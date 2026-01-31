@@ -62,6 +62,17 @@ export const queryAuditLogs = async (params: {
       orderBy: { createdAt: 'desc' },
       skip,
       take: params.limit,
+      include: {
+        actor: {
+          select: {
+            id: true,
+            email: true,
+            schoolId: true,
+            teacherProfile: { select: { firstName: true, lastName: true } },
+            parentProfiles: { select: { firstName: true, lastName: true }, take: 1 },
+          },
+        },
+      },
     }),
     prisma.auditLog.count({ where }),
   ]);

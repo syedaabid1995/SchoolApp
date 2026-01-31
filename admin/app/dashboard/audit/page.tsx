@@ -1,5 +1,6 @@
 'use client';
 
+import Link from 'next/link';
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { listAuditLogs } from '../../../services/audit.service';
@@ -102,7 +103,19 @@ export default function AuditPage() {
               {data?.items.map((log) => (
                 <tr key={log.id} className="border-t border-slate/10">
                   <td className="py-3">{new Date(log.createdAt).toLocaleString()}</td>
-                  <td>{log.actorRole}</td>
+                  <td>
+                    <Link
+                      href={`/dashboard/users/${log.actorId}`}
+                      className="text-ink underline-offset-2 hover:underline"
+                    >
+                      {log.actor?.teacherProfile
+                        ? `${log.actor.teacherProfile.firstName} ${log.actor.teacherProfile.lastName}`
+                        : log.actor?.parentProfiles?.[0]
+                          ? `${log.actor.parentProfiles[0].firstName} ${log.actor.parentProfiles[0].lastName}`
+                          : log.actor?.email ?? log.actorId}
+                    </Link>
+                    <div className="text-xs text-slate">{log.actorRole}</div>
+                  </td>
                   <td>{log.entityType}</td>
                   <td>{log.action}</td>
                 </tr>

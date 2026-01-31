@@ -5,6 +5,13 @@ export type AuditLogResponse = {
     id: string;
     actorId: string;
     actorRole: string;
+    actor?: {
+      id: string;
+      email: string;
+      schoolId: string | null;
+      teacherProfile?: { firstName: string; lastName: string } | null;
+      parentProfiles?: Array<{ firstName: string; lastName: string }>;
+    };
     entityType: string;
     entityId: string;
     action: string;
