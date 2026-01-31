@@ -5,8 +5,30 @@
 
 :root {
   color-scheme: light;
+  --theme-navbar-bg: #0f172a;
+  --theme-header-bg: #111827;
+  --theme-footer-bg: #0f172a;
+  --theme-button-bg: #2563eb;
+  --theme-button-text: #ffffff;
 }
 
 body {
   @apply bg-sand text-ink;
+}
+
+.theme-navbar {
+  background-color: var(--theme-navbar-bg);
+}
+
+.theme-header {
+  background-color: var(--theme-header-bg);
+}
+
+.theme-footer {
+  background-color: var(--theme-footer-bg);
+}
+
+.bg-ink {
+  background-color: var(--theme-button-bg) !important;
+  color: var(--theme-button-text) !important;
 }

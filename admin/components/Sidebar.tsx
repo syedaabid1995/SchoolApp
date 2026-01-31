@@ -1,7 +1,8 @@
 'use client';
 import Link from 'next/link';
-import { useState } from 'react';
+import { useContext, useState } from 'react';
 import { isSuperAdmin } from '../utils/roles';
+import { ThemeContext } from './ThemeProvider';
 
 const baseItems = [
   { href: '/dashboard', label: 'Overview' },
@@ -27,18 +28,25 @@ const academicItems = [
 export const Sidebar = ({ role }: { role: string | null }) => {
   const [isAcademicOpen, setIsAcademicOpen] = useState(false);
   const items = isSuperAdmin(role) ? [...superAdminItems, ...baseItems] : baseItems;
+  const { logoUrl } = useContext(ThemeContext);
 
   return (
-    <aside className="flex h-full w-64 flex-col border-r border-slate/10 bg-white px-4 py-6">
-      <div className="mb-6">
-        <p className="text-xs uppercase text-slate">Navigation</p>
+    <aside className="theme-navbar flex h-full w-64 flex-col border-r border-slate/10 px-4 py-6 text-white">
+      <div className="mb-6 flex items-center gap-3">
+        {logoUrl ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img src={logoUrl} alt="School Logo" className="h-9 w-9 rounded-md object-cover" />
+        ) : (
+          <div className="h-9 w-9 rounded-md bg-white/10" />
+        )}
+        <p className="text-xs uppercase text-white/70">Navigation</p>
       </div>
       <nav className="flex flex-col gap-2">
         {items.map((item) => (
           <Link
             key={item.href}
             href={item.href}
-            className="rounded-lg px-3 py-2 text-sm font-medium text-ink hover:bg-sand"
+            className="rounded-lg px-3 py-2 text-sm font-medium text-white/90 hover:bg-white/10"
           >
             {item.label}
           </Link>
@@ -48,7 +56,7 @@ export const Sidebar = ({ role }: { role: string | null }) => {
         <div>
           <button
             onClick={() => setIsAcademicOpen(!isAcademicOpen)}
-            className="w-full flex items-center justify-between rounded-lg px-3 py-2 text-sm font-medium text-ink hover:bg-sand"
+            className="flex w-full items-center justify-between rounded-lg px-3 py-2 text-sm font-medium text-white/90 hover:bg-white/10"
           >
             Academic
             <span className={`transform transition-transform ${isAcademicOpen ? 'rotate-90' : ''}`}>
@@ -61,7 +69,7 @@ export const Sidebar = ({ role }: { role: string | null }) => {
                 <Link
                   key={item.href}
                   href={item.href}
-                  className="rounded-lg px-3 py-2 text-sm text-ink hover:bg-sand"
+                  className="rounded-lg px-3 py-2 text-sm text-white/80 hover:bg-white/10"
                 >
                   {item.label}
                 </Link>

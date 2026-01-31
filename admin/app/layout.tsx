@@ -1,6 +1,7 @@
 import './globals.css';
 import { QueryProvider } from '../components/QueryProvider';
 import { ErrorBoundary } from '../components/ErrorBoundary';
+import { ThemeProvider } from '../components/ThemeProvider';
 
 export const metadata = {
   title: 'TechStage Admin',
@@ -12,7 +13,9 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     <html lang="en">
       <body>
         <ErrorBoundary>
-          <QueryProvider>{children}</QueryProvider>
+          <QueryProvider>
+            <ThemeProvider>{children}</ThemeProvider>
+          </QueryProvider>
         </ErrorBoundary>
       </body>
     </html>
