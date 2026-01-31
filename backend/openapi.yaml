@@ -1,0 +1,808 @@
+openapi: 3.0.3
+info:
+  title: TechStage IT API
+  version: 1.0.0
+servers:
+  - url: /api/v1
+tags:
+  - name: Auth
+  - name: Academics
+  - name: Attendance
+  - name: Attendance Approval
+  - name: Audit Logs
+  - name: Backups
+  - name: Compliance
+  - name: Consents
+  - name: Exams
+  - name: Face Enrollment
+  - name: Face Recognition
+  - name: Feature Flags
+  - name: Notifications
+  - name: OTP
+  - name: Reports
+  - name: Students
+  - name: Subscriptions
+  - name: Support Tickets
+  - name: Teacher Assignments
+  - name: Themes
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+  schemas:
+    Error:
+      type: object
+      properties:
+        error:
+          type: object
+          properties:
+            message:
+              type: string
+            details:
+              nullable: true
+  responses:
+    Unauthorized:
+      description: Unauthorized
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+    Forbidden:
+      description: Forbidden
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+    NotFound:
+      description: Not found
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+security:
+  - bearerAuth: []
+paths:
+  /auth/login:
+    post:
+      summary: Login
+      tags:
+        - Auth
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - email
+                - password
+              properties:
+                email:
+                  type: string
+                password:
+                  type: string
+                schoolId:
+                  type: string
+      responses:
+        "200":
+          description: OK
+  /auth/refresh:
+    post:
+      summary: Refresh token
+      tags:
+        - Auth
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - refreshToken
+              properties:
+                refreshToken:
+                  type: string
+      responses:
+        "200":
+          description: OK
+  /auth/logout:
+    post:
+      summary: Logout
+      tags:
+        - Auth
+      responses:
+        "200":
+          description: OK
+  /academics/academic-years:
+    get:
+      summary: List academic years
+      tags:
+        - Academics
+      parameters:
+        - in: query
+          name: schoolId
+          schema:
+            type: string
+      responses:
+        "200":
+          description: OK
+    post:
+      summary: Create academic year
+      tags:
+        - Academics
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        "201":
+          description: Created
+  /academics/terms:
+    get:
+      summary: List terms
+      tags:
+        - Academics
+      parameters:
+        - in: query
+          name: schoolId
+          schema:
+            type: string
+        - in: query
+          name: academicYearId
+          schema:
+            type: string
+      responses:
+        "200":
+          description: OK
+    post:
+      summary: Create term
+      tags:
+        - Academics
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        "201":
+          description: Created
+  /academics/classes:
+    get:
+      summary: List classes
+      tags:
+        - Academics
+      parameters:
+        - in: query
+          name: schoolId
+          schema:
+            type: string
+      responses:
+        "200":
+          description: OK
+    post:
+      summary: Create class
+      tags:
+        - Academics
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        "201":
+          description: Created
+  /academics/sections:
+    get:
+      summary: List sections
+      tags:
+        - Academics
+      parameters:
+        - in: query
+          name: schoolId
+          schema:
+            type: string
+        - in: query
+          name: classId
+          schema:
+            type: string
+      responses:
+        "200":
+          description: OK
+    post:
+      summary: Create section
+      tags:
+        - Academics
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        "201":
+          description: Created
+  /academics/subjects:
+    get:
+      summary: List subjects
+      tags:
+        - Academics
+      parameters:
+        - in: query
+          name: schoolId
+          schema:
+            type: string
+      responses:
+        "200":
+          description: OK
+    post:
+      summary: Create subject
+      tags:
+        - Academics
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        "201":
+          description: Created
+  /students/students:
+    get:
+      summary: List students
+      parameters:
+        - in: query
+          name: schoolId
+          schema:
+            type: string
+        - in: query
+          name: status
+          schema:
+            type: string
+      responses:
+        "200":
+          description: OK
+      tags:
+        - Students
+    post:
+      summary: Create student
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        "201":
+          description: Created
+      tags:
+        - Students
+  /students/parents:
+    get:
+      summary: List parents
+      parameters:
+        - in: query
+          name: schoolId
+          schema:
+            type: string
+      responses:
+        "200":
+          description: OK
+      tags:
+        - Students
+    post:
+      summary: Create parent
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        "201":
+          description: Created
+      tags:
+        - Students
+  /imports:
+    post:
+      summary: Create import
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                file:
+                  type: string
+                  format: binary
+                type:
+                  type: string
+                dryRun:
+                  type: boolean
+      responses:
+        "202":
+          description: Accepted
+    get:
+      summary: List imports
+      responses:
+        "200":
+          description: OK
+  /faces/enroll:
+    post:
+      summary: Enroll face
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        "201":
+          description: Created
+      tags:
+        - Face Enrollment
+  /recognition/match:
+    post:
+      summary: Face recognition
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        "200":
+          description: OK
+      tags:
+        - Face Recognition
+  /attendance/periods:
+    get:
+      summary: List attendance periods
+      parameters:
+        - in: query
+          name: schoolId
+          schema:
+            type: string
+      responses:
+        "200":
+          description: OK
+      tags:
+        - Attendance
+    post:
+      summary: Create attendance period
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        "201":
+          description: Created
+      tags:
+        - Attendance
+  /attendance/sessions:
+    post:
+      summary: Start attendance session
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        "201":
+          description: Created
+      tags:
+        - Attendance
+  /attendance/records:
+    post:
+      summary: Mark attendance
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        "201":
+          description: Created
+      tags:
+        - Attendance
+  /exams:
+    get:
+      summary: List exams
+      responses:
+        "200":
+          description: OK
+      tags:
+        - Exams
+    post:
+      summary: Create exam
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        "201":
+          description: Created
+      tags:
+        - Exams
+  /reports/term:
+    get:
+      summary: Download term report
+      parameters:
+        - in: query
+          name: studentId
+          schema:
+            type: string
+        - in: query
+          name: termId
+          schema:
+            type: string
+      responses:
+        "200":
+          description: OK
+      tags:
+        - Reports
+  /themes:
+    get:
+      summary: List themes
+      responses:
+        "200":
+          description: OK
+      tags:
+        - Themes
+    post:
+      summary: Create theme
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        "201":
+          description: Created
+      tags:
+        - Themes
+  /features/flags:
+    get:
+      summary: List feature flags
+      responses:
+        "200":
+          description: OK
+      tags:
+        - Feature Flags
+    post:
+      summary: Create feature flag
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        "201":
+          description: Created
+      tags:
+        - Feature Flags
+  /notifications/send:
+    post:
+      summary: Send notification
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        "202":
+          description: Accepted
+      tags:
+        - Notifications
+  /backups/backups:
+    post:
+      summary: Request backup
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        "202":
+          description: Accepted
+      tags:
+        - Backups
+    get:
+      summary: List backups
+      responses:
+        "200":
+          description: OK
+      tags:
+        - Backups
+  /attendance-approval/sessions/{sessionId}/approve:
+    post:
+      summary: Approve attendance session
+      parameters:
+        - in: path
+          name: sessionId
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: OK
+      tags:
+        - Attendance Approval
+  /attendance-approval/sessions/{sessionId}/reject:
+    post:
+      summary: Reject attendance session
+      parameters:
+        - in: path
+          name: sessionId
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                reason:
+                  type: string
+      responses:
+        "200":
+          description: OK
+      tags:
+        - Attendance Approval
+  /audit-logs:
+    get:
+      summary: List audit logs
+      parameters:
+        - in: query
+          name: schoolId
+          schema:
+            type: string
+      responses:
+        "200":
+          description: OK
+      tags:
+        - Audit Logs
+  /teacher-assignments/teachers/{teacherId}/status:
+    patch:
+      summary: Activate/deactivate teacher
+      parameters:
+        - in: path
+          name: teacherId
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                isActive:
+                  type: boolean
+      responses:
+        "200":
+          description: OK
+      tags:
+        - Teacher Assignments
+  /teacher-assignments/classes/assign:
+    post:
+      summary: Assign teacher to class
+      responses:
+        "201":
+          description: Created
+      tags:
+        - Teacher Assignments
+  /teacher-assignments/classes/unassign:
+    post:
+      summary: Unassign teacher from class
+      responses:
+        "200":
+          description: OK
+      tags:
+        - Teacher Assignments
+  /teacher-assignments/subjects/assign:
+    post:
+      summary: Assign teacher to subject
+      responses:
+        "201":
+          description: Created
+      tags:
+        - Teacher Assignments
+  /teacher-assignments/subjects/unassign:
+    post:
+      summary: Unassign teacher from subject
+      responses:
+        "200":
+          description: OK
+      tags:
+        - Teacher Assignments
+  /subscriptions:
+    get:
+      summary: Get subscription
+      responses:
+        "200":
+          description: OK
+      tags:
+        - Subscriptions
+    post:
+      summary: Upsert subscription
+      responses:
+        "200":
+          description: OK
+      tags:
+        - Subscriptions
+  /otp/request:
+    post:
+      summary: Request OTP
+      responses:
+        "202":
+          description: Accepted
+      tags:
+        - OTP
+  /otp/verify:
+    post:
+      summary: Verify OTP
+      responses:
+        "200":
+          description: OK
+      tags:
+        - OTP
+  /consents/documents:
+    post:
+      summary: Create consent document
+      responses:
+        "201":
+          description: Created
+      tags:
+        - Consents
+  /consents/records:
+    get:
+      summary: List consent records
+      responses:
+        "200":
+          description: OK
+      tags:
+        - Consents
+    post:
+      summary: Grant consent
+      responses:
+        "201":
+          description: Created
+      tags:
+        - Consents
+  /consents/records/{id}/withdraw:
+    post:
+      summary: Withdraw consent
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: OK
+      tags:
+        - Consents
+  /compliance/exports:
+    post:
+      summary: Request data export
+      responses:
+        "202":
+          description: Accepted
+      tags:
+        - Compliance
+  /compliance/exports/{id}:
+    get:
+      summary: Get export job status
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: OK
+      tags:
+        - Compliance
+  /compliance/deletions:
+    get:
+      summary: List deletion jobs
+      responses:
+        "200":
+          description: OK
+      tags:
+        - Compliance
+    post:
+      summary: Request deletion
+      responses:
+        "202":
+          description: Accepted
+      tags:
+        - Compliance
+  /compliance/deletions/{id}/approve:
+    post:
+      summary: Approve deletion
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: OK
+      tags:
+        - Compliance
+  /compliance/deletions/{id}/execute:
+    post:
+      summary: Execute deletion
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: OK
+      tags:
+        - Compliance
+  /tickets:
+    get:
+      summary: List support tickets
+      responses:
+        "200":
+          description: OK
+      tags:
+        - Support Tickets
+    post:
+      summary: Create support ticket
+      responses:
+        "201":
+          description: Created
+      tags:
+        - Support Tickets
+  /tickets/{id}:
+    patch:
+      summary: Update support ticket
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: OK
+      tags:
+        - Support Tickets
+  /analytics:
+    get:
+      summary: Get analytics
+      responses:
+        "200":
+          description: OK

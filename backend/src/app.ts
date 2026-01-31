@@ -1,0 +1,97 @@
+import 'express-async-errors';
+import express, { type Request, type Response } from 'express';
+import helmet from 'helmet';
+import cors from 'cors';
+import swaggerUi from 'swagger-ui-express';
+import YAML from 'yamljs';
+import path from 'path';
+import { logger } from './config/logger';
+import { errorMiddleware, notFoundMiddleware } from './middlewares/error.middleware';
+import { authRouter } from './routes/auth.routes';
+import { academicRouter } from './routes/academic.routes';
+import { studentRouter } from './routes/student.routes';
+import { importRouter } from './routes/import.routes';
+import { faceRouter } from './routes/face.routes';
+import { recognitionRouter } from './routes/recognition.routes';
+import { attendanceRouter } from './routes/attendance.routes';
+import { evidenceRouter } from './routes/evidence.routes';
+import { examRouter } from './routes/exam.routes';
+import { reportRouter } from './routes/report.routes';
+import { themeRouter } from './routes/theme.routes';
+import { featureFlagRouter } from './routes/feature-flag.routes';
+import { jobRouter } from './routes/job.routes';
+import { notificationRouter } from './routes/notification.routes';
+import { backupRouter } from './routes/backup.routes';
+import { attendanceApprovalRouter } from './routes/attendanceApproval.routes';
+import { auditLogRouter } from './routes/auditLog.routes';
+import { teacherAssignmentRouter } from './routes/teacherAssignment.routes';
+import { subscriptionRouter } from './routes/subscription.routes';
+import { otpRouter } from './routes/otp.routes';
+import { consentRouter } from './routes/consent.routes';
+import { dataComplianceRouter } from './routes/dataCompliance.routes';
+import { ticketRouter } from './routes/ticket.routes';
+import { analyticsRouter } from './routes/analytics.routes';
+import { schoolAdminRouter } from './routes/schoolAdmin.routes';
+import { subscriptionMetricsRouter } from './routes/subscriptionMetrics.routes';
+import { teacherRouter } from './routes/teacher.routes';
+import { attendanceSummaryRouter } from './routes/attendanceSummary.routes';
+import { adminDashboardRouter } from './routes/adminDashboard.routes';
+import { rateLimit } from './middlewares/rate-limit.middleware';
+import { apiVersionMiddleware } from './middlewares/version.middleware';
+
+export const createApp = () => {
+  const app = express();
+  const openapiPath = path.resolve(process.cwd(), 'openapi.yaml');
+  const openapiSpec = YAML.load(openapiPath);
+
+  app.disable('x-powered-by');
+  app.use(helmet());
+  app.use(cors({ origin: true, credentials: true }));
+  app.use(express.json({ limit: '2mb' }));
+  app.use(express.urlencoded({ extended: false }));
+  app.use(rateLimit());
+  app.use(apiVersionMiddleware);
+
+  app.get('/health', (_req: Request, res: Response) => {
+    res.status(200).json({ status: 'ok' });
+  });
+
+  app.use('/docs', swaggerUi.serve, swaggerUi.setup(openapiSpec));
+
+  app.use('/api/v1/auth', authRouter);
+  app.use('/api/v1/academics', academicRouter);
+  app.use('/api/v1/students', studentRouter);
+  app.use('/api/v1/imports', importRouter);
+  app.use('/api/v1/faces', faceRouter);
+  app.use('/api/v1/recognition', recognitionRouter);
+  app.use('/api/v1/attendance', attendanceRouter);
+  app.use('/api/v1/attendance/evidence', evidenceRouter);
+  app.use('/api/v1/exams', examRouter);
+  app.use('/api/v1/reports', reportRouter);
+  app.use('/api/v1/themes', themeRouter);
+  app.use('/api/v1/features', featureFlagRouter);
+  app.use('/api/v1/jobs', jobRouter);
+  app.use('/api/v1/notifications', notificationRouter);
+  app.use('/api/v1/backups', backupRouter);
+  app.use('/api/v1/attendance-approval', attendanceApprovalRouter);
+  app.use('/api/v1/audit-logs', auditLogRouter);
+  app.use('/api/v1/teacher-assignments', teacherAssignmentRouter);
+  app.use('/api/v1/subscriptions', subscriptionRouter);
+  app.use('/api/v1/otp', otpRouter);
+  app.use('/api/v1/consents', consentRouter);
+  app.use('/api/v1/compliance', dataComplianceRouter);
+  app.use('/api/v1/tickets', ticketRouter);
+  app.use('/api/v1/analytics', analyticsRouter);
+  app.use('/api/v1/admin/schools', schoolAdminRouter);
+  app.use('/api/v1/admin/subscription-metrics', subscriptionMetricsRouter);
+  app.use('/api/v1/teachers', teacherRouter);
+  app.use('/api/v1/attendance-summary', attendanceSummaryRouter);
+  app.use('/api/v1/admin/dashboard', adminDashboardRouter);
+
+  app.use(notFoundMiddleware);
+  app.use(errorMiddleware);
+
+  return app;
+};
+
+export const appLogger = logger;
