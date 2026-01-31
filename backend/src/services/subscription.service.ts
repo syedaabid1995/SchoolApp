@@ -45,7 +45,34 @@ export const incrementUsage = async (schoolId: string, type: 'students' | 'teach
 };
 
 export const enforceLimits = async (schoolId: string, type: 'students' | 'teachers') => {
-  const subscription = await prisma.subscription.findUnique({ where: { schoolId } });
+  let subscription = await prisma.subscription.findUnique({ where: { schoolId } });
+  if (!subscription) {
+    const school = await prisma.school.findUnique({ where: { id: schoolId } });
+    if (school) {
+      const defaults = {
+        STARTER: { students: 500, teachers: 50 },
+        STANDARD: { students: 2000, teachers: 200 },
+        PREMIUM: { students: 10000, teachers: 1000 },
+      };
+      const plan = defaults[school.subscriptionPlan];
+      subscription = await prisma.subscription.create({
+        data: {
+          schoolId,
+          planName: school.subscriptionPlan,
+          status: 'ACTIVE',
+          startsAt: new Date(),
+          endsAt: null,
+          studentLimit: plan.students,
+          teacherLimit: plan.teachers,
+        },
+      });
+      await prisma.usageCounter.upsert({
+        where: { schoolId },
+        update: {},
+        create: { schoolId, students: 0, teachers: 0 },
+      });
+    }
+  }
   if (!subscription || subscription.status !== 'ACTIVE') {
     throw new HttpError(403, 'Subscription inactive');
   }

@@ -30,6 +30,16 @@ export async function POST(req: Request) {
     secure: process.env.NODE_ENV === 'production',
     path: '/',
   });
+  if (data.mustChangePassword) {
+    response.cookies.set('must_change_password', '1', {
+      httpOnly: true,
+      sameSite: 'lax',
+      secure: process.env.NODE_ENV === 'production',
+      path: '/',
+    });
+  } else {
+    response.cookies.delete('must_change_password');
+  }
 
   return response;
 }

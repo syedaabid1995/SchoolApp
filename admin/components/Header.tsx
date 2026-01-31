@@ -3,7 +3,14 @@
 import { useRouter } from 'next/navigation';
 import { logout } from '../services/auth.service';
 
-export const Header = ({ role }: { role: string | null }) => {
+const resolveConsoleTitle = (role: string | null) => {
+  if (role === 'SUPER_ADMIN') return 'Super Admin Console';
+  if (role === 'SCHOOL_ADMIN') return 'School Admin Console';
+  if (role === 'TEACHER') return 'Teacher Console';
+  return 'Admin Console';
+};
+
+export const Header = ({ role, email }: { role: string | null; email: string | null }) => {
   const router = useRouter();
 
   const handleLogout = async () => {
@@ -14,8 +21,8 @@ export const Header = ({ role }: { role: string | null }) => {
   return (
     <header className="flex items-center justify-between border-b border-slate/10 bg-white px-6 py-4">
       <div>
-        <p className="text-sm text-slate">TechStage IT</p>
-        <h2 className="text-lg font-semibold text-ink">Admin Console</h2>
+        <p className="text-sm text-slate">{email ?? 'User'}</p>
+        <h2 className="text-lg font-semibold text-ink">{resolveConsoleTitle(role)}</h2>
       </div>
       <div className="flex items-center gap-4">
         <span className="rounded-full bg-sand px-3 py-1 text-xs font-semibold text-slate">{role ?? 'UNKNOWN'}</span>

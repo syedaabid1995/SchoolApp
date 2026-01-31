@@ -13,7 +13,13 @@ import {
 export default function SchoolsPage() {
   const queryClient = useQueryClient();
   const [query, setQuery] = useState('');
-  const [form, setForm] = useState({ name: '', code: '', subscriptionPlan: 'STANDARD' });
+  const [form, setForm] = useState({
+    name: '',
+    code: '',
+    subscriptionPlan: 'STANDARD',
+    adminEmail: '',
+  });
+  const [createdAdmin, setCreatedAdmin] = useState<{ email: string; tempPassword: string } | null>(null);
 
   const { data, isLoading } = useQuery({
     queryKey: ['schools', query],
@@ -22,8 +28,13 @@ export default function SchoolsPage() {
 
   const createMutation = useMutation({
     mutationFn: createSchool,
-    onSuccess: () => {
-      setForm({ name: '', code: '', subscriptionPlan: 'STANDARD' });
+    onSuccess: (result) => {
+      setForm({ name: '', code: '', subscriptionPlan: 'STANDARD', adminEmail: '' });
+      if (result.adminUser && result.tempPassword) {
+        setCreatedAdmin({ email: result.adminUser.email, tempPassword: result.tempPassword });
+      } else {
+        setCreatedAdmin(null);
+      }
       queryClient.invalidateQueries({ queryKey: ['schools'] });
     },
   });
@@ -48,7 +59,7 @@ export default function SchoolsPage() {
 
       <section className="rounded-2xl border border-slate/10 bg-white p-6">
         <h2 className="text-lg font-semibold">Create School</h2>
-        <div className="mt-4 grid gap-3 md:grid-cols-3">
+        <div className="mt-4 grid gap-3 md:grid-cols-4">
           <input
             value={form.name}
             onChange={(e) => setForm({ ...form, name: e.target.value })}
@@ -61,20 +72,49 @@ export default function SchoolsPage() {
             placeholder="School code"
             className="rounded-lg border border-slate/20 px-3 py-2 text-sm"
           />
-          <input
+          <select
             value={form.subscriptionPlan}
-            onChange={(e) => setForm({ ...form, subscriptionPlan: e.target.value })}
-            placeholder="Plan"
+            onChange={(e) =>
+              setForm({
+                ...form,
+                subscriptionPlan: e.target.value as 'STARTER' | 'STANDARD' | 'PREMIUM',
+              })
+            }
+            className="rounded-lg border border-slate/20 bg-white px-3 py-2 text-sm"
+          >
+            <option value="STARTER">Starter</option>
+            <option value="STANDARD">Standard</option>
+            <option value="PREMIUM">Premium</option>
+          </select>
+          <input
+            value={form.adminEmail}
+            onChange={(e) => setForm({ ...form, adminEmail: e.target.value })}
+            placeholder="Admin email (optional)"
             className="rounded-lg border border-slate/20 px-3 py-2 text-sm"
           />
         </div>
         <button
           className="mt-4 rounded-lg bg-ink px-4 py-2 text-sm font-semibold text-white"
-          onClick={() => createMutation.mutate(form)}
+          onClick={() =>
+            createMutation.mutate({
+              ...form,
+              adminEmail: form.adminEmail.trim().length > 0 ? form.adminEmail.trim() : undefined,
+            })
+          }
           disabled={createMutation.isPending}
         >
           {createMutation.isPending ? 'Creating...' : 'Create School'}
         </button>
+        {createdAdmin ? (
+          <div className="mt-4 rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-900">
+            <div className="font-semibold">School admin created</div>
+            <div className="mt-1">Email: {createdAdmin.email}</div>
+            <div className="mt-1">Temporary password: {createdAdmin.tempPassword}</div>
+            <div className="mt-2 text-xs text-emerald-700">
+              Share this once. It will not be shown again.
+            </div>
+          </div>
+        ) : null}
       </section>
 
       <section className="rounded-2xl border border-slate/10 bg-white p-6">
@@ -94,6 +134,7 @@ export default function SchoolsPage() {
                 <th className="py-2">Name</th>
                 <th>Code</th>
                 <th>Status</th>
+                <th>Admin Email</th>
                 <th>Plan</th>
                 <th className="text-right">Actions</th>
               </tr>
@@ -117,6 +158,7 @@ export default function SchoolsPage() {
                     <td className="py-3">{school.name}</td>
                     <td>{school.code}</td>
                     <td>{school.status}</td>
+                    <td>{school.adminEmail ?? '—'}</td>
                     <td>{school.subscriptionPlan}</td>
                     <td className="text-right">
                       <div className="flex justify-end gap-2">
@@ -130,12 +172,6 @@ export default function SchoolsPage() {
                           }
                         >
                           {school.status === 'ACTIVE' ? 'Suspend' : 'Activate'}
-                        </button>
-                        <button
-                          className="rounded-lg border border-red-200 px-3 py-1 text-xs text-red-600"
-                          onClick={() => actionMutation.mutate({ id: school.id, action: 'delete' })}
-                        >
-                          Archive
                         </button>
                       </div>
                     </td>

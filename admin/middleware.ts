@@ -23,10 +23,19 @@ export function middleware(req: NextRequest) {
     return NextResponse.next();
   }
 
+  if (pathname.startsWith('/reset-password')) {
+    return NextResponse.next();
+  }
+
   if (pathname.startsWith('/dashboard')) {
     const token = req.cookies.get(ACCESS_COOKIE)?.value;
     if (!token) {
       return NextResponse.redirect(new URL('/login', req.url));
+    }
+
+    const mustChangePassword = req.cookies.get('must_change_password')?.value === '1';
+    if (mustChangePassword) {
+      return NextResponse.redirect(new URL('/reset-password', req.url));
     }
 
     const role = decodeRole(token);
@@ -43,5 +52,5 @@ export function middleware(req: NextRequest) {
 }
 
 export const config = {
-  matcher: ['/dashboard/:path*', '/login'],
+  matcher: ['/dashboard/:path*', '/login', '/reset-password'],
 };

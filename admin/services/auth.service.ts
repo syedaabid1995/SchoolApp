@@ -7,7 +7,7 @@ export const login = async (payload: { email: string; password: string; schoolId
   if (!res.ok) {
     throw new Error('Login failed');
   }
-  return res.json();
+  return res.json() as Promise<{ mustChangePassword?: boolean }>;
 };
 
 export const logout = async () => {
@@ -33,7 +33,12 @@ export const refreshToken = async (refreshToken: string) => {
 export const getSession = async () => {
   const res = await fetch('/api/auth/session');
   if (!res.ok) {
-    return { role: null, schoolId: null };
+    return { role: null, schoolId: null, mustChangePassword: false };
   }
-  return res.json() as Promise<{ role: string | null; schoolId: string | null }>;
+  return res.json() as Promise<{
+    role: string | null;
+    schoolId: string | null;
+    email: string | null;
+    mustChangePassword: boolean;
+  }>;
 };

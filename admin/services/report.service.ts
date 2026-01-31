@@ -6,11 +6,9 @@ export const listExams = async () => {
 };
 
 export const createExam = async (payload: {
-  name: string;
+  name?: string;
   type: string;
-  termId?: string | null;
-  academicYearId: string;
-  scheduledAt?: string;
+  subjectIds: string[];
 }) => {
   const { data } = await api.post('/exams', payload);
   return data;

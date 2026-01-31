@@ -8,6 +8,16 @@ export type TeacherProfile = {
   firstName: string;
   lastName: string;
   phone: string | null;
+  address?: string | null;
+  bankDetails?: {
+    accountHolderName?: string | null;
+    accountNumber?: string | null;
+    ifscCode?: string | null;
+    accountType?: string | null;
+    bankName?: string | null;
+    branchName?: string | null;
+    panNumber?: string | null;
+  } | null;
   isActive: boolean;
   createdAt: string;
   updatedAt: string;
@@ -31,11 +41,21 @@ export const listTeachers = async (params?: { page?: number; limit?: number; que
 
 export const createTeacher = async (payload: {
   email: string;
-  password: string;
+  password?: string;
   firstName: string;
   lastName: string;
   employeeNo?: string | null;
   phone?: string | null;
+  address?: string | null;
+  bankDetails?: {
+    accountHolderName?: string | null;
+    accountNumber?: string | null;
+    ifscCode?: string | null;
+    accountType?: string | null;
+    bankName?: string | null;
+    branchName?: string | null;
+    panNumber?: string | null;
+  };
   schoolId?: string;
 }) => {
   const { data } = await api.post('/teachers', payload);
@@ -50,6 +70,7 @@ export const updateTeacher = async (
     lastName: string;
     employeeNo: string | null;
     phone: string | null;
+    address: string | null;
     isActive: boolean;
   }>,
 ) => {

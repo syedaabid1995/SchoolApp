@@ -36,6 +36,17 @@ const statusSchema = z.object({
   schoolId: z.string().uuid().optional(),
 });
 
+const transferRequestSchema = z.object({
+  toSchoolId: z.string().uuid(),
+  reason: z.string().min(1).optional(),
+  schoolId: z.string().uuid().optional(),
+});
+
+const transferDecisionSchema = z.object({
+  reason: z.string().min(1).optional(),
+  schoolId: z.string().uuid().optional(),
+});
+
 export const createStudent = async (req: Request, res: Response) => {
   const payload = createSchema.parse(req.body);
   const schoolId = resolveSchoolId(req, payload.schoolId);
@@ -76,6 +87,10 @@ export const listStudents = async (req: Request, res: Response) => {
       ...(status ? { status: status as 'ENROLLED' | 'TRANSFERRED' | 'EXITED' } : {}),
     },
     orderBy: { createdAt: 'desc' },
+    include: {
+      class: { select: { id: true, name: true } },
+      section: { select: { id: true, name: true } },
+    },
   });
 
   res.status(200).json(students);
@@ -212,4 +227,162 @@ export const changeStudentStatus = async (req: Request, res: Response) => {
   });
 
   res.status(200).json(updated);
+};
+
+export const listTransferTargets = async (req: Request, res: Response) => {
+  const schoolId = resolveSchoolId(req, req.query.schoolId as string | undefined);
+
+  const schools = await prisma.school.findMany({
+    where: {
+      deletedAt: null,
+      status: 'ACTIVE',
+      id: { not: schoolId },
+    },
+    orderBy: { name: 'asc' },
+    select: { id: true, name: true, code: true },
+  });
+
+  res.status(200).json(schools);
+};
+
+export const createTransferRequest = async (req: Request, res: Response) => {
+  const payload = transferRequestSchema.parse(req.body);
+  const fromSchoolId = resolveSchoolId(req, payload.schoolId);
+  const { id } = req.params;
+
+  const student = await prisma.student.findFirst({
+    where: { id, schoolId: fromSchoolId },
+    select: { id: true },
+  });
+  if (!student) {
+    throw new HttpError(404, 'Student not found');
+  }
+
+  if (!req.auth?.userId) {
+    throw new HttpError(401, 'Unauthorized');
+  }
+
+  const existing = await prisma.studentTransferRequest.findFirst({
+    where: {
+      studentId: id,
+      status: 'PENDING',
+    },
+    select: { id: true },
+  });
+  if (existing) {
+    throw new HttpError(409, 'Transfer request already pending');
+  }
+
+  const request = await prisma.studentTransferRequest.create({
+    data: {
+      studentId: id,
+      fromSchoolId,
+      toSchoolId: payload.toSchoolId,
+      requestedById: req.auth.userId,
+      reason: payload.reason ?? null,
+      status: 'PENDING',
+    },
+    include: {
+      student: { select: { id: true, firstName: true, lastName: true, admissionNo: true } },
+      fromSchool: { select: { id: true, name: true, code: true } },
+      toSchool: { select: { id: true, name: true, code: true } },
+    },
+  });
+
+  res.status(201).json(request);
+};
+
+export const listIncomingTransferRequests = async (req: Request, res: Response) => {
+  const schoolId = resolveSchoolId(req, req.query.schoolId as string | undefined);
+
+  const requests = await prisma.studentTransferRequest.findMany({
+    where: { toSchoolId: schoolId, status: 'PENDING' },
+    orderBy: { createdAt: 'desc' },
+    include: {
+      student: { select: { id: true, firstName: true, lastName: true, admissionNo: true } },
+      fromSchool: { select: { id: true, name: true, code: true } },
+    },
+  });
+
+  res.status(200).json(requests);
+};
+
+export const acceptTransferRequest = async (req: Request, res: Response) => {
+  const payload = transferDecisionSchema.parse(req.body);
+  const schoolId = resolveSchoolId(req, payload.schoolId ?? (req.query.schoolId as string | undefined));
+  const { id } = req.params;
+
+  if (!req.auth?.userId) {
+    throw new HttpError(401, 'Unauthorized');
+  }
+
+  const request = await prisma.studentTransferRequest.findFirst({
+    where: { id, toSchoolId: schoolId, status: 'PENDING' },
+    include: { student: true, fromSchool: true, toSchool: true },
+  });
+  if (!request) {
+    throw new HttpError(404, 'Transfer request not found');
+  }
+
+  const result = await prisma.$transaction(async (tx) => {
+    await tx.student.update({
+      where: { id: request.studentId },
+      data: {
+        schoolId: request.toSchoolId,
+        classId: null,
+        sectionId: null,
+        status: 'ENROLLED',
+      },
+    });
+
+    await tx.studentStatusHistory.create({
+      data: {
+        studentId: request.studentId,
+        status: 'TRANSFERRED',
+        reason: payload.reason ?? `Transfer accepted to ${request.toSchool.name}`,
+      },
+    });
+
+    return tx.studentTransferRequest.update({
+      where: { id },
+      data: {
+        status: 'ACCEPTED',
+        decidedById: req.auth.userId,
+        decidedAt: new Date(),
+        reason: payload.reason ?? null,
+      },
+    });
+  });
+
+  res.status(200).json(result);
+};
+
+export const rejectTransferRequest = async (req: Request, res: Response) => {
+  const payload = transferDecisionSchema.parse(req.body);
+  const schoolId = resolveSchoolId(req, payload.schoolId ?? (req.query.schoolId as string | undefined));
+  const { id } = req.params;
+
+  if (!req.auth?.userId) {
+    throw new HttpError(401, 'Unauthorized');
+  }
+
+  const existing = await prisma.studentTransferRequest.findFirst({
+    where: { id, toSchoolId: schoolId, status: 'PENDING' },
+    select: { id: true },
+  });
+  if (!existing) {
+    throw new HttpError(404, 'Transfer request not found');
+  }
+
+  const request = await prisma.studentTransferRequest.update({
+    where: { id },
+    data: {
+      status: 'REJECTED',
+      decidedById: req.auth.userId,
+      decidedAt: new Date(),
+      reason: payload.reason ?? null,
+    },
+  });
+
+  res.status(200).json(request);
 };

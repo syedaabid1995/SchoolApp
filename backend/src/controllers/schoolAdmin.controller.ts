@@ -11,8 +11,9 @@ import {
 const createSchema = z.object({
   name: z.string().min(1),
   code: z.string().min(1),
-  subscriptionPlan: z.string().min(1),
+  subscriptionPlan: z.enum(['STARTER', 'STANDARD', 'PREMIUM']),
   status: z.enum(['ACTIVE', 'SUSPENDED']).optional(),
+  adminEmail: z.string().email().optional(),
 });
 
 const listSchema = z.object({
@@ -24,7 +25,7 @@ const listSchema = z.object({
 
 const updateSchema = z.object({
   name: z.string().min(1).optional(),
-  subscriptionPlan: z.string().min(1).optional(),
+  subscriptionPlan: z.enum(['STARTER', 'STANDARD', 'PREMIUM']).optional(),
   statusReason: z.string().min(1).nullable().optional(),
   lastLoginAt: z.coerce.date().nullable().optional(),
   activeUsersCount: z.number().int().min(0).optional(),
@@ -36,8 +37,8 @@ const statusSchema = z.object({
 
 export const createSchoolApi = async (req: Request, res: Response) => {
   const payload = createSchema.parse(req.body);
-  const school = await createSchool(payload);
-  res.status(201).json(school);
+  const result = await createSchool(payload);
+  res.status(201).json(result);
 };
 
 export const listSchoolsApi = async (req: Request, res: Response) => {

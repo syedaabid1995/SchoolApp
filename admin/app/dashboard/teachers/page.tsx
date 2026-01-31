@@ -20,12 +20,20 @@ export default function TeachersPage() {
   const queryClient = useQueryClient();
   const [form, setForm] = useState({
     email: '',
-    password: '',
     firstName: '',
     lastName: '',
     employeeNo: '',
     phone: '',
+    address: '',
+    accountHolderName: '',
+    accountNumber: '',
+    ifscCode: '',
+    accountType: '',
+    bankName: '',
+    branchName: '',
+    panNumber: '',
   });
+  const [createdTeacher, setCreatedTeacher] = useState<{ email: string; tempPassword: string } | null>(null);
   const [selection, setSelection] = useState({ teacherId: '', classId: '', subjectId: '' });
 
   const [schoolId, setSchoolId] = useState('');
@@ -57,8 +65,27 @@ export default function TeachersPage() {
 
   const createMutation = useMutation({
     mutationFn: createTeacher,
-    onSuccess: () => {
-      setForm({ email: '', password: '', firstName: '', lastName: '', employeeNo: '', phone: '' });
+    onSuccess: (result) => {
+      setForm({
+        email: '',
+        firstName: '',
+        lastName: '',
+        employeeNo: '',
+        phone: '',
+        address: '',
+        accountHolderName: '',
+        accountNumber: '',
+        ifscCode: '',
+        accountType: '',
+        bankName: '',
+        branchName: '',
+        panNumber: '',
+      });
+      if (result?.user?.email && result?.tempPassword) {
+        setCreatedTeacher({ email: result.user.email, tempPassword: result.tempPassword });
+      } else {
+        setCreatedTeacher(null);
+      }
       queryClient.invalidateQueries({ queryKey: ['teachers'] });
     },
   });
@@ -136,38 +163,118 @@ export default function TeachersPage() {
             className="rounded-lg border border-slate/20 px-3 py-2 text-sm"
           />
           <input
-            value={form.email}
-            onChange={(e) => setForm({ ...form, email: e.target.value })}
-            placeholder="Email"
-            className="rounded-lg border border-slate/20 px-3 py-2 text-sm"
-          />
-          <input
-            value={form.password}
-            onChange={(e) => setForm({ ...form, password: e.target.value })}
-            placeholder="Password"
-            type="password"
-            className="rounded-lg border border-slate/20 px-3 py-2 text-sm"
-          />
-          <input
             value={form.employeeNo}
             onChange={(e) => setForm({ ...form, employeeNo: e.target.value })}
             placeholder="Employee No"
             className="rounded-lg border border-slate/20 px-3 py-2 text-sm"
           />
-          <input
-            value={form.phone}
-            onChange={(e) => setForm({ ...form, phone: e.target.value })}
-            placeholder="Phone"
-            className="rounded-lg border border-slate/20 px-3 py-2 text-sm"
-          />
+        </div>
+        <div className="mt-6">
+          <h3 className="text-sm font-semibold text-ink">Contact info</h3>
+          <div className="mt-3 grid gap-3 md:grid-cols-3">
+            <input
+              value={form.email}
+              onChange={(e) => setForm({ ...form, email: e.target.value })}
+              placeholder="Email"
+              className="rounded-lg border border-slate/20 px-3 py-2 text-sm"
+            />
+            <input
+              value={form.phone}
+              onChange={(e) => setForm({ ...form, phone: e.target.value })}
+              placeholder="Phone"
+              className="rounded-lg border border-slate/20 px-3 py-2 text-sm"
+            />
+            <input
+              value={form.address}
+              onChange={(e) => setForm({ ...form, address: e.target.value })}
+              placeholder="Address"
+              className="rounded-lg border border-slate/20 px-3 py-2 text-sm"
+            />
+          </div>
+        </div>
+        <div className="mt-6">
+          <h3 className="text-sm font-semibold text-ink">Banking details (optional)</h3>
+          <div className="mt-3 grid gap-3 md:grid-cols-3">
+            <input
+              value={form.accountHolderName}
+              onChange={(e) => setForm({ ...form, accountHolderName: e.target.value })}
+              placeholder="Account holder name"
+              className="rounded-lg border border-slate/20 px-3 py-2 text-sm"
+            />
+            <input
+              value={form.accountNumber}
+              onChange={(e) => setForm({ ...form, accountNumber: e.target.value })}
+              placeholder="Account number"
+              className="rounded-lg border border-slate/20 px-3 py-2 text-sm"
+            />
+            <input
+              value={form.ifscCode}
+              onChange={(e) => setForm({ ...form, ifscCode: e.target.value })}
+              placeholder="IFSC code"
+              className="rounded-lg border border-slate/20 px-3 py-2 text-sm"
+            />
+            <input
+              value={form.accountType}
+              onChange={(e) => setForm({ ...form, accountType: e.target.value })}
+              placeholder="Account type"
+              className="rounded-lg border border-slate/20 px-3 py-2 text-sm"
+            />
+            <input
+              value={form.bankName}
+              onChange={(e) => setForm({ ...form, bankName: e.target.value })}
+              placeholder="Bank name"
+              className="rounded-lg border border-slate/20 px-3 py-2 text-sm"
+            />
+            <input
+              value={form.branchName}
+              onChange={(e) => setForm({ ...form, branchName: e.target.value })}
+              placeholder="Branch name"
+              className="rounded-lg border border-slate/20 px-3 py-2 text-sm"
+            />
+            <input
+              value={form.panNumber}
+              onChange={(e) => setForm({ ...form, panNumber: e.target.value })}
+              placeholder="PAN number"
+              className="rounded-lg border border-slate/20 px-3 py-2 text-sm"
+            />
+          </div>
         </div>
         <button
           className="mt-4 rounded-lg bg-ink px-4 py-2 text-sm font-semibold text-white"
-          onClick={() => createMutation.mutate({ ...form, schoolId: effectiveSchoolId })}
+          onClick={() =>
+            createMutation.mutate({
+              email: form.email,
+              firstName: form.firstName,
+              lastName: form.lastName,
+              employeeNo: form.employeeNo || null,
+              phone: form.phone || null,
+              address: form.address || null,
+              bankDetails: {
+                accountHolderName: form.accountHolderName || null,
+                accountNumber: form.accountNumber || null,
+                ifscCode: form.ifscCode || null,
+                accountType: form.accountType || null,
+                bankName: form.bankName || null,
+                branchName: form.branchName || null,
+                panNumber: form.panNumber || null,
+              },
+              schoolId: effectiveSchoolId,
+            })
+          }
           disabled={createMutation.isPending}
         >
           {createMutation.isPending ? 'Creating...' : 'Create Teacher'}
         </button>
+        {createdTeacher ? (
+          <div className="mt-4 rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-900">
+            <div className="font-semibold">Teacher created</div>
+            <div className="mt-1">Email: {createdTeacher.email}</div>
+            <div className="mt-1">Temporary password: {createdTeacher.tempPassword}</div>
+            <div className="mt-2 text-xs text-emerald-700">
+              Share this once. It will not be shown again.
+            </div>
+          </div>
+        ) : null}
       </section>
 
       <section className="rounded-2xl border border-slate/10 bg-white p-6">

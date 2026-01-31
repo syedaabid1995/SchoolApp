@@ -19,7 +19,7 @@ export const listClasses = async (params?: { schoolId?: string }) => {
   return data;
 };
 
-export const createClass = async (payload: { name: string; schoolId?: string }) => {
+export const createClass = async (payload: { name: string; academicYearId: string; schoolId?: string }) => {
   const { data } = await api.post('/academics/classes', payload);
   return data;
 };
@@ -43,7 +43,13 @@ export const listSubjects = async (params?: { schoolId?: string }) => {
   return data;
 };
 
-export const createSubject = async (payload: { name: string; classId?: string; teacherId?: string; schoolId?: string }) => {
+export const createSubject = async (payload: {
+  name: string;
+  classId?: string;
+  academicYearId?: string;
+  teacherId?: string;
+  schoolId?: string;
+}) => {
   const { data } = await api.post('/academics/subjects', payload);
   return data;
 };

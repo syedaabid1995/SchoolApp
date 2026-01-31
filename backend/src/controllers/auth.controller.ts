@@ -16,6 +16,11 @@ const refreshSchema = z.object({
   refreshToken: z.string().min(1),
 });
 
+const changePasswordSchema = z.object({
+  currentPassword: z.string().min(8).optional(),
+  newPassword: z.string().min(8),
+});
+
 const ACCESS_TOKEN_TTL = '15m';
 const REFRESH_TOKEN_TTL = '30d';
 
@@ -23,6 +28,7 @@ export type AuthTokenPayload = {
   sub: string;
   schoolId: string | null;
   role: string | null;
+  email?: string | null;
   typ: 'access' | 'refresh';
 };
 
@@ -61,6 +67,7 @@ export const login = async (req: Request, res: Response) => {
     sub: user.id,
     schoolId: user.schoolId ?? null,
     role: roleRow?.role.name ?? null,
+    email: user.email,
   };
 
   const accessToken = signToken({ ...payloadBase, typ: 'access' }, ACCESS_TOKEN_TTL);
@@ -71,6 +78,7 @@ export const login = async (req: Request, res: Response) => {
     refreshToken,
     tokenType: 'Bearer',
     expiresIn: ACCESS_TOKEN_TTL,
+    mustChangePassword: user.mustChangePassword,
   });
 };
 
@@ -90,7 +98,7 @@ export const refreshToken = async (req: Request, res: Response) => {
 
   const user = await prisma.user.findUnique({
     where: { id: decoded.sub },
-    select: { id: true, schoolId: true, status: true },
+    select: { id: true, schoolId: true, status: true, email: true },
   });
 
   if (!user || user.status !== 'ACTIVE') {
@@ -103,7 +111,13 @@ export const refreshToken = async (req: Request, res: Response) => {
   });
 
   const accessToken = signToken(
-    { sub: user.id, schoolId: user.schoolId ?? null, role: roleRow?.role.name ?? null, typ: 'access' },
+    {
+      sub: user.id,
+      schoolId: user.schoolId ?? null,
+      role: roleRow?.role.name ?? null,
+      email: user.email,
+      typ: 'access',
+    },
     ACCESS_TOKEN_TTL,
   );
 
@@ -115,5 +129,39 @@ export const refreshToken = async (req: Request, res: Response) => {
 };
 
 export const logout = async (_req: Request, res: Response) => {
+  res.status(200).json({ success: true });
+};
+
+export const changePassword = async (req: Request, res: Response) => {
+  if (!req.auth?.userId) {
+    throw new HttpError(401, 'Unauthorized');
+  }
+  const { currentPassword, newPassword } = changePasswordSchema.parse(req.body);
+
+  const user = await prisma.user.findUnique({
+    where: { id: req.auth.userId },
+    select: { id: true, passwordHash: true, status: true, mustChangePassword: true },
+  });
+
+  if (!user || user.status !== 'ACTIVE') {
+    throw new HttpError(401, 'Unauthorized');
+  }
+
+  if (!user.mustChangePassword) {
+    if (!currentPassword) {
+      throw new HttpError(400, 'Current password is required');
+    }
+    const isValid = await verifyPassword(currentPassword, user.passwordHash);
+    if (!isValid) {
+      throw new HttpError(401, 'Invalid credentials');
+    }
+  }
+
+  const nextHash = await hashPassword(newPassword);
+  await prisma.user.update({
+    where: { id: user.id },
+    data: { passwordHash: nextHash, mustChangePassword: false },
+  });
+
   res.status(200).json({ success: true });
 };

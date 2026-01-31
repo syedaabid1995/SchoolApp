@@ -17,8 +17,12 @@ export default function LoginPage() {
     setError('');
     setLoading(true);
     try {
-      await login({ email, password, schoolId: schoolId || undefined });
-      router.replace('/dashboard');
+      const result = await login({ email, password, schoolId: schoolId || undefined });
+      if (result?.mustChangePassword) {
+        router.replace('/reset-password');
+      } else {
+        router.replace('/dashboard');
+      }
     } catch (err) {
       setError('Invalid credentials');
     } finally {

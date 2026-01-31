@@ -1,3 +1,4 @@
+import crypto from 'crypto';
 import { prisma } from '../config/db';
 import { hashPassword } from '../utils/password';
 import { incrementUsage, enforceLimits } from './subscription.service';
@@ -5,11 +6,21 @@ import { incrementUsage, enforceLimits } from './subscription.service';
 export type TeacherCreateInput = {
   schoolId: string;
   email: string;
-  password: string;
+  password?: string;
   firstName: string;
   lastName: string;
   employeeNo?: string | null;
   phone?: string | null;
+  address?: string | null;
+  bankDetails?: {
+    accountHolderName?: string | null;
+    accountNumber?: string | null;
+    ifscCode?: string | null;
+    accountType?: string | null;
+    bankName?: string | null;
+    branchName?: string | null;
+    panNumber?: string | null;
+  };
 };
 
 export type TeacherUpdateInput = {
@@ -18,6 +29,7 @@ export type TeacherUpdateInput = {
   lastName?: string;
   employeeNo?: string | null;
   phone?: string | null;
+  address?: string | null;
   isActive?: boolean;
 };
 
@@ -32,7 +44,9 @@ export const createTeacher = async (payload: TeacherCreateInput) => {
     throw new Error('Teacher role not configured');
   }
 
-  const passwordHash = await hashPassword(payload.password);
+  const tempPassword = payload.password ?? crypto.randomBytes(9).toString('base64url');
+  const passwordHash = await hashPassword(tempPassword);
+  const mustChangePassword = !payload.password;
 
   const teacher = await prisma.$transaction(async (tx) => {
     const user = await tx.user.create({
@@ -41,6 +55,7 @@ export const createTeacher = async (payload: TeacherCreateInput) => {
         email: payload.email,
         passwordHash,
         status: 'ACTIVE',
+        mustChangePassword,
         roles: {
           create: [{ roleId: teacherRole.id }],
         },
@@ -55,16 +70,43 @@ export const createTeacher = async (payload: TeacherCreateInput) => {
         lastName: payload.lastName,
         employeeNo: payload.employeeNo ?? null,
         phone: payload.phone ?? null,
+        address: payload.address ?? null,
         isActive: true,
       },
     });
+
+    if (payload.bankDetails) {
+      const details = payload.bankDetails;
+      const hasAny =
+        details.accountHolderName ||
+        details.accountNumber ||
+        details.ifscCode ||
+        details.accountType ||
+        details.bankName ||
+        details.branchName ||
+        details.panNumber;
+      if (hasAny) {
+        await tx.teacherBankDetails.create({
+          data: {
+            teacherId: profile.id,
+            accountHolderName: details.accountHolderName ?? null,
+            accountNumber: details.accountNumber ?? null,
+            ifscCode: details.ifscCode ?? null,
+            accountType: details.accountType ?? null,
+            bankName: details.bankName ?? null,
+            branchName: details.branchName ?? null,
+            panNumber: details.panNumber ?? null,
+          },
+        });
+      }
+    }
 
     return { user, profile };
   });
 
   await incrementUsage(payload.schoolId, 'teachers', 1);
 
-  return teacher;
+  return { ...teacher, tempPassword: mustChangePassword ? tempPassword : null };
 };
 
 export const listTeachers = async (params: {
@@ -95,6 +137,7 @@ export const listTeachers = async (params: {
       where,
       include: {
         user: { select: { email: true, status: true } },
+        bankDetails: true,
         classAssignments: { include: { class: true } },
         subjectAssignments: { include: { subject: true } },
       },
@@ -139,6 +182,7 @@ export const updateTeacher = async (teacherId: string, schoolId: string, payload
         lastName: payload.lastName ?? undefined,
         employeeNo: payload.employeeNo === undefined ? undefined : payload.employeeNo,
         phone: payload.phone === undefined ? undefined : payload.phone,
+        address: payload.address === undefined ? undefined : payload.address,
         isActive: payload.isActive ?? undefined,
       },
     });

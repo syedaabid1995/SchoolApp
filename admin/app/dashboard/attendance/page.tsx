@@ -94,12 +94,14 @@ export default function AttendancePage() {
             value={range.from}
             onChange={(e) => setRange({ ...range, from: e.target.value })}
             placeholder="From (YYYY-MM-DD)"
+            type="date"
             className="rounded-lg border border-slate/20 px-3 py-2 text-sm"
           />
           <input
             value={range.to}
             onChange={(e) => setRange({ ...range, to: e.target.value })}
             placeholder="To (YYYY-MM-DD)"
+            type="date"
             className="rounded-lg border border-slate/20 px-3 py-2 text-sm"
           />
         </div>

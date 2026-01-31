@@ -1,3 +1,4 @@
+@import "multiple-select/dist/multiple-select.min.css";
 @tailwind base;
 @tailwind components;
 @tailwind utilities;

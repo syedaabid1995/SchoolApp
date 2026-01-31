@@ -5,9 +5,12 @@ import { HttpError } from '../middlewares/error.middleware';
 import { resolveSchoolId } from '../utils/tenant';
 
 const createSchema = z.object({
-  academicYearId: z.string().uuid(),
+  academicYearId: z.string().uuid().optional(),
   termId: z.string().uuid().optional().nullable(),
-  name: z.string().min(1),
+  classId: z.string().uuid().optional().nullable(),
+  sectionId: z.string().uuid().optional().nullable(),
+  name: z.string().min(1).optional(),
+  subjectIds: z.array(z.string().uuid()).min(1),
   type: z.enum(['MIDTERM', 'FINAL', 'QUIZ', 'ASSIGNMENT']),
   status: z.enum(['DRAFT', 'PUBLISHED', 'CLOSED']).optional(),
   scheduledAt: z.coerce.date().optional(),
@@ -16,6 +19,8 @@ const createSchema = z.object({
 
 const updateSchema = z.object({
   termId: z.string().uuid().optional().nullable(),
+  classId: z.string().uuid().optional().nullable(),
+  sectionId: z.string().uuid().optional().nullable(),
   name: z.string().min(1).optional(),
   type: z.enum(['MIDTERM', 'FINAL', 'QUIZ', 'ASSIGNMENT']).optional(),
   status: z.enum(['DRAFT', 'PUBLISHED', 'CLOSED']).optional(),
@@ -27,18 +32,42 @@ export const createExam = async (req: Request, res: Response) => {
   const payload = createSchema.parse(req.body);
   const schoolId = resolveSchoolId(req, payload.schoolId);
 
-  const academicYear = await prisma.academicYear.findFirst({
-    where: { id: payload.academicYearId, schoolId },
-    select: { id: true },
+  const subjects = await prisma.subject.findMany({
+    where: { id: { in: payload.subjectIds }, schoolId },
+    select: { id: true, name: true, classId: true, academicYearId: true },
   });
+  if (subjects.length !== payload.subjectIds.length) {
+    throw new HttpError(404, 'One or more subjects not found');
+  }
 
-  if (!academicYear) {
-    throw new HttpError(404, 'Academic year not found');
+  let academicYearId = payload.academicYearId;
+  if (!academicYearId) {
+    const classIds = Array.from(new Set(subjects.map((s) => s.classId).filter(Boolean))) as string[];
+    if (classIds.length === 1) {
+      const classRow = await prisma.class.findFirst({
+        where: { id: classIds[0], schoolId },
+        select: { academicYearId: true },
+      });
+      if (classRow?.academicYearId) {
+        academicYearId = classRow.academicYearId;
+      }
+    }
+  }
+  if (!academicYearId) {
+    const activeYear = await prisma.academicYear.findFirst({
+      where: { schoolId, isActive: true },
+      orderBy: { startDate: 'desc' },
+      select: { id: true },
+    });
+    if (!activeYear) {
+      throw new HttpError(404, 'Active academic year not found');
+    }
+    academicYearId = activeYear.id;
   }
 
   if (payload.termId) {
     const term = await prisma.term.findFirst({
-      where: { id: payload.termId, academicYearId: payload.academicYearId },
+      where: { id: payload.termId, academicYearId },
       select: { id: true },
     });
     if (!term) {
@@ -46,16 +75,47 @@ export const createExam = async (req: Request, res: Response) => {
     }
   }
 
-  const exam = await prisma.exam.create({
-    data: {
-      schoolId,
-      academicYearId: payload.academicYearId,
-      termId: payload.termId ?? null,
-      name: payload.name,
-      type: payload.type,
-      status: payload.status ?? 'DRAFT',
-      scheduledAt: payload.scheduledAt ?? null,
-    },
+  const subjectClassIds = Array.from(new Set(subjects.map((s) => s.classId).filter(Boolean)));
+  if (subjectClassIds.length !== 1) {
+    throw new HttpError(400, 'Subjects must belong to the same class');
+  }
+  const classId = subjectClassIds[0] as string;
+
+  const mismatchedYear = subjects.find(
+    (s) => s.academicYearId && s.academicYearId !== academicYearId,
+  );
+  if (mismatchedYear) {
+    throw new HttpError(400, 'Subject academic year mismatch');
+  }
+
+  const examName = payload.name?.trim() || subjects.map((s) => s.name).join(', ');
+
+  const exam = await prisma.$transaction(async (tx) => {
+    const created = await tx.exam.create({
+      data: {
+        schoolId,
+        academicYearId,
+        termId: payload.termId ?? null,
+        classId,
+        sectionId: payload.sectionId ?? null,
+        name: examName,
+        type: payload.type,
+        status: payload.status ?? 'DRAFT',
+        scheduledAt: payload.scheduledAt ?? null,
+      },
+    });
+
+    await tx.examPaper.createMany({
+      data: subjects.map((subject) => ({
+        examId: created.id,
+        subjectId: subject.id,
+        classId,
+        maxMarks: 100,
+        weightage: 1,
+      })),
+    });
+
+    return created;
   });
 
   res.status(201).json(exam);
@@ -65,12 +125,16 @@ export const listExams = async (req: Request, res: Response) => {
   const schoolId = resolveSchoolId(req, req.query.schoolId as string | undefined);
   const academicYearId = req.query.academicYearId as string | undefined;
   const termId = req.query.termId as string | undefined;
+  const classId = req.query.classId as string | undefined;
+  const sectionId = req.query.sectionId as string | undefined;
 
   const exams = await prisma.exam.findMany({
     where: {
       schoolId,
       ...(academicYearId ? { academicYearId } : {}),
       ...(termId ? { termId } : {}),
+      ...(classId ? { classId } : {}),
+      ...(sectionId ? { sectionId } : {}),
     },
     orderBy: { createdAt: 'desc' },
   });
@@ -112,6 +176,8 @@ export const updateExam = async (req: Request, res: Response) => {
     where: { id },
     data: {
       termId: payload.termId === undefined ? undefined : payload.termId,
+      classId: payload.classId === undefined ? undefined : payload.classId,
+      sectionId: payload.sectionId === undefined ? undefined : payload.sectionId,
       name: payload.name ?? undefined,
       type: payload.type ?? undefined,
       status: payload.status ?? undefined,

@@ -5,7 +5,8 @@ export type School = {
   name: string;
   code: string;
   status: 'ACTIVE' | 'SUSPENDED';
-  subscriptionPlan: string;
+  subscriptionPlan: 'STARTER' | 'STANDARD' | 'PREMIUM';
+  adminEmail?: string | null;
   lastLoginAt: string | null;
   activeUsersCount: number;
   statusReason: string | null;
@@ -19,6 +20,20 @@ export type SchoolListResponse = {
   limit: number;
   total: number;
   pages: number;
+};
+
+export type SchoolAdminUser = {
+  id: string;
+  email: string;
+  schoolId: string;
+  status: 'ACTIVE' | 'SUSPENDED';
+  createdAt: string;
+};
+
+export type CreateSchoolResponse = {
+  school: School;
+  adminUser?: SchoolAdminUser;
+  tempPassword?: string;
 };
 
 export const listSchools = async (params?: { page?: number; limit?: number; status?: string; query?: string }) => {
@@ -35,10 +50,11 @@ export const listSchools = async (params?: { page?: number; limit?: number; stat
 export const createSchool = async (payload: {
   name: string;
   code: string;
-  subscriptionPlan: string;
+  subscriptionPlan: 'STARTER' | 'STANDARD' | 'PREMIUM';
   status?: 'ACTIVE' | 'SUSPENDED';
+  adminEmail?: string;
 }) => {
-  const { data } = await api.post<School>('/admin/schools', payload);
+  const { data } = await api.post<CreateSchoolResponse>('/admin/schools', payload);
   return data;
 };
 

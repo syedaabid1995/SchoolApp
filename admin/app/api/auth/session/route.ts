@@ -12,16 +12,19 @@ const decodePayload = (token: string) => {
 export async function GET() {
   const store = await cookies();
   const token = store.get('access_token')?.value;
+  const mustChangePassword = store.get('must_change_password')?.value === '1';
   if (!token) {
-    return NextResponse.json({ role: null, schoolId: null });
+    return NextResponse.json({ role: null, schoolId: null, mustChangePassword: false });
   }
   try {
     const payload = decodePayload(token);
     return NextResponse.json({
       role: (payload?.role as string | undefined) ?? null,
       schoolId: (payload?.schoolId as string | undefined) ?? null,
+      email: (payload?.email as string | undefined) ?? null,
+      mustChangePassword,
     });
   } catch {
-    return NextResponse.json({ role: null, schoolId: null });
+    return NextResponse.json({ role: null, schoolId: null, email: null, mustChangePassword: false });
   }
 }

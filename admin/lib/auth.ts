@@ -2,6 +2,7 @@ import { cookies } from 'next/headers';
 
 const ACCESS_COOKIE = 'access_token';
 const ROLE_CLAIM = 'role';
+const EMAIL_CLAIM = 'email';
 
 const decodePayload = (token: string) => {
   const parts = token.split('.');
@@ -21,4 +22,11 @@ export const getServerRole = async () => {
   if (!token) return null;
   const payload = decodePayload(token);
   return (payload?.[ROLE_CLAIM] as string | undefined) ?? null;
+};
+
+export const getServerEmail = async () => {
+  const token = await getServerToken();
+  if (!token) return null;
+  const payload = decodePayload(token);
+  return (payload?.[EMAIL_CLAIM] as string | undefined) ?? null;
 };

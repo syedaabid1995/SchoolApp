@@ -4,7 +4,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "next dev",
+    "dev": "next dev -p 3001",
     "build": "next build",
     "start": "next start",
     "lint": "next lint"
@@ -12,6 +12,8 @@
   "dependencies": {
     "@tanstack/react-query": "^5.59.0",
     "axios": "^1.7.7",
+    "jquery": "^3.7.1",
+    "multiple-select": "^2.2.0",
     "next": "^16.1.6",
     "react": "^18.3.1",
     "react-dom": "^18.3.1"

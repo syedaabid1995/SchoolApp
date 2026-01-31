@@ -1,28 +1,99 @@
+import crypto from 'crypto';
 import { prisma } from '../config/db';
+import { HttpError } from '../middlewares/error.middleware';
+import { hashPassword } from '../utils/password';
 
 export type SchoolCreateInput = {
   name: string;
   code: string;
-  subscriptionPlan: string;
+  subscriptionPlan: 'STARTER' | 'STANDARD' | 'PREMIUM';
   status?: 'ACTIVE' | 'SUSPENDED';
+  adminEmail?: string;
 };
 
 export type SchoolUpdateInput = {
   name?: string;
-  subscriptionPlan?: string;
+  subscriptionPlan?: 'STARTER' | 'STANDARD' | 'PREMIUM';
   statusReason?: string | null;
   lastLoginAt?: Date | null;
   activeUsersCount?: number;
 };
 
 export const createSchool = async (payload: SchoolCreateInput) => {
-  return prisma.school.create({
-    data: {
-      name: payload.name,
-      code: payload.code,
-      subscriptionPlan: payload.subscriptionPlan,
-      status: payload.status ?? 'ACTIVE',
-    },
+  return prisma.$transaction(async (tx) => {
+    const school = await tx.school.create({
+      data: {
+        name: payload.name,
+        code: payload.code,
+        subscriptionPlan: payload.subscriptionPlan,
+        status: payload.status ?? 'ACTIVE',
+      },
+    });
+
+    const limits = {
+      STARTER: { students: 500, teachers: 50 },
+      STANDARD: { students: 2000, teachers: 200 },
+      PREMIUM: { students: 10000, teachers: 1000 },
+    };
+    const planLimits = limits[payload.subscriptionPlan];
+
+    await tx.subscription.create({
+      data: {
+        schoolId: school.id,
+        planName: payload.subscriptionPlan,
+        status: 'ACTIVE',
+        startsAt: new Date(),
+        endsAt: null,
+        studentLimit: planLimits.students,
+        teacherLimit: planLimits.teachers,
+      },
+    });
+
+    await tx.usageCounter.create({
+      data: {
+        schoolId: school.id,
+        students: 0,
+        teachers: 0,
+      },
+    });
+
+    if (!payload.adminEmail) {
+      return { school };
+    }
+
+    const existingAdmin = await tx.user.findFirst({
+      where: { email: payload.adminEmail, schoolId: school.id },
+      select: { id: true },
+    });
+    if (existingAdmin) {
+      throw new HttpError(409, 'School admin already exists for this email');
+    }
+
+    const tempPassword = crypto.randomBytes(9).toString('base64url');
+    const passwordHash = await hashPassword(tempPassword);
+
+    const role = await tx.role.upsert({
+      where: { name: 'SCHOOL_ADMIN' },
+      update: {},
+      create: { name: 'SCHOOL_ADMIN' },
+    });
+
+    const adminUser = await tx.user.create({
+      data: {
+        email: payload.adminEmail,
+        passwordHash,
+        status: 'ACTIVE',
+        schoolId: school.id,
+        mustChangePassword: true,
+      },
+      select: { id: true, email: true, schoolId: true, status: true, createdAt: true },
+    });
+
+    await tx.userRole.create({
+      data: { userId: adminUser.id, roleId: role.id },
+    });
+
+    return { school, adminUser, tempPassword };
   });
 };
 
@@ -46,15 +117,31 @@ export const listSchools = async (params: {
       : {}),
   };
 
-  const [items, total] = await Promise.all([
+  const [itemsRaw, total] = await Promise.all([
     prisma.school.findMany({
       where,
       orderBy: { createdAt: 'desc' },
       skip,
       take: params.limit,
+      include: {
+        users: {
+          where: {
+            roles: {
+              some: { role: { name: 'SCHOOL_ADMIN' } },
+            },
+          },
+          select: { email: true },
+        },
+      },
     }),
     prisma.school.count({ where }),
   ]);
+
+  const items = itemsRaw.map((school) => {
+    const adminEmail = school.users[0]?.email ?? null;
+    const { users, ...rest } = school;
+    return { ...rest, adminEmail };
+  });
 
   return {
     items,
