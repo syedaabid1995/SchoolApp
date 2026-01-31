@@ -90,6 +90,13 @@ export const listStudents = async (req: Request, res: Response) => {
     include: {
       class: { select: { id: true, name: true } },
       section: { select: { id: true, name: true } },
+      parentLinks: {
+        include: {
+          parent: {
+            select: { id: true, firstName: true, lastName: true, phone: true, email: true },
+          },
+        },
+      },
     },
   });
 

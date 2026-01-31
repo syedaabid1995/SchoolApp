@@ -12,23 +12,82 @@
   --theme-button-text: #ffffff;
 }
 
+* {
+  transition-property: color, background-color, border-color, text-decoration-color, fill, stroke, opacity, box-shadow, transform, filter, backdrop-filter;
+  transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+  transition-duration: 150ms;
+}
+
 body {
   @apply bg-sand text-ink;
+  scroll-behavior: smooth;
 }
 
 .theme-navbar {
   background-color: var(--theme-navbar-bg);
+  backdrop-filter: blur(10px);
 }
 
 .theme-header {
   background-color: var(--theme-header-bg);
+  backdrop-filter: blur(10px);
 }
 
 .theme-footer {
   background-color: var(--theme-footer-bg);
+  backdrop-filter: blur(10px);
 }
 
 .bg-ink {
   background-color: var(--theme-button-bg) !important;
   color: var(--theme-button-text) !important;
+}
+
+/* Smooth scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.2);
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.3);
+}
+
+/* Animation utilities */
+@keyframes slideIn {
+  from {
+    transform: translateX(-100%);
+    opacity: 0;
+  }
+  to {
+    transform: translateX(0);
+    opacity: 1;
+  }
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-slide-in {
+  animation: slideIn 0.3s ease-out;
+}
+
+.animate-fade-in {
+  animation: fadeIn 0.2s ease-out;
 }

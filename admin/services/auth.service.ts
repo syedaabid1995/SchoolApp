@@ -40,5 +40,6 @@ export const getSession = async () => {
     schoolId: string | null;
     email: string | null;
     mustChangePassword: boolean;
+    displayName?: string | null;
   }>;
 };

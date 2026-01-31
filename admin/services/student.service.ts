@@ -11,6 +11,10 @@ export type Student = {
   sectionId: string | null;
   class?: { id: string; name: string } | null;
   section?: { id: string; name: string } | null;
+  parentLinks?: Array<{
+    parentId: string;
+    parent: { id: string; firstName: string; lastName: string; phone: string | null; email: string | null };
+  }>;
   createdAt: string;
   updatedAt: string;
 };
@@ -33,6 +37,11 @@ export const listStudents = async (params?: { status?: string; schoolId?: string
   const sanitized =
     params && (params as any).queryKey ? undefined : params;
   const { data } = await api.get<Student[]>('/students/students', { params: sanitized });
+  return data;
+};
+
+export const getStudent = async (id: string) => {
+  const { data } = await api.get<Student>(`/students/students/${id}`);
   return data;
 };
 
@@ -78,6 +87,29 @@ export const listParents = async (params?: { schoolId?: string }) => {
   const sanitized =
     params && (params as any).queryKey ? undefined : params;
   const { data } = await api.get('/students/parents', { params: sanitized });
+  return data;
+};
+
+export const lookupParentByPhone = async (phone: string) => {
+  const { data } = await api.get('/students/parents/lookup', { params: { phone } });
+  return data as { found: boolean; userId?: string; displayName?: string; phone?: string };
+};
+
+export const getParent = async (id: string) => {
+  const { data } = await api.get(`/students/parents/${id}`);
+  return data;
+};
+
+export const createParent = async (payload: {
+  firstName: string;
+  lastName: string;
+  phone?: string;
+  email?: string;
+  createLogin?: boolean;
+  sendVia?: 'SMS' | 'EMAIL' | 'BOTH';
+  schoolId?: string;
+}) => {
+  const { data } = await api.post('/students/parents', payload);
   return data;
 };
 

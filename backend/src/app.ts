@@ -36,6 +36,7 @@ import { subscriptionMetricsRouter } from './routes/subscriptionMetrics.routes';
 import { teacherRouter } from './routes/teacher.routes';
 import { attendanceSummaryRouter } from './routes/attendanceSummary.routes';
 import { adminDashboardRouter } from './routes/adminDashboard.routes';
+import { userRouter } from './routes/user.routes';
 import { rateLimit } from './middlewares/rate-limit.middleware';
 import { apiVersionMiddleware } from './middlewares/version.middleware';
 
@@ -87,6 +88,7 @@ export const createApp = () => {
   app.use('/api/v1/teachers', teacherRouter);
   app.use('/api/v1/attendance-summary', attendanceSummaryRouter);
   app.use('/api/v1/admin/dashboard', adminDashboardRouter);
+  app.use('/api/v1/users', userRouter);
 
   app.use(notFoundMiddleware);
   app.use(errorMiddleware);

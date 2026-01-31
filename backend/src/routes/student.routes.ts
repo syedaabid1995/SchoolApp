@@ -16,6 +16,7 @@ import {
 import {
   createParent,
   listParents,
+  lookupParentByPhone,
   getParent,
   updateParent,
   deleteParent,
@@ -41,6 +42,7 @@ studentRouter.post('/transfer-requests/:id/reject', rejectTransferRequest);
 
 studentRouter.post('/parents', createParent);
 studentRouter.get('/parents', listParents);
+studentRouter.get('/parents/lookup', lookupParentByPhone);
 studentRouter.get('/parents/:id', getParent);
 studentRouter.patch('/parents/:id', updateParent);
 studentRouter.delete('/parents/:id', deleteParent);
