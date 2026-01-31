@@ -1,13 +1,13 @@
+'use client';
 import Link from 'next/link';
+import { useState } from 'react';
 import { isSuperAdmin } from '../utils/roles';
 
 const baseItems = [
   { href: '/dashboard', label: 'Overview' },
   { href: '/dashboard/teachers', label: 'Teachers' },
   { href: '/dashboard/students', label: 'Students' },
-  { href: '/dashboard/academics', label: 'Academics' },
   { href: '/dashboard/attendance', label: 'Attendance' },
-  { href: '/dashboard/reports', label: 'Reports' },
   { href: '/dashboard/themes', label: 'Themes' },
   { href: '/dashboard/audit', label: 'Audit Logs' },
   { href: '/dashboard/settings', label: 'Settings' },
@@ -19,7 +19,13 @@ const superAdminItems = [
   { href: '/dashboard/subscriptions', label: 'Subscriptions' },
 ];
 
+const academicItems = [
+  { href: '/dashboard/academics/exams', label: 'Exams' },
+  { href: '/dashboard/academics/marks', label: 'Upload Marks' },
+];
+
 export const Sidebar = ({ role }: { role: string | null }) => {
+  const [isAcademicOpen, setIsAcademicOpen] = useState(false);
   const items = isSuperAdmin(role) ? [...superAdminItems, ...baseItems] : baseItems;
 
   return (
@@ -37,6 +43,32 @@ export const Sidebar = ({ role }: { role: string | null }) => {
             {item.label}
           </Link>
         ))}
+        
+        {/* Academic Section */}
+        <div>
+          <button
+            onClick={() => setIsAcademicOpen(!isAcademicOpen)}
+            className="w-full flex items-center justify-between rounded-lg px-3 py-2 text-sm font-medium text-ink hover:bg-sand"
+          >
+            Academic
+            <span className={`transform transition-transform ${isAcademicOpen ? 'rotate-90' : ''}`}>
+              ▶
+            </span>
+          </button>
+          {isAcademicOpen && (
+            <div className="ml-4 mt-1 flex flex-col gap-1">
+              {academicItems.map((item) => (
+                <Link
+                  key={item.href}
+                  href={item.href}
+                  className="rounded-lg px-3 py-2 text-sm text-ink hover:bg-sand"
+                >
+                  {item.label}
+                </Link>
+              ))}
+            </div>
+          )}
+        </div>
       </nav>
     </aside>
   );

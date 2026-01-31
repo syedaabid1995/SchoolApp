@@ -180,7 +180,6 @@ model AcademicYear {
   subjects Subject[]
 
   @@index([schoolId])
-  @@unique([schoolId, name])
   @@map("academic_years")
 }
 
@@ -259,7 +258,7 @@ model Subject {
   @@index([schoolId])
   @@index([classId])
   @@index([academicYearId])
-  @@unique([schoolId, name])
+  @@unique([schoolId, name, classId, academicYearId])
   @@map("subjects")
 }
 
@@ -691,6 +690,12 @@ enum ExamStatus {
   CLOSED
 }
 
+enum MarkStatus {
+  DRAFT
+  SUBMITTED
+  LOCKED
+}
+
 model Exam {
   id         String    @id @default(uuid()) @db.Uuid
   schoolId   String    @map("school_id") @db.Uuid
@@ -726,6 +731,7 @@ model ExamPaper {
   subjectId  String   @map("subject_id") @db.Uuid
   classId    String   @map("class_id") @db.Uuid
   maxMarks   Float    @map("max_marks")
+  passMarks  Float    @default(0) @map("pass_marks")
   weightage  Float    @default(1) @map("weightage")
   createdAt  DateTime @default(now()) @map("created_at")
   updatedAt  DateTime @updatedAt @map("updated_at")
@@ -748,6 +754,7 @@ model Mark {
   studentId  String  @map("student_id") @db.Uuid
   marks      Float
   grade      String?
+  status     MarkStatus @default(DRAFT)
   moderated  Boolean @default(false)
   createdAt  DateTime @default(now()) @map("created_at")
   updatedAt  DateTime @updatedAt @map("updated_at")

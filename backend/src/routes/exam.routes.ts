@@ -9,6 +9,7 @@ import {
 } from '../controllers/exam.controller';
 import {
   createExamPaper,
+  listMarks,
   uploadMarks,
   moderateMark,
   requestRevaluation,
@@ -20,6 +21,7 @@ examRouter.use(authMiddleware);
 
 examRouter.post('/', createExam);
 examRouter.get('/', listExams);
+examRouter.get('/marks', listMarks);
 examRouter.get('/:id', getExam);
 examRouter.patch('/:id', updateExam);
 examRouter.delete('/:id', deleteExam);

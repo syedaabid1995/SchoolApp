@@ -10,6 +10,7 @@ const createPaperSchema = z.object({
   subjectId: z.string().uuid(),
   classId: z.string().uuid(),
   maxMarks: z.number().positive(),
+  passMarks: z.number().min(0).optional(),
   weightage: z.number().positive().optional(),
   schoolId: z.string().uuid().optional(),
 });
@@ -24,6 +25,7 @@ const uploadMarksSchema = z.object({
       }),
     )
     .min(1),
+  status: z.enum(['DRAFT', 'SUBMITTED', 'LOCKED']).optional(),
   schoolId: z.string().uuid().optional(),
 });
 
@@ -75,6 +77,7 @@ export const createExamPaper = async (req: Request, res: Response) => {
       subjectId: payload.subjectId,
       classId: payload.classId,
       maxMarks: payload.maxMarks,
+      passMarks: payload.passMarks ?? 0,
       weightage: payload.weightage ?? 1,
     },
   });
@@ -85,6 +88,7 @@ export const createExamPaper = async (req: Request, res: Response) => {
 export const uploadMarks = async (req: Request, res: Response) => {
   const payload = uploadMarksSchema.parse(req.body);
   const schoolId = resolveSchoolId(req, payload.schoolId);
+  const status = payload.status ?? 'SUBMITTED';
 
   const paper = await prisma.examPaper.findFirst({
     where: { id: payload.examPaperId, exam: { schoolId } },
@@ -114,12 +118,13 @@ export const uploadMarks = async (req: Request, res: Response) => {
 
       const mark = await tx.mark.upsert({
         where: { examPaperId_studentId: { examPaperId: paper.id, studentId: entry.studentId } },
-        update: { marks: entry.marks, grade },
+        update: { marks: entry.marks, grade, status },
         create: {
           examPaperId: paper.id,
           studentId: entry.studentId,
           marks: entry.marks,
           grade,
+          status,
         },
       });
 
@@ -130,6 +135,28 @@ export const uploadMarks = async (req: Request, res: Response) => {
   });
 
   res.status(200).json({ results });
+};
+
+export const listMarks = async (req: Request, res: Response) => {
+  const examPaperId = req.query.examPaperId as string | undefined;
+  if (!examPaperId) {
+    throw new HttpError(400, 'examPaperId is required');
+  }
+  const schoolId = resolveSchoolId(req, req.query.schoolId as string | undefined);
+
+  const marks = await prisma.mark.findMany({
+    where: { examPaperId, examPaper: { exam: { schoolId } } },
+    select: {
+      id: true,
+      studentId: true,
+      marks: true,
+      grade: true,
+      status: true,
+      moderated: true,
+    },
+  });
+
+  res.status(200).json(marks);
 };
 
 export const moderateMark = async (req: Request, res: Response) => {

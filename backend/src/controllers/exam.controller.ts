@@ -4,13 +4,20 @@ import { prisma } from '../config/db';
 import { HttpError } from '../middlewares/error.middleware';
 import { resolveSchoolId } from '../utils/tenant';
 
+const subjectMappingSchema = z.object({
+  subjectId: z.string().uuid(),
+  maxMarks: z.number().positive(),
+  passMarks: z.number().min(0),
+});
+
 const createSchema = z.object({
   academicYearId: z.string().uuid().optional(),
   termId: z.string().uuid().optional().nullable(),
   classId: z.string().uuid().optional().nullable(),
   sectionId: z.string().uuid().optional().nullable(),
   name: z.string().min(1).optional(),
-  subjectIds: z.array(z.string().uuid()).min(1),
+  subjectIds: z.array(z.string().uuid()).min(1).optional(),
+  subjectMappings: z.array(subjectMappingSchema).min(1).optional(),
   type: z.enum(['MIDTERM', 'FINAL', 'QUIZ', 'ASSIGNMENT']),
   status: z.enum(['DRAFT', 'PUBLISHED', 'CLOSED']).optional(),
   scheduledAt: z.coerce.date().optional(),
@@ -32,11 +39,16 @@ export const createExam = async (req: Request, res: Response) => {
   const payload = createSchema.parse(req.body);
   const schoolId = resolveSchoolId(req, payload.schoolId);
 
+  const subjectIds = payload.subjectMappings?.map((item) => item.subjectId) ?? payload.subjectIds ?? [];
+  if (!subjectIds.length) {
+    throw new HttpError(400, 'At least one subject is required');
+  }
+
   const subjects = await prisma.subject.findMany({
-    where: { id: { in: payload.subjectIds }, schoolId },
+    where: { id: { in: subjectIds }, schoolId },
     select: { id: true, name: true, classId: true, academicYearId: true },
   });
-  if (subjects.length !== payload.subjectIds.length) {
+  if (subjects.length !== subjectIds.length) {
     throw new HttpError(404, 'One or more subjects not found');
   }
 
@@ -105,14 +117,22 @@ export const createExam = async (req: Request, res: Response) => {
       },
     });
 
+    const mappingBySubject = new Map(
+      (payload.subjectMappings ?? []).map((mapping) => [mapping.subjectId, mapping]),
+    );
+
     await tx.examPaper.createMany({
-      data: subjects.map((subject) => ({
-        examId: created.id,
-        subjectId: subject.id,
-        classId,
-        maxMarks: 100,
-        weightage: 1,
-      })),
+      data: subjects.map((subject) => {
+        const mapping = mappingBySubject.get(subject.id);
+        return {
+          examId: created.id,
+          subjectId: subject.id,
+          classId,
+          maxMarks: mapping?.maxMarks ?? 100,
+          passMarks: mapping?.passMarks ?? 35,
+          weightage: 1,
+        };
+      }),
     });
 
     return created;
