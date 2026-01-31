@@ -4,6 +4,7 @@ import { prisma } from '../config/db';
 import { HttpError } from '../middlewares/error.middleware';
 import { resolveSchoolId } from '../utils/tenant';
 import { calculateGrade } from '../services/grade.service';
+import { logAudit } from '../utils/audit';
 
 const createPaperSchema = z.object({
   examId: z.string().uuid(),
@@ -82,6 +83,21 @@ export const createExamPaper = async (req: Request, res: Response) => {
     },
   });
 
+  await logAudit(req, {
+    schoolId,
+    entityType: 'EXAM_PAPER',
+    entityId: paper.id,
+    action: 'CREATE',
+    afterState: {
+      examId: paper.examId,
+      subjectId: paper.subjectId,
+      classId: paper.classId,
+      maxMarks: paper.maxMarks,
+      passMarks: paper.passMarks,
+      weightage: paper.weightage,
+    },
+  });
+
   res.status(201).json(paper);
 };
 
@@ -132,6 +148,18 @@ export const uploadMarks = async (req: Request, res: Response) => {
     }
 
     return created;
+  });
+
+  await logAudit(req, {
+    schoolId,
+    entityType: 'MARKS',
+    entityId: payload.examPaperId,
+    action: 'UPLOAD',
+    afterState: {
+      examPaperId: payload.examPaperId,
+      status,
+      entries: payload.entries.length,
+    },
   });
 
   res.status(200).json({ results });
@@ -203,6 +231,15 @@ export const moderateMark = async (req: Request, res: Response) => {
     return updatedMark;
   });
 
+  await logAudit(req, {
+    schoolId,
+    entityType: 'MARK',
+    entityId: id,
+    action: 'MODERATE',
+    beforeState: { marks: mark.marks, grade: mark.grade },
+    afterState: { marks: updated.marks, grade: updated.grade, moderated: true },
+  });
+
   res.status(200).json(updated);
 };
 
@@ -228,6 +265,14 @@ export const requestRevaluation = async (req: Request, res: Response) => {
       requestedById: auth.userId,
       remarks: payload.remarks ?? null,
     },
+  });
+
+  await logAudit(req, {
+    schoolId,
+    entityType: 'MARK',
+    entityId: id,
+    action: 'REVALUATION_REQUEST',
+    afterState: { remarks: payload.remarks ?? null },
   });
 
   res.status(201).json(revaluation);

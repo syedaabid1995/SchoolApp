@@ -5,6 +5,7 @@ import { HttpError } from '../middlewares/error.middleware';
 import { resolveSchoolId } from '../utils/tenant';
 import { computeStatus, isWithinWindow } from '../utils/attendance';
 import { auditAttendance } from '../middlewares/audit.middleware';
+import { logAudit } from '../utils/audit';
 
 const startSchema = z.object({
   periodId: z.string().uuid(),
@@ -87,6 +88,19 @@ export const startSession = async (req: Request, res: Response) => {
       deviceId: payload.deviceId,
       gpsLat: payload.gpsLat ?? null,
       gpsLng: payload.gpsLng ?? null,
+    },
+  });
+
+  await logAudit(req, {
+    schoolId,
+    entityType: 'ATTENDANCE_SESSION',
+    entityId: session.id,
+    action: 'START',
+    afterState: {
+      periodId: session.periodId,
+      date: session.date,
+      status: session.status,
+      deviceId: session.deviceId,
     },
   });
 
@@ -177,6 +191,18 @@ export const markAttendance = async (req: Request, res: Response) => {
     return results;
   });
 
+  await logAudit(req, {
+    schoolId,
+    entityType: 'ATTENDANCE',
+    entityId: payload.sessionId,
+    action: 'CAPTURE',
+    afterState: {
+      sessionId: payload.sessionId,
+      records: payload.records.length,
+      deviceId: payload.deviceId,
+    },
+  });
+
   res.status(201).json({ records: created });
 };
 
@@ -204,6 +230,14 @@ export const closeSession = async (req: Request, res: Response) => {
   const updated = await prisma.attendanceSession.update({
     where: { id },
     data: { status: 'CLOSED' },
+  });
+
+  await logAudit(req, {
+    schoolId,
+    entityType: 'ATTENDANCE_SESSION',
+    entityId: updated.id,
+    action: 'CLOSE',
+    afterState: { status: updated.status },
   });
 
   res.status(200).json(updated);
@@ -244,6 +278,15 @@ export const overrideAttendance = async (req: Request, res: Response) => {
       manualOverrideReason: updated.manualOverrideReason,
     },
     reason: payload.reason,
+  });
+
+  await logAudit(req, {
+    schoolId,
+    entityType: 'ATTENDANCE_RECORD',
+    entityId: updated.id,
+    action: 'OVERRIDE',
+    beforeState: { status: record.status, manualOverrideReason: record.manualOverrideReason },
+    afterState: { status: updated.status, manualOverrideReason: updated.manualOverrideReason },
   });
 
   res.status(200).json(updated);

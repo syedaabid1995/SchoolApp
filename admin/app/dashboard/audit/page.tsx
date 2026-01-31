@@ -32,24 +32,61 @@ export default function AuditPage() {
 
       <section className="rounded-2xl border border-slate/10 bg-white p-6">
         <div className="grid gap-3 md:grid-cols-3">
-          <input
+          <select
             value={filters.entityType}
             onChange={(e) => setFilters({ ...filters, entityType: e.target.value, page: 1 })}
-            placeholder="Entity type"
             className="rounded-lg border border-slate/20 px-3 py-2 text-sm"
-          />
-          <input
+          >
+            <option value="">All entities</option>
+            <option value="STUDENT">Student</option>
+            <option value="PARENT">Parent</option>
+            <option value="TEACHER">Teacher</option>
+            <option value="EXAM">Exam</option>
+            <option value="EXAM_PAPER">Exam Paper</option>
+            <option value="MARKS">Marks Upload</option>
+            <option value="MARK">Mark</option>
+            <option value="ATTENDANCE_SESSION">Attendance Session</option>
+            <option value="ATTENDANCE">Attendance Capture</option>
+            <option value="ATTENDANCE_RECORD">Attendance Record</option>
+            <option value="STUDENT_STATUS">Student Status</option>
+            <option value="STUDENT_PARENT">Student-Parent Link</option>
+            <option value="STUDENT_TRANSFER">Student Transfer</option>
+          </select>
+          <select
             value={filters.actorRole}
             onChange={(e) => setFilters({ ...filters, actorRole: e.target.value, page: 1 })}
-            placeholder="Actor role"
             className="rounded-lg border border-slate/20 px-3 py-2 text-sm"
-          />
-          <input
+          >
+            <option value="">All roles</option>
+            <option value="SUPER_ADMIN">Super Admin</option>
+            <option value="SCHOOL_ADMIN">School Admin</option>
+            <option value="TEACHER">Teacher</option>
+            <option value="PARENT">Parent</option>
+          </select>
+          <select
             value={filters.action}
             onChange={(e) => setFilters({ ...filters, action: e.target.value, page: 1 })}
-            placeholder="Action"
             className="rounded-lg border border-slate/20 px-3 py-2 text-sm"
-          />
+          >
+            <option value="">All actions</option>
+            <option value="CREATE">Create</option>
+            <option value="UPDATE">Update</option>
+            <option value="DELETE">Delete</option>
+            <option value="STATUS_CHANGE">Status Change</option>
+            <option value="LINK">Link</option>
+            <option value="UNLINK">Unlink</option>
+            <option value="REQUEST">Request</option>
+            <option value="ACCEPT">Accept</option>
+            <option value="REJECT">Reject</option>
+            <option value="START">Start</option>
+            <option value="CAPTURE">Capture</option>
+            <option value="CLOSE">Close</option>
+            <option value="OVERRIDE">Override</option>
+            <option value="UPLOAD">Upload</option>
+            <option value="MODERATE">Moderate</option>
+            <option value="REVALUATION_REQUEST">Revaluation Request</option>
+            <option value="APPROVE">Approve</option>
+          </select>
         </div>
         <div className="mt-4 overflow-x-auto">
           <table className="w-full text-left text-sm">

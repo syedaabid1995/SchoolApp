@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { prisma } from '../config/db';
 import { HttpError } from '../middlewares/error.middleware';
 import { resolveSchoolId } from '../utils/tenant';
+import { logAudit } from '../utils/audit';
 
 const subjectMappingSchema = z.object({
   subjectId: z.string().uuid(),
@@ -138,6 +139,23 @@ export const createExam = async (req: Request, res: Response) => {
     return created;
   });
 
+  await logAudit(req, {
+    schoolId,
+    entityType: 'EXAM',
+    entityId: exam.id,
+    action: 'CREATE',
+    afterState: {
+      name: exam.name,
+      type: exam.type,
+      status: exam.status,
+      academicYearId: exam.academicYearId,
+      classId: exam.classId,
+      sectionId: exam.sectionId,
+      scheduledAt: exam.scheduledAt,
+      subjects: subjectIds.length,
+    },
+  });
+
   res.status(201).json(exam);
 };
 
@@ -185,7 +203,6 @@ export const updateExam = async (req: Request, res: Response) => {
 
   const existing = await prisma.exam.findFirst({
     where: { id, schoolId },
-    select: { id: true },
   });
 
   if (!existing) {
@@ -205,6 +222,31 @@ export const updateExam = async (req: Request, res: Response) => {
     },
   });
 
+  await logAudit(req, {
+    schoolId,
+    entityType: 'EXAM',
+    entityId: exam.id,
+    action: 'UPDATE',
+    beforeState: existing ? {
+      name: existing.name,
+      type: existing.type,
+      status: existing.status,
+      academicYearId: existing.academicYearId,
+      classId: existing.classId,
+      sectionId: existing.sectionId,
+      scheduledAt: existing.scheduledAt,
+    } : null,
+    afterState: {
+      name: exam.name,
+      type: exam.type,
+      status: exam.status,
+      academicYearId: exam.academicYearId,
+      classId: exam.classId,
+      sectionId: exam.sectionId,
+      scheduledAt: exam.scheduledAt,
+    },
+  });
+
   res.status(200).json(exam);
 };
 
@@ -214,7 +256,6 @@ export const deleteExam = async (req: Request, res: Response) => {
 
   const existing = await prisma.exam.findFirst({
     where: { id, schoolId },
-    select: { id: true },
   });
 
   if (!existing) {
@@ -222,6 +263,22 @@ export const deleteExam = async (req: Request, res: Response) => {
   }
 
   await prisma.exam.delete({ where: { id } });
+
+  await logAudit(req, {
+    schoolId,
+    entityType: 'EXAM',
+    entityId: id,
+    action: 'DELETE',
+    beforeState: existing ? {
+      name: existing.name,
+      type: existing.type,
+      status: existing.status,
+      academicYearId: existing.academicYearId,
+      classId: existing.classId,
+      sectionId: existing.sectionId,
+      scheduledAt: existing.scheduledAt,
+    } : null,
+  });
 
   res.status(204).send();
 };

@@ -44,6 +44,7 @@ export default function ExamsPage() {
     practicalMarks: '',
   });
   const [subjectMap, setSubjectMap] = useState<Record<string, SubjectSelection>>({});
+  const [stepError, setStepError] = useState('');
 
   const { data: session } = useQuery({ queryKey: ['session'], queryFn: getSession });
   const isSuperAdmin = session?.role === 'SUPER_ADMIN';
@@ -153,6 +154,11 @@ export default function ExamsPage() {
   };
 
   const handleContinueFromBasics = () => {
+    let error = '';
+    if (!examBasics.academicYearId) error = 'Select academic year.';
+    else if (!examBasics.classId) error = 'Select class.';
+    setStepError(error);
+    if (error) return;
     syncSubjectMap();
     setStep(2);
   };
@@ -214,16 +220,26 @@ export default function ExamsPage() {
       ) : null}
 
       <section className="rounded-2xl border border-slate/10 bg-white p-6">
-        <div className="flex items-center justify-between">
-          <h2 className="text-lg font-semibold">Create Exam</h2>
-          <div className="flex items-center gap-2 text-xs font-semibold text-slate">
-            <span className={step === 1 ? 'text-ink' : ''}>1. Details</span>
-            <span>→</span>
-            <span className={step === 2 ? 'text-ink' : ''}>2. Subjects</span>
-            <span>→</span>
-            <span className={step === 3 ? 'text-ink' : ''}>3. Structure</span>
-          </div>
+        <div className="flex flex-wrap items-center gap-1">
+          {[
+            { id: 1, label: 'Details' },
+            { id: 2, label: 'Subjects' },
+            { id: 3, label: 'Structure' },
+          ].map((item) => (
+            <span
+              key={item.id}
+              className={`rounded-full px-3 py-1 text-xs font-semibold ${
+                step === item.id ? 'bg-ink text-white' : 'bg-sand text-slate'
+              }`}
+            >
+              {item.id}. {item.label}
+            </span>
+          ))}
         </div>
+      </section>
+
+      <section className="rounded-2xl border border-slate/10 bg-white p-6">
+        <h2 className="text-lg font-semibold">Create Exam</h2>
 
         {step === 1 ? (
           <div className="mt-4 space-y-4">
@@ -302,7 +318,6 @@ export default function ExamsPage() {
               <button
                 className="rounded-lg bg-ink px-4 py-2 text-sm font-semibold text-white"
                 onClick={handleContinueFromBasics}
-                disabled={!examBasics.academicYearId || !examBasics.classId}
               >
                 Save & Continue
               </button>
@@ -313,6 +328,7 @@ export default function ExamsPage() {
                 Cancel
               </button>
             </div>
+            {stepError ? <p className="mt-3 text-sm font-semibold text-rose-600">{stepError}</p> : null}
           </div>
         ) : null}
 
@@ -392,12 +408,19 @@ export default function ExamsPage() {
               </button>
               <button
                 className="rounded-lg bg-ink px-4 py-2 text-sm font-semibold text-white"
-                onClick={() => setStep(3)}
-                disabled={selectedSubjectIds.length === 0}
+                onClick={() => {
+                  if (!selectedSubjectIds.length) {
+                    setStepError('Select at least one subject.');
+                    return;
+                  }
+                  setStepError('');
+                  setStep(3);
+                }}
               >
                 Save & Continue
               </button>
             </div>
+            {stepError ? <p className="mt-3 text-sm font-semibold text-rose-600">{stepError}</p> : null}
           </div>
         ) : null}
 

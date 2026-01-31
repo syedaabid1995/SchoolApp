@@ -3,6 +3,8 @@ import { z } from 'zod';
 import { resolveSchoolId } from '../utils/tenant';
 import { createTeacher, listTeachers, updateTeacher } from '../services/teacher.service';
 import { HttpError } from '../middlewares/error.middleware';
+import { logAudit } from '../utils/audit';
+import { prisma } from '../config/db';
 
 const createSchema = z.object({
   email: z.string().email(),
@@ -69,6 +71,22 @@ export const createTeacherApi = async (req: Request, res: Response) => {
         }
       : undefined,
   });
+
+  await logAudit(req, {
+    schoolId,
+    entityType: 'TEACHER',
+    entityId: teacher.profile.id,
+    action: 'CREATE',
+    afterState: {
+      firstName: teacher.profile.firstName,
+      lastName: teacher.profile.lastName,
+      employeeNo: teacher.profile.employeeNo,
+      phone: teacher.profile.phone,
+      email: teacher.user.email,
+      isActive: teacher.profile.isActive,
+    },
+  });
+
   res.status(201).json(teacher);
 };
 
@@ -89,7 +107,40 @@ export const updateTeacherApi = async (req: Request, res: Response) => {
   const payload = updateSchema.parse(req.body);
   const schoolId = resolveSchoolId(req, payload.schoolId ?? (req.query.schoolId as string | undefined));
   try {
+    const existing = await prisma.teacherProfile.findFirst({
+      where: { id: req.params.id, schoolId },
+      include: { user: { select: { email: true } } },
+    });
+    if (!existing) {
+      throw new HttpError(404, 'Teacher not found');
+    }
+
     const updated = await updateTeacher(req.params.id, schoolId, payload);
+
+    await logAudit(req, {
+      schoolId,
+      entityType: 'TEACHER',
+      entityId: updated.id,
+      action: 'UPDATE',
+      beforeState: {
+        firstName: existing.firstName,
+        lastName: existing.lastName,
+        employeeNo: existing.employeeNo,
+        phone: existing.phone,
+        address: existing.address,
+        isActive: existing.isActive,
+        email: existing.user.email,
+      },
+      afterState: {
+        firstName: updated.firstName,
+        lastName: updated.lastName,
+        employeeNo: updated.employeeNo,
+        phone: updated.phone,
+        address: updated.address,
+        isActive: updated.isActive,
+      },
+    });
+
     res.status(200).json(updated);
   } catch (err) {
     throw new HttpError(404, 'Teacher not found');

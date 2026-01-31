@@ -127,6 +127,21 @@ export default function AddTeacherPage() {
       </header>
 
       <section className="rounded-2xl border border-slate/10 bg-white p-6">
+        <div className="flex flex-wrap items-center gap-2">
+          {steps.map((item) => (
+            <span
+              key={item.id}
+              className={`rounded-full px-3 py-1 text-xs font-semibold ${
+                step === item.id ? 'bg-ink text-white' : 'bg-sand text-slate'
+              }`}
+            >
+              {item.id}. {item.title}
+            </span>
+          ))}
+        </div>
+      </section>
+
+      <section className="rounded-2xl border border-slate/10 bg-white p-6">
         {isSuperAdmin ? (
           <div className="mb-4">
             <select
@@ -143,19 +158,6 @@ export default function AddTeacherPage() {
             </select>
           </div>
         ) : null}
-
-        <div className="flex flex-wrap items-center gap-2">
-          {steps.map((item) => (
-            <span
-              key={item.id}
-              className={`rounded-full px-3 py-1 text-xs font-semibold ${
-                step === item.id ? 'bg-ink text-white' : 'bg-sand text-slate'
-              }`}
-            >
-              {item.id}. {item.title}
-            </span>
-          ))}
-        </div>
 
         {step === 1 ? (
           <>

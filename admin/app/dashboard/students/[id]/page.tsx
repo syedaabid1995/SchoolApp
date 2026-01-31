@@ -25,10 +25,39 @@ export default function StudentDetailPage() {
   const [step, setStep] = useState<Step>(1);
   const [isEditing, setIsEditing] = useState(false);
   const [editData, setEditData] = useState({
+    // Academic
+    admissionNo: '',
+    classId: '',
+    sectionId: '',
+    // Student
     firstName: '',
     lastName: '',
-    admissionNo: '',
     dob: '',
+    gender: '',
+    bloodGroup: '',
+    // Parent
+    fatherName: '',
+    motherName: '',
+    guardianName: '',
+    relationship: '',
+    phone: '',
+    email: '',
+    // Address
+    line1: '',
+    line2: '',
+    city: '',
+    state: '',
+    pincode: '',
+    emergency: '',
+    // Medical
+    conditions: '',
+    allergies: '',
+    doctor: '',
+    // Documents
+    birthCert: '',
+    transferCert: '',
+    aadhaar: '',
+    reportCard: '',
   });
   const studentId = params.id as string;
 
@@ -38,10 +67,39 @@ export default function StudentDetailPage() {
     enabled: Boolean(studentId),
     onSuccess: (data) => {
       setEditData({
+        // Academic
+        admissionNo: data.admissionNo,
+        classId: data.classId || '',
+        sectionId: data.sectionId || '',
+        // Student
         firstName: data.firstName,
         lastName: data.lastName,
-        admissionNo: data.admissionNo,
         dob: data.dob || '',
+        gender: '',
+        bloodGroup: '',
+        // Parent
+        fatherName: data.parentLinks?.[0]?.parent?.firstName || '',
+        motherName: '',
+        guardianName: data.parentLinks?.[0]?.parent?.firstName || '',
+        relationship: '',
+        phone: data.parentLinks?.[0]?.parent?.phone || '',
+        email: data.parentLinks?.[0]?.parent?.email || '',
+        // Address
+        line1: '',
+        line2: '',
+        city: '',
+        state: '',
+        pincode: '',
+        emergency: '',
+        // Medical
+        conditions: '',
+        allergies: '',
+        doctor: '',
+        // Documents
+        birthCert: '',
+        transferCert: '',
+        aadhaar: '',
+        reportCard: '',
       });
     },
   });
@@ -227,6 +285,48 @@ export default function StudentDetailPage() {
                   )}
                 </div>
                 <div>
+                  <label className="block text-sm font-medium text-slate mb-1">Gender</label>
+                  {isEditing ? (
+                    <select
+                      value={editData.gender}
+                      onChange={(e) => setEditData({ ...editData, gender: e.target.value })}
+                      className="w-full rounded-lg border border-slate/20 px-3 py-2 text-sm"
+                    >
+                      <option value="">Select Gender</option>
+                      <option value="Male">Male</option>
+                      <option value="Female">Female</option>
+                    </select>
+                  ) : (
+                    <div className="rounded-lg border border-slate/20 px-3 py-2 text-sm bg-slate/5">
+                      {editData.gender || '—'}
+                    </div>
+                  )}
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-slate mb-1">Blood Group</label>
+                  {isEditing ? (
+                    <select
+                      value={editData.bloodGroup}
+                      onChange={(e) => setEditData({ ...editData, bloodGroup: e.target.value })}
+                      className="w-full rounded-lg border border-slate/20 px-3 py-2 text-sm"
+                    >
+                      <option value="">Select Blood Group</option>
+                      <option value="A+">A+</option>
+                      <option value="A-">A-</option>
+                      <option value="B+">B+</option>
+                      <option value="B-">B-</option>
+                      <option value="AB+">AB+</option>
+                      <option value="AB-">AB-</option>
+                      <option value="O+">O+</option>
+                      <option value="O-">O-</option>
+                    </select>
+                  ) : (
+                    <div className="rounded-lg border border-slate/20 px-3 py-2 text-sm bg-slate/5">
+                      {editData.bloodGroup || '—'}
+                    </div>
+                  )}
+                </div>
+                <div>
                   <label className="block text-sm font-medium text-slate mb-1">Created</label>
                   <div className="rounded-lg border border-slate/20 px-3 py-2 text-sm bg-slate/5">
                     {new Date(student.createdAt).toLocaleDateString()}
@@ -239,58 +339,273 @@ export default function StudentDetailPage() {
           {step === 3 && (
             <div>
               <h3 className="text-lg font-semibold mb-4">Parent Information</h3>
-              {primaryParent ? (
-                <div className="grid gap-4 md:grid-cols-2">
-                  <div>
-                    <label className="block text-sm font-medium text-slate mb-1">Parent Name</label>
+              <div className="grid gap-4 md:grid-cols-2">
+                <div>
+                  <label className="block text-sm font-medium text-slate mb-1">Father Name</label>
+                  {isEditing ? (
+                    <input
+                      value={editData.fatherName}
+                      onChange={(e) => setEditData({ ...editData, fatherName: e.target.value })}
+                      className="w-full rounded-lg border border-slate/20 px-3 py-2 text-sm"
+                    />
+                  ) : (
                     <div className="rounded-lg border border-slate/20 px-3 py-2 text-sm bg-slate/5">
-                      {primaryParent.firstName} {primaryParent.lastName}
+                      {editData.fatherName || '—'}
                     </div>
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-slate mb-1">Phone</label>
-                    <div className="rounded-lg border border-slate/20 px-3 py-2 text-sm bg-slate/5">
-                      {primaryParent.phone || '—'}
-                    </div>
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-slate mb-1">Email</label>
-                    <div className="rounded-lg border border-slate/20 px-3 py-2 text-sm bg-slate/5">
-                      {primaryParent.email || '—'}
-                    </div>
-                  </div>
+                  )}
                 </div>
-              ) : (
-                <p className="text-slate">No parent information available.</p>
-              )}
+                <div>
+                  <label className="block text-sm font-medium text-slate mb-1">Mother Name</label>
+                  {isEditing ? (
+                    <input
+                      value={editData.motherName}
+                      onChange={(e) => setEditData({ ...editData, motherName: e.target.value })}
+                      className="w-full rounded-lg border border-slate/20 px-3 py-2 text-sm"
+                    />
+                  ) : (
+                    <div className="rounded-lg border border-slate/20 px-3 py-2 text-sm bg-slate/5">
+                      {editData.motherName || '—'}
+                    </div>
+                  )}
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-slate mb-1">Guardian Name</label>
+                  {isEditing ? (
+                    <input
+                      value={editData.guardianName}
+                      onChange={(e) => setEditData({ ...editData, guardianName: e.target.value })}
+                      className="w-full rounded-lg border border-slate/20 px-3 py-2 text-sm"
+                    />
+                  ) : (
+                    <div className="rounded-lg border border-slate/20 px-3 py-2 text-sm bg-slate/5">
+                      {editData.guardianName || '—'}
+                    </div>
+                  )}
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-slate mb-1">Relationship</label>
+                  {isEditing ? (
+                    <input
+                      value={editData.relationship}
+                      onChange={(e) => setEditData({ ...editData, relationship: e.target.value })}
+                      className="w-full rounded-lg border border-slate/20 px-3 py-2 text-sm"
+                    />
+                  ) : (
+                    <div className="rounded-lg border border-slate/20 px-3 py-2 text-sm bg-slate/5">
+                      {editData.relationship || '—'}
+                    </div>
+                  )}
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-slate mb-1">Phone</label>
+                  {isEditing ? (
+                    <input
+                      value={editData.phone}
+                      onChange={(e) => setEditData({ ...editData, phone: e.target.value })}
+                      className="w-full rounded-lg border border-slate/20 px-3 py-2 text-sm"
+                    />
+                  ) : (
+                    <div className="rounded-lg border border-slate/20 px-3 py-2 text-sm bg-slate/5">
+                      {editData.phone || '—'}
+                    </div>
+                  )}
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-slate mb-1">Email</label>
+                  {isEditing ? (
+                    <input
+                      type="email"
+                      value={editData.email}
+                      onChange={(e) => setEditData({ ...editData, email: e.target.value })}
+                      className="w-full rounded-lg border border-slate/20 px-3 py-2 text-sm"
+                    />
+                  ) : (
+                    <div className="rounded-lg border border-slate/20 px-3 py-2 text-sm bg-slate/5">
+                      {editData.email || '—'}
+                    </div>
+                  )}
+                </div>
+              </div>
             </div>
           )}
 
           {step === 4 && (
             <div>
               <h3 className="text-lg font-semibold mb-4">Address Information</h3>
-              <p className="text-slate">Address information not available in current data structure.</p>
+              <div className="grid gap-4 md:grid-cols-2">
+                <div className="md:col-span-2">
+                  <label className="block text-sm font-medium text-slate mb-1">Address Line 1</label>
+                  {isEditing ? (
+                    <input
+                      value={editData.line1}
+                      onChange={(e) => setEditData({ ...editData, line1: e.target.value })}
+                      className="w-full rounded-lg border border-slate/20 px-3 py-2 text-sm"
+                    />
+                  ) : (
+                    <div className="rounded-lg border border-slate/20 px-3 py-2 text-sm bg-slate/5">
+                      {editData.line1 || '—'}
+                    </div>
+                  )}
+                </div>
+                <div className="md:col-span-2">
+                  <label className="block text-sm font-medium text-slate mb-1">Address Line 2</label>
+                  {isEditing ? (
+                    <input
+                      value={editData.line2}
+                      onChange={(e) => setEditData({ ...editData, line2: e.target.value })}
+                      className="w-full rounded-lg border border-slate/20 px-3 py-2 text-sm"
+                    />
+                  ) : (
+                    <div className="rounded-lg border border-slate/20 px-3 py-2 text-sm bg-slate/5">
+                      {editData.line2 || '—'}
+                    </div>
+                  )}
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-slate mb-1">City</label>
+                  {isEditing ? (
+                    <input
+                      value={editData.city}
+                      onChange={(e) => setEditData({ ...editData, city: e.target.value })}
+                      className="w-full rounded-lg border border-slate/20 px-3 py-2 text-sm"
+                    />
+                  ) : (
+                    <div className="rounded-lg border border-slate/20 px-3 py-2 text-sm bg-slate/5">
+                      {editData.city || '—'}
+                    </div>
+                  )}
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-slate mb-1">State</label>
+                  {isEditing ? (
+                    <input
+                      value={editData.state}
+                      onChange={(e) => setEditData({ ...editData, state: e.target.value })}
+                      className="w-full rounded-lg border border-slate/20 px-3 py-2 text-sm"
+                    />
+                  ) : (
+                    <div className="rounded-lg border border-slate/20 px-3 py-2 text-sm bg-slate/5">
+                      {editData.state || '—'}
+                    </div>
+                  )}
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-slate mb-1">Pincode</label>
+                  {isEditing ? (
+                    <input
+                      value={editData.pincode}
+                      onChange={(e) => setEditData({ ...editData, pincode: e.target.value })}
+                      className="w-full rounded-lg border border-slate/20 px-3 py-2 text-sm"
+                    />
+                  ) : (
+                    <div className="rounded-lg border border-slate/20 px-3 py-2 text-sm bg-slate/5">
+                      {editData.pincode || '—'}
+                    </div>
+                  )}
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-slate mb-1">Emergency Contact</label>
+                  {isEditing ? (
+                    <input
+                      value={editData.emergency}
+                      onChange={(e) => setEditData({ ...editData, emergency: e.target.value })}
+                      className="w-full rounded-lg border border-slate/20 px-3 py-2 text-sm"
+                    />
+                  ) : (
+                    <div className="rounded-lg border border-slate/20 px-3 py-2 text-sm bg-slate/5">
+                      {editData.emergency || '—'}
+                    </div>
+                  )}
+                </div>
+              </div>
             </div>
           )}
 
           {step === 5 && (
             <div>
               <h3 className="text-lg font-semibold mb-4">Medical Information</h3>
-              <p className="text-slate">Medical information not available in current data structure.</p>
+              <div className="grid gap-4 md:grid-cols-2">
+                <div className="md:col-span-2">
+                  <label className="block text-sm font-medium text-slate mb-1">Medical Conditions</label>
+                  {isEditing ? (
+                    <textarea
+                      value={editData.conditions}
+                      onChange={(e) => setEditData({ ...editData, conditions: e.target.value })}
+                      className="w-full rounded-lg border border-slate/20 px-3 py-2 text-sm"
+                      rows={3}
+                    />
+                  ) : (
+                    <div className="rounded-lg border border-slate/20 px-3 py-2 text-sm bg-slate/5 min-h-[80px]">
+                      {editData.conditions || '—'}
+                    </div>
+                  )}
+                </div>
+                <div className="md:col-span-2">
+                  <label className="block text-sm font-medium text-slate mb-1">Allergies</label>
+                  {isEditing ? (
+                    <textarea
+                      value={editData.allergies}
+                      onChange={(e) => setEditData({ ...editData, allergies: e.target.value })}
+                      className="w-full rounded-lg border border-slate/20 px-3 py-2 text-sm"
+                      rows={3}
+                    />
+                  ) : (
+                    <div className="rounded-lg border border-slate/20 px-3 py-2 text-sm bg-slate/5 min-h-[80px]">
+                      {editData.allergies || '—'}
+                    </div>
+                  )}
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-slate mb-1">Doctor Name</label>
+                  {isEditing ? (
+                    <input
+                      value={editData.doctor}
+                      onChange={(e) => setEditData({ ...editData, doctor: e.target.value })}
+                      className="w-full rounded-lg border border-slate/20 px-3 py-2 text-sm"
+                    />
+                  ) : (
+                    <div className="rounded-lg border border-slate/20 px-3 py-2 text-sm bg-slate/5">
+                      {editData.doctor || '—'}
+                    </div>
+                  )}
+                </div>
+              </div>
             </div>
           )}
 
           {step === 6 && (
             <div>
               <h3 className="text-lg font-semibold mb-4">Documents</h3>
-              <p className="text-slate">Document information not available in current data structure.</p>
+              <div className="grid gap-4 md:grid-cols-2">
+                {[
+                  { key: 'birthCert', label: 'Birth Certificate' },
+                  { key: 'transferCert', label: 'Transfer Certificate' },
+                  { key: 'aadhaar', label: 'Aadhaar Card' },
+                  { key: 'reportCard', label: 'Report Card' },
+                ].map((item) => (
+                  <div key={item.key} className="flex flex-col gap-2 rounded-lg border border-slate/20 px-3 py-2">
+                    <label className="text-sm font-medium text-slate">{item.label}</label>
+                    {isEditing ? (
+                      <input
+                        type="file"
+                        onChange={(e) => setEditData({ ...editData, [item.key]: e.target.files?.[0]?.name ?? '' })}
+                        className="text-xs"
+                      />
+                    ) : (
+                      <div className="text-sm bg-slate/5 px-2 py-1 rounded">
+                        {editData[item.key as keyof typeof editData] || 'No file uploaded'}
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
             </div>
           )}
 
           {step === 7 && (
             <div>
               <h3 className="text-lg font-semibold mb-4">Access Information</h3>
-              <p className="text-slate">Access information not available in current data structure.</p>
+              <p className="text-slate">Access and login settings for student and parent accounts.</p>
             </div>
           )}
 

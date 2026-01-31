@@ -4,6 +4,7 @@ import { prisma } from '../config/db';
 import { HttpError } from '../middlewares/error.middleware';
 import { resolveSchoolId } from '../utils/tenant';
 import { incrementUsage, enforceLimits } from '../services/subscription.service';
+import { logAudit } from '../utils/audit';
 
 const createSchema = z.object({
   admissionNo: z.string().min(1),
@@ -74,6 +75,21 @@ export const createStudent = async (req: Request, res: Response) => {
     },
   });
 
+  await logAudit(req, {
+    schoolId,
+    entityType: 'STUDENT',
+    entityId: student.id,
+    action: 'CREATE',
+    afterState: {
+      admissionNo: student.admissionNo,
+      firstName: student.firstName,
+      lastName: student.lastName,
+      classId: student.classId,
+      sectionId: student.sectionId,
+      status: student.status,
+    },
+  });
+
   res.status(201).json(student);
 };
 
@@ -129,7 +145,16 @@ export const updateStudent = async (req: Request, res: Response) => {
 
   const existing = await prisma.student.findFirst({
     where: { id, schoolId },
-    select: { id: true },
+    select: {
+      id: true,
+      admissionNo: true,
+      firstName: true,
+      lastName: true,
+      dob: true,
+      classId: true,
+      sectionId: true,
+      status: true,
+    },
   });
 
   if (!existing) {
@@ -145,6 +170,23 @@ export const updateStudent = async (req: Request, res: Response) => {
       dob: payload.dob === undefined ? undefined : payload.dob,
       classId: payload.classId === undefined ? undefined : payload.classId,
       sectionId: payload.sectionId === undefined ? undefined : payload.sectionId,
+    },
+  });
+
+  await logAudit(req, {
+    schoolId,
+    entityType: 'STUDENT',
+    entityId: student.id,
+    action: 'UPDATE',
+    beforeState: existing,
+    afterState: {
+      admissionNo: student.admissionNo,
+      firstName: student.firstName,
+      lastName: student.lastName,
+      dob: student.dob,
+      classId: student.classId,
+      sectionId: student.sectionId,
+      status: student.status,
     },
   });
 
@@ -180,6 +222,14 @@ export const linkParent = async (req: Request, res: Response) => {
     create: { studentId: id, parentId: payload.parentId },
   });
 
+  await logAudit(req, {
+    schoolId,
+    entityType: 'STUDENT_PARENT',
+    entityId: `${id}:${payload.parentId}`,
+    action: 'LINK',
+    afterState: { studentId: id, parentId: payload.parentId },
+  });
+
   res.status(201).json(link);
 };
 
@@ -198,6 +248,14 @@ export const unlinkParent = async (req: Request, res: Response) => {
 
   await prisma.studentParent.delete({
     where: { studentId_parentId: { studentId: id, parentId } },
+  });
+
+  await logAudit(req, {
+    schoolId,
+    entityType: 'STUDENT_PARENT',
+    entityId: `${id}:${parentId}`,
+    action: 'UNLINK',
+    beforeState: { studentId: id, parentId },
   });
 
   res.status(204).send();
@@ -231,6 +289,15 @@ export const changeStudentStatus = async (req: Request, res: Response) => {
     });
 
     return studentUpdate;
+  });
+
+  await logAudit(req, {
+    schoolId,
+    entityType: 'STUDENT_STATUS',
+    entityId: updated.id,
+    action: 'STATUS_CHANGE',
+    beforeState: { status: student.status },
+    afterState: { status: updated.status, reason: payload.reason ?? null },
   });
 
   res.status(200).json(updated);
@@ -293,6 +360,20 @@ export const createTransferRequest = async (req: Request, res: Response) => {
       student: { select: { id: true, firstName: true, lastName: true, admissionNo: true } },
       fromSchool: { select: { id: true, name: true, code: true } },
       toSchool: { select: { id: true, name: true, code: true } },
+    },
+  });
+
+  await logAudit(req, {
+    schoolId: fromSchoolId,
+    entityType: 'STUDENT_TRANSFER',
+    entityId: request.id,
+    action: 'REQUEST',
+    afterState: {
+      studentId: request.studentId,
+      fromSchoolId: request.fromSchoolId,
+      toSchoolId: request.toSchoolId,
+      status: request.status,
+      reason: request.reason,
     },
   });
 
@@ -361,6 +442,15 @@ export const acceptTransferRequest = async (req: Request, res: Response) => {
     });
   });
 
+  await logAudit(req, {
+    schoolId,
+    entityType: 'STUDENT_TRANSFER',
+    entityId: result.id,
+    action: 'ACCEPT',
+    beforeState: { status: 'PENDING' },
+    afterState: { status: result.status, reason: result.reason },
+  });
+
   res.status(200).json(result);
 };
 
@@ -389,6 +479,15 @@ export const rejectTransferRequest = async (req: Request, res: Response) => {
       decidedAt: new Date(),
       reason: payload.reason ?? null,
     },
+  });
+
+  await logAudit(req, {
+    schoolId,
+    entityType: 'STUDENT_TRANSFER',
+    entityId: request.id,
+    action: 'REJECT',
+    beforeState: { status: 'PENDING' },
+    afterState: { status: request.status, reason: request.reason },
   });
 
   res.status(200).json(request);

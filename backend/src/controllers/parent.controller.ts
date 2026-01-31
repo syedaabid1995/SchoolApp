@@ -5,6 +5,7 @@ import { prisma } from '../config/db';
 import { HttpError } from '../middlewares/error.middleware';
 import { resolveSchoolId } from '../utils/tenant';
 import { hashPassword } from '../utils/password';
+import { logAudit } from '../utils/audit';
 
 const createSchema = z.object({
   firstName: z.string().min(1),
@@ -112,6 +113,20 @@ export const createParent = async (req: Request, res: Response) => {
     return { parent, tempPassword };
   });
 
+  await logAudit(req, {
+    schoolId,
+    entityType: 'PARENT',
+    entityId: result.parent.id,
+    action: 'CREATE',
+    afterState: {
+      firstName: result.parent.firstName,
+      lastName: result.parent.lastName,
+      phone: result.parent.phone,
+      email: result.parent.email,
+      userId: result.parent.userId,
+    },
+  });
+
   res.status(201).json({ ...result.parent, tempPassword: result.tempPassword, sendVia: payload.sendVia ?? null });
 };
 
@@ -177,7 +192,7 @@ export const updateParent = async (req: Request, res: Response) => {
 
   const existing = await prisma.parentProfile.findFirst({
     where: { id, schoolId },
-    select: { id: true },
+    select: { id: true, firstName: true, lastName: true, phone: true, email: true, userId: true },
   });
 
   if (!existing) {
@@ -195,6 +210,21 @@ export const updateParent = async (req: Request, res: Response) => {
     },
   });
 
+  await logAudit(req, {
+    schoolId,
+    entityType: 'PARENT',
+    entityId: parent.id,
+    action: 'UPDATE',
+    beforeState: existing,
+    afterState: {
+      firstName: parent.firstName,
+      lastName: parent.lastName,
+      phone: parent.phone,
+      email: parent.email,
+      userId: parent.userId,
+    },
+  });
+
   res.status(200).json(parent);
 };
 
@@ -204,7 +234,7 @@ export const deleteParent = async (req: Request, res: Response) => {
 
   const existing = await prisma.parentProfile.findFirst({
     where: { id, schoolId },
-    select: { id: true },
+    select: { id: true, firstName: true, lastName: true, phone: true, email: true, userId: true },
   });
 
   if (!existing) {
@@ -212,6 +242,14 @@ export const deleteParent = async (req: Request, res: Response) => {
   }
 
   await prisma.parentProfile.delete({ where: { id } });
+
+  await logAudit(req, {
+    schoolId,
+    entityType: 'PARENT',
+    entityId: id,
+    action: 'DELETE',
+    beforeState: existing,
+  });
 
   res.status(204).send();
 };

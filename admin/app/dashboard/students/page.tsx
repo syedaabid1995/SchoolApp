@@ -6,11 +6,13 @@ import { useMutation, useQuery } from '@tanstack/react-query';
 import { createTransferRequest, listStudents, listTransferTargets } from '../../../services/student.service';
 import { listSchools } from '../../../services/school.service';
 import { getSession } from '../../../services/auth.service';
+import { listClasses, listSections } from '../../../services/academic.service';
 
 export default function StudentsPage() {
   const [schoolId, setSchoolId] = useState('');
   const [transfer, setTransfer] = useState({ open: false, studentId: '', toSchoolId: '', reason: '' });
   const [transferError, setTransferError] = useState('');
+  const [filters, setFilters] = useState({ query: '', status: '', classId: '', sectionId: '' });
   const { data: session } = useQuery({ queryKey: ['session'], queryFn: getSession });
   const isSuperAdmin = session?.role === 'SUPER_ADMIN';
   const effectiveSchoolId = isSuperAdmin ? schoolId : session?.schoolId ?? undefined;
@@ -24,6 +26,18 @@ export default function StudentsPage() {
   const { data: students } = useQuery({
     queryKey: ['students', effectiveSchoolId],
     queryFn: () => listStudents({ schoolId: effectiveSchoolId }),
+    enabled: Boolean(effectiveSchoolId),
+  });
+
+  const { data: classes } = useQuery({
+    queryKey: ['classes', effectiveSchoolId],
+    queryFn: () => listClasses({ schoolId: effectiveSchoolId }),
+    enabled: Boolean(effectiveSchoolId),
+  });
+
+  const { data: sections } = useQuery({
+    queryKey: ['sections', effectiveSchoolId],
+    queryFn: () => listSections({ schoolId: effectiveSchoolId }),
     enabled: Boolean(effectiveSchoolId),
   });
 
@@ -76,6 +90,53 @@ export default function StudentsPage() {
         ) : null}
 
         <h2 className="text-lg font-semibold">Student List</h2>
+        <div className="mt-4 grid gap-3 md:grid-cols-4">
+          <input
+            value={filters.query}
+            onChange={(e) => setFilters({ ...filters, query: e.target.value })}
+            placeholder="Search by name or admission no"
+            className="rounded-lg border border-slate/20 px-3 py-2 text-sm"
+          />
+          <select
+            value={filters.classId}
+            onChange={(e) =>
+              setFilters({ ...filters, classId: e.target.value, sectionId: '' })
+            }
+            className="rounded-lg border border-slate/20 px-3 py-2 text-sm"
+          >
+            <option value="">All classes</option>
+            {classes?.map((cls: { id: string; name: string }) => (
+              <option key={cls.id} value={cls.id}>
+                {cls.name}
+              </option>
+            ))}
+          </select>
+          <select
+            value={filters.sectionId}
+            onChange={(e) => setFilters({ ...filters, sectionId: e.target.value })}
+            className="rounded-lg border border-slate/20 px-3 py-2 text-sm"
+            disabled={!filters.classId}
+          >
+            <option value="">All sections</option>
+            {(sections ?? [])
+              .filter((section: { classId: string }) => section.classId === filters.classId)
+              .map((section: { id: string; name: string }) => (
+                <option key={section.id} value={section.id}>
+                  {section.name}
+                </option>
+              ))}
+          </select>
+          <select
+            value={filters.status}
+            onChange={(e) => setFilters({ ...filters, status: e.target.value })}
+            className="rounded-lg border border-slate/20 px-3 py-2 text-sm"
+          >
+            <option value="">All statuses</option>
+            <option value="ACTIVE">Active</option>
+            <option value="TRANSFERRED">Transferred</option>
+            <option value="EXITED">Exited</option>
+          </select>
+        </div>
         <div className="mt-4 overflow-x-auto">
           <table className="w-full text-left text-sm">
             <thead className="text-xs uppercase text-slate">
@@ -91,7 +152,17 @@ export default function StudentsPage() {
               </tr>
             </thead>
             <tbody>
-              {students?.map((student) => {
+              {(students ?? [])
+                .filter((student) => {
+                  const query = filters.query.trim().toLowerCase();
+                  const name = `${student.firstName} ${student.lastName}`.toLowerCase();
+                  const matchesQuery = !query || name.includes(query) || student.admissionNo.toLowerCase().includes(query);
+                  const matchesStatus = !filters.status || student.status === filters.status;
+                  const matchesClass = !filters.classId || student.classId === filters.classId;
+                  const matchesSection = !filters.sectionId || student.sectionId === filters.sectionId;
+                  return matchesQuery && matchesStatus && matchesClass && matchesSection;
+                })
+                .map((student) => {
                 const primaryParent = student.parentLinks?.[0]?.parent;
                 return (
                   <tr key={student.id} className="border-t border-slate/10">

@@ -7,7 +7,7 @@ export type AnalyticsResponse = {
   academicSummary: { exams: number; marks: number };
 };
 
-export const getAnalytics = async () => {
-  const { data } = await api.get<AnalyticsResponse>('/analytics');
+export const getAnalytics = async (params?: { schoolId?: string }) => {
+  const { data } = await api.get<AnalyticsResponse>('/analytics', { params });
   return data;
 };

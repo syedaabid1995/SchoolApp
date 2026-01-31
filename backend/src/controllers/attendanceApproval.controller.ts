@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { resolveSchoolId } from '../utils/tenant';
 import { HttpError } from '../middlewares/error.middleware';
 import { approveAttendanceSession, rejectAttendanceSession } from '../services/attendanceApproval.service';
+import { logAudit } from '../utils/audit';
 
 const approveSchema = z.object({
   schoolId: z.string().uuid().optional(),
@@ -25,6 +26,14 @@ export const approveSession = async (req: Request, res: Response) => {
     approvedById: auth.userId,
   });
 
+  await logAudit(req, {
+    schoolId,
+    entityType: 'ATTENDANCE_SESSION',
+    entityId: session.id,
+    action: 'APPROVE',
+    afterState: { approvalStatus: session.approvalStatus },
+  });
+
   res.status(200).json(session);
 };
 
@@ -39,6 +48,14 @@ export const rejectSession = async (req: Request, res: Response) => {
     sessionId: req.params.sessionId,
     rejectedById: auth.userId,
     reason: payload.reason,
+  });
+
+  await logAudit(req, {
+    schoolId,
+    entityType: 'ATTENDANCE_SESSION',
+    entityId: result.id,
+    action: 'REJECT',
+    afterState: { approvalStatus: result.approvalStatus, reason: payload.reason },
   });
 
   res.status(200).json(result);
