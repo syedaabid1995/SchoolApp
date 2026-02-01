@@ -146,39 +146,10 @@ export default function DashboardPage() {
             Welcome back! Here's what's happening at your school today.
           </p>
         </div>
-        <div className="absolute -right-4 -top-4 h-32 w-32 rounded-full bg-white/10"></div>
-        <div className="absolute -left-8 -bottom-8 h-40 w-40 rounded-full bg-white/5"></div>
-      </section>
-
-      {/* Test Notifications */}
-      <section className="bg-white rounded-2xl border border-slate/10 p-6">
-        <h2 className="text-lg font-semibold mb-4">Test Notifications</h2>
-        <div className="grid gap-3 md:grid-cols-4">
-          <button
-            onClick={() => notify.success('Success!', 'Operation completed successfully')}
-            className="rounded-lg bg-green-500 px-4 py-2 text-sm text-white hover:bg-green-600"
-          >
-            Success
-          </button>
-          <button
-            onClick={() => notify.error('Error!', 'Something went wrong')}
-            className="rounded-lg bg-red-500 px-4 py-2 text-sm text-white hover:bg-red-600"
-          >
-            Error
-          </button>
-          <button
-            onClick={() => notify.warning('Warning!', 'Please check your input')}
-            className="rounded-lg bg-yellow-500 px-4 py-2 text-sm text-white hover:bg-yellow-600"
-          >
-            Warning
-          </button>
-          <button
-            onClick={() => notify.info('Info', 'Here is some information')}
-            className="rounded-lg bg-blue-500 px-4 py-2 text-sm text-white hover:bg-blue-600"
-          >
-            Info
-          </button>
-        </div>
+        <div className="absolute -right-4 -top-4 h-32 w-32 rounded-full bg-white/10 animate-pulse"></div>
+        <div className="absolute -left-8 -bottom-8 h-40 w-40 rounded-full bg-white/5 animate-bounce"></div>
+        <div className="absolute right-1/4 top-1/2 h-16 w-16 rounded-full bg-white/5 animate-ping"></div>
+        <div className="absolute left-1/3 top-1/4 h-20 w-20 rounded-full bg-white/10 animate-pulse" style={{animationDelay: '1s'}}></div>
       </section>
 
       {/* Stats Grid */}
