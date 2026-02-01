@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { prisma } from '../config/db';
 import { HttpError } from '../middlewares/error.middleware';
 import { resolveSchoolId } from '../utils/tenant';
+import { logAudit } from '../utils/audit';
 
 const createSchema = z.object({
   classId: z.string().uuid(),
@@ -75,7 +76,7 @@ export const updateSection = async (req: Request, res: Response) => {
 
   const existing = await prisma.section.findFirst({
     where: { id, class: { schoolId } },
-    select: { id: true },
+    select: { id: true, name: true, classId: true },
   });
 
   if (!existing) {
@@ -104,6 +105,14 @@ export const deleteSection = async (req: Request, res: Response) => {
   }
 
   await prisma.section.delete({ where: { id } });
+
+  await logAudit(req, {
+    schoolId,
+    entityType: 'SECTION',
+    entityId: id,
+    action: 'DELETE',
+    beforeState: existing,
+  });
 
   res.status(204).send();
 };

@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { prisma } from '../config/db';
 import { HttpError } from '../middlewares/error.middleware';
 import { resolveSchoolId } from '../utils/tenant';
+import { logAudit } from '../utils/audit';
 
 const dateSchema = z.coerce.date();
 
@@ -97,7 +98,7 @@ export const deleteAcademicYear = async (req: Request, res: Response) => {
 
   const existing = await prisma.academicYear.findFirst({
     where: { id, schoolId },
-    select: { id: true },
+    select: { id: true, name: true, startDate: true, endDate: true, isActive: true },
   });
 
   if (!existing) {
@@ -105,6 +106,14 @@ export const deleteAcademicYear = async (req: Request, res: Response) => {
   }
 
   await prisma.academicYear.delete({ where: { id } });
+
+  await logAudit(req, {
+    schoolId,
+    entityType: 'ACADEMIC_YEAR',
+    entityId: id,
+    action: 'DELETE',
+    beforeState: existing,
+  });
 
   res.status(204).send();
 };
