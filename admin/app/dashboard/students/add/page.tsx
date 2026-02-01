@@ -1,6 +1,7 @@
 'use client';
 
 import { useMemo, useState } from 'react';
+import { City, State } from 'country-state-city';
 import { useMutation } from '@tanstack/react-query';
 import { useRouter } from 'next/navigation';
 import { useQuery } from '@tanstack/react-query';
@@ -108,6 +109,15 @@ export default function StudentOnboardingPage() {
     () => (sections ?? []).filter((section: { classId: string }) => section.classId === academic.classId),
     [sections, academic.classId],
   );
+  const stateOptions = useMemo(() => State.getStatesOfCountry('IN'), []);
+  const selectedStateCode = useMemo(() => {
+    const match = stateOptions.find((state) => state.name === address.state);
+    return match?.isoCode ?? '';
+  }, [stateOptions, address.state]);
+  const cityOptions = useMemo(() => {
+    if (!selectedStateCode) return [];
+    return City.getCitiesOfState('IN', selectedStateCode);
+  }, [selectedStateCode]);
 
   const yearLookup = useMemo(() => {
     const map = new Map<string, string>();
@@ -147,35 +157,50 @@ export default function StudentOnboardingPage() {
 
   const nextStep = () => {
     let error = '';
+    const nameMin = 3;
+    const isNameValid = (value: string) => value.trim().length >= nameMin;
+    const isPhoneValid = (value: string) => /^[0-9]{10}$/.test(value.trim());
+    const isEmailValid = (value: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value.trim());
     if (step === 1) {
       if (!academic.yearId) error = 'Academic year is required.';
       else if (!academic.classId) error = 'Class is required.';
       else if (sectionOptions.length > 0 && !academic.sectionId) error = 'Section is required.';
       else if (!academic.admissionNo.trim()) error = 'Admission number is required.';
+      else if (academic.admissionNo.trim().length < 3) error = 'Admission number must be at least 3 characters.';
+      else if (academic.rollNo.trim() && academic.rollNo.trim().length < 1) error = 'Roll number is invalid.';
     }
     if (step === 2) {
       if (!student.fullName.trim()) error = 'Student full name is required.';
+      else if (!isNameValid(student.fullName)) error = 'Student name must be at least 3 characters.';
       else if (!student.gender) error = 'Gender is required.';
       else if (!student.dob) error = 'Date of birth is required.';
+      else if (student.bloodGroup && !student.bloodGroup.trim()) error = 'Blood group is invalid.';
     }
     if (step === 3) {
       if (!parent.fatherName.trim()) error = 'Father name is required.';
+      else if (!isNameValid(parent.fatherName)) error = 'Father name must be at least 3 characters.';
       else if (!parent.motherName.trim()) error = 'Mother name is required.';
+      else if (!isNameValid(parent.motherName)) error = 'Mother name must be at least 3 characters.';
       else if (!parent.guardianName.trim()) error = 'Primary guardian name is required.';
+      else if (!isNameValid(parent.guardianName)) error = 'Primary guardian name must be at least 3 characters.';
       else if (!parent.relationship.trim()) error = 'Relationship is required.';
       else if (!parent.phone.trim()) error = 'Mobile number is required.';
+      else if (!isPhoneValid(parent.phone)) error = 'Mobile number must be 10 digits.';
+      else if (parent.email.trim() && !isEmailValid(parent.email)) error = 'Email address is invalid.';
     }
     if (step === 4) {
       if (!address.line1.trim()) error = 'Address line 1 is required.';
-      else if (!address.city.trim()) error = 'City is required.';
       else if (!address.state.trim()) error = 'State is required.';
+      else if (cityOptions.length > 0 && !address.city.trim()) error = 'City is required.';
       else if (!address.pincode.trim()) error = 'Pincode is required.';
+      else if (!/^[0-9]{6}$/.test(address.pincode.trim())) error = 'Pincode must be 6 digits.';
       else if (!address.emergency.trim()) error = 'Emergency contact number is required.';
+      else if (!isPhoneValid(address.emergency)) error = 'Emergency contact must be 10 digits.';
     }
     if (step === 7) {
       if (access.parentLogin) {
         const phone = parent.phone.trim();
-        if (phone.length !== 10) {
+        if (!isPhoneValid(phone)) {
           error = 'Enter a valid 10-digit parent mobile number.';
         } else if (parentMatches.length > 0 && !selectedParentUserId) {
           error = 'Select an existing parent to continue.';
@@ -401,12 +426,21 @@ export default function StudentOnboardingPage() {
               onChange={(e) => setStudent({ ...student, dob: e.target.value })}
               className="rounded-lg border border-slate/20 px-3 py-2 text-sm"
             />
-            <input
+            <select
               value={student.bloodGroup}
               onChange={(e) => setStudent({ ...student, bloodGroup: e.target.value })}
-              placeholder="Blood group (optional)"
               className="rounded-lg border border-slate/20 px-3 py-2 text-sm"
-            />
+            >
+              <option value="">Blood group (optional)</option>
+              <option value="A+">A+</option>
+              <option value="A-">A-</option>
+              <option value="B+">B+</option>
+              <option value="B-">B-</option>
+              <option value="AB+">AB+</option>
+              <option value="AB-">AB-</option>
+              <option value="O+">O+</option>
+              <option value="O-">O-</option>
+            </select>
             <input
               type="file"
               accept="image/*"
@@ -447,15 +481,20 @@ export default function StudentOnboardingPage() {
               placeholder="Primary guardian name"
               className="rounded-lg border border-slate/20 px-3 py-2 text-sm"
             />
-            <input
+            <select
               value={parent.relationship}
               onChange={(e) => setParent({ ...parent, relationship: e.target.value })}
-              placeholder="Relationship"
               className="rounded-lg border border-slate/20 px-3 py-2 text-sm"
-            />
+            >
+              <option value="">Relationship</option>
+              <option value="FATHER">Father</option>
+              <option value="MOTHER">Mother</option>
+              <option value="GUARDIAN">Guardian</option>
+              <option value="OTHER">Other</option>
+            </select>
             <input
               value={parent.phone}
-              onChange={(e) => setParent({ ...parent, phone: e.target.value })}
+              onChange={(e) => setParent({ ...parent, phone: e.target.value.replace(/\D/g, '').slice(0, 10) })}
               placeholder="Mobile number"
               className="rounded-lg border border-slate/20 px-3 py-2 text-sm"
             />
@@ -493,27 +532,46 @@ export default function StudentOnboardingPage() {
               placeholder="Address line 2"
               className="rounded-lg border border-slate/20 px-3 py-2 text-sm"
             />
-            <input
+            <select
+              value={address.state}
+              onChange={(e) => setAddress({ ...address, state: e.target.value, city: '' })}
+              className="rounded-lg border border-slate/20 px-3 py-2 text-sm"
+            >
+              <option value="">Select state</option>
+              {stateOptions.map((state) => (
+                <option key={state.isoCode} value={state.name}>
+                  {state.name}
+                </option>
+              ))}
+            </select>
+            <select
               value={address.city}
               onChange={(e) => setAddress({ ...address, city: e.target.value })}
-              placeholder="City"
               className="rounded-lg border border-slate/20 px-3 py-2 text-sm"
-            />
-            <input
-              value={address.state}
-              onChange={(e) => setAddress({ ...address, state: e.target.value })}
-              placeholder="State"
-              className="rounded-lg border border-slate/20 px-3 py-2 text-sm"
-            />
+              disabled={!address.state || cityOptions.length === 0}
+            >
+              <option value="">
+                {!address.state
+                  ? 'Select state first'
+                  : cityOptions.length
+                    ? 'Select city'
+                    : 'No cities available'}
+              </option>
+              {cityOptions.map((city) => (
+                <option key={`${city.name}-${city.latitude}-${city.longitude}`} value={city.name}>
+                  {city.name}
+                </option>
+              ))}
+            </select>
             <input
               value={address.pincode}
-              onChange={(e) => setAddress({ ...address, pincode: e.target.value })}
+              onChange={(e) => setAddress({ ...address, pincode: e.target.value.replace(/\D/g, '').slice(0, 6) })}
               placeholder="Pincode"
               className="rounded-lg border border-slate/20 px-3 py-2 text-sm"
             />
             <input
               value={address.emergency}
-              onChange={(e) => setAddress({ ...address, emergency: e.target.value })}
+              onChange={(e) => setAddress({ ...address, emergency: e.target.value.replace(/\D/g, '').slice(0, 10) })}
               placeholder="Emergency contact number"
               className="rounded-lg border border-slate/20 px-3 py-2 text-sm"
             />
