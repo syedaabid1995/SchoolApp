@@ -25,12 +25,12 @@ const storage = multer.diskStorage({
       const schoolId = resolveSchoolId(req, req.query.schoolId as string | undefined);
       const category = String(req.query.category ?? 'students');
       const studentId = req.query.studentId as string | undefined;
-      let targetDir = path.join(uploadDir, `school_${schoolId}`, category);
+      let targetDir = path.join(uploadDir, 'schools', schoolId, category);
       if (category === 'documents' && studentId) {
-        targetDir = path.join(uploadDir, `school_${schoolId}`, 'documents', studentId);
+        targetDir = path.join(uploadDir, 'schools', schoolId, 'documents', studentId);
       }
       if (category === 'students' && studentId) {
-        targetDir = path.join(uploadDir, `school_${schoolId}`, 'students', studentId);
+        targetDir = path.join(uploadDir, 'schools', schoolId, 'students', studentId);
       }
       ensureDir(targetDir);
       cb(null, targetDir);
@@ -89,8 +89,8 @@ uploadRouter.post('/photos', upload.single('file'), (req, res) => {
   const studentId = req.query.studentId as string | undefined;
   const url =
     category === 'students' && studentId
-      ? `/uploads/school_${schoolId}/students/${studentId}/${req.file.filename}`
-      : `/uploads/school_${schoolId}/${category}/${req.file.filename}`;
+      ? `/uploads/schools/${schoolId}/students/${studentId}/${req.file.filename}`
+      : `/uploads/schools/${schoolId}/${category}/${req.file.filename}`;
   res.status(201).json({ url, filename: req.file.filename });
 });
 
@@ -111,6 +111,6 @@ uploadRouter.post('/documents', docUpload.single('file'), (req, res) => {
     res.status(400).json({ error: { message: 'studentId is required for documents', details: null } });
     return;
   }
-  const url = `/uploads/school_${schoolId}/documents/${studentId}/${req.file.filename}`;
+  const url = `/uploads/schools/${schoolId}/documents/${studentId}/${req.file.filename}`;
   res.status(201).json({ url, filename: req.file.filename });
 });

@@ -634,8 +634,8 @@ export const acceptTransferRequest = async (req: Request, res: Response) => {
   const toSchoolId = request.toSchoolId;
   const studentId = request.studentId;
 
-  const oldBase = `/uploads/school_${fromSchoolId}`;
-  const newBase = `/uploads/school_${toSchoolId}`;
+  const oldBase = `/uploads/schools/${fromSchoolId}`;
+  const newBase = `/uploads/schools/${toSchoolId}`;
 
   const rewriteUrl = (value: string | null) => {
     if (!value) return value;
@@ -663,12 +663,12 @@ export const acceptTransferRequest = async (req: Request, res: Response) => {
   };
 
   await moveDir(
-    path.join(uploadsRoot, `school_${fromSchoolId}`, 'students', studentId),
-    path.join(uploadsRoot, `school_${toSchoolId}`, 'students', studentId),
+    path.join(uploadsRoot, 'schools', fromSchoolId, 'students', studentId),
+    path.join(uploadsRoot, 'schools', toSchoolId, 'students', studentId),
   );
   await moveDir(
-    path.join(uploadsRoot, `school_${fromSchoolId}`, 'documents', studentId),
-    path.join(uploadsRoot, `school_${toSchoolId}`, 'documents', studentId),
+    path.join(uploadsRoot, 'schools', fromSchoolId, 'documents', studentId),
+    path.join(uploadsRoot, 'schools', toSchoolId, 'documents', studentId),
   );
 
   const result = await prisma.$transaction(async (tx) => {
