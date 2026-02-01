@@ -153,10 +153,12 @@ export default function MarksUploadPage() {
       const statusSet = new Set((existing ?? []).map((entry: { status: 'DRAFT' | 'SUBMITTED' | 'LOCKED' }) => entry.status));
       if (statusSet.has('LOCKED')) nextStatus = 'LOCKED';
       else if (statusSet.has('SUBMITTED')) nextStatus = 'SUBMITTED';
-      const markMap = new Map((existing ?? []).map((entry: { studentId: string; marks: number }) => [entry.studentId, entry]));
+      const markMap = new Map(
+        (existing ?? []).map((entry: { studentId: string; marks: number }) => [entry.studentId, entry]),
+      );
       rows.forEach((row) => {
         const entry = markMap.get(row.studentId);
-        if (entry) {
+        if (entry && typeof entry === 'object' && 'marks' in entry) {
           row.marks = Number.isFinite(entry.marks) ? String(entry.marks) : '';
         }
       });

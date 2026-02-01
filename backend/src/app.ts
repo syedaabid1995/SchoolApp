@@ -76,8 +76,31 @@ export const createApp = () => {
   app.use(rateLimit());
   app.use(apiVersionMiddleware);
 
-  app.get('/health', (_req: Request, res: Response) => {
-    res.status(200).json({ status: 'ok' });
+  app.get('/health', async (_req: Request, res: Response) => {
+    try {
+      // Check database connectivity
+      const { prisma } = await import('./config/db');
+      await prisma.$queryRaw`SELECT 1`;
+      
+      res.status(200).json({ 
+        status: 'healthy',
+        timestamp: new Date().toISOString(),
+        uptime: process.uptime(),
+        version: process.env.npm_package_version || '1.0.0',
+        environment: process.env.NODE_ENV || 'development',
+        database: 'connected'
+      });
+    } catch (error) {
+      res.status(503).json({ 
+        status: 'unhealthy',
+        timestamp: new Date().toISOString(),
+        uptime: process.uptime(),
+        version: process.env.npm_package_version || '1.0.0',
+        environment: process.env.NODE_ENV || 'development',
+        database: 'disconnected',
+        error: error instanceof Error ? error.message : 'Unknown error'
+      });
+    }
   });
 
   app.use('/docs', swaggerUi.serve, swaggerUi.setup(openapiSpec));

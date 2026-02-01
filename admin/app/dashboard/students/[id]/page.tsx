@@ -8,6 +8,7 @@ import { getStudent, updateStudent, uploadStudentPhoto, uploadStudentDocument, r
 import { City, State } from 'country-state-city';
 import FullPageLoader from '../../../../components/FullPageLoader';
 import { getSession } from '../../../../services/auth.service';
+import { useNotify } from '../../../../components/NotificationProvider';
 
 type Step = 1 | 2 | 3 | 4 | 5 | 6;
 
@@ -23,6 +24,7 @@ const steps: Array<{ id: Step; title: string }> = [
 export default function StudentDetailPage() {
   const params = useParams();
   const queryClient = useQueryClient();
+  const notify = useNotify();
   const { data: session } = useQuery({ queryKey: ['session'], queryFn: getSession });
   const schoolId = session?.schoolId ?? undefined;
   const [step, setStep] = useState<Step>(1);
@@ -69,43 +71,6 @@ export default function StudentDetailPage() {
     queryKey: ['student', studentId],
     queryFn: () => getStudent(studentId, { schoolId }),
     enabled: Boolean(studentId),
-    onSuccess: (data) => {
-      setEditData({
-        // Academic
-        admissionNo: data.admissionNo,
-        classId: data.classId || '',
-        sectionId: data.sectionId || '',
-        // Student
-        fullName: data.fullName ?? `${data.firstName} ${data.lastName}`.trim(),
-        dob: data.dob || '',
-        gender: data.gender ?? '',
-        bloodGroup: data.bloodGroup ?? '',
-        photoUrl: data.photoUrl ?? '',
-        // Parent
-        fatherName: data.fatherName ?? '',
-        motherName: data.motherName ?? '',
-        guardianName: data.guardianName ?? '',
-        guardianRelationship: data.guardianRelationship ?? '',
-        parentPhone: data.parentPhone ?? '',
-        parentEmail: data.parentEmail ?? '',
-        // Address
-        addressLine1: data.addressLine1 ?? '',
-        addressLine2: data.addressLine2 ?? '',
-        city: data.city ?? '',
-        state: data.state ?? '',
-        pincode: data.pincode ?? '',
-        emergencyContact: data.emergencyContact ?? '',
-        // Medical
-        medicalConditions: data.medicalConditions ?? '',
-        allergies: data.allergies ?? '',
-        doctorContact: data.doctorContact ?? '',
-        // Documents
-        docBirthCert: data.docBirthCert ?? '',
-        docTransferCert: data.docTransferCert ?? '',
-        docAadhaar: data.docAadhaar ?? '',
-        docReportCard: data.docReportCard ?? '',
-      });
-    },
   });
 
   const updateMutation = useMutation({
@@ -486,13 +451,15 @@ export default function StudentDetailPage() {
                           if (!file) return;
                           setPhotoPreview(URL.createObjectURL(file));
                           try {
-                            const uploaded = await uploadStudentPhoto(file, { schoolId: student.schoolId, studentId: student.id });
+                            const uploaded = await uploadStudentPhoto(file, { schoolId, studentId: student.id });
                             const resolved = resolveUploadUrl(uploaded.url) ?? uploaded.url;
                             setEditData({ ...editData, photoUrl: uploaded.url });
                             setPhotoPreview(resolved);
                             quickUpdateMutation.mutate({ photoUrl: uploaded.url });
-                          } catch {
-                            // Keep preview but do not update url.
+                            notify.success('Photo uploaded', 'Student photo updated.');
+                          } catch (err) {
+                            const message = err instanceof Error ? err.message : 'Photo upload failed';
+                            notify.error('Photo upload failed', message);
                           }
                         }}
                         className="w-full rounded-xl border border-gray-300 px-4 py-3 text-sm focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-200 transition-colors"
@@ -564,9 +531,19 @@ export default function StudentDetailPage() {
                           const existing = student.photos?.length ?? 0;
                           const remaining = Math.max(0, 5 - existing);
                           const toUpload = files.slice(0, remaining);
+                          let successCount = 0;
                           for (const file of toUpload) {
-                            const uploaded = await uploadStudentPhoto(file, { schoolId: student.schoolId, studentId: student.id });
-                            await addPhotoMutation.mutateAsync(uploaded.url);
+                            try {
+                              const uploaded = await uploadStudentPhoto(file, { schoolId, studentId: student.id });
+                              await addPhotoMutation.mutateAsync(uploaded.url);
+                              successCount += 1;
+                            } catch (err) {
+                              const message = err instanceof Error ? err.message : 'Additional photo upload failed';
+                              notify.error('Additional photo failed', message);
+                            }
+                          }
+                          if (successCount > 0) {
+                            notify.success('Additional photos uploaded', `${successCount} photo(s) added.`);
                           }
                         }}
                         className="w-full rounded-xl border border-gray-300 px-4 py-3 text-sm focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-200 transition-colors"
@@ -872,11 +849,13 @@ export default function StudentDetailPage() {
                           const file = e.target.files?.[0];
                           if (!file) return;
                           try {
-                            const uploaded = await uploadStudentDocument(file, student.id, { schoolId: student.schoolId });
+                            const uploaded = await uploadStudentDocument(file, student.id, { schoolId });
                             setEditData({ ...editData, [item.key]: uploaded.url });
                             quickUpdateMutation.mutate({ [item.key]: uploaded.url } as any);
-                          } catch {
-                            // ignore upload error in UI
+                            notify.success('Document uploaded', `${item.label} uploaded.`);
+                          } catch (err) {
+                            const message = err instanceof Error ? err.message : 'Document upload failed';
+                            notify.error('Document upload failed', message);
                           }
                         }}
                         className="text-xs"

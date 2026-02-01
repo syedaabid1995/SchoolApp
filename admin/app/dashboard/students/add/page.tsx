@@ -280,31 +280,71 @@ export default function StudentOnboardingPage() {
 
       if (createdStudentId) {
         if (photoFile) {
-          const uploaded = await uploadStudentPhoto(photoFile, { schoolId, studentId: createdStudentId });
-          await updateStudent(createdStudentId, { photoUrl: uploaded.url });
+          try {
+            const uploaded = await uploadStudentPhoto(photoFile, { schoolId, studentId: createdStudentId });
+            await updateStudent(createdStudentId, { photoUrl: uploaded.url });
+            notify.success('Photo uploaded', 'Student photo uploaded successfully.');
+          } catch (err) {
+            const message = err instanceof Error ? err.message : 'Photo upload failed';
+            notify.error('Photo upload failed', message);
+          }
         }
         if (additionalPhotoFiles.length) {
+          let successCount = 0;
           for (const file of additionalPhotoFiles) {
-            const uploaded = await uploadStudentPhoto(file, { schoolId, studentId: createdStudentId });
-            await addStudentPhoto(createdStudentId, uploaded.url);
+            try {
+              const uploaded = await uploadStudentPhoto(file, { schoolId, studentId: createdStudentId });
+              await addStudentPhoto(createdStudentId, uploaded.url);
+              successCount += 1;
+            } catch (err) {
+              const message = err instanceof Error ? err.message : 'Additional photo upload failed';
+              notify.error('Additional photo failed', message);
+            }
+          }
+          if (successCount > 0) {
+            notify.success('Additional photos uploaded', `${successCount} photo(s) added.`);
           }
         }
         const docUpdates: Record<string, string> = {};
         if (documentFiles.birthCert) {
-          const uploaded = await uploadStudentDocument(documentFiles.birthCert, createdStudentId, { schoolId });
-          docUpdates.docBirthCert = uploaded.url;
+          try {
+            const uploaded = await uploadStudentDocument(documentFiles.birthCert, createdStudentId, { schoolId });
+            docUpdates.docBirthCert = uploaded.url;
+            notify.success('Document uploaded', 'Birth certificate uploaded.');
+          } catch (err) {
+            const message = err instanceof Error ? err.message : 'Birth certificate upload failed';
+            notify.error('Document upload failed', message);
+          }
         }
         if (documentFiles.transferCert) {
-          const uploaded = await uploadStudentDocument(documentFiles.transferCert, createdStudentId, { schoolId });
-          docUpdates.docTransferCert = uploaded.url;
+          try {
+            const uploaded = await uploadStudentDocument(documentFiles.transferCert, createdStudentId, { schoolId });
+            docUpdates.docTransferCert = uploaded.url;
+            notify.success('Document uploaded', 'Transfer certificate uploaded.');
+          } catch (err) {
+            const message = err instanceof Error ? err.message : 'Transfer certificate upload failed';
+            notify.error('Document upload failed', message);
+          }
         }
         if (documentFiles.aadhaar) {
-          const uploaded = await uploadStudentDocument(documentFiles.aadhaar, createdStudentId, { schoolId });
-          docUpdates.docAadhaar = uploaded.url;
+          try {
+            const uploaded = await uploadStudentDocument(documentFiles.aadhaar, createdStudentId, { schoolId });
+            docUpdates.docAadhaar = uploaded.url;
+            notify.success('Document uploaded', 'Aadhaar uploaded.');
+          } catch (err) {
+            const message = err instanceof Error ? err.message : 'Aadhaar upload failed';
+            notify.error('Document upload failed', message);
+          }
         }
         if (documentFiles.reportCard) {
-          const uploaded = await uploadStudentDocument(documentFiles.reportCard, createdStudentId, { schoolId });
-          docUpdates.docReportCard = uploaded.url;
+          try {
+            const uploaded = await uploadStudentDocument(documentFiles.reportCard, createdStudentId, { schoolId });
+            docUpdates.docReportCard = uploaded.url;
+            notify.success('Document uploaded', 'Report card uploaded.');
+          } catch (err) {
+            const message = err instanceof Error ? err.message : 'Report card upload failed';
+            notify.error('Document upload failed', message);
+          }
         }
         if (Object.keys(docUpdates).length) {
           await updateStudent(createdStudentId, docUpdates);
@@ -338,7 +378,7 @@ export default function StudentOnboardingPage() {
           phone: parent.phone || undefined,
           email: parent.email || undefined,
           createLogin: access.parentLogin,
-          sendVia: access.sendVia,
+          sendVia: access.sendVia as 'SMS' | 'EMAIL' | 'BOTH',
           schoolId,
         });
         if (createdParent?.id && createdStudent?.id) {
