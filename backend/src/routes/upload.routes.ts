@@ -1,49 +1,10 @@
 import { Router } from 'express';
 import multer from 'multer';
 import path from 'path';
-import { fileURLToPath } from 'url';
-import fs from 'fs';
 import crypto from 'crypto';
 import { authMiddleware } from '../middlewares/auth.middleware';
 import { resolveSchoolId } from '../utils/tenant';
-
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const uploadDir = path.resolve(__dirname, '../../uploads');
-if (!fs.existsSync(uploadDir)) {
-  fs.mkdirSync(uploadDir, { recursive: true });
-}
-
-const ensureDir = (dir: string) => {
-  if (!fs.existsSync(dir)) {
-    fs.mkdirSync(dir, { recursive: true });
-  }
-};
-
-const storage = multer.diskStorage({
-  destination: (req, _file, cb) => {
-    try {
-      const schoolId = resolveSchoolId(req, req.query.schoolId as string | undefined);
-      const category = String(req.query.category ?? 'students');
-      const studentId = req.query.studentId as string | undefined;
-      let targetDir = path.join(uploadDir, 'schools', schoolId, category);
-      if (category === 'documents' && studentId) {
-        targetDir = path.join(uploadDir, 'schools', schoolId, 'documents', studentId);
-      }
-      if (category === 'students' && studentId) {
-        targetDir = path.join(uploadDir, 'schools', schoolId, 'students', studentId);
-      }
-      ensureDir(targetDir);
-      cb(null, targetDir);
-    } catch (err) {
-      cb(err as Error, uploadDir);
-    }
-  },
-  filename: (_req, file, cb) => {
-    const ext = path.extname(file.originalname);
-    const name = `${crypto.randomUUID()}${ext || ''}`;
-    cb(null, name);
-  },
-});
+import { getSignedUrlForKey, uploadBuffer, getBucketName } from '../services/s3.service';
 
 const imageOnlyFilter: multer.Options['fileFilter'] = (_req, file, cb) => {
   if (file.mimetype.startsWith('image/')) {
@@ -70,12 +31,37 @@ const documentFilter: multer.Options['fileFilter'] = (_req, file, cb) => {
 };
 
 const upload = multer({
-  storage,
+  storage: multer.memoryStorage(),
   fileFilter: imageOnlyFilter,
   limits: { fileSize: 10 * 1024 * 1024 },
 });
 
 export const uploadRouter = Router();
+
+uploadRouter.get('/signed', async (req, res) => {
+  const rawKey = req.query.key as string | undefined;
+  const bucket = (req.query.bucket as string | undefined) ?? getBucketName();
+  if (!rawKey) {
+    res.status(400).json({ error: { message: 'key is required', details: null } });
+    return;
+  }
+  if (bucket !== getBucketName()) {
+    res.status(400).json({ error: { message: 'Invalid bucket', details: null } });
+    return;
+  }
+  if (req.auth) {
+    const parts = rawKey.split('/');
+    if (parts[0] === 'schools' && parts[1]) {
+      resolveSchoolId(req, parts[1]);
+    }
+  }
+  try {
+    const signed = await getSignedUrlForKey({ key: rawKey });
+    res.redirect(302, signed);
+  } catch (err) {
+    res.status(500).json({ error: { message: 'Failed to sign url', details: (err as Error).message } });
+  }
+});
 
 uploadRouter.use(authMiddleware);
 
@@ -87,15 +73,23 @@ uploadRouter.post('/photos', upload.single('file'), (req, res) => {
   const schoolId = resolveSchoolId(req, req.query.schoolId as string | undefined);
   const category = String(req.query.category ?? 'students');
   const studentId = req.query.studentId as string | undefined;
-  const url =
-    category === 'students' && studentId
-      ? `/uploads/schools/${schoolId}/students/${studentId}/${req.file.filename}`
-      : `/uploads/schools/${schoolId}/${category}/${req.file.filename}`;
-  res.status(201).json({ url, filename: req.file.filename });
+  const ext = path.extname(req.file.originalname);
+  const name = `${crypto.randomUUID()}${ext || ''}`;
+  let key = `schools/${schoolId}/${category}/${name}`;
+  if (category === 'students' && studentId) {
+    key = `schools/${schoolId}/students/${studentId}/${name}`;
+  }
+  if (category === 'documents' && studentId) {
+    key = `schools/${schoolId}/documents/${studentId}/${name}`;
+  }
+
+  uploadBuffer({ key, body: req.file.buffer, contentType: req.file.mimetype })
+    .then((result) => res.status(201).json({ url: result.url, filename: name }))
+    .catch((err) => res.status(500).json({ error: { message: 'Upload failed', details: err.message } }));
 });
 
 const docUpload = multer({
-  storage,
+  storage: multer.memoryStorage(),
   fileFilter: documentFilter,
   limits: { fileSize: 20 * 1024 * 1024 },
 });
@@ -111,6 +105,11 @@ uploadRouter.post('/documents', docUpload.single('file'), (req, res) => {
     res.status(400).json({ error: { message: 'studentId is required for documents', details: null } });
     return;
   }
-  const url = `/uploads/schools/${schoolId}/documents/${studentId}/${req.file.filename}`;
-  res.status(201).json({ url, filename: req.file.filename });
+  const ext = path.extname(req.file.originalname);
+  const name = `${crypto.randomUUID()}${ext || ''}`;
+  const key = `schools/${schoolId}/documents/${studentId}/${name}`;
+
+  uploadBuffer({ key, body: req.file.buffer, contentType: req.file.mimetype })
+    .then((result) => res.status(201).json({ url: result.url, filename: name }))
+    .catch((err) => res.status(500).json({ error: { message: 'Upload failed', details: err.message } }));
 });

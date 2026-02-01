@@ -117,6 +117,11 @@ export const upsertSubscription = async (payload: {
   status: string;
   startsAt: string | Date;
   endsAt?: string | Date | null;
+  billingCycle?: 'MONTHLY' | 'ANNUAL';
+  discountPercent?: number;
+  graceDays?: number;
+  paidAt?: string | Date | null;
+  nextDueAt?: string | Date | null;
   studentLimit?: number;
   teacherLimit?: number;
 }) => {

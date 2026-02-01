@@ -25,13 +25,13 @@ export default function DashboardClientLayout({
           role={role} 
           isOpen={isSidebarOpen} 
           onClose={() => setIsSidebarOpen(false)}
-          schoolName={session?.schoolName}
+          schoolName={session?.schoolName ?? undefined}
         />
         <div className="flex flex-1 flex-col h-screen">
           <Header 
             role={role} 
             email={email} 
-            displayName={session?.displayName ?? null}
+            displayName={session && 'displayName' in session ? session.displayName ?? null : null}
             onMenuToggle={() => setIsSidebarOpen(!isSidebarOpen)} 
           />
           <main className="flex-1 overflow-y-auto p-4 transition-all duration-200 sm:p-6">

@@ -28,6 +28,7 @@ export type AuditLogResponse = {
 export const listAuditLogs = async (params?: {
   page?: number;
   limit?: number;
+  schoolId?: string;
   entityType?: string;
   actorRole?: string;
   action?: string;

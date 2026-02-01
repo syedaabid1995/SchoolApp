@@ -38,7 +38,7 @@ export const refreshToken = async (refreshToken: string) => {
 export const getSession = async () => {
   const res = await fetch('/api/auth/session');
   if (!res.ok) {
-    return { role: null, schoolId: null, mustChangePassword: false };
+    return { role: null, schoolId: null, mustChangePassword: false, schoolName: null };
   }
   return res.json() as Promise<{
     role: string | null;
@@ -46,5 +46,6 @@ export const getSession = async () => {
     email: string | null;
     mustChangePassword: boolean;
     displayName?: string | null;
+    schoolName?: string | null;
   }>;
 };

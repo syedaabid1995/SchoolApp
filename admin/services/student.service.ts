@@ -176,6 +176,15 @@ export const uploadStudentDocument = async (file: File, studentId: string, param
 export const resolveUploadUrl = (value?: string | null) => {
   if (!value) return null;
   if (/^https?:\/\//i.test(value)) return value;
+  if (value.startsWith('s3://')) {
+    const stripped = value.replace(/^s3:\/\//, '');
+    const [bucket, ...rest] = stripped.split('/');
+    const key = rest.join('/');
+    const base = env.apiBaseUrl.replace(/\/api\/v1\/?$/, '');
+    const params = new URLSearchParams({ key });
+    if (bucket) params.set('bucket', bucket);
+    return `${base}/api/v1/uploads/signed?${params.toString()}`;
+  }
   const base = env.apiBaseUrl.replace(/\/api\/v1\/?$/, '');
   const url = value.startsWith('/') ? `${base}${value}` : `${base}/${value}`;
   return url;
@@ -222,6 +231,7 @@ export const createParent = async (payload: {
   lastName: string;
   phone?: string;
   email?: string;
+  userId?: string;
   createLogin?: boolean;
   sendVia?: 'SMS' | 'EMAIL' | 'BOTH';
   schoolId?: string;

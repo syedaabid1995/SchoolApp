@@ -63,6 +63,11 @@ export const createParent = async (req: Request, res: Response) => {
     let created = false;
 
     if (payload.createLogin) {
+      await tx.role.upsert({
+        where: { name: 'PARENT' },
+        update: {},
+        create: { name: 'PARENT' },
+      });
       const email = payload.email ?? `${payload.phone}@parent.local`;
       const existingUser = await tx.user.findFirst({
         where: { schoolId: null, email },
