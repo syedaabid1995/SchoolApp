@@ -5,6 +5,7 @@ import {
   listTemplates,
   sendNotificationApi,
   listNotificationLogs,
+  listNotificationSummary,
 } from '../controllers/notification.controller';
 
 export const notificationRouter = Router();
@@ -15,3 +16,4 @@ notificationRouter.post('/templates', createTemplate);
 notificationRouter.get('/templates', listTemplates);
 notificationRouter.post('/send', sendNotificationApi);
 notificationRouter.get('/logs', listNotificationLogs);
+notificationRouter.get('/summary', listNotificationSummary);
