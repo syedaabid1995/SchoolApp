@@ -150,7 +150,7 @@ export default function StudentOnboardingPage() {
     if (step === 1) {
       if (!academic.yearId) error = 'Academic year is required.';
       else if (!academic.classId) error = 'Class is required.';
-      else if (!academic.sectionId) error = 'Section is required.';
+      else if (sectionOptions.length > 0 && !academic.sectionId) error = 'Section is required.';
       else if (!academic.admissionNo.trim()) error = 'Admission number is required.';
     }
     if (step === 2) {
