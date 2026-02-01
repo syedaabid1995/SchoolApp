@@ -2,7 +2,8 @@
 
 import { useMemo, use } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { getParent, listStudents } from '../../../../services/student.service';
+import { getParent } from '../../../../services/parent.service';
+import { listStudents } from '../../../../services/student.service';
 import { getSession } from '../../../../services/auth.service';
 
 export default function ParentDetailsPage({ params }: { params: Promise<{ id: string }> }) {

@@ -6,6 +6,7 @@ import { isSuperAdmin } from '../utils/roles';
 import { ThemeContext } from './ThemeProvider';
 
 const academicItems = [
+  { href: '/dashboard/academics', label: 'Academic Setup' },
   { href: '/dashboard/academics/exams', label: 'Exams' },
   { href: '/dashboard/academics/marks', label: 'Upload Marks' },
 ];
@@ -149,6 +150,43 @@ export const Sidebar = ({ role, isOpen, onClose, schoolName }: { role: string | 
                 }`}>
                   <div className="mt-1 flex flex-col gap-1">
                     {studentItems.map((item) => (
+                      <Link
+                        key={item.href}
+                        href={item.href}
+                        className={`rounded-lg px-3 py-2 text-sm transition-all duration-200 ${
+                          isExactActive(item.href)
+                            ? 'bg-white/20 text-white'
+                            : 'text-white/80 hover:bg-white/10 hover:text-white hover:translate-x-1'
+                        }`}
+                        onClick={onClose}
+                      >
+                        {item.label}
+                      </Link>
+                    ))}
+                  </div>
+                </div>
+              </div>
+              <div className="border-t border-white/10 my-2"></div>
+              {/* Teachers Section */}
+              <div className="flex-shrink-0">
+                <button
+                  onClick={() => setIsTeachersOpen(!isTeachersOpen)}
+                  className={`flex w-full items-center justify-between rounded-lg px-3 py-2 text-sm font-medium transition-all duration-200 ${
+                    isSectionActive(teacherItems)
+                      ? 'bg-white/20 text-white'
+                      : 'text-white/90 hover:bg-white/10 hover:text-white'
+                  }`}
+                >
+                  Teachers
+                  <span className={`transform transition-all duration-300 ${isTeachersOpen ? 'rotate-90 text-white' : 'text-white/70'}`}>
+                    ▶
+                  </span>
+                </button>
+                <div className={`ml-4 overflow-hidden transition-all duration-300 ease-in-out ${
+                  isTeachersOpen ? 'max-h-32 opacity-100' : 'max-h-0 opacity-0'
+                }`}>
+                  <div className="mt-1 flex flex-col gap-1">
+                    {teacherItems.map((item) => (
                       <Link
                         key={item.href}
                         href={item.href}
@@ -386,6 +424,15 @@ export const Sidebar = ({ role, isOpen, onClose, schoolName }: { role: string | 
             </>
           ) : null}
 
+          <div className="border-t border-white/10 my-2"></div>
+          <a
+            href="/parent/login"
+            className="rounded-lg px-3 py-2 text-sm font-medium transition-all duration-200 text-white/90 hover:bg-white/10 hover:text-white hover:translate-x-1"
+            target="_blank"
+            rel="noreferrer"
+          >
+            Parent Portal
+          </a>
         </nav>
       </aside>
     </>

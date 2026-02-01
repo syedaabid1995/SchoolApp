@@ -146,3 +146,37 @@ export const updateTeacherApi = async (req: Request, res: Response) => {
     throw new HttpError(404, 'Teacher not found');
   }
 };
+
+export const deleteTeacherApi = async (req: Request, res: Response) => {
+  const schoolId = resolveSchoolId(req, req.query.schoolId as string | undefined);
+  const { id } = req.params;
+
+  const existing = await prisma.teacherProfile.findFirst({
+    where: { id, schoolId },
+    include: { user: { select: { email: true, id: true } } },
+  });
+
+  if (!existing) {
+    throw new HttpError(404, 'Teacher not found');
+  }
+
+  await prisma.teacherProfile.delete({ where: { id } });
+
+  await logAudit(req, {
+    schoolId,
+    entityType: 'TEACHER',
+    entityId: id,
+    action: 'DELETE',
+    beforeState: {
+      firstName: existing.firstName,
+      lastName: existing.lastName,
+      employeeNo: existing.employeeNo,
+      phone: existing.phone,
+      address: existing.address,
+      email: existing.user.email,
+      isActive: existing.isActive,
+    },
+  });
+
+  res.status(200).json({ success: true });
+};

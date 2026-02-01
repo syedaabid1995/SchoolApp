@@ -73,6 +73,11 @@ export const updateStudent = async (
   return data;
 };
 
+export const deleteStudent = async (id: string) => {
+  const { data } = await api.delete(`/students/students/${id}`);
+  return data;
+};
+
 export const linkParent = async (studentId: string, parentId: string) => {
   const { data } = await api.post(`/students/students/${studentId}/parents`, { parentId });
   return data;

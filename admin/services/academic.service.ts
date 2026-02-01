@@ -12,6 +12,11 @@ export const createAcademicYear = async (payload: { name: string; startDate: str
   return data;
 };
 
+export const deleteAcademicYear = async (id: string) => {
+  const { data } = await api.delete(`/academics/academic-years/${id}`);
+  return data;
+};
+
 export const listClasses = async (params?: { schoolId?: string }) => {
   const sanitized =
     params && (params as any).queryKey ? undefined : params;
@@ -24,6 +29,11 @@ export const createClass = async (payload: { name: string; academicYearId: strin
   return data;
 };
 
+export const deleteClass = async (id: string) => {
+  const { data } = await api.delete(`/academics/classes/${id}`);
+  return data;
+};
+
 export const listSections = async (params?: { schoolId?: string }) => {
   const sanitized =
     params && (params as any).queryKey ? undefined : params;
@@ -33,6 +43,11 @@ export const listSections = async (params?: { schoolId?: string }) => {
 
 export const createSection = async (payload: { name: string; classId: string; schoolId?: string }) => {
   const { data } = await api.post('/academics/sections', payload);
+  return data;
+};
+
+export const deleteSection = async (id: string) => {
+  const { data } = await api.delete(`/academics/sections/${id}`);
   return data;
 };
 
@@ -51,5 +66,10 @@ export const createSubject = async (payload: {
   schoolId?: string;
 }) => {
   const { data } = await api.post('/academics/subjects', payload);
+  return data;
+};
+
+export const deleteSubject = async (id: string) => {
+  const { data } = await api.delete(`/academics/subjects/${id}`);
   return data;
 };

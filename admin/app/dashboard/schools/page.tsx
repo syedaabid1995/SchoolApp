@@ -9,9 +9,11 @@ import {
   suspendSchool,
   deleteSchool,
 } from '../../../services/school.service';
+import { useNotify } from '../../../components/NotificationProvider';
 
 export default function SchoolsPage() {
   const queryClient = useQueryClient();
+  const notify = useNotify();
   const [query, setQuery] = useState('');
   const [form, setForm] = useState({
     name: '',
@@ -20,6 +22,7 @@ export default function SchoolsPage() {
     adminEmail: '',
   });
   const [createdAdmin, setCreatedAdmin] = useState<{ email: string; tempPassword: string } | null>(null);
+  const [formError, setFormError] = useState('');
 
   const { data, isLoading } = useQuery({
     queryKey: ['schools', query],
@@ -32,20 +35,37 @@ export default function SchoolsPage() {
       setForm({ name: '', code: '', subscriptionPlan: 'STANDARD', adminEmail: '' });
       if (result.adminUser && result.tempPassword) {
         setCreatedAdmin({ email: result.adminUser.email, tempPassword: result.tempPassword });
+        notify.success('School created successfully!', `${form.name} has been created with admin account`);
       } else {
         setCreatedAdmin(null);
+        notify.success('School created!', `${form.name} has been created successfully`);
       }
       queryClient.invalidateQueries({ queryKey: ['schools'] });
+    },
+    onError: (error: any) => {
+      const message = error?.response?.data?.error?.message || error?.message || 'Failed to create school';
+      notify.error('School creation failed', message);
     },
   });
 
   const actionMutation = useMutation({
     mutationFn: async (payload: { id: string; action: 'activate' | 'suspend' | 'delete' }) => {
+      const actionText = payload.action === 'activate' ? 'Activating' : payload.action === 'suspend' ? 'Suspending' : 'Deleting';
+      notify.info(`${actionText} school...`, 'Please wait while we process your request');
+      
       if (payload.action === 'activate') return activateSchool(payload.id);
       if (payload.action === 'suspend') return suspendSchool(payload.id);
       return deleteSchool(payload.id);
     },
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['schools'] }),
+    onSuccess: (data, variables) => {
+      queryClient.invalidateQueries({ queryKey: ['schools'] });
+      const actionText = variables.action === 'activate' ? 'activated' : variables.action === 'suspend' ? 'suspended' : 'deleted';
+      notify.success(`School ${actionText}!`, `School has been ${actionText} successfully`);
+    },
+    onError: (error: any) => {
+      const message = error?.response?.data?.error?.message || error?.message || 'Failed to process school action';
+      notify.error('Action failed', message);
+    },
   });
 
   const rows = useMemo(() => data?.items ?? [], [data]);
@@ -95,16 +115,35 @@ export default function SchoolsPage() {
         </div>
         <button
           className="mt-4 rounded-lg bg-ink px-4 py-2 text-sm font-semibold text-white"
-          onClick={() =>
+          onClick={() => {
+            const trimmedName = form.name.trim();
+            const trimmedCode = form.code.trim();
+            const trimmedEmail = form.adminEmail.trim();
+            let error = '';
+            if (!trimmedName) error = 'School name is required.';
+            else if (!trimmedCode) error = 'School code is required.';
+            else if (!trimmedEmail) error = 'Admin email is required.';
+            else if (!/^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/.test(trimmedEmail)) {
+              error = 'Enter a valid admin email.';
+            }
+            setFormError(error);
+            if (error) {
+              notify.error('Validation error', error);
+              return;
+            }
+            notify.info('Creating school...', 'Please wait while we set up your school');
             createMutation.mutate({
               ...form,
-              adminEmail: form.adminEmail.trim().length > 0 ? form.adminEmail.trim() : undefined,
-            })
-          }
+              name: trimmedName,
+              code: trimmedCode,
+              adminEmail: trimmedEmail,
+            });
+          }}
           disabled={createMutation.isPending}
         >
           {createMutation.isPending ? 'Creating...' : 'Create School'}
         </button>
+        {formError ? <p className="mt-2 text-sm font-semibold text-rose-600">{formError}</p> : null}
         {createdAdmin ? (
           <div className="mt-4 rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-900">
             <div className="font-semibold">School admin created</div>

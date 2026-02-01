@@ -78,6 +78,11 @@ export const updateTeacher = async (
   return data;
 };
 
+export const deleteTeacher = async (id: string) => {
+  const { data } = await api.delete(`/teachers/${id}`);
+  return data;
+};
+
 export const setTeacherStatus = async (teacherId: string, isActive: boolean) => {
   const { data } = await api.patch(`/teacher-assignments/teachers/${teacherId}/status`, { isActive });
   return data;

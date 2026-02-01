@@ -4,8 +4,10 @@ import { useState } from 'react';
 import { useMutation, useQuery } from '@tanstack/react-query';
 import { acceptTransferRequest, listIncomingTransferRequests, rejectTransferRequest } from '../../../../services/student.service';
 import { getSession } from '../../../../services/auth.service';
+import { useNotify } from '../../../../components/NotificationProvider';
 
 export default function IncomingTransfersPage() {
+  const notify = useNotify();
   const [decision, setDecision] = useState({ requestId: '', action: 'accept' as 'accept' | 'reject', reason: '' });
   const { data: session } = useQuery({ queryKey: ['session'], queryFn: getSession });
   const schoolId = session?.schoolId ?? undefined;
@@ -17,11 +19,23 @@ export default function IncomingTransfersPage() {
   });
 
   const decisionMutation = useMutation({
-    mutationFn: () =>
-      decision.action === 'accept'
+    mutationFn: () => {
+      const action = decision.action === 'accept' ? 'Accepting' : 'Rejecting';
+      notify.info(`${action} transfer...`, 'Please wait while we process your request');
+      
+      return decision.action === 'accept'
         ? acceptTransferRequest(decision.requestId, { reason: decision.reason || undefined, schoolId })
-        : rejectTransferRequest(decision.requestId, { reason: decision.reason || undefined, schoolId }),
-    onSuccess: () => setDecision({ requestId: '', action: 'accept', reason: '' }),
+        : rejectTransferRequest(decision.requestId, { reason: decision.reason || undefined, schoolId });
+    },
+    onSuccess: () => {
+      const action = decision.action === 'accept' ? 'accepted' : 'rejected';
+      notify.success(`Transfer ${action}!`, `Transfer request has been ${action} successfully`);
+      setDecision({ requestId: '', action: 'accept', reason: '' });
+    },
+    onError: (error: any) => {
+      const message = error?.response?.data?.error?.message || error?.message || 'Failed to process transfer request';
+      notify.error('Transfer processing failed', message);
+    },
   });
 
   return (

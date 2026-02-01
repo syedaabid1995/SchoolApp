@@ -5,6 +5,7 @@ import { useMutation, useQuery } from '@tanstack/react-query';
 import { createTeacher } from '../../../../services/teacher.service';
 import { listSchools } from '../../../../services/school.service';
 import { getSession } from '../../../../services/auth.service';
+import { useNotify } from '../../../../components/NotificationProvider';
 
 type Step = 1 | 2 | 3 | 4 | 5;
 
@@ -17,6 +18,7 @@ const steps: Array<{ id: Step; title: string }> = [
 ];
 
 export default function AddTeacherPage() {
+  const notify = useNotify();
   const [step, setStep] = useState<Step>(1);
   const [form, setForm] = useState({
     email: '',
@@ -36,6 +38,7 @@ export default function AddTeacherPage() {
   const [createdTeacher, setCreatedTeacher] = useState<{ email: string; tempPassword: string } | null>(null);
   const [schoolId, setSchoolId] = useState('');
   const [stepError, setStepError] = useState('');
+  const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
   const { data: session } = useQuery({ queryKey: ['session'], queryFn: getSession });
   const isSuperAdmin = session?.role === 'SUPER_ADMIN';
@@ -52,8 +55,10 @@ export default function AddTeacherPage() {
     onSuccess: (result) => {
       if (result?.user?.email && result?.tempPassword) {
         setCreatedTeacher({ email: result.user.email, tempPassword: result.tempPassword });
+        notify.success('Teacher created successfully!', `Account created for ${result.user.email}`);
       } else {
         setCreatedTeacher(null);
+        notify.warning('Teacher created', 'Account created but no login credentials generated');
       }
       setForm({
         email: '',
@@ -70,6 +75,10 @@ export default function AddTeacherPage() {
         branchName: '',
         panNumber: '',
       });
+    },
+    onError: (error: any) => {
+      const message = error?.response?.data?.error?.message || error?.message || 'Failed to create teacher';
+      notify.error('Creation failed', message);
     },
   });
 
@@ -102,16 +111,36 @@ export default function AddTeacherPage() {
     let error = '';
     if (step === 1) {
       if (!form.email.trim()) error = 'Email is required.';
+      else if (!emailPattern.test(form.email.trim())) error = 'Enter a valid email.';
       else if (!form.firstName.trim()) error = 'First name is required.';
       else if (!form.lastName.trim()) error = 'Last name is required.';
+      else if (isSuperAdmin && !effectiveSchoolId) error = 'Select a school before continuing.';
     }
     if (step === 2) {
       if (!form.phone.trim()) error = 'Phone is required.';
       else if (!form.address.trim()) error = 'Address is required.';
     }
     setStepError(error);
-    if (error) return;
+    if (error) {
+      notify.error('Validation error', error);
+      return;
+    }
     setStep((prev) => (prev < 5 ? ((prev + 1) as Step) : prev));
+    notify.success('Step saved', 'Continue to the next section.');
+  };
+
+  const validateBeforeCreate = () => {
+    let error = '';
+    if (!form.email.trim()) error = 'Email is required.';
+    else if (!emailPattern.test(form.email.trim())) error = 'Enter a valid email.';
+    else if (!form.firstName.trim()) error = 'First name is required.';
+    else if (!form.lastName.trim()) error = 'Last name is required.';
+    else if (!form.phone.trim()) error = 'Phone is required.';
+    else if (!form.address.trim()) error = 'Address is required.';
+    else if (isSuperAdmin && !effectiveSchoolId) error = 'Select a school before creating.';
+    setStepError(error);
+    if (error) notify.error('Validation error', error);
+    return !error;
   };
 
   const prevStep = () => {
@@ -297,6 +326,8 @@ export default function AddTeacherPage() {
           className="mt-4 rounded-lg bg-ink px-4 py-2 text-sm font-semibold text-white"
           onClick={() => {
             if (step < 5) return nextStep();
+            if (!validateBeforeCreate()) return;
+            notify.info('Creating teacher...', 'Please wait while we process your request');
             createMutation.mutate({
               email: form.email,
               firstName: form.firstName,
@@ -330,8 +361,6 @@ export default function AddTeacherPage() {
             <span />
           )}
         </div>
-        {stepError ? <p className="mt-3 text-sm font-semibold text-rose-600">{stepError}</p> : null}
-
         {createdTeacher ? (
           <div className="mt-4 rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-sm">
             <p className="font-semibold text-emerald-700">Teacher account created</p>

@@ -4,6 +4,7 @@ import {
   listStudents,
   getStudent,
   updateStudent,
+  deleteStudent,
   linkParent,
   unlinkParent,
   changeStudentStatus,
@@ -31,6 +32,7 @@ studentRouter.post('/students', createStudent);
 studentRouter.get('/students', listStudents);
 studentRouter.get('/students/:id', getStudent);
 studentRouter.patch('/students/:id', updateStudent);
+studentRouter.delete('/students/:id', deleteStudent);
 studentRouter.post('/students/:id/parents', linkParent);
 studentRouter.delete('/students/:id/parents/:parentId', unlinkParent);
 studentRouter.post('/students/:id/status', changeStudentStatus);

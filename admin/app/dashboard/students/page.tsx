@@ -2,13 +2,14 @@
 
 import Link from 'next/link';
 import { useState } from 'react';
-import { useMutation, useQuery } from '@tanstack/react-query';
-import { createTransferRequest, listStudents, listTransferTargets } from '../../../services/student.service';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { deleteStudent, createTransferRequest, listStudents, listTransferTargets } from '../../../services/student.service';
 import { listSchools } from '../../../services/school.service';
 import { getSession } from '../../../services/auth.service';
 import { listClasses, listSections } from '../../../services/academic.service';
 
 export default function StudentsPage() {
+  const queryClient = useQueryClient();
   const [schoolId, setSchoolId] = useState('');
   const [transfer, setTransfer] = useState({ open: false, studentId: '', toSchoolId: '', reason: '' });
   const [transferError, setTransferError] = useState('');
@@ -61,6 +62,29 @@ export default function StudentsPage() {
     onError: (error: any) => {
       const message = error?.response?.data?.error?.message ?? error?.message ?? 'Unable to create transfer request.';
       setTransferError(message);
+    },
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: ({ studentId }: { studentId: string }) => deleteStudent(studentId),
+    onMutate: async ({ studentId }) => {
+      await queryClient.cancelQueries({ queryKey: ['students', effectiveSchoolId] });
+      const previous = queryClient.getQueryData<any[]>(['students', effectiveSchoolId]);
+      if (previous) {
+        queryClient.setQueryData(
+          ['students', effectiveSchoolId],
+          previous.filter((student) => student.id !== studentId),
+        );
+      }
+      return { previous };
+    },
+    onError: (_err, _vars, context) => {
+      if (context?.previous) {
+        queryClient.setQueryData(['students', effectiveSchoolId], context.previous);
+      }
+    },
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: ['students'] });
     },
   });
 
@@ -192,14 +216,25 @@ export default function StudentsPage() {
                     <td>{primaryParent?.phone ?? '—'}</td>
                     <td>{student.status}</td>
                     <td className="text-right">
-                      <button
-                        className="rounded-lg border border-slate/20 px-3 py-1 text-xs"
-                        onClick={() =>
-                          setTransfer({ open: true, studentId: student.id, toSchoolId: '', reason: '' })
-                        }
-                      >
-                        Transfer
-                      </button>
+                      <div className="flex justify-end gap-2">
+                        <button
+                          className="rounded-lg border border-slate/20 px-3 py-1 text-xs"
+                          onClick={() =>
+                            setTransfer({ open: true, studentId: student.id, toSchoolId: '', reason: '' })
+                          }
+                        >
+                          Transfer
+                        </button>
+                        <button
+                          className="rounded-lg border border-rose-200 px-3 py-1 text-xs text-rose-600"
+                          onClick={() => {
+                            if (!window.confirm(`Delete "${student.firstName} ${student.lastName}"?`)) return;
+                            deleteMutation.mutate({ studentId: student.id });
+                          }}
+                        >
+                          Delete
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 );

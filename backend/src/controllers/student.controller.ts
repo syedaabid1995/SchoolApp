@@ -53,6 +53,14 @@ export const createStudent = async (req: Request, res: Response) => {
   const schoolId = resolveSchoolId(req, payload.schoolId);
   await enforceLimits(schoolId, 'students');
 
+  const existing = await prisma.student.findFirst({
+    where: { schoolId, admissionNo: payload.admissionNo },
+    select: { id: true, admissionNo: true, firstName: true, lastName: true },
+  });
+  if (existing) {
+    throw new HttpError(409, 'Admission number already exists');
+  }
+
   const student = await prisma.student.create({
     data: {
       admissionNo: payload.admissionNo,
@@ -191,6 +199,41 @@ export const updateStudent = async (req: Request, res: Response) => {
   });
 
   res.status(200).json(student);
+};
+
+export const deleteStudent = async (req: Request, res: Response) => {
+  const schoolId = resolveSchoolId(req, req.query.schoolId as string | undefined);
+  const { id } = req.params;
+
+  const existing = await prisma.student.findFirst({
+    where: { id, schoolId },
+    select: {
+      id: true,
+      admissionNo: true,
+      firstName: true,
+      lastName: true,
+      dob: true,
+      classId: true,
+      sectionId: true,
+      status: true,
+    },
+  });
+
+  if (!existing) {
+    throw new HttpError(404, 'Student not found');
+  }
+
+  await prisma.student.delete({ where: { id } });
+
+  await logAudit(req, {
+    schoolId,
+    entityType: 'STUDENT',
+    entityId: id,
+    action: 'DELETE',
+    beforeState: existing,
+  });
+
+  res.status(200).json({ success: true });
 };
 
 export const linkParent = async (req: Request, res: Response) => {

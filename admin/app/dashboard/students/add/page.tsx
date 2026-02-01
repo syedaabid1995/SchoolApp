@@ -7,6 +7,7 @@ import { useQuery } from '@tanstack/react-query';
 import { listAcademicYears, listClasses, listSections } from '../../../../services/academic.service';
 import { getSession } from '../../../../services/auth.service';
 import { createParent, createStudent, linkParent, lookupParentByPhone } from '../../../../services/student.service';
+import { useNotify } from '../../../../components/NotificationProvider';
 
 type Step = 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8;
 
@@ -23,6 +24,7 @@ const steps: Array<{ id: Step; title: string }> = [
 
 export default function StudentOnboardingPage() {
   const router = useRouter();
+  const notify = useNotify();
   const [step, setStep] = useState<Step>(1);
   const [academic, setAcademic] = useState({
     yearId: '',
@@ -181,8 +183,12 @@ export default function StudentOnboardingPage() {
       }
     }
     setStepError(error);
-    if (error) return;
+    if (error) {
+      notify.error('Validation error', error);
+      return;
+    }
     setStep((prev) => (prev < 8 ? ((prev + 1) as Step) : prev));
+    notify.success('Step saved', 'Continue to the next section.');
   };
   const prevStep = () => {
     setStepError('');
@@ -199,6 +205,8 @@ export default function StudentOnboardingPage() {
     const lastName = nameParts.slice(1).join(' ') || 'Student';
     try {
       setErrorMessage('');
+      notify.info('Creating student...', 'Please wait while we process your request');
+      
       const createdStudent = await createMutation.mutateAsync({
         admissionNo: academic.admissionNo,
         firstName,
@@ -245,6 +253,7 @@ export default function StudentOnboardingPage() {
       }
 
       setCreateStatus('success');
+      notify.success('Student created successfully!', `${student.fullName} has been added to the system`);
       setTimeout(() => router.push('/dashboard/students'), 800);
     } catch (error: any) {
       setCreateStatus('idle');
@@ -253,6 +262,7 @@ export default function StudentOnboardingPage() {
         error?.message ||
         'Something went wrong. Please check the form.';
       setErrorMessage(message);
+      notify.error('Failed to create student', message);
     }
   };
 
@@ -353,7 +363,6 @@ export default function StudentOnboardingPage() {
               Save &amp; Continue
             </button>
           </div>
-          {stepError ? <p className="mt-3 text-sm font-semibold text-rose-600">{stepError}</p> : null}
         </section>
       ) : null}
 
@@ -404,7 +413,6 @@ export default function StudentOnboardingPage() {
               Save &amp; Continue
             </button>
           </div>
-          {stepError ? <p className="mt-3 text-sm font-semibold text-rose-600">{stepError}</p> : null}
         </section>
       ) : null}
 
@@ -457,7 +465,6 @@ export default function StudentOnboardingPage() {
               Save &amp; Continue
             </button>
           </div>
-          {stepError ? <p className="mt-3 text-sm font-semibold text-rose-600">{stepError}</p> : null}
         </section>
       ) : null}
 
@@ -510,7 +517,6 @@ export default function StudentOnboardingPage() {
               Save &amp; Continue
             </button>
           </div>
-          {stepError ? <p className="mt-3 text-sm font-semibold text-rose-600">{stepError}</p> : null}
         </section>
       ) : null}
 
@@ -547,7 +553,6 @@ export default function StudentOnboardingPage() {
               Save &amp; Continue
             </button>
           </div>
-          {stepError ? <p className="mt-3 text-sm font-semibold text-rose-600">{stepError}</p> : null}
         </section>
       ) : null}
 
@@ -579,7 +584,6 @@ export default function StudentOnboardingPage() {
               Save &amp; Continue
             </button>
           </div>
-          {stepError ? <p className="mt-3 text-sm font-semibold text-rose-600">{stepError}</p> : null}
         </section>
       ) : null}
 

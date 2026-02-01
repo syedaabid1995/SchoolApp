@@ -13,7 +13,7 @@ const loginSchema = z.object({
 });
 
 const refreshSchema = z.object({
-  refreshToken: z.string().min(1),
+  refreshToken: z.string().min(1).optional(),
 });
 
 const changePasswordSchema = z.object({
@@ -83,7 +83,10 @@ export const login = async (req: Request, res: Response) => {
 };
 
 export const refreshToken = async (req: Request, res: Response) => {
-  const { refreshToken: token } = refreshSchema.parse(req.body);
+  const { refreshToken: token } = refreshSchema.parse(req.body ?? {});
+  if (!token) {
+    throw new HttpError(401, 'Missing refresh token');
+  }
 
   let decoded: JwtPayload | AuthTokenPayload;
   try {

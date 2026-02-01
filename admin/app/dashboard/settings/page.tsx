@@ -15,6 +15,8 @@ export default function SettingsPage() {
   const queryClient = useQueryClient();
   const [flagForm, setFlagForm] = useState({ code: '', description: '', enabled: true });
   const [configForm, setConfigForm] = useState({ key: '', value: '', description: '' });
+  const [flagError, setFlagError] = useState('');
+  const [configError, setConfigError] = useState('');
 
   const { data: flags } = useQuery({ queryKey: ['feature-flags'], queryFn: listFeatureFlags });
   const { data: configs } = useQuery({ queryKey: ['config-entries'], queryFn: listConfigEntries });
@@ -78,11 +80,17 @@ export default function SettingsPage() {
         </div>
         <button
           className="mt-4 rounded-lg bg-ink px-4 py-2 text-sm font-semibold text-white"
-          onClick={() => createFlagMutation.mutate(flagForm)}
+          onClick={() => {
+            const error = flagForm.code.trim() ? '' : 'Flag code is required.';
+            setFlagError(error);
+            if (error) return;
+            createFlagMutation.mutate(flagForm);
+          }}
           disabled={createFlagMutation.isPending}
         >
           Create Flag
         </button>
+        {flagError ? <p className="mt-3 text-sm font-semibold text-rose-600">{flagError}</p> : null}
         <div className="mt-4 space-y-2 text-sm">
           {flags?.map((flag: { id: string; code: string; enabled: boolean }) => (
             <div key={flag.id} className="flex items-center justify-between rounded-lg border border-slate/10 px-3 py-2">
@@ -122,11 +130,19 @@ export default function SettingsPage() {
         </div>
         <button
           className="mt-4 rounded-lg bg-ink px-4 py-2 text-sm font-semibold text-white"
-          onClick={() => createConfigMutation.mutate(configForm)}
+          onClick={() => {
+            let error = '';
+            if (!configForm.key.trim()) error = 'Config key is required.';
+            else if (!configForm.value.trim()) error = 'Config value is required.';
+            setConfigError(error);
+            if (error) return;
+            createConfigMutation.mutate(configForm);
+          }}
           disabled={createConfigMutation.isPending}
         >
           Create Config
         </button>
+        {configError ? <p className="mt-3 text-sm font-semibold text-rose-600">{configError}</p> : null}
         <div className="mt-4 space-y-2 text-sm">
           {configs?.map((config: { id: string; key: string; value: string }) => (
             <div key={config.id} className="flex items-center justify-between rounded-lg border border-slate/10 px-3 py-2">

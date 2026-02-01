@@ -6,6 +6,7 @@ import { listAcademicYears, listClasses, listSections, listSubjects } from '../.
 import { listSchools } from '../../../../services/school.service';
 import { getSession } from '../../../../services/auth.service';
 import { createExam, listExams } from '../../../../services/report.service';
+import { useNotify } from '../../../../components/NotificationProvider';
 
 type SubjectRow = {
   id: string;
@@ -24,6 +25,7 @@ const defaultMarks = { maxMarks: '100', passMarks: '35' };
 
 export default function ExamsPage() {
   const queryClient = useQueryClient();
+  const notify = useNotify();
   const [step, setStep] = useState<1 | 2 | 3>(1);
   const [schoolId, setSchoolId] = useState('');
   const [examBasics, setExamBasics] = useState({
@@ -120,7 +122,7 @@ export default function ExamsPage() {
         scheduledAt: examBasics.resultPublishDate || undefined,
         status: payload.status,
       }),
-    onSuccess: () => {
+    onSuccess: (data, variables) => {
       setStep(1);
       setExamBasics({
         name: '',
@@ -141,6 +143,13 @@ export default function ExamsPage() {
       });
       setSubjectMap({});
       queryClient.invalidateQueries({ queryKey: ['exams'] });
+      
+      const status = variables.status === 'DRAFT' ? 'saved as draft' : 'published';
+      notify.success(`Exam ${status}!`, `${examBasics.name} has been ${status} successfully`);
+    },
+    onError: (error: any) => {
+      const message = error?.response?.data?.error?.message || error?.message || 'Failed to create exam';
+      notify.error('Exam creation failed', message);
     },
   });
 
@@ -158,9 +167,13 @@ export default function ExamsPage() {
     if (!examBasics.academicYearId) error = 'Select academic year.';
     else if (!examBasics.classId) error = 'Select class.';
     setStepError(error);
-    if (error) return;
+    if (error) {
+      notify.error('Validation error', error);
+      return;
+    }
     syncSubjectMap();
     setStep(2);
+    notify.success('Step saved', 'Exam details saved. Continue to subjects.');
   };
 
   const handleToggleSubject = (id: string) => {
@@ -328,7 +341,6 @@ export default function ExamsPage() {
                 Cancel
               </button>
             </div>
-            {stepError ? <p className="mt-3 text-sm font-semibold text-rose-600">{stepError}</p> : null}
           </div>
         ) : null}
 
@@ -410,17 +422,19 @@ export default function ExamsPage() {
                 className="rounded-lg bg-ink px-4 py-2 text-sm font-semibold text-white"
                 onClick={() => {
                   if (!selectedSubjectIds.length) {
-                    setStepError('Select at least one subject.');
+                    const message = 'Select at least one subject.';
+                    setStepError(message);
+                    notify.error('Validation error', message);
                     return;
                   }
                   setStepError('');
                   setStep(3);
+                  notify.success('Step saved', 'Subject mapping saved. Continue to structure.');
                 }}
               >
                 Save & Continue
               </button>
             </div>
-            {stepError ? <p className="mt-3 text-sm font-semibold text-rose-600">{stepError}</p> : null}
           </div>
         ) : null}
 
@@ -485,14 +499,20 @@ export default function ExamsPage() {
               </button>
               <button
                 className="rounded-lg border border-slate/20 px-4 py-2 text-sm"
-                onClick={() => createExamMutation.mutate({ status: 'DRAFT' })}
+                onClick={() => {
+                  notify.info('Saving exam...', 'Creating exam as draft');
+                  createExamMutation.mutate({ status: 'DRAFT' });
+                }}
                 disabled={createExamMutation.isPending}
               >
                 Save Exam
               </button>
               <button
                 className="rounded-lg bg-ink px-4 py-2 text-sm font-semibold text-white"
-                onClick={() => createExamMutation.mutate({ status: 'PUBLISHED' })}
+                onClick={() => {
+                  notify.info('Publishing exam...', 'Creating and publishing exam');
+                  createExamMutation.mutate({ status: 'PUBLISHED' });
+                }}
                 disabled={createExamMutation.isPending}
               >
                 Publish Exam

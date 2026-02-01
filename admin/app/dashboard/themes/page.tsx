@@ -19,6 +19,7 @@ export default function ThemesPage() {
     logoUrl: '',
   });
   const [editingThemeId, setEditingThemeId] = useState<string | null>(null);
+  const [formError, setFormError] = useState('');
 
   const { data: session } = useQuery({ queryKey: ['session'], queryFn: getSession });
   const isSuperAdmin = session?.role === 'SUPER_ADMIN';
@@ -193,6 +194,11 @@ export default function ThemesPage() {
         <button
           className="mt-4 rounded-lg bg-ink px-4 py-2 text-sm font-semibold text-white"
           onClick={() => {
+            let error = '';
+            if (!name.trim()) error = 'Theme name is required.';
+            else if (!effectiveSchoolId) error = 'Select a school to apply the theme.';
+            setFormError(error);
+            if (error) return;
             if (editingThemeId) {
               updateMutation.mutate({ id: editingThemeId, tokens });
             } else {
@@ -203,6 +209,7 @@ export default function ThemesPage() {
         >
           {editingThemeId ? 'Update Theme' : 'Create Theme'}
         </button>
+        {formError ? <p className="mt-3 text-sm font-semibold text-rose-600">{formError}</p> : null}
       </section>
 
       <section className="rounded-2xl border border-slate/10 bg-white p-6">

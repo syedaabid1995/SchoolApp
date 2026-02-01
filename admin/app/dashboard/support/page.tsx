@@ -7,6 +7,7 @@ import { listTickets, createTicket, updateTicket, type SupportTicket } from '../
 export default function SupportPage() {
   const queryClient = useQueryClient();
   const [form, setForm] = useState({ subject: '', description: '', priority: 'MEDIUM' });
+  const [formError, setFormError] = useState('');
 
   const { data: tickets } = useQuery({ queryKey: ['tickets'], queryFn: listTickets });
 
@@ -57,11 +58,19 @@ export default function SupportPage() {
         </div>
         <button
           className="mt-4 rounded-lg bg-ink px-4 py-2 text-sm font-semibold text-white"
-          onClick={() => createMutation.mutate(form)}
+          onClick={() => {
+            let error = '';
+            if (!form.subject.trim()) error = 'Subject is required.';
+            else if (!form.description.trim()) error = 'Description is required.';
+            setFormError(error);
+            if (error) return;
+            createMutation.mutate(form);
+          }}
           disabled={createMutation.isPending}
         >
           Create Ticket
         </button>
+        {formError ? <p className="mt-3 text-sm font-semibold text-rose-600">{formError}</p> : null}
       </section>
 
       <section className="rounded-2xl border border-slate/10 bg-white p-6">

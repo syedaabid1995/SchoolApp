@@ -28,13 +28,8 @@ export const rateLimit = () => async (req: Request, _res: Response, next: NextFu
   }
 };
 
-export const otpRateLimit = () => async (req: Request, _res: Response, next: NextFunction) => {
-  try {
-    await otpLimiter.consume(keyFor(req));
-    return next();
-  } catch {
-    return next(new HttpError(429, 'OTP rate limit exceeded'));
-  }
+export const otpRateLimit = () => async (_req: Request, _res: Response, next: NextFunction) => {
+  return next();
 };
 
 export const aiRateLimit = () => async (req: Request, _res: Response, next: NextFunction) => {

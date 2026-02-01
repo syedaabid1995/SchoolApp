@@ -60,6 +60,7 @@ export const createParent = async (req: Request, res: Response) => {
   const result = await prisma.$transaction(async (tx) => {
     let userId = payload.userId ?? null;
     let tempPassword: string | null = null;
+    let created = false;
 
     if (payload.createLogin) {
       const email = payload.email ?? `${payload.phone}@parent.local`;
@@ -92,11 +93,24 @@ export const createParent = async (req: Request, res: Response) => {
     const existingProfile = userId
       ? await tx.parentProfile.findFirst({
           where: { schoolId, userId },
-          select: { id: true },
+          select: {
+            id: true,
+            schoolId: true,
+            userId: true,
+            firstName: true,
+            lastName: true,
+            phone: true,
+            email: true,
+            createdAt: true,
+            updatedAt: true,
+          },
         })
       : null;
     if (existingProfile) {
-      throw new HttpError(409, 'Parent already linked to this school');
+      if (payload.createLogin) {
+        throw new HttpError(409, 'Parent already linked to this school');
+      }
+      return { parent: existingProfile, tempPassword: null, created: false };
     }
 
     const parent = await tx.parentProfile.create({
@@ -110,22 +124,25 @@ export const createParent = async (req: Request, res: Response) => {
       },
     });
 
-    return { parent, tempPassword };
+    created = true;
+    return { parent, tempPassword, created };
   });
 
-  await logAudit(req, {
-    schoolId,
-    entityType: 'PARENT',
-    entityId: result.parent.id,
-    action: 'CREATE',
-    afterState: {
-      firstName: result.parent.firstName,
-      lastName: result.parent.lastName,
-      phone: result.parent.phone,
-      email: result.parent.email,
-      userId: result.parent.userId,
-    },
-  });
+  if (result.created) {
+    await logAudit(req, {
+      schoolId,
+      entityType: 'PARENT',
+      entityId: result.parent.id,
+      action: 'CREATE',
+      afterState: {
+        firstName: result.parent.firstName,
+        lastName: result.parent.lastName,
+        phone: result.parent.phone,
+        email: result.parent.email,
+        userId: result.parent.userId,
+      },
+    });
+  }
 
   res.status(201).json({ ...result.parent, tempPassword: result.tempPassword, sendVia: payload.sendVia ?? null });
 };

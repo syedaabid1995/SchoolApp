@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { listTeachers, updateTeacher, setTeacherStatus } from '../../../services/teacher.service';
+import { listTeachers, updateTeacher, setTeacherStatus, deleteTeacher } from '../../../services/teacher.service';
 import { listSchools } from '../../../services/school.service';
 import { getSession } from '../../../services/auth.service';
 
@@ -34,6 +34,29 @@ export default function TeachersPage() {
   const statusMutation = useMutation({
     mutationFn: ({ id, isActive }: { id: string; isActive: boolean }) => setTeacherStatus(id, isActive),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['teachers'] }),
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: (id: string) => deleteTeacher(id),
+    onMutate: async (id) => {
+      await queryClient.cancelQueries({ queryKey: ['teachers', effectiveSchoolId] });
+      const previous = queryClient.getQueryData<any>(['teachers', effectiveSchoolId]);
+      if (previous?.items) {
+        queryClient.setQueryData(['teachers', effectiveSchoolId], {
+          ...previous,
+          items: previous.items.filter((teacher: any) => teacher.id !== id),
+        });
+      }
+      return { previous };
+    },
+    onError: (_err, _vars, context) => {
+      if (context?.previous) {
+        queryClient.setQueryData(['teachers', effectiveSchoolId], context.previous);
+      }
+    },
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: ['teachers'] });
+    },
   });
 
   return (
@@ -126,6 +149,15 @@ export default function TeachersPage() {
                           onClick={() => statusMutation.mutate({ id: teacher.id, isActive: !teacher.isActive })}
                         >
                           {teacher.isActive ? 'Deactivate' : 'Activate'}
+                        </button>
+                        <button
+                          className="rounded-lg border border-rose-200 px-3 py-1 text-xs text-rose-600"
+                          onClick={() => {
+                            if (!window.confirm(`Delete "${teacher.firstName} ${teacher.lastName}"?`)) return;
+                            deleteMutation.mutate(teacher.id);
+                          }}
+                        >
+                          Delete
                         </button>
                       </div>
                     </td>

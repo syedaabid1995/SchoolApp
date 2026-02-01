@@ -8,8 +8,10 @@ import {
   getPerformanceMetrics
 } from '../../services/adminDashboard.service';
 import { listAuditLogs } from '../../services/audit.service';
+import { useNotify } from '../../components/NotificationProvider';
 
 export default function DashboardPage() {
+  const notify = useNotify();
   const { data, isLoading, isError } = useQuery({
     queryKey: ['admin-dashboard'],
     queryFn: getAdminDashboardMetrics,
@@ -67,7 +69,6 @@ export default function DashboardPage() {
     { title: 'Add Student', href: '/dashboard/students/add', icon: '➕', desc: 'Register new student' },
     { title: 'Add Teacher', href: '/dashboard/teachers/add', icon: '👨💼', desc: 'Add teaching staff' },
     { title: 'View Reports', href: '/dashboard/reports', icon: '📈', desc: 'Academic reports' },
-    { title: 'Manage Themes', href: '/dashboard/themes', icon: '🎨', desc: 'Customize appearance' },
   ];
 
   const SimpleChart = ({ data, color, label }: { data: number[], color: string, label: string }) => {
@@ -147,6 +148,37 @@ export default function DashboardPage() {
         </div>
         <div className="absolute -right-4 -top-4 h-32 w-32 rounded-full bg-white/10"></div>
         <div className="absolute -left-8 -bottom-8 h-40 w-40 rounded-full bg-white/5"></div>
+      </section>
+
+      {/* Test Notifications */}
+      <section className="bg-white rounded-2xl border border-slate/10 p-6">
+        <h2 className="text-lg font-semibold mb-4">Test Notifications</h2>
+        <div className="grid gap-3 md:grid-cols-4">
+          <button
+            onClick={() => notify.success('Success!', 'Operation completed successfully')}
+            className="rounded-lg bg-green-500 px-4 py-2 text-sm text-white hover:bg-green-600"
+          >
+            Success
+          </button>
+          <button
+            onClick={() => notify.error('Error!', 'Something went wrong')}
+            className="rounded-lg bg-red-500 px-4 py-2 text-sm text-white hover:bg-red-600"
+          >
+            Error
+          </button>
+          <button
+            onClick={() => notify.warning('Warning!', 'Please check your input')}
+            className="rounded-lg bg-yellow-500 px-4 py-2 text-sm text-white hover:bg-yellow-600"
+          >
+            Warning
+          </button>
+          <button
+            onClick={() => notify.info('Info', 'Here is some information')}
+            className="rounded-lg bg-blue-500 px-4 py-2 text-sm text-white hover:bg-blue-600"
+          >
+            Info
+          </button>
+        </div>
       </section>
 
       {/* Stats Grid */}

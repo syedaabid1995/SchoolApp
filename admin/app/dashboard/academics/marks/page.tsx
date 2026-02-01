@@ -6,6 +6,7 @@ import { listAcademicYears, listClasses, listSections, listSubjects } from '../.
 import { listExams, getExam, listMarks, uploadMarks } from '../../../../services/report.service';
 import { getSession } from '../../../../services/auth.service';
 import { listStudents, Student } from '../../../../services/student.service';
+import { useNotify } from '../../../../components/NotificationProvider';
 
 type ExamPaper = {
   id: string;
@@ -35,6 +36,7 @@ const gradeFor = (marks: number, maxMarks: number) => {
 };
 
 export default function MarksUploadPage() {
+  const notify = useNotify();
   const [filters, setFilters] = useState({
     academicYearId: '',
     examId: '',
@@ -49,6 +51,7 @@ export default function MarksUploadPage() {
   const [saving, setSaving] = useState(false);
   const [bulkOpen, setBulkOpen] = useState(false);
   const [bulkFileName, setBulkFileName] = useState('');
+  const [formError, setFormError] = useState('');
 
   const { data: session } = useQuery({ queryKey: ['session'], queryFn: getSession });
   const role = session?.role ?? 'TEACHER';
@@ -120,7 +123,15 @@ export default function MarksUploadPage() {
   }, [sections, filters.classId]);
 
   const loadStudents = async () => {
-    if (!effectiveSchoolId || !filters.classId || !filters.examId || !filters.subjectId) return;
+    let error = '';
+    if (!filters.examId) error = 'Select an exam.';
+    else if (!filters.classId) error = 'Select a class.';
+    else if (!filters.subjectId) error = 'Select a subject.';
+    setFormError(error);
+    if (error) {
+      notify.error('Validation error', error);
+      return;
+    }
     const students = await listStudents({ schoolId: effectiveSchoolId });
     const filtered = (students ?? []).filter((student: Student) => {
       if (filters.classId && student.classId !== filters.classId) return false;
@@ -152,6 +163,8 @@ export default function MarksUploadPage() {
     setMarksRows(rows);
     setLoaded(true);
     setStatus(nextStatus);
+    setFormError('');
+    notify.success('Students loaded', 'Marks are ready to enter.');
   };
 
   const handleExamChange = (examId: string) => {
@@ -201,6 +214,12 @@ export default function MarksUploadPage() {
 
   const saveMarks = async (nextStatus: 'DRAFT' | 'SUBMITTED' | 'LOCKED') => {
     if (!selectedPaper?.id) return;
+    if (!marksRows.length) {
+      const message = 'Load students before saving marks.';
+      setFormError(message);
+      notify.error('Validation error', message);
+      return;
+    }
     setSaving(true);
     try {
       const payload = marksRows
@@ -208,6 +227,9 @@ export default function MarksUploadPage() {
         .map((row) => ({ studentId: row.studentId, score: Number(row.marks) }));
       await uploadMarks({ examPaperId: selectedPaper.id, marks: payload, status: nextStatus });
       setStatus(nextStatus);
+      setFormError('');
+      const label = nextStatus === 'DRAFT' ? 'Draft saved' : nextStatus === 'SUBMITTED' ? 'Marks submitted' : 'Marks locked';
+      notify.success(label, 'Marks updated successfully.');
     } finally {
       setSaving(false);
     }
@@ -310,7 +332,6 @@ export default function MarksUploadPage() {
         <button
           className="mt-4 rounded-lg bg-ink px-4 py-2 text-sm font-semibold text-white"
           onClick={loadStudents}
-          disabled={!filters.examId || !filters.classId || !filters.subjectId}
         >
           Load Students
         </button>
