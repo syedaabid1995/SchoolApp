@@ -50,7 +50,6 @@ export const executeDeletion = async (params: {
   });
 
   await prisma.student.deleteMany({ where: { schoolId: params.schoolId } });
-  await prisma.parentProfile.deleteMany({ where: { schoolId: params.schoolId } });
   await prisma.teacherProfile.deleteMany({ where: { schoolId: params.schoolId } });
 
   await prisma.dataDeletionJob.update({

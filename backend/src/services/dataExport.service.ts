@@ -16,7 +16,9 @@ export const exportTenantData = async (params: {
   const exportData = {
     schools: await prisma.school.findMany({ where: { id: params.schoolId } }),
     students: await prisma.student.findMany({ where: { schoolId: params.schoolId } }),
-    parents: await prisma.parentProfile.findMany({ where: { schoolId: params.schoolId } }),
+    parents: await prisma.parentProfile.findMany({
+      where: { links: { some: { student: { schoolId: params.schoolId } } } },
+    }),
     teachers: await prisma.teacherProfile.findMany({ where: { schoolId: params.schoolId } }),
     attendance: await prisma.attendanceSession.findMany({ where: { schoolId: params.schoolId }, include: { records: true } }),
   };

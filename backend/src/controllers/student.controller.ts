@@ -259,7 +259,7 @@ export const linkParent = async (req: Request, res: Response) => {
   }
 
   const parent = await prisma.parentProfile.findFirst({
-    where: { id: payload.parentId, schoolId },
+    where: { id: payload.parentId },
     select: { id: true },
   });
 

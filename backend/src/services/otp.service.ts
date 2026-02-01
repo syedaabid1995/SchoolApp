@@ -83,7 +83,7 @@ export const verifyOtp = async (params: { schoolId: string; phone: string; code:
 
   // Optional audit log if parent user exists.
   const parent = await prisma.parentProfile.findFirst({
-    where: { phone, schoolId: params.schoolId },
+    where: { phone },
     select: { userId: true },
   });
 

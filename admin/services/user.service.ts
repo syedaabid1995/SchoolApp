@@ -7,7 +7,7 @@ export type UserProfile = {
   role: string | null;
   displayName: string;
   teacherProfile?: { firstName: string; lastName: string; phone: string | null; address: string | null } | null;
-  parentProfiles?: Array<{ firstName: string; lastName: string; phone: string | null; email: string | null; schoolId: string }>;
+  parentProfiles?: Array<{ firstName: string; lastName: string; phone: string | null; email: string | null }>;
   createdAt: string;
 };
 

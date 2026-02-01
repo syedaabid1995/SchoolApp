@@ -33,14 +33,22 @@ const resolveSchoolForPhone = async (req: Request, phone: string, schoolId?: str
   }
   const parents = await prisma.parentProfile.findMany({
     where: { phone: normalizePhone(phone) },
-    select: { schoolId: true },
+    select: { id: true },
   });
-  const unique = Array.from(new Set(parents.map((parent) => parent.schoolId)));
+  if (!parents.length) {
+    throw new HttpError(404, 'Parent not found');
+  }
+  const parentIds = parents.map((parent) => parent.id);
+  const links = await prisma.studentParent.findMany({
+    where: { parentId: { in: parentIds } },
+    select: { student: { select: { schoolId: true } } },
+  });
+  const unique = Array.from(new Set(links.map((link) => link.student.schoolId)));
   if (unique.length === 1) {
     return unique[0];
   }
   if (unique.length === 0) {
-    throw new HttpError(404, 'Parent not found');
+    throw new HttpError(404, 'Parent not linked to any school');
   }
   throw new HttpError(400, 'Multiple schools found. Provide schoolId.');
 };
@@ -74,7 +82,7 @@ export const verifyOtpApi = async (req: Request, res: Response) => {
 
   const phone = normalizePhone(payload.phone);
   const parentProfile = await prisma.parentProfile.findFirst({
-    where: { phone, schoolId },
+    where: { phone },
   });
   if (!parentProfile) {
     throw new HttpError(404, 'Parent not found');

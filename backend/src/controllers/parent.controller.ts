@@ -49,12 +49,12 @@ export const createParent = async (req: Request, res: Response) => {
 
   const existingByPhone = payload.phone
     ? await prisma.parentProfile.findFirst({
-        where: { schoolId, phone: payload.phone },
+        where: { phone: payload.phone },
         select: { id: true },
       })
     : null;
   if (existingByPhone && payload.createLogin) {
-    throw new HttpError(409, 'Parent with this phone already exists in this school');
+    throw new HttpError(409, 'Parent with this phone already exists');
   }
 
   const result = await prisma.$transaction(async (tx) => {
@@ -92,10 +92,9 @@ export const createParent = async (req: Request, res: Response) => {
 
     const existingProfile = userId
       ? await tx.parentProfile.findFirst({
-          where: { schoolId, userId },
+          where: { userId },
           select: {
             id: true,
-            schoolId: true,
             userId: true,
             firstName: true,
             lastName: true,
@@ -108,14 +107,13 @@ export const createParent = async (req: Request, res: Response) => {
       : null;
     if (existingProfile) {
       if (payload.createLogin) {
-        throw new HttpError(409, 'Parent already linked to this school');
+        throw new HttpError(409, 'Parent already exists');
       }
       return { parent: existingProfile, tempPassword: null, created: false };
     }
 
     const parent = await tx.parentProfile.create({
       data: {
-        schoolId,
         userId,
         firstName: payload.firstName,
         lastName: payload.lastName,
@@ -151,7 +149,7 @@ export const listParents = async (req: Request, res: Response) => {
   const schoolId = resolveSchoolId(req, req.query.schoolId as string | undefined);
 
   const parents = await prisma.parentProfile.findMany({
-    where: { schoolId },
+    where: { links: { some: { student: { schoolId } } } },
     orderBy: { createdAt: 'desc' },
   });
 
@@ -192,7 +190,7 @@ export const getParent = async (req: Request, res: Response) => {
   const id = idSchema.parse(req.params.id);
 
   const parent = await prisma.parentProfile.findFirst({
-    where: { id, schoolId },
+    where: { id, links: { some: { student: { schoolId } } } },
   });
 
   if (!parent) {
@@ -208,7 +206,7 @@ export const updateParent = async (req: Request, res: Response) => {
   const id = idSchema.parse(req.params.id);
 
   const existing = await prisma.parentProfile.findFirst({
-    where: { id, schoolId },
+    where: { id, links: { some: { student: { schoolId } } } },
     select: { id: true, firstName: true, lastName: true, phone: true, email: true, userId: true },
   });
 
@@ -250,7 +248,7 @@ export const deleteParent = async (req: Request, res: Response) => {
   const id = idSchema.parse(req.params.id);
 
   const existing = await prisma.parentProfile.findFirst({
-    where: { id, schoolId },
+    where: { id, links: { some: { student: { schoolId } } } },
     select: { id: true, firstName: true, lastName: true, phone: true, email: true, userId: true },
   });
 

@@ -58,7 +58,7 @@ export const getUserById = async (req: Request, res: Response) => {
       email: true,
       schoolId: true,
       teacherProfile: { select: { firstName: true, lastName: true, phone: true, address: true } },
-      parentProfiles: { select: { firstName: true, lastName: true, phone: true, email: true, schoolId: true } },
+      parentProfiles: { select: { firstName: true, lastName: true, phone: true, email: true } },
       roles: { select: { role: { select: { name: true } } } },
       createdAt: true,
     },
@@ -71,9 +71,15 @@ export const getUserById = async (req: Request, res: Response) => {
   const requesterSchoolId = requester?.schoolId ?? null;
   const isSuperAdmin = requesterSchoolId === null;
   const sameSchoolUser = requesterSchoolId && user.schoolId === requesterSchoolId;
-  const hasParentProfileInSchool =
-    requesterSchoolId &&
-    user.parentProfiles.some((profile) => profile.schoolId === requesterSchoolId);
+  const hasParentProfileInSchool = requesterSchoolId
+    ? await prisma.studentParent.findFirst({
+        where: {
+          parent: { userId: user.id },
+          student: { schoolId: requesterSchoolId },
+        },
+        select: { studentId: true },
+      })
+    : null;
 
   if (!isSuperAdmin && !sameSchoolUser && !hasParentProfileInSchool) {
     throw new HttpError(403, 'Forbidden');

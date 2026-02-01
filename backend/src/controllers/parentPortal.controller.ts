@@ -6,7 +6,6 @@ import { requireAuth } from '../middlewares/rbac.middleware';
 const resolveParentProfiles = async (userId: string) => {
   return prisma.parentProfile.findMany({
     where: { userId },
-    include: { school: { select: { id: true, name: true } } },
   });
 };
 
@@ -21,9 +20,9 @@ const resolveChildren = async (userId: string) => {
         include: {
           class: { select: { id: true, name: true, academicYearId: true } },
           section: { select: { id: true, name: true } },
+          school: { select: { id: true, name: true } },
         },
       },
-      parent: { select: { id: true, schoolId: true, school: { select: { name: true } } } },
     },
   });
 
@@ -44,7 +43,7 @@ const resolveChildren = async (userId: string) => {
       sectionId: link.student.sectionId ?? null,
       rollNo: link.student.admissionNo,
       schoolId: link.student.schoolId,
-      schoolName: link.parent.school?.name ?? '',
+      schoolName: link.student.school?.name ?? '',
       academicYearId: link.student.class?.academicYearId ?? null,
     };
   });

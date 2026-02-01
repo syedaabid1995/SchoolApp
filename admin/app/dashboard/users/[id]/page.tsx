@@ -64,12 +64,11 @@ export default function UserDetailsPage({ params }: { params: Promise<{ id: stri
           <h2 className="text-lg font-semibold">Parent Profiles</h2>
           <div className="mt-4 space-y-3 text-sm text-slate">
             {user.parentProfiles.map((profile) => (
-              <div key={`${profile.schoolId}-${profile.phone ?? ''}`} className="rounded-xl border border-slate/10 p-4">
+              <div key={`${profile.phone ?? profile.firstName}`} className="rounded-xl border border-slate/10 p-4">
                 <p className="text-xs uppercase text-slate">Name</p>
                 <p className="mt-1 text-ink">{profile.firstName} {profile.lastName}</p>
                 <p className="mt-1">Phone: {profile.phone ?? '—'}</p>
                 <p className="mt-1">Email: {profile.email ?? '—'}</p>
-                <p className="mt-1 text-xs text-slate">School: {profile.schoolId}</p>
               </div>
             ))}
           </div>

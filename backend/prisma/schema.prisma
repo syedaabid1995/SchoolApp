@@ -36,7 +36,6 @@ model School {
   classes       Class[]
   subjects      Subject[]
   students      Student[]
-  parents       ParentProfile[]
   teachers      TeacherProfile[]
   importJobs    ImportJob[]
   faceProfiles  FaceProfile[]
@@ -332,7 +331,6 @@ model StudentTransferRequest {
 
 model ParentProfile {
   id           String   @id @default(uuid()) @db.Uuid
-  schoolId     String   @map("school_id") @db.Uuid
   userId       String?  @map("user_id") @db.Uuid
   firstName    String   @map("first_name")
   lastName     String   @map("last_name")
@@ -341,14 +339,12 @@ model ParentProfile {
   createdAt    DateTime @default(now()) @map("created_at")
   updatedAt    DateTime @updatedAt @map("updated_at")
 
-  school School @relation(fields: [schoolId], references: [id], onDelete: Cascade)
   user   User?  @relation(fields: [userId], references: [id], onDelete: SetNull)
   links  StudentParent[]
   consents ConsentRecord[]
 
-  @@index([schoolId])
   @@index([userId])
-  @@unique([schoolId, userId])
+  @@unique([userId])
   @@map("parent_profiles")
 }
 
