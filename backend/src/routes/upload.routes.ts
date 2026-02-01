@@ -47,7 +47,7 @@ const documentFilter: multer.Options['fileFilter'] = (_req, file, cb) => {
 const upload = multer({
   storage,
   fileFilter: imageOnlyFilter,
-  limits: { fileSize: 5 * 1024 * 1024 },
+  limits: { fileSize: 10 * 1024 * 1024 },
 });
 
 export const uploadRouter = Router();
@@ -64,7 +64,7 @@ uploadRouter.post('/photos', upload.single('file'), (req, res) => {
 const docUpload = multer({
   storage,
   fileFilter: documentFilter,
-  limits: { fileSize: 10 * 1024 * 1024 },
+  limits: { fileSize: 20 * 1024 * 1024 },
 });
 
 uploadRouter.post('/documents', docUpload.single('file'), (req, res) => {

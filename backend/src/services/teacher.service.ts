@@ -31,6 +31,15 @@ export type TeacherUpdateInput = {
   phone?: string | null;
   address?: string | null;
   isActive?: boolean;
+  bankDetails?: {
+    accountHolderName?: string | null;
+    accountNumber?: string | null;
+    ifscCode?: string | null;
+    accountType?: string | null;
+    bankName?: string | null;
+    branchName?: string | null;
+    panNumber?: string | null;
+  };
 };
 
 export const createTeacher = async (payload: TeacherCreateInput) => {
@@ -157,6 +166,18 @@ export const listTeachers = async (params: {
   };
 };
 
+export const getTeacher = async (teacherId: string, schoolId: string) => {
+  return prisma.teacherProfile.findFirst({
+    where: { id: teacherId, schoolId },
+    include: {
+      user: { select: { email: true, status: true } },
+      bankDetails: true,
+      classAssignments: { include: { class: true } },
+      subjectAssignments: { include: { subject: true } },
+    },
+  });
+};
+
 export const updateTeacher = async (teacherId: string, schoolId: string, payload: TeacherUpdateInput) => {
   const existing = await prisma.teacherProfile.findFirst({
     where: { id: teacherId, schoolId },
@@ -186,6 +207,43 @@ export const updateTeacher = async (teacherId: string, schoolId: string, payload
         isActive: payload.isActive ?? undefined,
       },
     });
+
+    if (payload.bankDetails) {
+      const details = payload.bankDetails;
+      const hasAny =
+        details.accountHolderName ||
+        details.accountNumber ||
+        details.ifscCode ||
+        details.accountType ||
+        details.bankName ||
+        details.branchName ||
+        details.panNumber;
+
+      if (hasAny) {
+        await tx.teacherBankDetails.upsert({
+          where: { teacherId: existing.id },
+          create: {
+            teacherId: existing.id,
+            accountHolderName: details.accountHolderName ?? null,
+            accountNumber: details.accountNumber ?? null,
+            ifscCode: details.ifscCode ?? null,
+            accountType: details.accountType ?? null,
+            bankName: details.bankName ?? null,
+            branchName: details.branchName ?? null,
+            panNumber: details.panNumber ?? null,
+          },
+          update: {
+            accountHolderName: details.accountHolderName ?? null,
+            accountNumber: details.accountNumber ?? null,
+            ifscCode: details.ifscCode ?? null,
+            accountType: details.accountType ?? null,
+            bankName: details.bankName ?? null,
+            branchName: details.branchName ?? null,
+            panNumber: details.panNumber ?? null,
+          },
+        });
+      }
+    }
 
     return profile;
   });

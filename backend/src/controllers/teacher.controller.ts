@@ -1,7 +1,7 @@
 import type { Request, Response } from 'express';
 import { z } from 'zod';
 import { resolveSchoolId } from '../utils/tenant';
-import { createTeacher, listTeachers, updateTeacher } from '../services/teacher.service';
+import { createTeacher, listTeachers, updateTeacher, getTeacher } from '../services/teacher.service';
 import { HttpError } from '../middlewares/error.middleware';
 import { logAudit } from '../utils/audit';
 import { prisma } from '../config/db';
@@ -44,6 +44,17 @@ const updateSchema = z.object({
   phone: z.string().min(1).optional().nullable(),
   address: z.string().min(1).optional().nullable(),
   isActive: z.boolean().optional(),
+  bankDetails: z
+    .object({
+      accountHolderName: z.string().min(1).optional().nullable(),
+      accountNumber: z.string().min(1).optional().nullable(),
+      ifscCode: z.string().min(1).optional().nullable(),
+      accountType: z.string().min(1).optional().nullable(),
+      bankName: z.string().min(1).optional().nullable(),
+      branchName: z.string().min(1).optional().nullable(),
+      panNumber: z.string().min(1).optional().nullable(),
+    })
+    .optional(),
   schoolId: z.string().uuid().optional(),
 });
 
@@ -145,6 +156,15 @@ export const updateTeacherApi = async (req: Request, res: Response) => {
   } catch (err) {
     throw new HttpError(404, 'Teacher not found');
   }
+};
+
+export const getTeacherApi = async (req: Request, res: Response) => {
+  const schoolId = resolveSchoolId(req, req.query.schoolId as string | undefined);
+  const teacher = await getTeacher(req.params.id, schoolId);
+  if (!teacher) {
+    throw new HttpError(404, 'Teacher not found');
+  }
+  res.status(200).json(teacher);
 };
 
 export const deleteTeacherApi = async (req: Request, res: Response) => {

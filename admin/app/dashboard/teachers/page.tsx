@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import Link from 'next/link';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { listTeachers, updateTeacher, setTeacherStatus, deleteTeacher } from '../../../services/teacher.service';
 import { listSchools } from '../../../services/school.service';
@@ -128,7 +129,12 @@ export default function TeachersPage() {
                 .map((teacher) => (
                   <tr key={teacher.id} className="border-t border-slate/10">
                     <td className="py-3">
-                      {teacher.firstName} {teacher.lastName}
+                      <Link
+                        href={`/dashboard/teachers/${teacher.id}${isSuperAdmin && effectiveSchoolId ? `?schoolId=${effectiveSchoolId}` : ''}`}
+                        className="font-semibold text-ink hover:underline"
+                      >
+                        {teacher.firstName} {teacher.lastName}
+                      </Link>
                     </td>
                     <td>{teacher.user.email}</td>
                     <td>{teacher.isActive ? 'Active' : 'Inactive'}</td>
@@ -138,12 +144,6 @@ export default function TeachersPage() {
                     </td>
                     <td className="text-right">
                       <div className="flex justify-end gap-2">
-                        <button
-                          className="rounded-lg border border-slate/20 px-3 py-1 text-xs"
-                          onClick={() => updateMutation.mutate({ id: teacher.id, payload: { isActive: !teacher.isActive } })}
-                        >
-                          Toggle Profile
-                        </button>
                         <button
                           className="rounded-lg border border-slate/20 px-3 py-1 text-xs"
                           onClick={() => statusMutation.mutate({ id: teacher.id, isActive: !teacher.isActive })}

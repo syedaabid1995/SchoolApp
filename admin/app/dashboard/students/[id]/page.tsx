@@ -7,7 +7,7 @@ import Link from 'next/link';
 import { getStudent, updateStudent, uploadStudentPhoto, uploadStudentDocument, resolveUploadUrl, addStudentPhoto, deleteStudentPhoto } from '../../../../services/student.service';
 import { City, State } from 'country-state-city';
 
-type Step = 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8;
+type Step = 1 | 2 | 3 | 4 | 5 | 6;
 
 const steps: Array<{ id: Step; title: string }> = [
   { id: 1, title: 'Academic' },
@@ -16,8 +16,6 @@ const steps: Array<{ id: Step; title: string }> = [
   { id: 4, title: 'Address' },
   { id: 5, title: 'Medical' },
   { id: 6, title: 'Documents' },
-  { id: 7, title: 'Access' },
-  { id: 8, title: 'Summary' },
 ];
 
 export default function StudentDetailPage() {
@@ -245,7 +243,7 @@ export default function StudentDetailPage() {
           <h1 className="text-2xl font-semibold text-ink">
             {displayName}
           </h1>
-          <p className="text-sm text-slate">Student details and information</p>
+          
         </div>
         <div className="flex gap-2">
           {isEditing ? (
@@ -341,7 +339,7 @@ export default function StudentDetailPage() {
 
           {step === 2 && (
             <div>
-              <h3 className="text-lg font-semibold mb-4">Student Information</h3>
+              
               <div className="grid gap-4 md:grid-cols-2">
                 <div>
                   <label className="block text-sm font-medium text-slate mb-1">Full Name</label>
@@ -417,6 +415,7 @@ export default function StudentDetailPage() {
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-slate mb-1">Photo</label>
+                  <p className="text-xs text-slate/70 mb-2">Max 10MB per image (JPG/PNG).</p>
                   {isEditing ? (
                     <div className="space-y-2">
                       <input
@@ -458,6 +457,7 @@ export default function StudentDetailPage() {
                 </div>
                 <div className="md:col-span-2">
                   <label className="block text-sm font-medium text-slate mb-1">Additional Photos (max 5)</label>
+                  <p className="text-xs text-slate/70 mb-2">Max 10MB per image (JPG/PNG).</p>
                   <div className="flex flex-wrap gap-2">
                     {(student.photos ?? []).map((photo) => (
                       <div key={photo.id} className="relative">
@@ -776,6 +776,7 @@ export default function StudentDetailPage() {
           {step === 6 && (
             <div>
               <h3 className="text-lg font-semibold mb-4">Documents</h3>
+              <p className="text-xs text-slate/70 -mt-3 mb-4">Max 20MB per file (PDF/DOC/DOCX/Images).</p>
               <div className="grid gap-4 md:grid-cols-2">
                   {[
                     { key: 'docBirthCert', label: 'Birth Certificate' },
@@ -824,41 +825,6 @@ export default function StudentDetailPage() {
             </div>
           )}
 
-          {step === 7 && (
-            <div>
-              <h3 className="text-lg font-semibold mb-4">Access Information</h3>
-              <p className="text-slate">Access and login settings for student and parent accounts.</p>
-            </div>
-          )}
-
-          {step === 8 && (
-            <div>
-              <h3 className="text-lg font-semibold mb-4">Summary</h3>
-              <div className="space-y-4">
-                <div className="rounded-lg border border-slate/10 p-4">
-                  <h4 className="font-medium mb-2">Academic Details</h4>
-                  <p className="text-sm text-slate">
-                    Admission: {student.admissionNo} | Class: {student.class?.name || '—'} | 
-                    Section: {student.section?.name || '—'} | Status: {student.status}
-                  </p>
-                </div>
-                <div className="rounded-lg border border-slate/10 p-4">
-                  <h4 className="font-medium mb-2">Student Details</h4>
-                  <p className="text-sm text-slate">
-                    Name: {displayName} | 
-                    DOB: {student.dob ? new Date(student.dob).toLocaleDateString() : '—'}
-                  </p>
-                </div>
-                <div className="rounded-lg border border-slate/10 p-4">
-                  <h4 className="font-medium mb-2">Parent Details</h4>
-                  <p className="text-sm text-slate">
-                    Father: {student.fatherName ?? '—'} | Mother: {student.motherName ?? '—'} | 
-                    Guardian: {student.guardianName ?? '—'} | Phone: {student.parentPhone ?? '—'} | Email: {student.parentEmail ?? '—'}
-                  </p>
-                </div>
-              </div>
-            </div>
-          )}
         </div>
 
         <div className="flex justify-between mt-6 pt-6 border-t border-slate/10">
@@ -870,8 +836,8 @@ export default function StudentDetailPage() {
             Previous
           </button>
           <button
-            onClick={() => setStep((prev) => (prev < 8 ? ((prev + 1) as Step) : prev))}
-            disabled={step === 8}
+            onClick={() => setStep((prev) => (prev < 6 ? ((prev + 1) as Step) : prev))}
+            disabled={step === 6}
             className="rounded-lg bg-ink px-4 py-2 text-sm font-semibold text-white disabled:opacity-50 disabled:cursor-not-allowed hover:bg-ink/90"
           >
             Next

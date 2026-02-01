@@ -467,27 +467,31 @@ export default function StudentOnboardingPage() {
               <option value="O+">O+</option>
               <option value="O-">O-</option>
             </select>
-            <input
-              type="file"
-              accept="image/*"
-              onChange={async (e) => {
-                const file = e.target.files?.[0];
-                if (!file) return;
-                setPhotoPreview(URL.createObjectURL(file));
-                try {
-                  const uploaded = await uploadStudentPhoto(file);
-                  const resolved = resolveUploadUrl(uploaded.url) ?? uploaded.url;
-                  setStudent({ ...student, photo: uploaded.url });
-                  setPhotoPreview(resolved);
-                  notify.success('Photo uploaded', 'Student photo saved.');
-                } catch (error: any) {
-                  const message =
-                    error?.response?.data?.error?.message || error?.message || 'Failed to upload photo';
-                  notify.error('Upload failed', message);
-                }
-              }}
-              className="rounded-lg border border-slate/20 px-3 py-2 text-sm"
-            />
+            <div className="md:col-span-2">
+              <label className="block text-sm font-medium text-slate mb-1">Photo</label>
+              <p className="text-xs text-slate/70 mb-2">Max 10MB per image (JPG/PNG).</p>
+              <input
+                type="file"
+                accept="image/*"
+                onChange={async (e) => {
+                  const file = e.target.files?.[0];
+                  if (!file) return;
+                  setPhotoPreview(URL.createObjectURL(file));
+                  try {
+                    const uploaded = await uploadStudentPhoto(file);
+                    const resolved = resolveUploadUrl(uploaded.url) ?? uploaded.url;
+                    setStudent({ ...student, photo: uploaded.url });
+                    setPhotoPreview(resolved);
+                    notify.success('Photo uploaded', 'Student photo saved.');
+                  } catch (error: any) {
+                    const message =
+                      error?.response?.data?.error?.message || error?.message || 'Failed to upload photo';
+                    notify.error('Upload failed', message);
+                  }
+                }}
+                className="rounded-lg border border-slate/20 px-3 py-2 text-sm"
+              />
+            </div>
             {photoPreview ? (
               <div className="md:col-span-2">
                 <img src={photoPreview} alt="Student preview" className="h-24 w-24 rounded-lg object-cover" />
@@ -495,6 +499,7 @@ export default function StudentOnboardingPage() {
             ) : null}
             <div className="md:col-span-2">
               <label className="block text-sm font-medium text-slate mb-1">Additional Photos (max 5)</label>
+              <p className="text-xs text-slate/70 mb-2">Max 10MB per image (JPG/PNG).</p>
               <div className="flex flex-wrap gap-2">
                 {additionalPhotos.map((photo) => (
                   <img key={photo} src={photo} alt="Student" className="h-20 w-20 rounded-lg object-cover" />
@@ -697,6 +702,7 @@ export default function StudentOnboardingPage() {
       {step === 6 ? (
         <section className="rounded-2xl border border-slate/10 bg-white p-6">
           <h2 className="text-lg font-semibold">Documents Upload</h2>
+          <p className="text-xs text-slate/70 mt-1">Max 20MB per file (PDF/DOC/DOCX/Images).</p>
           <div className="mt-4 grid gap-3 md:grid-cols-2">
             {[
               { key: 'birthCert', label: 'Birth Certificate' },

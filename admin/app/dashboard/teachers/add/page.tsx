@@ -7,6 +7,14 @@ import { listSchools } from '../../../../services/school.service';
 import { getSession } from '../../../../services/auth.service';
 import { useNotify } from '../../../../components/NotificationProvider';
 
+const toTitleCase = (str: string) => {
+  return str.replace(/\w\S*/g, (txt) => 
+    txt.charAt(0).toUpperCase() + txt.substr(1).toLowerCase()
+  );
+};
+
+const toUpperCase = (str: string) => str.toUpperCase();
+
 type Step = 1 | 2 | 3 | 4 | 5;
 
 const steps: Array<{ id: Step; title: string }> = [
@@ -15,6 +23,17 @@ const steps: Array<{ id: Step; title: string }> = [
   { id: 3, title: 'Banking' },
   { id: 4, title: 'Review' },
   { id: 5, title: 'Confirm' },
+];
+
+const indianBanks = [
+  'State Bank of India', 'HDFC Bank', 'ICICI Bank', 'Axis Bank', 'Kotak Mahindra Bank',
+  'Punjab National Bank', 'Bank of Baroda', 'Canara Bank', 'Union Bank of India',
+  'Bank of India', 'Central Bank of India', 'Indian Overseas Bank', 'UCO Bank',
+  'Indian Bank', 'Punjab & Sind Bank', 'IDFC First Bank', 'Yes Bank', 'IndusInd Bank',
+  'Federal Bank', 'South Indian Bank', 'Karur Vysya Bank', 'City Union Bank',
+  'Tamilnad Mercantile Bank', 'Dhanlaxmi Bank', 'RBL Bank', 'Bandhan Bank',
+  'ESAF Small Finance Bank', 'Equitas Small Finance Bank', 'Jana Small Finance Bank',
+  'Others'
 ];
 
 export default function AddTeacherPage() {
@@ -32,6 +51,7 @@ export default function AddTeacherPage() {
     ifscCode: '',
     accountType: '',
     bankName: '',
+    customBankName: '',
     branchName: '',
     panNumber: '',
   });
@@ -113,12 +133,23 @@ export default function AddTeacherPage() {
       if (!form.email.trim()) error = 'Email is required.';
       else if (!emailPattern.test(form.email.trim())) error = 'Enter a valid email.';
       else if (!form.firstName.trim()) error = 'First name is required.';
+      else if (form.firstName.trim().length < 3) error = 'First name must be at least 3 characters.';
       else if (!form.lastName.trim()) error = 'Last name is required.';
+      else if (form.lastName.trim().length < 3) error = 'Last name must be at least 3 characters.';
       else if (isSuperAdmin && !effectiveSchoolId) error = 'Select a school before continuing.';
     }
     if (step === 2) {
       if (!form.phone.trim()) error = 'Phone is required.';
+      else if (!/^[0-9]{10}$/.test(form.phone.trim())) error = 'Enter a valid 10-digit phone number.';
       else if (!form.address.trim()) error = 'Address is required.';
+    }
+    if (step === 3) {
+      if (form.accountNumber && !form.ifscCode.trim()) error = 'IFSC code is required when account number is provided.';
+      else if (form.ifscCode && !form.accountNumber.trim()) error = 'Account number is required when IFSC code is provided.';
+      else if (form.ifscCode && !/^[A-Z]{4}0[A-Z0-9]{6}$/.test(form.ifscCode.trim())) error = 'Enter a valid IFSC code (AAAA0BBBBBB format).';
+      else if (form.accountNumber && (form.accountNumber.length < 9 || form.accountNumber.length > 18)) error = 'Account number must be 9-18 digits.';
+      else if (form.panNumber && !/^[A-Z]{5}[0-9]{4}[A-Z]{1}$/.test(form.panNumber.trim())) error = 'Enter a valid PAN number (ABCDE1234F).';
+      else if (form.bankName === 'Others' && !form.customBankName.trim()) error = 'Enter bank name when Others is selected.';
     }
     setStepError(error);
     if (error) {
@@ -134,9 +165,18 @@ export default function AddTeacherPage() {
     if (!form.email.trim()) error = 'Email is required.';
     else if (!emailPattern.test(form.email.trim())) error = 'Enter a valid email.';
     else if (!form.firstName.trim()) error = 'First name is required.';
+    else if (form.firstName.trim().length < 3) error = 'First name must be at least 3 characters.';
     else if (!form.lastName.trim()) error = 'Last name is required.';
+    else if (form.lastName.trim().length < 3) error = 'Last name must be at least 3 characters.';
     else if (!form.phone.trim()) error = 'Phone is required.';
+    else if (!/^[0-9]{10}$/.test(form.phone.trim())) error = 'Enter a valid 10-digit phone number.';
     else if (!form.address.trim()) error = 'Address is required.';
+    else if (form.accountNumber && !form.ifscCode.trim()) error = 'IFSC code is required when account number is provided.';
+    else if (form.ifscCode && !form.accountNumber.trim()) error = 'Account number is required when IFSC code is provided.';
+    else if (form.ifscCode && !/^[A-Z]{4}0[A-Z0-9]{6}$/.test(form.ifscCode.trim())) error = 'Enter a valid IFSC code (AAAA0BBBBBB format).';
+    else if (form.accountNumber && (form.accountNumber.length < 9 || form.accountNumber.length > 18)) error = 'Account number must be 9-18 digits.';
+    else if (form.panNumber && !/^[A-Z]{5}[0-9]{4}[A-Z]{1}$/.test(form.panNumber.trim())) error = 'Enter a valid PAN number (ABCDE1234F).';
+    else if (form.bankName === 'Others' && !form.customBankName.trim()) error = 'Enter bank name when Others is selected.';
     else if (isSuperAdmin && !effectiveSchoolId) error = 'Select a school before creating.';
     setStepError(error);
     if (error) notify.error('Validation error', error);
@@ -206,13 +246,13 @@ export default function AddTeacherPage() {
               />
               <input
                 value={form.firstName}
-                onChange={(e) => setForm({ ...form, firstName: e.target.value })}
+                onChange={(e) => setForm({ ...form, firstName: toTitleCase(e.target.value) })}
                 placeholder="First name"
                 className="rounded-lg border border-slate/20 px-3 py-2 text-sm"
               />
               <input
                 value={form.lastName}
-                onChange={(e) => setForm({ ...form, lastName: e.target.value })}
+                onChange={(e) => setForm({ ...form, lastName: toTitleCase(e.target.value) })}
                 placeholder="Last name"
                 className="rounded-lg border border-slate/20 px-3 py-2 text-sm"
               />
@@ -226,13 +266,17 @@ export default function AddTeacherPage() {
             <div className="mt-4 grid gap-3 md:grid-cols-2">
               <input
                 value={form.phone}
-                onChange={(e) => setForm({ ...form, phone: e.target.value })}
+                onChange={(e) => {
+                  const value = e.target.value.replace(/[^0-9]/g, '');
+                  setForm({ ...form, phone: value });
+                }}
                 placeholder="Phone"
+                maxLength={10}
                 className="rounded-lg border border-slate/20 px-3 py-2 text-sm"
               />
               <input
                 value={form.address}
-                onChange={(e) => setForm({ ...form, address: e.target.value })}
+                onChange={(e) => setForm({ ...form, address: toTitleCase(e.target.value) })}
                 placeholder="Address"
                 className="rounded-lg border border-slate/20 px-3 py-2 text-sm"
               />
@@ -246,44 +290,69 @@ export default function AddTeacherPage() {
             <div className="mt-3 grid gap-3 md:grid-cols-2">
               <input
                 value={form.accountHolderName}
-                onChange={(e) => setForm({ ...form, accountHolderName: e.target.value })}
+                onChange={(e) => setForm({ ...form, accountHolderName: toUpperCase(e.target.value) })}
                 placeholder="Account holder name"
                 className="rounded-lg border border-slate/20 px-3 py-2 text-sm"
               />
               <input
                 value={form.accountNumber}
-                onChange={(e) => setForm({ ...form, accountNumber: e.target.value })}
-                placeholder="Account number"
+                onChange={(e) => {
+                  const value = e.target.value.replace(/[^0-9]/g, '');
+                  if (value.length <= 18) setForm({ ...form, accountNumber: value });
+                }}
+                placeholder="Account number (9-18 digits)"
                 className="rounded-lg border border-slate/20 px-3 py-2 text-sm"
               />
               <input
                 value={form.ifscCode}
-                onChange={(e) => setForm({ ...form, ifscCode: e.target.value })}
-                placeholder="IFSC code"
+                onChange={(e) => {
+                  const value = e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, '');
+                  if (value.length <= 11) setForm({ ...form, ifscCode: value });
+                }}
+                placeholder="IFSC code (AAAA0BBBBBB)"
                 className="rounded-lg border border-slate/20 px-3 py-2 text-sm"
               />
-              <input
+              <select
                 value={form.accountType}
                 onChange={(e) => setForm({ ...form, accountType: e.target.value })}
-                placeholder="Account type"
                 className="rounded-lg border border-slate/20 px-3 py-2 text-sm"
-              />
-              <input
+              >
+                <option value="">Select account type</option>
+                <option value="Savings">Savings</option>
+                <option value="Current">Current</option>
+                <option value="Salary">Salary</option>
+              </select>
+              <select
                 value={form.bankName}
-                onChange={(e) => setForm({ ...form, bankName: e.target.value })}
-                placeholder="Bank name"
+                onChange={(e) => setForm({ ...form, bankName: e.target.value, customBankName: '' })}
                 className="rounded-lg border border-slate/20 px-3 py-2 text-sm"
-              />
+              >
+                <option value="">Select bank</option>
+                {indianBanks.map((bank) => (
+                  <option key={bank} value={bank}>{bank}</option>
+                ))}
+              </select>
+              {form.bankName === 'Others' && (
+                <input
+                  value={form.customBankName}
+                  onChange={(e) => setForm({ ...form, customBankName: toUpperCase(e.target.value) })}
+                  placeholder="Enter bank name"
+                  className="rounded-lg border border-slate/20 px-3 py-2 text-sm"
+                />
+              )}
               <input
                 value={form.branchName}
-                onChange={(e) => setForm({ ...form, branchName: e.target.value })}
+                onChange={(e) => setForm({ ...form, branchName: toUpperCase(e.target.value) })}
                 placeholder="Branch name"
                 className="rounded-lg border border-slate/20 px-3 py-2 text-sm"
               />
               <input
                 value={form.panNumber}
-                onChange={(e) => setForm({ ...form, panNumber: e.target.value })}
-                placeholder="PAN number"
+                onChange={(e) => {
+                  const value = e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, '');
+                  if (value.length <= 10) setForm({ ...form, panNumber: value });
+                }}
+                placeholder="PAN number (ABCDE1234F)"
                 className="rounded-lg border border-slate/20 px-3 py-2 text-sm"
               />
             </div>
@@ -340,7 +409,7 @@ export default function AddTeacherPage() {
                 accountNumber: form.accountNumber || null,
                 ifscCode: form.ifscCode || null,
                 accountType: form.accountType || null,
-                bankName: form.bankName || null,
+                bankName: form.bankName === 'Others' ? form.customBankName : form.bankName || null,
                 branchName: form.branchName || null,
                 panNumber: form.panNumber || null,
               },

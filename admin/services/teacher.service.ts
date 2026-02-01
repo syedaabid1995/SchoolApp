@@ -39,6 +39,11 @@ export const listTeachers = async (params?: { page?: number; limit?: number; que
   return data;
 };
 
+export const getTeacher = async (id: string, params?: { schoolId?: string }) => {
+  const { data } = await api.get<TeacherProfile>(`/teachers/${id}`, { params });
+  return data;
+};
+
 export const createTeacher = async (payload: {
   email: string;
   password?: string;
@@ -72,6 +77,16 @@ export const updateTeacher = async (
     phone: string | null;
     address: string | null;
     isActive: boolean;
+    schoolId?: string;
+    bankDetails?: {
+      accountHolderName?: string | null;
+      accountNumber?: string | null;
+      ifscCode?: string | null;
+      accountType?: string | null;
+      bankName?: string | null;
+      branchName?: string | null;
+      panNumber?: string | null;
+    };
   }>,
 ) => {
   const { data } = await api.patch(`/teachers/${id}`, payload);

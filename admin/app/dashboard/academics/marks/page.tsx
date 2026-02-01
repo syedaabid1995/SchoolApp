@@ -225,6 +225,12 @@ export default function MarksUploadPage() {
       const payload = marksRows
         .filter((row) => row.marks.trim() !== '' && !row.absent)
         .map((row) => ({ studentId: row.studentId, score: Number(row.marks) }));
+      if (!payload.length) {
+        const message = 'Enter at least one mark before saving.';
+        setFormError(message);
+        notify.error('Validation error', message);
+        return;
+      }
       await uploadMarks({ examPaperId: selectedPaper.id, marks: payload, status: nextStatus });
       setStatus(nextStatus);
       setFormError('');

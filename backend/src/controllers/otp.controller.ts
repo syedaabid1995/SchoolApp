@@ -44,13 +44,15 @@ const resolveSchoolForPhone = async (req: Request, phone: string, schoolId?: str
     select: { student: { select: { schoolId: true } } },
   });
   const unique = Array.from(new Set(links.map((link) => link.student.schoolId)));
-  if (unique.length === 1) {
-    return unique[0];
-  }
   if (unique.length === 0) {
     throw new HttpError(404, 'Parent not linked to any school');
   }
-  throw new HttpError(400, 'Multiple schools found. Provide schoolId.');
+  if (unique.length === 1) {
+    return unique[0];
+  }
+  // For multi-school parents, pick a deterministic school for OTP issuance.
+  const sorted = unique.slice().sort();
+  return sorted[0];
 };
 
 const signToken = (payload: { sub: string; schoolId: string | null; role: string | null; email?: string | null; typ: 'access' | 'refresh' }, expiresIn: string) =>
