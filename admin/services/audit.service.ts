@@ -9,8 +9,8 @@ export type AuditLogResponse = {
       id: string;
       email: string;
       schoolId: string | null;
-      teacherProfile?: { firstName: string; lastName: string } | null;
-      parentProfiles?: Array<{ firstName: string; lastName: string }>;
+      teacherProfile?: { id: string; firstName: string; lastName: string } | null;
+      parentProfiles?: Array<{ id: string; firstName: string; lastName: string }>;
     };
     entityType: string;
     entityId: string;

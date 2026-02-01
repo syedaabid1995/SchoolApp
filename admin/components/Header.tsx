@@ -96,7 +96,6 @@ export const Header = ({
             </div>
           ) : null}
         </div>
-        <span className="hidden rounded-full bg-white/10 px-3 py-1 text-xs font-semibold text-white transition-all duration-200 hover:bg-white/20 sm:inline-block">{role ?? 'UNKNOWN'}</span>
         <button
           onClick={handleLogout}
           className="rounded-md border border-white/30 px-3 py-2 text-sm font-medium text-white transition-all duration-200 hover:bg-white/10 hover:border-white/50"

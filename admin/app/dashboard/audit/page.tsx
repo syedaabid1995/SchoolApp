@@ -1,9 +1,10 @@
 'use client';
 
 import Link from 'next/link';
-import { useState } from 'react';
+import { useMemo, useState, useEffect } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { listAuditLogs } from '../../../services/audit.service';
+import { getSession } from '../../../services/auth.service';
 
 export default function AuditPage() {
   const [filters, setFilters] = useState({
@@ -12,6 +13,41 @@ export default function AuditPage() {
     action: '',
     page: 1,
   });
+
+  const { data: session } = useQuery({ queryKey: ['session'], queryFn: getSession });
+
+  const roleOptions = useMemo(() => {
+    if (session?.role === 'TEACHER') {
+      return [{ value: 'TEACHER', label: 'Teacher' }];
+    }
+    if (session?.role === 'SCHOOL_ADMIN') {
+      return [
+        { value: 'SCHOOL_ADMIN', label: 'School Admin' },
+        { value: 'TEACHER', label: 'Teacher' },
+      ];
+    }
+    return [
+      { value: 'SUPER_ADMIN', label: 'Super Admin' },
+      { value: 'SCHOOL_ADMIN', label: 'School Admin' },
+      { value: 'TEACHER', label: 'Teacher' },
+      { value: 'PARENT', label: 'Parent' },
+    ];
+  }, [session?.role]);
+
+  useEffect(() => {
+    if (!session?.role) return;
+    setFilters((prev) => {
+      if (session.role === 'TEACHER') {
+        return prev.actorRole === 'TEACHER' ? prev : { ...prev, actorRole: 'TEACHER', page: 1 };
+      }
+      if (session.role === 'SCHOOL_ADMIN') {
+        if (prev.actorRole && !['SCHOOL_ADMIN', 'TEACHER'].includes(prev.actorRole)) {
+          return { ...prev, actorRole: '', page: 1 };
+        }
+      }
+      return prev;
+    });
+  }, [session?.role]);
 
   const { data } = useQuery({
     queryKey: ['audit-logs', filters],
@@ -158,12 +194,12 @@ export default function AuditPage() {
                 value={filters.actorRole}
                 onChange={(e) => setFilters({ ...filters, actorRole: e.target.value, page: 1 })}
                 className="w-full rounded-xl border border-gray-300 px-4 py-3 text-sm focus:border-gray-500 focus:outline-none focus:ring-2 focus:ring-gray-200"
+                disabled={session?.role === 'TEACHER'}
               >
                 <option value="">All roles</option>
-                <option value="SUPER_ADMIN">Super Admin</option>
-                <option value="SCHOOL_ADMIN">School Admin</option>
-                <option value="TEACHER">Teacher</option>
-                <option value="PARENT">Parent</option>
+                {roleOptions.map((role) => (
+                  <option key={role.value} value={role.value}>{role.label}</option>
+                ))}
               </select>
             </div>
             <div>
@@ -231,7 +267,15 @@ export default function AuditPage() {
                     </td>
                     <td className="px-6 py-4 text-sm text-gray-900">
                       <Link
-                        href={`/dashboard/users/${log.actorId}`}
+                        href={
+                          log.actor?.teacherProfile?.id
+                            ? `/dashboard/teachers/${log.actor.teacherProfile.id}`
+                            : log.actor?.parentProfiles?.[0]?.id
+                              ? `/dashboard/parents/${log.actor.parentProfiles[0].id}`
+                              : log.entityType === 'STUDENT'
+                                ? `/dashboard/students/${log.entityId}`
+                                : `/dashboard/users/${log.actorId}`
+                        }
                         className="font-medium text-gray-900 hover:text-gray-600 transition-colors"
                       >
                         {log.actor?.teacherProfile
