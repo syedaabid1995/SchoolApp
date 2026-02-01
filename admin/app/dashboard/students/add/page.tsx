@@ -7,7 +7,7 @@ import { useRouter } from 'next/navigation';
 import { useQuery } from '@tanstack/react-query';
 import { listAcademicYears, listClasses, listSections } from '../../../../services/academic.service';
 import { getSession } from '../../../../services/auth.service';
-import { createParent, createStudent, linkParent, lookupParentByPhone, deleteStudent, uploadStudentPhoto, uploadStudentDocument, resolveUploadUrl, addStudentPhoto } from '../../../../services/student.service';
+import { createParent, createStudent, linkParent, lookupParentByPhone, deleteStudent, uploadStudentPhoto, uploadStudentDocument, resolveUploadUrl, addStudentPhoto, updateStudent } from '../../../../services/student.service';
 import { useNotify } from '../../../../components/NotificationProvider';
 
 type Step = 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8;
@@ -42,6 +42,8 @@ export default function StudentOnboardingPage() {
     photo: '',
   });
   const [photoPreview, setPhotoPreview] = useState<string | null>(null);
+  const [photoFile, setPhotoFile] = useState<File | null>(null);
+  const [additionalPhotoFiles, setAdditionalPhotoFiles] = useState<File[]>([]);
   const [additionalPhotos, setAdditionalPhotos] = useState<string[]>([]);
   const [parent, setParent] = useState({
     fatherName: '',
@@ -69,6 +71,17 @@ export default function StudentOnboardingPage() {
     transferCert: '',
     aadhaar: '',
     reportCard: '',
+  });
+  const [documentFiles, setDocumentFiles] = useState<{
+    birthCert: File | null;
+    transferCert: File | null;
+    aadhaar: File | null;
+    reportCard: File | null;
+  }>({
+    birthCert: null,
+    transferCert: null,
+    aadhaar: null,
+    reportCard: null,
   });
   const [access, setAccess] = useState({
     studentLogin: false,
@@ -238,7 +251,7 @@ export default function StudentOnboardingPage() {
         dob: student.dob || undefined,
         gender: student.gender || undefined,
         bloodGroup: student.bloodGroup || undefined,
-        photoUrl: student.photo || undefined,
+        photoUrl: undefined,
         fatherName: parent.fatherName || undefined,
         motherName: parent.motherName || undefined,
         guardianName: parent.guardianName || undefined,
@@ -254,19 +267,46 @@ export default function StudentOnboardingPage() {
         medicalConditions: medical.conditions || undefined,
         allergies: medical.allergies || undefined,
         doctorContact: medical.doctor || undefined,
-        docBirthCert: documents.birthCert || undefined,
-        docTransferCert: documents.transferCert || undefined,
-        docAadhaar: documents.aadhaar || undefined,
-        docReportCard: documents.reportCard || undefined,
+        docBirthCert: undefined,
+        docTransferCert: undefined,
+        docAadhaar: undefined,
+        docReportCard: undefined,
         classId: academic.classId || undefined,
         sectionId: academic.sectionId || undefined,
         schoolId,
       });
       createdStudentId = createdStudent?.id ?? null;
 
-      if (createdStudentId && additionalPhotos.length) {
-        for (const url of additionalPhotos) {
-          await addStudentPhoto(createdStudentId, url);
+      if (createdStudentId) {
+        if (photoFile) {
+          const uploaded = await uploadStudentPhoto(photoFile, { schoolId, studentId: createdStudentId });
+          await updateStudent(createdStudentId, { photoUrl: uploaded.url });
+        }
+        if (additionalPhotoFiles.length) {
+          for (const file of additionalPhotoFiles) {
+            const uploaded = await uploadStudentPhoto(file, { schoolId, studentId: createdStudentId });
+            await addStudentPhoto(createdStudentId, uploaded.url);
+          }
+        }
+        const docUpdates: Record<string, string> = {};
+        if (documentFiles.birthCert) {
+          const uploaded = await uploadStudentDocument(documentFiles.birthCert, createdStudentId, { schoolId });
+          docUpdates.docBirthCert = uploaded.url;
+        }
+        if (documentFiles.transferCert) {
+          const uploaded = await uploadStudentDocument(documentFiles.transferCert, createdStudentId, { schoolId });
+          docUpdates.docTransferCert = uploaded.url;
+        }
+        if (documentFiles.aadhaar) {
+          const uploaded = await uploadStudentDocument(documentFiles.aadhaar, createdStudentId, { schoolId });
+          docUpdates.docAadhaar = uploaded.url;
+        }
+        if (documentFiles.reportCard) {
+          const uploaded = await uploadStudentDocument(documentFiles.reportCard, createdStudentId, { schoolId });
+          docUpdates.docReportCard = uploaded.url;
+        }
+        if (Object.keys(docUpdates).length) {
+          await updateStudent(createdStudentId, docUpdates);
         }
       }
 
@@ -476,21 +516,12 @@ export default function StudentOnboardingPage() {
                 onChange={async (e) => {
                   const file = e.target.files?.[0];
                   if (!file) return;
-                  setPhotoPreview(URL.createObjectURL(file));
-                  try {
-                    const uploaded = await uploadStudentPhoto(file);
-                    const resolved = resolveUploadUrl(uploaded.url) ?? uploaded.url;
-                    setStudent({ ...student, photo: uploaded.url });
-                    setPhotoPreview(resolved);
-                    notify.success('Photo uploaded', 'Student photo saved.');
-                  } catch (error: any) {
-                    const message =
-                      error?.response?.data?.error?.message || error?.message || 'Failed to upload photo';
-                    notify.error('Upload failed', message);
-                  }
-                }}
-                className="rounded-lg border border-slate/20 px-3 py-2 text-sm"
-              />
+                setPhotoFile(file);
+                setPhotoPreview(URL.createObjectURL(file));
+                notify.success('Photo selected', 'Student photo ready to upload.');
+              }}
+              className="rounded-lg border border-slate/20 px-3 py-2 text-sm"
+            />
             </div>
             {photoPreview ? (
               <div className="md:col-span-2">
@@ -512,13 +543,11 @@ export default function StudentOnboardingPage() {
                 onChange={async (e) => {
                   const files = Array.from(e.target.files ?? []);
                   if (!files.length) return;
-                  const remaining = Math.max(0, 5 - additionalPhotos.length);
-                  const toUpload = files.slice(0, remaining);
-                  for (const file of toUpload) {
-                    const uploaded = await uploadStudentPhoto(file);
-                    const resolved = resolveUploadUrl(uploaded.url) ?? uploaded.url;
-                    setAdditionalPhotos((prev) => [...prev, resolved]);
-                  }
+                  const remaining = Math.max(0, 5 - additionalPhotoFiles.length);
+                  const toStore = files.slice(0, remaining);
+                  setAdditionalPhotoFiles((prev) => [...prev, ...toStore]);
+                  const previews = toStore.map((file) => URL.createObjectURL(file));
+                  setAdditionalPhotos((prev) => [...prev, ...previews]);
                 }}
                 className="mt-2 w-full rounded-lg border border-slate/20 px-3 py-2 text-sm"
               />
@@ -718,20 +747,14 @@ export default function StudentOnboardingPage() {
                   onChange={async (e) => {
                     const file = e.target.files?.[0];
                     if (!file) return;
-                    try {
-                      const uploaded = await uploadStudentDocument(file);
-                      setDocuments({ ...documents, [item.key]: uploaded.url });
-                      notify.success('Document uploaded', `${item.label} saved.`);
-                    } catch (error: any) {
-                      const message =
-                        error?.response?.data?.error?.message || error?.message || 'Failed to upload document';
-                      notify.error('Upload failed', message);
-                    }
+                    setDocumentFiles((prev) => ({ ...prev, [item.key]: file }));
+                    setDocuments((prev) => ({ ...prev, [item.key]: file.name }));
+                    notify.success('Document selected', `${item.label} ready to upload.`);
                   }}
                   className="text-xs"
                 />
                 {documents[item.key as keyof typeof documents] ? (
-                  <span className="text-xs text-slate">Uploaded</span>
+                  <span className="text-xs text-slate">Selected</span>
                 ) : null}
               </label>
             ))}

@@ -5,6 +5,10 @@ import { HttpError } from '../middlewares/error.middleware';
 import { resolveSchoolId } from '../utils/tenant';
 import { enforceLimits } from '../services/subscription.service';
 import { logAudit } from '../utils/audit';
+import path from 'path';
+import { fileURLToPath } from 'url';
+import fs from 'fs/promises';
+import { constants as fsConstants } from 'fs';
 
 const createSchema = z.object({
   admissionNo: z.string().min(1),
@@ -624,20 +628,88 @@ export const acceptTransferRequest = async (req: Request, res: Response) => {
     throw new HttpError(404, 'Transfer request not found');
   }
 
+  const __dirname = path.dirname(fileURLToPath(import.meta.url));
+  const uploadsRoot = path.resolve(__dirname, '../../uploads');
+  const fromSchoolId = request.fromSchoolId;
+  const toSchoolId = request.toSchoolId;
+  const studentId = request.studentId;
+
+  const oldBase = `/uploads/school_${fromSchoolId}`;
+  const newBase = `/uploads/school_${toSchoolId}`;
+
+  const rewriteUrl = (value: string | null) => {
+    if (!value) return value;
+    if (!value.startsWith(oldBase)) return value;
+    return value.replace(oldBase, newBase);
+  };
+
+  const moveDir = async (fromDir: string, toDir: string) => {
+    try {
+      await fs.access(fromDir, fsConstants.F_OK);
+    } catch {
+      return;
+    }
+    await fs.mkdir(path.dirname(toDir), { recursive: true });
+    try {
+      await fs.rename(fromDir, toDir);
+    } catch (err: any) {
+      if (err?.code === 'EXDEV') {
+        await fs.cp(fromDir, toDir, { recursive: true });
+        await fs.rm(fromDir, { recursive: true, force: true });
+        return;
+      }
+      throw err;
+    }
+  };
+
+  await moveDir(
+    path.join(uploadsRoot, `school_${fromSchoolId}`, 'students', studentId),
+    path.join(uploadsRoot, `school_${toSchoolId}`, 'students', studentId),
+  );
+  await moveDir(
+    path.join(uploadsRoot, `school_${fromSchoolId}`, 'documents', studentId),
+    path.join(uploadsRoot, `school_${toSchoolId}`, 'documents', studentId),
+  );
+
   const result = await prisma.$transaction(async (tx) => {
+    const student = await tx.student.findFirst({
+      where: { id: studentId },
+      select: { photoUrl: true, docBirthCert: true, docTransferCert: true, docAadhaar: true, docReportCard: true },
+    });
+
+    const photos = await tx.studentPhoto.findMany({
+      where: { studentId },
+      select: { id: true, url: true },
+    });
+
     await tx.student.update({
-      where: { id: request.studentId },
+      where: { id: studentId },
       data: {
-        schoolId: request.toSchoolId,
+        schoolId: toSchoolId,
         classId: null,
         sectionId: null,
         status: 'ENROLLED',
+        photoUrl: student?.photoUrl ? rewriteUrl(student.photoUrl) : null,
+        docBirthCert: student?.docBirthCert ? rewriteUrl(student.docBirthCert) : null,
+        docTransferCert: student?.docTransferCert ? rewriteUrl(student.docTransferCert) : null,
+        docAadhaar: student?.docAadhaar ? rewriteUrl(student.docAadhaar) : null,
+        docReportCard: student?.docReportCard ? rewriteUrl(student.docReportCard) : null,
       },
     });
 
+    for (const photo of photos) {
+      const nextUrl = rewriteUrl(photo.url);
+      if (nextUrl !== photo.url) {
+        await tx.studentPhoto.update({
+          where: { id: photo.id },
+          data: { url: nextUrl },
+        });
+      }
+    }
+
     await tx.studentStatusHistory.create({
       data: {
-        studentId: request.studentId,
+        studentId,
         status: 'TRANSFERRED',
         reason: payload.reason ?? `Transfer accepted to ${request.toSchool.name}`,
       },

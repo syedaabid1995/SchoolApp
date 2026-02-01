@@ -145,32 +145,32 @@ export const deleteStudent = async (id: string) => {
   return data;
 };
 
-export const uploadStudentPhoto = async (file: File) => {
+export const uploadStudentPhoto = async (file: File, params?: { schoolId?: string; studentId?: string; category?: 'students' | 'teachers' }) => {
   const form = new FormData();
   form.append('file', file);
-  const res = await fetch(`${env.apiBaseUrl}/uploads/photos`, {
-    method: 'POST',
-    body: form,
+  const { data } = await api.post('/uploads/photos', form, {
+    headers: { 'Content-Type': 'multipart/form-data' },
+    params: {
+      schoolId: params?.schoolId,
+      category: params?.category ?? 'students',
+      studentId: params?.studentId,
+    },
   });
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({}));
-    throw new Error(err?.error?.message || 'Upload failed');
-  }
-  return (await res.json()) as { url: string; filename: string };
+  return data as { url: string; filename: string };
 };
 
-export const uploadStudentDocument = async (file: File) => {
+export const uploadStudentDocument = async (file: File, studentId: string, params?: { schoolId?: string }) => {
   const form = new FormData();
   form.append('file', file);
-  const res = await fetch(`${env.apiBaseUrl}/uploads/documents`, {
-    method: 'POST',
-    body: form,
+  const { data } = await api.post('/uploads/documents', form, {
+    headers: { 'Content-Type': 'multipart/form-data' },
+    params: {
+      schoolId: params?.schoolId,
+      studentId,
+      category: 'documents',
+    },
   });
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({}));
-    throw new Error(err?.error?.message || 'Upload failed');
-  }
-  return (await res.json()) as { url: string; filename: string };
+  return data as { url: string; filename: string };
 };
 
 export const resolveUploadUrl = (value?: string | null) => {

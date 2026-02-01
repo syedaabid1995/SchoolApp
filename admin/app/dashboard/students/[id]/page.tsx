@@ -426,7 +426,7 @@ export default function StudentDetailPage() {
                           if (!file) return;
                           setPhotoPreview(URL.createObjectURL(file));
                           try {
-                            const uploaded = await uploadStudentPhoto(file);
+                            const uploaded = await uploadStudentPhoto(file, { schoolId: student.schoolId, studentId: student.id });
                             const resolved = resolveUploadUrl(uploaded.url) ?? uploaded.url;
                             setEditData({ ...editData, photoUrl: uploaded.url });
                             setPhotoPreview(resolved);
@@ -491,7 +491,7 @@ export default function StudentDetailPage() {
                         const remaining = Math.max(0, 5 - existing);
                         const toUpload = files.slice(0, remaining);
                         for (const file of toUpload) {
-                          const uploaded = await uploadStudentPhoto(file);
+                          const uploaded = await uploadStudentPhoto(file, { schoolId: student.schoolId, studentId: student.id });
                           await addPhotoMutation.mutateAsync(uploaded.url);
                         }
                       }}
@@ -794,7 +794,7 @@ export default function StudentDetailPage() {
                             const file = e.target.files?.[0];
                             if (!file) return;
                             try {
-                              const uploaded = await uploadStudentDocument(file);
+                              const uploaded = await uploadStudentDocument(file, student.id, { schoolId: student.schoolId });
                               setEditData({ ...editData, [item.key]: uploaded.url });
                               quickUpdateMutation.mutate({ [item.key]: uploaded.url } as any);
                             } catch {
