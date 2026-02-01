@@ -6,7 +6,7 @@ import { useRouter } from 'next/navigation';
 import { useQuery } from '@tanstack/react-query';
 import { listAcademicYears, listClasses, listSections } from '../../../../services/academic.service';
 import { getSession } from '../../../../services/auth.service';
-import { createParent, createStudent, linkParent, lookupParentByPhone } from '../../../../services/student.service';
+import { createParent, createStudent, linkParent, lookupParentByPhone, deleteStudent } from '../../../../services/student.service';
 import { useNotify } from '../../../../components/NotificationProvider';
 
 type Step = 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8;
@@ -203,6 +203,7 @@ export default function StudentOnboardingPage() {
     const nameParts = student.fullName.trim().split(/\s+/);
     const firstName = nameParts[0] ?? '';
     const lastName = nameParts.slice(1).join(' ') || 'Student';
+    let createdStudentId: string | null = null;
     try {
       setErrorMessage('');
       notify.info('Creating student...', 'Please wait while we process your request');
@@ -216,6 +217,7 @@ export default function StudentOnboardingPage() {
         sectionId: academic.sectionId || undefined,
         schoolId,
       });
+      createdStudentId = createdStudent?.id ?? null;
 
       const guardianName = parent.guardianName || parent.fatherName || parent.motherName;
       if (selectedParentUserId) {
@@ -256,6 +258,13 @@ export default function StudentOnboardingPage() {
       notify.success('Student created successfully!', `${student.fullName} has been added to the system`);
       setTimeout(() => router.push('/dashboard/students'), 800);
     } catch (error: any) {
+      if (createdStudentId) {
+        try {
+          await deleteStudent(createdStudentId);
+        } catch {
+          // Best-effort rollback.
+        }
+      }
       setCreateStatus('idle');
       const message =
         error?.response?.data?.error?.message ||

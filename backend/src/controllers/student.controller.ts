@@ -3,7 +3,7 @@ import { z } from 'zod';
 import { prisma } from '../config/db';
 import { HttpError } from '../middlewares/error.middleware';
 import { resolveSchoolId } from '../utils/tenant';
-import { incrementUsage, enforceLimits } from '../services/subscription.service';
+import { enforceLimits } from '../services/subscription.service';
 import { logAudit } from '../utils/audit';
 
 const createSchema = z.object({
@@ -61,26 +61,34 @@ export const createStudent = async (req: Request, res: Response) => {
     throw new HttpError(409, 'Admission number already exists');
   }
 
-  const student = await prisma.student.create({
-    data: {
-      admissionNo: payload.admissionNo,
-      firstName: payload.firstName,
-      lastName: payload.lastName,
-      dob: payload.dob ?? null,
-      classId: payload.classId ?? null,
-      sectionId: payload.sectionId ?? null,
-      schoolId,
-    },
-  });
+  const student = await prisma.$transaction(async (tx) => {
+    const createdStudent = await tx.student.create({
+      data: {
+        admissionNo: payload.admissionNo,
+        firstName: payload.firstName,
+        lastName: payload.lastName,
+        dob: payload.dob ?? null,
+        classId: payload.classId ?? null,
+        sectionId: payload.sectionId ?? null,
+        schoolId,
+      },
+    });
 
-  await incrementUsage(schoolId, 'students', 1);
+    await tx.usageCounter.upsert({
+      where: { schoolId },
+      update: { students: { increment: 1 } },
+      create: { schoolId, students: 1, teachers: 0 },
+    });
 
-  await prisma.studentStatusHistory.create({
-    data: {
-      studentId: student.id,
-      status: 'ENROLLED',
-      reason: 'Initial enrollment',
-    },
+    await tx.studentStatusHistory.create({
+      data: {
+        studentId: createdStudent.id,
+        status: 'ENROLLED',
+        reason: 'Initial enrollment',
+      },
+    });
+
+    return createdStudent;
   });
 
   await logAudit(req, {
