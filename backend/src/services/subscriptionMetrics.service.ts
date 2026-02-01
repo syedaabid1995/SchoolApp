@@ -2,20 +2,20 @@ import { prisma } from '../config/db';
 
 export const getSubscriptionMetrics = async (schoolId: string) => {
   const [subscription, usage] = await Promise.all([
-    prisma.subscription.findUnique({ where: { schoolId } }),
+    prisma.subscription.findUnique({ where: { schoolId }, include: { plan: true } }),
     prisma.usageCounter.findUnique({ where: { schoolId } }),
   ]);
 
   const studentCount = usage?.students ?? 0;
   const teacherCount = usage?.teachers ?? 0;
 
-  const studentLimit = subscription?.studentLimit ?? 0;
-  const teacherLimit = subscription?.teacherLimit ?? 0;
+  const studentLimit = subscription?.plan?.studentLimit ?? subscription?.studentLimit ?? 0;
+  const teacherLimit = subscription?.plan?.teacherLimit ?? subscription?.teacherLimit ?? 0;
 
   return {
     plan: subscription
       ? {
-          name: subscription.planName,
+          name: subscription.plan?.name ?? subscription.planName,
           status: subscription.status,
           startsAt: subscription.startsAt,
           endsAt: subscription.endsAt,

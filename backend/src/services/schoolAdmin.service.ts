@@ -2,6 +2,7 @@ import crypto from 'crypto';
 import { prisma } from '../config/db';
 import { HttpError } from '../middlewares/error.middleware';
 import { hashPassword } from '../utils/password';
+import { upsertSubscription } from './subscription.service';
 
 export type SchoolCreateInput = {
   name: string;
@@ -30,22 +31,42 @@ export const createSchool = async (payload: SchoolCreateInput) => {
       },
     });
 
-    const limits = {
-      STARTER: { students: 500, teachers: 50 },
-      STANDARD: { students: 2000, teachers: 200 },
-      PREMIUM: { students: 10000, teachers: 1000 },
-    };
-    const planLimits = limits[payload.subscriptionPlan];
+    const plan = await tx.subscriptionPlanDef.findUnique({
+      where: { name: payload.subscriptionPlan },
+    });
+    const planRow =
+      plan ??
+      (await tx.subscriptionPlanDef.create({
+        data: {
+          name: payload.subscriptionPlan,
+          status: 'ACTIVE',
+          priceCents: 0,
+          features: [],
+          studentLimit:
+            payload.subscriptionPlan === 'STARTER'
+              ? 500
+              : payload.subscriptionPlan === 'STANDARD'
+                ? 2000
+                : 10000,
+          teacherLimit:
+            payload.subscriptionPlan === 'STARTER'
+              ? 50
+              : payload.subscriptionPlan === 'STANDARD'
+                ? 200
+                : 1000,
+        },
+      }));
 
     await tx.subscription.create({
       data: {
         schoolId: school.id,
-        planName: payload.subscriptionPlan,
+        planName: planRow.name,
+        planId: planRow.id,
         status: 'ACTIVE',
         startsAt: new Date(),
         endsAt: null,
-        studentLimit: planLimits.students,
-        teacherLimit: planLimits.teachers,
+        studentLimit: planRow.studentLimit,
+        teacherLimit: planRow.teacherLimit,
       },
     });
 
@@ -124,6 +145,9 @@ export const listSchools = async (params: {
       skip,
       take: params.limit,
       include: {
+        subscription: {
+          include: { plan: true },
+        },
         users: {
           where: {
             roles: {
@@ -139,8 +163,12 @@ export const listSchools = async (params: {
 
   const items = itemsRaw.map((school) => {
     const adminEmail = school.users[0]?.email ?? null;
-    const { users, ...rest } = school;
-    return { ...rest, adminEmail };
+    const planName =
+      school.subscription?.plan?.name ??
+      school.subscription?.planName ??
+      school.subscriptionPlan;
+    const { users, subscription, ...rest } = school;
+    return { ...rest, subscriptionPlan: planName, adminEmail };
   });
 
   return {
@@ -153,7 +181,7 @@ export const listSchools = async (params: {
 };
 
 export const updateSchool = async (id: string, payload: SchoolUpdateInput) => {
-  return prisma.school.update({
+  const updated = await prisma.school.update({
     where: { id },
     data: {
       name: payload.name ?? undefined,
@@ -163,6 +191,16 @@ export const updateSchool = async (id: string, payload: SchoolUpdateInput) => {
       activeUsersCount: payload.activeUsersCount ?? undefined,
     },
   });
+  if (payload.subscriptionPlan) {
+    await upsertSubscription({
+      schoolId: updated.id,
+      planName: payload.subscriptionPlan,
+      status: 'ACTIVE',
+      startsAt: new Date(),
+      endsAt: null,
+    });
+  }
+  return updated;
 };
 
 export const setSchoolStatus = async (id: string, status: 'ACTIVE' | 'SUSPENDED', reason?: string | null) => {

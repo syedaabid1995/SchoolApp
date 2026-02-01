@@ -41,9 +41,11 @@ const resolveSchoolForPhone = async (req: Request, phone: string, schoolId?: str
   const parentIds = parents.map((parent) => parent.id);
   const links = await prisma.studentParent.findMany({
     where: { parentId: { in: parentIds } },
-    select: { student: { select: { schoolId: true } } },
+    select: { student: { select: { schoolId: true, school: { select: { status: true } } } } },
   });
-  const unique = Array.from(new Set(links.map((link) => link.student.schoolId)));
+  const unique = Array.from(
+    new Set(links.filter((link) => link.student.school?.status === 'ACTIVE').map((link) => link.student.schoolId)),
+  );
   if (unique.length === 0) {
     throw new HttpError(404, 'Parent not linked to any school');
   }
@@ -88,6 +90,15 @@ export const verifyOtpApi = async (req: Request, res: Response) => {
   });
   if (!parentProfile) {
     throw new HttpError(404, 'Parent not found');
+  }
+
+  const parentLinks = await prisma.studentParent.findMany({
+    where: { parentId: parentProfile.id },
+    select: { student: { select: { school: { select: { status: true } } } } },
+  });
+  const hasActive = parentLinks.some((link) => link.student.school?.status === 'ACTIVE');
+  if (!hasActive) {
+    throw new HttpError(403, 'School is suspended');
   }
 
   let userId = parentProfile.userId;

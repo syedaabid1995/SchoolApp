@@ -80,9 +80,9 @@ export const updateTicket = async (params: {
   return updated;
 };
 
-export const listTickets = async (schoolId: string) => {
+export const listTickets = async (schoolId?: string) => {
   return prisma.supportTicket.findMany({
-    where: { schoolId },
+    where: schoolId ? { schoolId } : undefined,
     orderBy: { createdAt: 'desc' },
   });
 };

@@ -18,7 +18,12 @@ const querySchema = z.object({
 
 export const listAuditLogs = async (req: Request, res: Response) => {
   const payload = querySchema.parse(req.query);
-  const schoolId = payload.schoolId ? resolveSchoolId(req, payload.schoolId) : req.auth?.schoolId;
+  let schoolId: string | undefined = undefined;
+  if (payload.schoolId) {
+    schoolId = resolveSchoolId(req, payload.schoolId);
+  } else if (req.auth?.role !== 'SUPER_ADMIN') {
+    schoolId = req.auth?.schoolId ?? undefined;
+  }
 
   const logs = await queryAuditLogs({
     schoolId: schoolId ?? undefined,

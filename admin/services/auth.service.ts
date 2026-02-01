@@ -5,7 +5,12 @@ export const login = async (payload: { email: string; password: string; schoolId
     body: JSON.stringify(payload),
   });
   if (!res.ok) {
-    throw new Error('Login failed');
+    const data = await res.json().catch(() => null);
+    const message =
+      (data as any)?.error?.message ||
+      (data as any)?.message ||
+      'Login failed';
+    throw new Error(message);
   }
   return res.json() as Promise<{ mustChangePassword?: boolean }>;
 };

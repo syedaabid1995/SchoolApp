@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import FullPageLoader from '../../components/FullPageLoader';
 import { useRouter } from 'next/navigation';
 
 const changePassword = async (payload: { newPassword: string }) => {
@@ -43,6 +44,7 @@ export default function ResetPasswordPage() {
 
   return (
     <main className="min-h-screen grid place-items-center bg-sand">
+      {loading ? <FullPageLoader label="Updating password..." /> : null}
       <div className="w-full max-w-md rounded-2xl border border-slate/10 bg-white p-8 shadow-sm">
         <h1 className="text-2xl font-semibold text-ink">Set a new password</h1>
         <p className="mt-2 text-sm text-slate">You must update your password before accessing the dashboard.</p>

@@ -5,7 +5,7 @@ export type School = {
   name: string;
   code: string;
   status: 'ACTIVE' | 'SUSPENDED';
-  subscriptionPlan: 'STARTER' | 'STANDARD' | 'PREMIUM';
+  subscriptionPlan: string;
   adminEmail?: string | null;
   lastLoginAt: string | null;
   activeUsersCount: number;
@@ -50,7 +50,7 @@ export const listSchools = async (params?: { page?: number; limit?: number; stat
 export const createSchool = async (payload: {
   name: string;
   code: string;
-  subscriptionPlan: 'STARTER' | 'STANDARD' | 'PREMIUM';
+  subscriptionPlan: string;
   status?: 'ACTIVE' | 'SUSPENDED';
   adminEmail?: string;
 }) => {

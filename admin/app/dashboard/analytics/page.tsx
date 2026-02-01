@@ -5,6 +5,7 @@ import { useQuery } from '@tanstack/react-query';
 import { getAnalytics } from '../../../services/analytics.service';
 import { getSession } from '../../../services/auth.service';
 import { listSchools } from '../../../services/school.service';
+import FullPageLoader from '../../../components/FullPageLoader';
 
 export default function AnalyticsPage() {
   const [schoolId, setSchoolId] = useState('');
@@ -23,6 +24,10 @@ export default function AnalyticsPage() {
     queryFn: () => getAnalytics({ schoolId: effectiveSchoolId }),
     enabled: Boolean(effectiveSchoolId),
   });
+
+  if (isLoading) {
+    return <FullPageLoader label="Loading analytics..." />;
+  }
 
   return (
     <div className="space-y-6">

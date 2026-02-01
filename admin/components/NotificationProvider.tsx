@@ -1,6 +1,6 @@
 'use client';
 
-import { createContext, useContext, useState, useCallback, ReactNode } from 'react';
+import { createContext, useContext, useState, useCallback, ReactNode, useEffect } from 'react';
 
 export type NotificationType = 'success' | 'error' | 'warning' | 'info';
 
@@ -67,6 +67,7 @@ const NotificationItem = ({ notification, onRemove }: { notification: Notificati
 
 export const NotificationProvider = ({ children }: { children: ReactNode }) => {
   const [notifications, setNotifications] = useState<Notification[]>([]);
+  const [suspension, setSuspension] = useState<{ title: string; message: string } | null>(null);
 
   const addNotification = useCallback((notification: Omit<Notification, 'id'>) => {
     const id = Math.random().toString(36).substr(2, 9);
@@ -86,9 +87,45 @@ export const NotificationProvider = ({ children }: { children: ReactNode }) => {
     setNotifications(prev => prev.filter(n => n.id !== id));
   }, []);
 
+  useEffect(() => {
+    const handler = (event: Event) => {
+      const detail = (event as CustomEvent).detail as { title?: string; message?: string } | undefined;
+      setSuspension({
+        title: detail?.title ?? 'Account Suspended',
+        message: detail?.message ?? 'Your access has been suspended. Please contact support.',
+      });
+    };
+    window.addEventListener('account-suspended', handler);
+    return () => window.removeEventListener('account-suspended', handler);
+  }, []);
+
+  const handleSuspensionClose = () => {
+    setSuspension(null);
+    if (typeof window !== 'undefined') {
+      const isParent = window.location.pathname.startsWith('/parent');
+      window.location.href = isParent ? '/parent/login' : '/login';
+    }
+  };
+
   return (
     <NotificationContext.Provider value={{ notifications, addNotification, removeNotification }}>
       {children}
+      {suspension ? (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/40 px-4">
+          <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-xl">
+            <div className="text-lg font-semibold text-ink">{suspension.title}</div>
+            <p className="mt-2 text-sm text-slate">{suspension.message}</p>
+            <div className="mt-4 flex justify-end">
+              <button
+                className="rounded-lg bg-ink px-4 py-2 text-sm font-semibold text-white"
+                onClick={handleSuspensionClose}
+              >
+                OK
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
       <div className="fixed top-4 right-4 z-50 space-y-2 max-w-sm w-full">
         {notifications.map(notification => (
           <NotificationItem

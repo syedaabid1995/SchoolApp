@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
+import Link from 'next/link';
 import { useQuery } from '@tanstack/react-query';
 import { listAcademicYears, listClasses, listSections, listSubjects } from '../../../../services/academic.service';
 import { listExams, getExam, listMarks, uploadMarks } from '../../../../services/report.service';
@@ -249,262 +250,478 @@ export default function MarksUploadPage() {
     }
   };
 
+  const stats = {
+    total: marksRows.length,
+    completed: completedCount,
+    absent: absentCount,
+    pending: pendingCount,
+  };
+
   return (
-    <div className="space-y-6">
-      <header>
-        <h1 className="text-2xl font-semibold text-ink">Upload Marks</h1>
-        <p className="text-sm text-slate">Select context and enter marks for the mapped subjects.</p>
-      </header>
-
-      <section className="rounded-2xl border border-slate/10 bg-white p-6">
-        <h2 className="text-lg font-semibold">Select Context</h2>
-        <div className="mt-4 grid gap-3 md:grid-cols-3">
-          <select
-            value={filters.academicYearId || examAcademicYearId}
-            onChange={(e) => setFilters({ ...filters, academicYearId: e.target.value })}
-            className="rounded-lg border border-slate/20 px-3 py-2 text-sm"
-            disabled={Boolean(examAcademicYearId)}
-          >
-            <option value="">Academic Year</option>
-            {years?.map((year: { id: string; name: string }) => (
-              <option key={year.id} value={year.id}>
-                {year.name}
-              </option>
-            ))}
-          </select>
-          <select
-            value={filters.examId}
-            onChange={(e) => handleExamChange(e.target.value)}
-            className="rounded-lg border border-slate/20 px-3 py-2 text-sm"
-          >
-            <option value="">Exam</option>
-            {exams?.map((exam: { id: string; name: string }) => (
-              <option key={exam.id} value={exam.id}>
-                {exam.name}
-              </option>
-            ))}
-          </select>
-          <select
-            value={examClassId || filters.classId}
-            onChange={(e) => setFilters({ ...filters, classId: e.target.value, sectionId: '' })}
-            className="rounded-lg border border-slate/20 px-3 py-2 text-sm"
-            disabled={Boolean(examClassId)}
-          >
-            <option value="">Class</option>
-            {(examClassId
-              ? classes?.filter((cls: { id: string }) => cls.id === examClassId)
-              : classes
-            )?.map((cls: { id: string; name: string }) => (
-              <option key={cls.id} value={cls.id}>
-                {cls.name}
-              </option>
-            ))}
-          </select>
-          <select
-            value={filters.sectionId}
-            onChange={(e) => setFilters({ ...filters, sectionId: e.target.value })}
-            className="rounded-lg border border-slate/20 px-3 py-2 text-sm"
-          >
-            <option value="">Section</option>
-            {sectionOptions.map((section: { id: string; name: string }) => (
-              <option key={section.id} value={section.id}>
-                {section.name}
-              </option>
-            ))}
-          </select>
-          <select
-            value={filters.subjectId}
-            onChange={(e) => setFilters({ ...filters, subjectId: e.target.value })}
-            className="rounded-lg border border-slate/20 px-3 py-2 text-sm"
-          >
-            <option value="">Subject (mapped to exam)</option>
-            {mappedSubjects.map((subject) => (
-              <option key={subject.id} value={subject.id}>
-                {subject.name}
-              </option>
-            ))}
-          </select>
-          <select
-            value={filters.component}
-            onChange={(e) => setFilters({ ...filters, component: e.target.value })}
-            className="rounded-lg border border-slate/20 px-3 py-2 text-sm"
-          >
-            <option value="">Exam Component (optional)</option>
-            <option value="INTERNAL">Internal</option>
-            <option value="EXTERNAL">External</option>
-            <option value="PRACTICAL">Practical</option>
-          </select>
-        </div>
-        <button
-          className="mt-4 rounded-lg bg-ink px-4 py-2 text-sm font-semibold text-white"
-          onClick={loadStudents}
-        >
-          Load Students
-        </button>
-      </section>
-
-      {loaded ? (
-        <section className="rounded-2xl border border-slate/10 bg-white p-6">
-          <div className="flex flex-wrap items-center justify-between gap-2">
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-green-50/30 to-emerald-50/40">
+      {/* Hero Section */}
+      <div className="relative overflow-hidden bg-gradient-to-r from-green-600 via-emerald-600 to-teal-700 px-6 py-16 text-white">
+        <div className="absolute inset-0 bg-black/10"></div>
+        <div className="relative mx-auto max-w-6xl">
+          <div className="flex items-center justify-between">
             <div>
-              <h2 className="text-lg font-semibold">{examTitle || 'Marks Entry'}</h2>
-              <p className="text-xs text-slate">Max Marks: {maxMarks}</p>
+              <div className="mb-4 inline-flex items-center rounded-full bg-white/20 px-4 py-2 text-sm font-medium backdrop-blur-sm">
+                <svg className="mr-2 h-4 w-4" fill="currentColor" viewBox="0 0 20 20">
+                  <path d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+                </svg>
+                Marks Management
+              </div>
+              <h1 className="mb-4 text-4xl font-bold tracking-tight sm:text-5xl">
+                Upload Marks
+              </h1>
+              <p className="max-w-2xl text-lg text-green-100">
+                Enter and manage student marks for exams with comprehensive grading and assessment tools.
+              </p>
             </div>
-            <div className="flex items-center gap-2">
-              <span className="rounded-full bg-slate/10 px-3 py-1 text-xs font-semibold text-slate">
-                {status}
-              </span>
-              <button
-                className="rounded-lg border border-slate/20 px-3 py-1.5 text-xs font-semibold"
-                onClick={() => setBulkOpen(true)}
+            
+            <div className="hidden sm:flex gap-3">
+              <Link
+                href="/dashboard/academics"
+                className="flex items-center rounded-xl bg-white/20 px-6 py-3 font-semibold text-white backdrop-blur-sm transition-all hover:bg-white/30 hover:scale-105"
               >
-                Upload via Excel
-              </button>
+                <svg className="mr-2 h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.394 2.08a1 1 0 00-.788 0l-7 3a1 1 0 000 1.84L5.25 8.051a.999.999 0 01.356-.257l4-1.714a1 1 0 11.788 1.838L7.667 9.088l1.94.831a1 1 0 00.787 0l7-3a1 1 0 000-1.838l-7-3z" />
+                </svg>
+                Academics
+              </Link>
+              <Link
+                href="/dashboard/academics/exams"
+                className="flex items-center rounded-xl bg-white/20 px-6 py-3 font-semibold text-white backdrop-blur-sm transition-all hover:bg-white/30 hover:scale-105"
+              >
+                <svg className="mr-2 h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                </svg>
+                Exams
+              </Link>
             </div>
           </div>
+        </div>
+        
+        {/* Animated background elements */}
+        <div className="absolute -top-10 -left-10 h-40 w-40 rounded-full bg-white/10 animate-pulse"></div>
+        <div className="absolute -bottom-10 -right-10 h-32 w-32 rounded-full bg-white/10 animate-bounce"></div>
+        <div className="absolute top-1/2 left-1/3 h-6 w-6 rounded-full bg-white/20 animate-ping"></div>
+      </div>
 
-          <div className="mt-4 overflow-x-auto">
-            <table className="w-full text-left text-sm">
-              <thead className="text-xs uppercase text-slate">
-                <tr>
-                  <th className="py-2">Roll No</th>
-                  <th>Student Name</th>
-                  <th>Max Marks</th>
-                  <th>Marks Obtained</th>
-                  <th>Grade</th>
-                  <th>Absent</th>
-                  <th>Remarks</th>
-                </tr>
-              </thead>
-              <tbody>
-                {marksRows.map((row) => {
-                  const marksValue = Number(row.marks);
-                  const grade = row.absent ? 'AB' : row.marks.trim() ? gradeFor(marksValue, maxMarks) : '—';
-                  return (
-                    <tr key={row.studentId} className="border-t border-slate/10">
-                      <td className="py-2">{row.rollNo}</td>
-                      <td>{row.name}</td>
-                      <td>{maxMarks}</td>
-                      <td>
-                        <input
-                          value={row.marks}
-                          onChange={(e) => setRow(row.studentId, { marks: e.target.value })}
-                          disabled={row.absent || status === 'LOCKED' || (status === 'SUBMITTED' && !canEditAfterSubmit)}
-                          className="w-24 rounded-md border border-slate/20 px-2 py-1 text-sm"
-                          inputMode="numeric"
-                        />
-                      </td>
-                      <td className="text-slate">{grade}</td>
-                      <td>
-                        <input
-                          type="checkbox"
-                          checked={row.absent}
-                          onChange={(e) => setRow(row.studentId, { absent: e.target.checked, marks: '' })}
-                          disabled={status === 'LOCKED' || (status === 'SUBMITTED' && !canEditAfterSubmit)}
-                        />
-                      </td>
-                      <td>
-                        <input
-                          value={row.remarks}
-                          onChange={(e) => setRow(row.studentId, { remarks: e.target.value })}
-                          disabled={status === 'LOCKED' || (status === 'SUBMITTED' && !canEditAfterSubmit)}
-                          className="w-40 rounded-md border border-slate/20 px-2 py-1 text-sm"
-                        />
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-
-          <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
-            <div className="rounded-xl border border-slate/10 bg-sand px-4 py-3 text-xs text-slate">
-              <div className="flex gap-4">
-                <span>Total Students: {marksRows.length}</span>
-                <span>Marks Entered: {completedCount}</span>
-                <span>Absent: {absentCount}</span>
-                <span>Pending: {pendingCount}</span>
-              </div>
-            </div>
-            <div className="flex gap-2">
-              <button
-                className="rounded-lg border border-slate/20 px-4 py-2 text-sm"
-                onClick={() => saveMarks('DRAFT')}
-                disabled={saving}
-              >
-                {saving && status === 'DRAFT' ? 'Saving...' : 'Save Draft'}
-              </button>
-              <button
-                className="rounded-lg border border-slate/20 px-4 py-2 text-sm"
-                onClick={submitWithConfirm}
-                disabled={saving}
-              >
-                Submit Marks
-              </button>
-              {canLock ? (
-                <button
-                  className="rounded-lg bg-ink px-4 py-2 text-sm font-semibold text-white"
-                  onClick={() => saveMarks('LOCKED')}
-                  disabled={saving}
-                >
-                  Lock Marks
-                </button>
-              ) : null}
-            </div>
-          </div>
-        </section>
-      ) : null}
-
-      {bulkOpen ? (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate/40 px-4">
-          <div className="w-full max-w-2xl rounded-2xl bg-white p-6">
-            <div className="flex items-center justify-between">
-              <h3 className="text-lg font-semibold">Bulk Upload</h3>
-              <button className="text-sm text-slate" onClick={() => setBulkOpen(false)}>
-                Close
-              </button>
-            </div>
-            <div className="mt-4 space-y-4 text-sm">
-              <div>
-                <p className="font-semibold text-ink">Step 1: Download Template</p>
-                <button
-                  className="mt-2 rounded-lg border border-slate/20 px-3 py-2 text-xs font-semibold"
-                  onClick={downloadTemplate}
-                >
-                  Download Sample Excel
-                </button>
-              </div>
-              <div>
-                <p className="font-semibold text-ink">Step 2: Upload File</p>
-                <input
-                  type="file"
-                  accept=".xls,.xlsx,.csv"
-                  onChange={(e) => setBulkFileName(e.target.files?.[0]?.name ?? '')}
-                  className="mt-2 text-xs"
-                />
-                {bulkFileName ? (
-                  <p className="mt-2 text-xs text-slate">Selected: {bulkFileName}</p>
-                ) : null}
-              </div>
-              <div>
-                <p className="font-semibold text-ink">Step 3: Preview Data</p>
-                <div className="mt-2 rounded-lg border border-dashed border-slate/20 bg-sand px-4 py-6 text-xs text-slate">
-                  Preview will appear here after upload.
+      <div className="mx-auto max-w-7xl px-6 py-12">
+        {/* Stats Cards */}
+        {loaded && (
+          <div className="mb-8 grid gap-6 md:grid-cols-4">
+            <div className="rounded-2xl bg-gradient-to-br from-blue-500 to-blue-600 p-6 text-white shadow-lg">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-blue-100">Total Students</p>
+                  <p className="text-3xl font-bold">{stats.total}</p>
+                </div>
+                <div className="rounded-full bg-white/20 p-3">
+                  <svg className="h-8 w-8" fill="currentColor" viewBox="0 0 20 20">
+                    <path d="M13 6a3 3 0 11-6 0 3 3 0 016 0zM18 8a2 2 0 11-4 0 2 2 0 014 0zM14 15a4 4 0 00-8 0v3h8v-3z" />
+                  </svg>
                 </div>
               </div>
             </div>
-            <div className="mt-4 flex justify-end gap-2">
-              <button className="rounded-lg border border-slate/20 px-4 py-2 text-sm" onClick={() => setBulkOpen(false)}>
-                Cancel
-              </button>
-              <button className="rounded-lg bg-ink px-4 py-2 text-sm font-semibold text-white">
-                Confirm &amp; Save
-              </button>
+            
+            <div className="rounded-2xl bg-gradient-to-br from-emerald-500 to-emerald-600 p-6 text-white shadow-lg">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-emerald-100">Marks Entered</p>
+                  <p className="text-3xl font-bold">{stats.completed}</p>
+                </div>
+                <div className="rounded-full bg-white/20 p-3">
+                  <svg className="h-8 w-8" fill="currentColor" viewBox="0 0 20 20">
+                    <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+                  </svg>
+                </div>
+              </div>
+            </div>
+            
+            <div className="rounded-2xl bg-gradient-to-br from-amber-500 to-amber-600 p-6 text-white shadow-lg">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-amber-100">Absent</p>
+                  <p className="text-3xl font-bold">{stats.absent}</p>
+                </div>
+                <div className="rounded-full bg-white/20 p-3">
+                  <svg className="h-8 w-8" fill="currentColor" viewBox="0 0 20 20">
+                    <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
+                  </svg>
+                </div>
+              </div>
+            </div>
+            
+            <div className="rounded-2xl bg-gradient-to-br from-red-500 to-red-600 p-6 text-white shadow-lg">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-red-100">Pending</p>
+                  <p className="text-3xl font-bold">{stats.pending}</p>
+                </div>
+                <div className="rounded-full bg-white/20 p-3">
+                  <svg className="h-8 w-8" fill="currentColor" viewBox="0 0 20 20">
+                    <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
+                  </svg>
+                </div>
+              </div>
             </div>
           </div>
-        </div>
-      ) : null}
+        )}
+
+        {/* Context Selection */}
+        <section className="mb-8 rounded-2xl bg-white p-6 shadow-lg ring-1 ring-gray-200">
+          <h2 className="mb-6 text-xl font-semibold text-gray-900">Select Context</h2>
+          <div className="grid gap-4 md:grid-cols-3">
+            <div>
+              <label className="mb-2 block text-sm font-medium text-gray-700">Academic Year</label>
+              <select
+                value={filters.academicYearId || examAcademicYearId}
+                onChange={(e) => setFilters({ ...filters, academicYearId: e.target.value })}
+                className="w-full rounded-xl border border-gray-300 px-4 py-3 text-sm focus:border-green-500 focus:outline-none focus:ring-2 focus:ring-green-200"
+                disabled={Boolean(examAcademicYearId)}
+              >
+                <option value="">Select academic year...</option>
+                {years?.map((year: { id: string; name: string }) => (
+                  <option key={year.id} value={year.id}>
+                    {year.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="mb-2 block text-sm font-medium text-gray-700">Exam</label>
+              <select
+                value={filters.examId}
+                onChange={(e) => handleExamChange(e.target.value)}
+                className="w-full rounded-xl border border-gray-300 px-4 py-3 text-sm focus:border-green-500 focus:outline-none focus:ring-2 focus:ring-green-200"
+              >
+                <option value="">Select exam...</option>
+                {exams?.map((exam: { id: string; name: string }) => (
+                  <option key={exam.id} value={exam.id}>
+                    {exam.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="mb-2 block text-sm font-medium text-gray-700">Class</label>
+              <select
+                value={examClassId || filters.classId}
+                onChange={(e) => setFilters({ ...filters, classId: e.target.value, sectionId: '' })}
+                className="w-full rounded-xl border border-gray-300 px-4 py-3 text-sm focus:border-green-500 focus:outline-none focus:ring-2 focus:ring-green-200"
+                disabled={Boolean(examClassId)}
+              >
+                <option value="">Select class...</option>
+                {(examClassId
+                  ? classes?.filter((cls: { id: string }) => cls.id === examClassId)
+                  : classes
+                )?.map((cls: { id: string; name: string }) => (
+                  <option key={cls.id} value={cls.id}>
+                    {cls.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="mb-2 block text-sm font-medium text-gray-700">Section</label>
+              <select
+                value={filters.sectionId}
+                onChange={(e) => setFilters({ ...filters, sectionId: e.target.value })}
+                className="w-full rounded-xl border border-gray-300 px-4 py-3 text-sm focus:border-green-500 focus:outline-none focus:ring-2 focus:ring-green-200"
+              >
+                <option value="">Select section...</option>
+                {sectionOptions.map((section: { id: string; name: string }) => (
+                  <option key={section.id} value={section.id}>
+                    {section.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="mb-2 block text-sm font-medium text-gray-700">Subject</label>
+              <select
+                value={filters.subjectId}
+                onChange={(e) => setFilters({ ...filters, subjectId: e.target.value })}
+                className="w-full rounded-xl border border-gray-300 px-4 py-3 text-sm focus:border-green-500 focus:outline-none focus:ring-2 focus:ring-green-200"
+              >
+                <option value="">Select subject...</option>
+                {mappedSubjects.map((subject) => (
+                  <option key={subject.id} value={subject.id}>
+                    {subject.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="mb-2 block text-sm font-medium text-gray-700">Component (Optional)</label>
+              <select
+                value={filters.component}
+                onChange={(e) => setFilters({ ...filters, component: e.target.value })}
+                className="w-full rounded-xl border border-gray-300 px-4 py-3 text-sm focus:border-green-500 focus:outline-none focus:ring-2 focus:ring-green-200"
+              >
+                <option value="">Select component...</option>
+                <option value="INTERNAL">Internal</option>
+                <option value="EXTERNAL">External</option>
+                <option value="PRACTICAL">Practical</option>
+              </select>
+            </div>
+          </div>
+          <div className="mt-6">
+            <button
+              className="rounded-xl bg-gradient-to-r from-green-600 to-emerald-600 px-6 py-3 text-sm font-semibold text-white shadow-lg transition-all hover:from-green-700 hover:to-emerald-700 hover:shadow-xl"
+              onClick={loadStudents}
+            >
+              <div className="flex items-center">
+                <svg className="mr-2 h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
+                </svg>
+                Load Students
+              </div>
+            </button>
+          </div>
+        </section>
+
+        {/* Marks Entry Table */}
+        {loaded && (
+          <section className="mb-8 rounded-2xl bg-white p-6 shadow-lg ring-1 ring-gray-200">
+            <div className="mb-6 flex flex-wrap items-center justify-between gap-4">
+              <div>
+                <h2 className="text-xl font-semibold text-gray-900">{examTitle || 'Marks Entry'}</h2>
+                <p className="text-sm text-gray-500">Max Marks: {maxMarks}</p>
+              </div>
+              <div className="flex items-center gap-3">
+                <span className={`inline-flex rounded-full px-3 py-1 text-xs font-semibold ${
+                  status === 'LOCKED' 
+                    ? 'bg-red-100 text-red-800' 
+                    : status === 'SUBMITTED' 
+                    ? 'bg-green-100 text-green-800' 
+                    : 'bg-yellow-100 text-yellow-800'
+                }`}>
+                  {status}
+                </span>
+                <button
+                  className="rounded-xl border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 shadow-sm hover:bg-gray-50"
+                  onClick={() => setBulkOpen(true)}
+                >
+                  <div className="flex items-center">
+                    <svg className="mr-2 h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M9 19l3 3m0 0l3-3m-3 3V10" />
+                    </svg>
+                    Upload Excel
+                  </div>
+                </button>
+              </div>
+            </div>
+
+            <div className="overflow-hidden rounded-xl border border-gray-200">
+              <table className="w-full">
+                <thead className="bg-gray-50">
+                  <tr>
+                    <th className="px-6 py-4 text-left text-xs font-medium uppercase tracking-wider text-gray-500">Roll No</th>
+                    <th className="px-6 py-4 text-left text-xs font-medium uppercase tracking-wider text-gray-500">Student Name</th>
+                    <th className="px-6 py-4 text-left text-xs font-medium uppercase tracking-wider text-gray-500">Max Marks</th>
+                    <th className="px-6 py-4 text-left text-xs font-medium uppercase tracking-wider text-gray-500">Marks Obtained</th>
+                    <th className="px-6 py-4 text-left text-xs font-medium uppercase tracking-wider text-gray-500">Grade</th>
+                    <th className="px-6 py-4 text-left text-xs font-medium uppercase tracking-wider text-gray-500">Absent</th>
+                    <th className="px-6 py-4 text-left text-xs font-medium uppercase tracking-wider text-gray-500">Remarks</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-200 bg-white">
+                  {marksRows.map((row) => {
+                    const marksValue = Number(row.marks);
+                    const grade = row.absent ? 'AB' : row.marks.trim() ? gradeFor(marksValue, maxMarks) : '—';
+                    return (
+                      <tr key={row.studentId} className="hover:bg-gray-50">
+                        <td className="px-6 py-4 text-sm font-medium text-gray-900">{row.rollNo}</td>
+                        <td className="px-6 py-4 text-sm text-gray-900">{row.name}</td>
+                        <td className="px-6 py-4 text-sm text-gray-500">{maxMarks}</td>
+                        <td className="px-6 py-4">
+                          <input
+                            value={row.marks}
+                            onChange={(e) => setRow(row.studentId, { marks: e.target.value })}
+                            disabled={row.absent || status === 'LOCKED' || (status === 'SUBMITTED' && !canEditAfterSubmit)}
+                            className="w-24 rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-green-500 focus:outline-none focus:ring-2 focus:ring-green-200 disabled:bg-gray-100"
+                            inputMode="numeric"
+                          />
+                        </td>
+                        <td className="px-6 py-4 text-sm">
+                          <span className={`inline-flex rounded-full px-2 py-1 text-xs font-semibold ${
+                            grade === 'AB' ? 'bg-red-100 text-red-800' :
+                            grade === 'A+' || grade === 'A' ? 'bg-green-100 text-green-800' :
+                            grade === 'B' || grade === 'C' ? 'bg-yellow-100 text-yellow-800' :
+                            grade === 'D' || grade === 'E' ? 'bg-red-100 text-red-800' :
+                            'bg-gray-100 text-gray-800'
+                          }`}>
+                            {grade}
+                          </span>
+                        </td>
+                        <td className="px-6 py-4">
+                          <input
+                            type="checkbox"
+                            checked={row.absent}
+                            onChange={(e) => setRow(row.studentId, { absent: e.target.checked, marks: '' })}
+                            disabled={status === 'LOCKED' || (status === 'SUBMITTED' && !canEditAfterSubmit)}
+                            className="h-4 w-4 rounded border-gray-300 text-green-600 focus:ring-green-500"
+                          />
+                        </td>
+                        <td className="px-6 py-4">
+                          <input
+                            value={row.remarks}
+                            onChange={(e) => setRow(row.studentId, { remarks: e.target.value })}
+                            disabled={status === 'LOCKED' || (status === 'SUBMITTED' && !canEditAfterSubmit)}
+                            className="w-40 rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-green-500 focus:outline-none focus:ring-2 focus:ring-green-200 disabled:bg-gray-100"
+                          />
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+
+            <div className="mt-6 flex flex-wrap items-center justify-between gap-4">
+              <div className="rounded-xl border border-gray-200 bg-gray-50 px-6 py-4">
+                <div className="grid grid-cols-2 gap-6 text-sm md:grid-cols-4">
+                  <div>
+                    <span className="font-medium text-gray-900">Total Students:</span>
+                    <span className="ml-2 text-gray-600">{marksRows.length}</span>
+                  </div>
+                  <div>
+                    <span className="font-medium text-gray-900">Marks Entered:</span>
+                    <span className="ml-2 text-gray-600">{completedCount}</span>
+                  </div>
+                  <div>
+                    <span className="font-medium text-gray-900">Absent:</span>
+                    <span className="ml-2 text-gray-600">{absentCount}</span>
+                  </div>
+                  <div>
+                    <span className="font-medium text-gray-900">Pending:</span>
+                    <span className="ml-2 text-gray-600">{pendingCount}</span>
+                  </div>
+                </div>
+              </div>
+              <div className="flex gap-3">
+                <button
+                  className="rounded-xl border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 shadow-sm hover:bg-gray-50 disabled:opacity-50"
+                  onClick={() => saveMarks('DRAFT')}
+                  disabled={saving}
+                >
+                  {saving && status === 'DRAFT' ? 'Saving...' : 'Save Draft'}
+                </button>
+                <button
+                  className="rounded-xl border border-green-300 bg-green-50 px-4 py-2 text-sm font-medium text-green-700 hover:bg-green-100 disabled:opacity-50"
+                  onClick={submitWithConfirm}
+                  disabled={saving}
+                >
+                  Submit Marks
+                </button>
+                {canLock && (
+                  <button
+                    className="rounded-xl bg-gradient-to-r from-green-600 to-emerald-600 px-4 py-2 text-sm font-semibold text-white shadow-lg hover:from-green-700 hover:to-emerald-700 disabled:opacity-50"
+                    onClick={() => saveMarks('LOCKED')}
+                    disabled={saving}
+                  >
+                    Lock Marks
+                  </button>
+                )}
+              </div>
+            </div>
+          </section>
+        )}
+
+        {/* Bulk Upload Modal */}
+        {bulkOpen && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 px-4">
+            <div className="w-full max-w-2xl rounded-2xl bg-white p-6 shadow-2xl">
+              <div className="mb-6 flex items-center justify-between">
+                <h3 className="text-xl font-semibold text-gray-900">Bulk Upload Marks</h3>
+                <button 
+                  className="rounded-lg p-2 text-gray-400 hover:bg-gray-100 hover:text-gray-600"
+                  onClick={() => setBulkOpen(false)}
+                >
+                  <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
+              
+              <div className="space-y-6">
+                <div className="rounded-xl border border-blue-200 bg-blue-50 p-4">
+                  <div className="flex items-start">
+                    <div className="flex-shrink-0">
+                      <svg className="h-5 w-5 text-blue-400" fill="currentColor" viewBox="0 0 20 20">
+                        <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
+                      </svg>
+                    </div>
+                    <div className="ml-3">
+                      <h4 className="text-sm font-medium text-blue-800">Step 1: Download Template</h4>
+                      <p className="mt-1 text-sm text-blue-700">Download the Excel template with student data pre-filled.</p>
+                      <button
+                        className="mt-3 rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700"
+                        onClick={downloadTemplate}
+                      >
+                        <div className="flex items-center">
+                          <svg className="mr-2 h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                          </svg>
+                          Download Template
+                        </div>
+                      </button>
+                    </div>
+                  </div>
+                </div>
+                
+                <div className="rounded-xl border border-green-200 bg-green-50 p-4">
+                  <div className="flex items-start">
+                    <div className="flex-shrink-0">
+                      <svg className="h-5 w-5 text-green-400" fill="currentColor" viewBox="0 0 20 20">
+                        <path fillRule="evenodd" d="M3 17a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm3.293-7.707a1 1 0 011.414 0L9 10.586V3a1 1 0 112 0v7.586l1.293-1.293a1 1 0 111.414 1.414l-3 3a1 1 0 01-1.414 0l-3-3a1 1 0 010-1.414z" clipRule="evenodd" />
+                      </svg>
+                    </div>
+                    <div className="ml-3">
+                      <h4 className="text-sm font-medium text-green-800">Step 2: Upload Completed File</h4>
+                      <p className="mt-1 text-sm text-green-700">Fill in the marks and upload the completed Excel file.</p>
+                      <input
+                        type="file"
+                        accept=".xls,.xlsx,.csv"
+                        onChange={(e) => setBulkFileName(e.target.files?.[0]?.name ?? '')}
+                        className="mt-3 block w-full text-sm text-gray-500 file:mr-4 file:rounded-lg file:border-0 file:bg-green-600 file:px-4 file:py-2 file:text-sm file:font-medium file:text-white hover:file:bg-green-700"
+                      />
+                      {bulkFileName && (
+                        <p className="mt-2 text-sm text-green-600">Selected: {bulkFileName}</p>
+                      )}
+                    </div>
+                  </div>
+                </div>
+                
+                <div className="rounded-xl border border-gray-200 bg-gray-50 p-4">
+                  <h4 className="text-sm font-medium text-gray-800">Step 3: Preview & Confirm</h4>
+                  <div className="mt-3 rounded-lg border-2 border-dashed border-gray-300 p-6 text-center">
+                    <svg className="mx-auto h-8 w-8 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                    </svg>
+                    <p className="mt-2 text-sm text-gray-500">Data preview will appear here after file upload</p>
+                  </div>
+                </div>
+              </div>
+              
+              <div className="mt-6 flex justify-end gap-3">
+                <button 
+                  className="rounded-xl border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
+                  onClick={() => setBulkOpen(false)}
+                >
+                  Cancel
+                </button>
+                <button className="rounded-xl bg-gradient-to-r from-green-600 to-emerald-600 px-4 py-2 text-sm font-semibold text-white hover:from-green-700 hover:to-emerald-700">
+                  Confirm & Save
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
     </div>
   );
 }

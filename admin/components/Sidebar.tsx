@@ -305,6 +305,8 @@ export const Sidebar = ({ role, isOpen, onClose, schoolName }: { role: string | 
             <>
               {renderLink({ href: '/dashboard', label: 'Overview' })}
               <div className="border-t border-white/10 my-2"></div>
+              {renderLink({ href: '/dashboard/plans', label: 'Plans' })}
+              <div className="border-t border-white/10 my-2"></div>
               {/* Teachers Section */}
               <div className="flex-shrink-0">
                 <button

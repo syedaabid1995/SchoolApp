@@ -2,10 +2,12 @@ import type { NextFunction, Request, Response } from 'express';
 import jwt, { type JwtPayload } from 'jsonwebtoken';
 import { env } from '../config/env';
 import { HttpError } from './error.middleware';
+import { prisma } from '../config/db';
 
 export type AuthContext = {
   userId: string;
   schoolId: string | null;
+  role?: string | null;
 };
 
 declare global {
@@ -24,19 +26,20 @@ const extractBearer = (req: Request) => {
   return token;
 };
 
-export const authMiddleware = (req: Request, _res: Response, next: NextFunction) => {
+export const authMiddleware = async (req: Request, _res: Response, next: NextFunction) => {
   const token = extractBearer(req);
   if (!token) {
     next(new HttpError(401, 'Missing authorization token'));
     return;
   }
 
-  let decoded: JwtPayload | { sub?: string; schoolId?: string | null; typ?: string };
+  let decoded: JwtPayload | { sub?: string; schoolId?: string | null; typ?: string; role?: string | null };
   try {
     decoded = jwt.verify(token, env.JWT_SECRET) as JwtPayload | {
       sub?: string;
       schoolId?: string | null;
       typ?: string;
+      role?: string | null;
     };
   } catch {
     next(new HttpError(401, 'Invalid token'));
@@ -48,9 +51,56 @@ export const authMiddleware = (req: Request, _res: Response, next: NextFunction)
     return;
   }
 
+  const schoolId = decoded.schoolId ?? null;
+
+  if (schoolId) {
+    const school = await prisma.school.findUnique({
+      where: { id: schoolId },
+      select: { status: true },
+    });
+    if (!school || school.status !== 'ACTIVE') {
+      next(new HttpError(403, 'Account suspended'));
+      return;
+    }
+  }
+
+  const role = decoded.role ?? null;
+  if (role === 'TEACHER') {
+    const teacher = await prisma.teacherProfile.findFirst({
+      where: { userId: decoded.sub, ...(schoolId ? { schoolId } : {}) },
+      select: { isActive: true },
+    });
+    if (!teacher || !teacher.isActive) {
+      next(new HttpError(403, 'Account suspended'));
+      return;
+    }
+  }
+
+  if (role === 'PARENT') {
+    const parents = await prisma.parentProfile.findMany({
+      where: { userId: decoded.sub },
+      select: { id: true },
+    });
+    if (!parents.length) {
+      next(new HttpError(403, 'Account suspended'));
+      return;
+    }
+    const parentIds = parents.map((p) => p.id);
+    const links = await prisma.studentParent.findMany({
+      where: { parentId: { in: parentIds } },
+      select: { student: { select: { school: { select: { status: true } } } } },
+    });
+    const hasActive = links.some((link) => link.student.school?.status === 'ACTIVE');
+    if (!hasActive) {
+      next(new HttpError(403, 'Account suspended'));
+      return;
+    }
+  }
+
   req.auth = {
     userId: decoded.sub,
-    schoolId: decoded.schoolId ?? null,
+    schoolId,
+    role,
   };
 
   next();

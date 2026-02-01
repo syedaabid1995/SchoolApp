@@ -7,6 +7,7 @@ import YAML from 'yamljs';
 import path from 'path';
 import { logger } from './config/logger';
 import { errorMiddleware, notFoundMiddleware } from './middlewares/error.middleware';
+import { writeOperationGuard } from './middlewares/subscriptionGuard.middleware';
 import { authRouter } from './routes/auth.routes';
 import { academicRouter } from './routes/academic.routes';
 import { studentRouter } from './routes/student.routes';
@@ -33,6 +34,7 @@ import { ticketRouter } from './routes/ticket.routes';
 import { analyticsRouter } from './routes/analytics.routes';
 import { schoolAdminRouter } from './routes/schoolAdmin.routes';
 import { subscriptionMetricsRouter } from './routes/subscriptionMetrics.routes';
+import { subscriptionPlanRouter } from './routes/subscriptionPlan.routes';
 import { teacherRouter } from './routes/teacher.routes';
 import { attendanceSummaryRouter } from './routes/attendanceSummary.routes';
 import { adminDashboardRouter } from './routes/adminDashboard.routes';
@@ -80,6 +82,14 @@ export const createApp = () => {
 
   app.use('/docs', swaggerUi.serve, swaggerUi.setup(openapiSpec));
 
+  // Apply write operation guard to all API routes except auth and subscriptions
+  app.use('/api/v1', (req, res, next) => {
+    if (req.path.startsWith('/auth') || req.path.startsWith('/subscriptions') || req.path.startsWith('/admin')) {
+      return next();
+    }
+    return writeOperationGuard(req, res, next);
+  });
+
   app.use('/api/v1/auth', authRouter);
   app.use('/api/v1/academics', academicRouter);
   app.use('/api/v1/students', studentRouter);
@@ -105,6 +115,7 @@ export const createApp = () => {
   app.use('/api/v1/tickets', ticketRouter);
   app.use('/api/v1/analytics', analyticsRouter);
   app.use('/api/v1/admin/schools', schoolAdminRouter);
+  app.use('/api/v1/admin/subscription-plans', subscriptionPlanRouter);
   app.use('/api/v1/admin/subscription-metrics', subscriptionMetricsRouter);
   app.use('/api/v1/teachers', teacherRouter);
   app.use('/api/v1/attendance-summary', attendanceSummaryRouter);

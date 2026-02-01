@@ -1,12 +1,14 @@
 'use client';
 
 import { useMemo, useState } from 'react';
+import Link from 'next/link';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { listAcademicYears, listClasses, listSections, listSubjects } from '../../../../services/academic.service';
 import { listSchools } from '../../../../services/school.service';
 import { getSession } from '../../../../services/auth.service';
 import { createExam, listExams } from '../../../../services/report.service';
 import { useNotify } from '../../../../components/NotificationProvider';
+import FullPageLoader from '../../../../components/FullPageLoader';
 
 type SubjectRow = {
   id: string;
@@ -205,23 +207,136 @@ export default function ExamsPage() {
     }));
   };
 
-  return (
-    <div className="space-y-6">
-      <header>
-        <h1 className="text-2xl font-semibold text-ink">Exams</h1>
-        <p className="text-sm text-slate">Create exams and map subjects from your academic setup.</p>
-      </header>
+  const stats = {
+    exams: exams?.length || 0,
+    subjects: filteredSubjects.length,
+    selected: selectedSubjectIds.length,
+    pending: filteredSubjects.length - selectedSubjectIds.length,
+  };
 
-      {isSuperAdmin ? (
-        <section className="rounded-2xl border border-slate/10 bg-white p-6">
-          <h2 className="text-sm font-semibold text-ink">School Context</h2>
-          <div className="mt-3">
+  return (
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-orange-50/30 to-red-50/40">
+      {createExamMutation.isPending && <FullPageLoader label="Saving exam..." />}
+      
+      {/* Hero Section */}
+      <div className="relative overflow-hidden bg-gradient-to-r from-orange-600 via-red-600 to-pink-700 px-6 py-16 text-white">
+        <div className="absolute inset-0 bg-black/10"></div>
+        <div className="relative mx-auto max-w-6xl">
+          <div className="flex items-center justify-between">
+            <div>
+              <div className="mb-4 inline-flex items-center rounded-full bg-white/20 px-4 py-2 text-sm font-medium backdrop-blur-sm">
+                <svg className="mr-2 h-4 w-4" fill="currentColor" viewBox="0 0 20 20">
+                  <path d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                </svg>
+                Examination Management
+              </div>
+              <h1 className="mb-4 text-4xl font-bold tracking-tight sm:text-5xl">
+                Exams & Assessments
+              </h1>
+              <p className="max-w-2xl text-lg text-orange-100">
+                Create comprehensive exams, map subjects, and configure assessment structures for your academic programs.
+              </p>
+            </div>
+            
+            <div className="hidden sm:flex gap-3">
+              <Link
+                href="/dashboard/academics"
+                className="flex items-center rounded-xl bg-white/20 px-6 py-3 font-semibold text-white backdrop-blur-sm transition-all hover:bg-white/30 hover:scale-105"
+              >
+                <svg className="mr-2 h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.394 2.08a1 1 0 00-.788 0l-7 3a1 1 0 000 1.84L5.25 8.051a.999.999 0 01.356-.257l4-1.714a1 1 0 11.788 1.838L7.667 9.088l1.94.831a1 1 0 00.787 0l7-3a1 1 0 000-1.838l-7-3z" />
+                </svg>
+                Academics
+              </Link>
+              <Link
+                href="/dashboard/academics/marks"
+                className="flex items-center rounded-xl bg-white/20 px-6 py-3 font-semibold text-white backdrop-blur-sm transition-all hover:bg-white/30 hover:scale-105"
+              >
+                <svg className="mr-2 h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+                </svg>
+                Marks
+              </Link>
+            </div>
+          </div>
+        </div>
+        
+        {/* Animated background elements */}
+        <div className="absolute -top-10 -left-10 h-40 w-40 rounded-full bg-white/10 animate-pulse"></div>
+        <div className="absolute -bottom-10 -right-10 h-32 w-32 rounded-full bg-white/10 animate-bounce"></div>
+        <div className="absolute top-1/2 left-1/3 h-6 w-6 rounded-full bg-white/20 animate-ping"></div>
+      </div>
+
+      <div className="mx-auto max-w-7xl px-6 py-12">
+        {/* Stats Cards */}
+        <div className="mb-8 grid gap-6 md:grid-cols-4">
+          <div className="rounded-2xl bg-gradient-to-br from-blue-500 to-blue-600 p-6 text-white shadow-lg">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-blue-100">Total Exams</p>
+                <p className="text-3xl font-bold">{stats.exams}</p>
+              </div>
+              <div className="rounded-full bg-white/20 p-3">
+                <svg className="h-8 w-8" fill="currentColor" viewBox="0 0 20 20">
+                  <path d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                </svg>
+              </div>
+            </div>
+          </div>
+          
+          <div className="rounded-2xl bg-gradient-to-br from-emerald-500 to-emerald-600 p-6 text-white shadow-lg">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-emerald-100">Available Subjects</p>
+                <p className="text-3xl font-bold">{stats.subjects}</p>
+              </div>
+              <div className="rounded-full bg-white/20 p-3">
+                <svg className="h-8 w-8" fill="currentColor" viewBox="0 0 20 20">
+                  <path fillRule="evenodd" d="M3 4a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm0 4a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm0 4a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm0 4a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1z" clipRule="evenodd" />
+                </svg>
+              </div>
+            </div>
+          </div>
+          
+          <div className="rounded-2xl bg-gradient-to-br from-purple-500 to-purple-600 p-6 text-white shadow-lg">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-purple-100">Selected Subjects</p>
+                <p className="text-3xl font-bold">{stats.selected}</p>
+              </div>
+              <div className="rounded-full bg-white/20 p-3">
+                <svg className="h-8 w-8" fill="currentColor" viewBox="0 0 20 20">
+                  <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+                </svg>
+              </div>
+            </div>
+          </div>
+          
+          <div className="rounded-2xl bg-gradient-to-br from-amber-500 to-amber-600 p-6 text-white shadow-lg">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-amber-100">Pending Setup</p>
+                <p className="text-3xl font-bold">{stats.pending}</p>
+              </div>
+              <div className="rounded-full bg-white/20 p-3">
+                <svg className="h-8 w-8" fill="currentColor" viewBox="0 0 20 20">
+                  <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
+                </svg>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* School Selection for Super Admin */}
+        {isSuperAdmin && (
+          <div className="mb-8 rounded-2xl bg-white p-6 shadow-lg ring-1 ring-gray-200">
+            <h2 className="mb-4 text-lg font-semibold text-gray-900">School Selection</h2>
             <select
               value={schoolId}
               onChange={(e) => setSchoolId(e.target.value)}
-              className="w-full rounded-lg border border-slate/20 px-3 py-2 text-sm"
+              className="w-full rounded-xl border border-gray-300 px-4 py-3 text-sm focus:border-orange-500 focus:outline-none focus:ring-2 focus:ring-orange-200"
             >
-              <option value="">Select school</option>
+              <option value="">Select school...</option>
               {schools?.items.map((school) => (
                 <option key={school.id} value={school.id}>
                   {school.name} ({school.code})
@@ -229,30 +344,61 @@ export default function ExamsPage() {
               ))}
             </select>
           </div>
-        </section>
-      ) : null}
+        )}
 
-      <section className="rounded-2xl border border-slate/10 bg-white p-6">
-        <div className="flex flex-wrap items-center gap-1">
-          {[
-            { id: 1, label: 'Details' },
-            { id: 2, label: 'Subjects' },
-            { id: 3, label: 'Structure' },
-          ].map((item) => (
-            <span
-              key={item.id}
-              className={`rounded-full px-3 py-1 text-xs font-semibold ${
-                step === item.id ? 'bg-ink text-white' : 'bg-sand text-slate'
-              }`}
-            >
-              {item.id}. {item.label}
-            </span>
-          ))}
+        {/* Enhanced Stepper */}
+        <div className="mb-8 rounded-2xl bg-white p-6 shadow-lg ring-1 ring-gray-200">
+          <div className="flex items-center justify-center">
+            <div className="flex items-center space-x-8">
+              {[
+                { id: 1, label: 'Exam Details', icon: 'M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z' },
+                { id: 2, label: 'Subject Mapping', icon: 'M3 4a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm0 4a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm0 4a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm0 4a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1z' },
+                { id: 3, label: 'Exam Structure', icon: 'M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z' },
+              ].map((item, index) => (
+                <div key={item.id} className="flex items-center">
+                  <div className={`flex h-12 w-12 items-center justify-center rounded-full ${
+                    step === item.id 
+                      ? 'bg-gradient-to-r from-orange-500 to-red-500 text-white shadow-lg' 
+                      : step > item.id 
+                      ? 'bg-green-500 text-white' 
+                      : 'bg-gray-200 text-gray-500'
+                  }`}>
+                    {step > item.id ? (
+                      <svg className="h-6 w-6" fill="currentColor" viewBox="0 0 20 20">
+                        <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                      </svg>
+                    ) : (
+                      <svg className="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d={item.icon} />
+                      </svg>
+                    )}
+                  </div>
+                  <div className="ml-4">
+                    <p className={`text-sm font-medium ${
+                      step === item.id ? 'text-orange-600' : step > item.id ? 'text-green-600' : 'text-gray-500'
+                    }`}>
+                      Step {item.id}
+                    </p>
+                    <p className={`text-xs ${
+                      step === item.id ? 'text-orange-500' : step > item.id ? 'text-green-500' : 'text-gray-400'
+                    }`}>
+                      {item.label}
+                    </p>
+                  </div>
+                  {index < 2 && (
+                    <div className={`mx-8 h-0.5 w-16 ${
+                      step > item.id ? 'bg-green-500' : 'bg-gray-200'
+                    }`}></div>
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
         </div>
-      </section>
 
-      <section className="rounded-2xl border border-slate/10 bg-white p-6">
-        <h2 className="text-lg font-semibold">Create Exam</h2>
+        {/* Create Exam Form */}
+        <section className="mb-8 rounded-2xl bg-white p-6 shadow-lg ring-1 ring-gray-200">
+          <h2 className="mb-6 text-xl font-semibold text-gray-900">Create New Exam</h2>
 
         {step === 1 ? (
           <div className="mt-4 space-y-4">
@@ -500,7 +646,6 @@ export default function ExamsPage() {
               <button
                 className="rounded-lg border border-slate/20 px-4 py-2 text-sm"
                 onClick={() => {
-                  notify.info('Saving exam...', 'Creating exam as draft');
                   createExamMutation.mutate({ status: 'DRAFT' });
                 }}
                 disabled={createExamMutation.isPending}
@@ -510,7 +655,6 @@ export default function ExamsPage() {
               <button
                 className="rounded-lg bg-ink px-4 py-2 text-sm font-semibold text-white"
                 onClick={() => {
-                  notify.info('Publishing exam...', 'Creating and publishing exam');
                   createExamMutation.mutate({ status: 'PUBLISHED' });
                 }}
                 disabled={createExamMutation.isPending}
@@ -522,40 +666,54 @@ export default function ExamsPage() {
         ) : null}
       </section>
 
-      <section className="rounded-2xl border border-slate/10 bg-white p-6">
-        <h2 className="text-lg font-semibold">Existing Exams</h2>
-        <div className="mt-4 overflow-x-auto">
-          <table className="w-full text-left text-sm">
-            <thead className="text-xs uppercase text-slate">
-              <tr>
-                <th className="py-2">Exam</th>
-                <th>Type</th>
-                <th>Class</th>
-                <th>Academic Year</th>
-                <th>Status</th>
-              </tr>
-            </thead>
-            <tbody>
-              {(exams ?? []).map((exam: any) => (
-                <tr key={exam.id} className="border-t border-slate/10">
-                  <td className="py-3">{exam.name}</td>
-                  <td>{exam.type}</td>
-                  <td>{classLookup.get(exam.classId) ?? '—'}</td>
-                  <td>{yearLookup.get(exam.academicYearId) ?? '—'}</td>
-                  <td>{exam.status}</td>
-                </tr>
-              ))}
-              {!exams?.length ? (
+        {/* Existing Exams */}
+        <section className="rounded-2xl bg-white p-6 shadow-lg ring-1 ring-gray-200">
+          <h2 className="mb-6 text-xl font-semibold text-gray-900">Existing Exams</h2>
+          <div className="overflow-hidden rounded-xl border border-gray-200">
+            <table className="w-full">
+              <thead className="bg-gray-50">
                 <tr>
-                  <td colSpan={5} className="py-6 text-center text-slate">
-                    No exams found.
-                  </td>
+                  <th className="px-6 py-4 text-left text-xs font-medium uppercase tracking-wider text-gray-500">Exam Name</th>
+                  <th className="px-6 py-4 text-left text-xs font-medium uppercase tracking-wider text-gray-500">Type</th>
+                  <th className="px-6 py-4 text-left text-xs font-medium uppercase tracking-wider text-gray-500">Class</th>
+                  <th className="px-6 py-4 text-left text-xs font-medium uppercase tracking-wider text-gray-500">Academic Year</th>
+                  <th className="px-6 py-4 text-left text-xs font-medium uppercase tracking-wider text-gray-500">Status</th>
                 </tr>
-              ) : null}
-            </tbody>
-          </table>
-        </div>
-      </section>
+              </thead>
+              <tbody className="divide-y divide-gray-200 bg-white">
+                {(exams ?? []).map((exam: any) => (
+                  <tr key={exam.id} className="hover:bg-gray-50">
+                    <td className="px-6 py-4 text-sm font-medium text-gray-900">{exam.name}</td>
+                    <td className="px-6 py-4 text-sm text-gray-500">
+                      <span className="inline-flex rounded-full bg-blue-100 px-2 py-1 text-xs font-semibold text-blue-800">
+                        {exam.type}
+                      </span>
+                    </td>
+                    <td className="px-6 py-4 text-sm text-gray-500">{classLookup.get(exam.classId) ?? '—'}</td>
+                    <td className="px-6 py-4 text-sm text-gray-500">{yearLookup.get(exam.academicYearId) ?? '—'}</td>
+                    <td className="px-6 py-4 text-sm text-gray-500">
+                      <span className={`inline-flex rounded-full px-2 py-1 text-xs font-semibold ${
+                        exam.status === 'PUBLISHED' 
+                          ? 'bg-green-100 text-green-800' 
+                          : 'bg-yellow-100 text-yellow-800'
+                      }`}>
+                        {exam.status}
+                      </span>
+                    </td>
+                  </tr>
+                ))}
+                {!exams?.length && (
+                  <tr>
+                    <td colSpan={5} className="px-6 py-12 text-center text-sm text-gray-500">
+                      No exams found. Create your first exam above.
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        </section>
+      </div>
     </div>
   );
 }

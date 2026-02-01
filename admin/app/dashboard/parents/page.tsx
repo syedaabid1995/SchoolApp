@@ -5,6 +5,7 @@ import { useQuery } from '@tanstack/react-query';
 import Link from 'next/link';
 import { listParents } from '../../../services/parent.service';
 import { getSession } from '../../../services/auth.service';
+import FullPageLoader from '../../../components/FullPageLoader';
 
 export default function ParentsPage() {
   const [query, setQuery] = useState('');
@@ -17,6 +18,10 @@ export default function ParentsPage() {
     queryFn: () => listParents({ schoolId, query }),
     enabled: Boolean(schoolId),
   });
+
+  if (isLoading) {
+    return <FullPageLoader label="Loading parents..." />;
+  }
 
   return (
     <div className="space-y-6">

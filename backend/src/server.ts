@@ -1,6 +1,7 @@
 import { createApp, appLogger } from './app';
 import { env } from './config/env';
 import { prisma } from './config/db';
+import { startSubscriptionWorker } from './workers/subscription.worker';
 
 const start = async () => {
   const app = createApp();
@@ -8,6 +9,10 @@ const start = async () => {
   try {
     await prisma.$connect();
     appLogger.info('database connected');
+
+    // Start subscription worker
+    startSubscriptionWorker();
+    appLogger.info('subscription worker started');
 
     app.listen(env.PORT, () => {
       appLogger.info({ port: env.PORT, env: env.NODE_ENV }, 'server started');

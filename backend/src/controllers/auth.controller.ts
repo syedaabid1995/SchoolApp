@@ -35,6 +35,45 @@ export type AuthTokenPayload = {
 const signToken = (payload: AuthTokenPayload, expiresIn: string) =>
   jwt.sign(payload, env.JWT_SECRET, { expiresIn });
 
+const ensureSchoolActive = async (schoolId: string) => {
+  const school = await prisma.school.findUnique({
+    where: { id: schoolId },
+    select: { id: true, status: true },
+  });
+  if (!school || school.status !== 'ACTIVE') {
+    throw new HttpError(403, 'School is suspended');
+  }
+};
+
+const ensureTeacherActive = async (userId: string, schoolId: string | null) => {
+  const profile = await prisma.teacherProfile.findFirst({
+    where: { userId, ...(schoolId ? { schoolId } : {}) },
+    select: { isActive: true },
+  });
+  if (!profile || !profile.isActive) {
+    throw new HttpError(403, 'Teacher is inactive');
+  }
+};
+
+const ensureParentActive = async (userId: string) => {
+  const parents = await prisma.parentProfile.findMany({
+    where: { userId },
+    select: { id: true },
+  });
+  if (!parents.length) {
+    throw new HttpError(403, 'Parent is inactive');
+  }
+  const parentIds = parents.map((p) => p.id);
+  const links = await prisma.studentParent.findMany({
+    where: { parentId: { in: parentIds } },
+    select: { student: { select: { school: { select: { id: true, status: true } } } } },
+  });
+  const hasActiveSchool = links.some((link) => link.student.school?.status === 'ACTIVE');
+  if (!hasActiveSchool) {
+    throw new HttpError(403, 'Parent is inactive');
+  }
+};
+
 export const login = async (req: Request, res: Response) => {
   const { email, password, schoolId } = loginSchema.parse(req.body);
 
@@ -53,6 +92,10 @@ export const login = async (req: Request, res: Response) => {
     throw new HttpError(403, 'User is not active');
   }
 
+  if (user.schoolId) {
+    await ensureSchoolActive(user.schoolId);
+  }
+
   const isValid = await verifyPassword(password, user.passwordHash);
   if (!isValid) {
     throw new HttpError(401, 'Invalid credentials');
@@ -69,6 +112,13 @@ export const login = async (req: Request, res: Response) => {
     role: roleRow?.role.name ?? null,
     email: user.email,
   };
+
+  if (payloadBase.role === 'TEACHER') {
+    await ensureTeacherActive(user.id, user.schoolId ?? null);
+  }
+  if (payloadBase.role === 'PARENT') {
+    await ensureParentActive(user.id);
+  }
 
   const accessToken = signToken({ ...payloadBase, typ: 'access' }, ACCESS_TOKEN_TTL);
   const refreshToken = signToken({ ...payloadBase, typ: 'refresh' }, REFRESH_TOKEN_TTL);
@@ -108,16 +158,28 @@ export const refreshToken = async (req: Request, res: Response) => {
     throw new HttpError(401, 'Invalid refresh token');
   }
 
+  if (user.schoolId) {
+    await ensureSchoolActive(user.schoolId);
+  }
+
   const roleRow = await prisma.userRole.findFirst({
     where: { userId: user.id },
     select: { role: { select: { name: true } } },
   });
 
+  const roleName = roleRow?.role.name ?? null;
+  if (roleName === 'TEACHER') {
+    await ensureTeacherActive(user.id, user.schoolId ?? null);
+  }
+  if (roleName === 'PARENT') {
+    await ensureParentActive(user.id);
+  }
+
   const accessToken = signToken(
     {
       sub: user.id,
       schoolId: user.schoolId ?? null,
-      role: roleRow?.role.name ?? null,
+      role: roleName,
       email: user.email,
       typ: 'access',
     },

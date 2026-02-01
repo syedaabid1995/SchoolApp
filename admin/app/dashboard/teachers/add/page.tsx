@@ -6,6 +6,7 @@ import { createTeacher } from '../../../../services/teacher.service';
 import { listSchools } from '../../../../services/school.service';
 import { getSession } from '../../../../services/auth.service';
 import { useNotify } from '../../../../components/NotificationProvider';
+import FullPageLoader from '../../../../components/FullPageLoader';
 
 const toTitleCase = (str: string) => {
   return str.replace(/\w\S*/g, (txt) => 
@@ -17,12 +18,12 @@ const toUpperCase = (str: string) => str.toUpperCase();
 
 type Step = 1 | 2 | 3 | 4 | 5;
 
-const steps: Array<{ id: Step; title: string }> = [
-  { id: 1, title: 'Profile' },
-  { id: 2, title: 'Contact' },
-  { id: 3, title: 'Banking' },
-  { id: 4, title: 'Review' },
-  { id: 5, title: 'Confirm' },
+const steps: Array<{ id: Step; title: string; icon: string }> = [
+  { id: 1, title: 'Profile', icon: '👤' },
+  { id: 2, title: 'Contact', icon: '📞' },
+  { id: 3, title: 'Banking', icon: '🏦' },
+  { id: 4, title: 'Review', icon: '📋' },
+  { id: 5, title: 'Confirm', icon: '✅' },
 ];
 
 const indianBanks = [
@@ -92,6 +93,7 @@ export default function AddTeacherPage() {
         ifscCode: '',
         accountType: '',
         bankName: '',
+        customBankName: '',
         branchName: '',
         panNumber: '',
       });
@@ -189,36 +191,80 @@ export default function AddTeacherPage() {
   };
 
   return (
-    <div className="space-y-6">
-      <header>
-        <h1 className="text-2xl font-semibold text-ink">Add Teacher</h1>
-        <p className="text-sm text-slate">Create teacher profile with contact and banking details.</p>
-      </header>
-
-      <section className="rounded-2xl border border-slate/10 bg-white p-6">
-        <div className="flex flex-wrap items-center gap-2">
-          {steps.map((item) => (
-            <span
-              key={item.id}
-              className={`rounded-full px-3 py-1 text-xs font-semibold ${
-                step === item.id ? 'bg-ink text-white' : 'bg-sand text-slate'
-              }`}
-            >
-              {item.id}. {item.title}
-            </span>
-          ))}
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50/30 to-indigo-50/40">
+      {createMutation.isPending ? <FullPageLoader label="Saving teacher..." /> : null}
+      
+      {/* Hero Section */}
+      <div className="relative overflow-hidden bg-gradient-to-r from-emerald-600 via-teal-600 to-cyan-700 px-6 py-16 text-white">
+        <div className="absolute inset-0 bg-black/10"></div>
+        <div className="relative mx-auto max-w-4xl text-center">
+          <div className="mb-4 inline-flex items-center rounded-full bg-white/20 px-4 py-2 text-sm font-medium backdrop-blur-sm">
+            <svg className="mr-2 h-4 w-4" fill="currentColor" viewBox="0 0 20 20">
+              <path d="M13 6a3 3 0 11-6 0 3 3 0 016 0zM18 8a2 2 0 11-4 0 2 2 0 014 0zM14 15a4 4 0 00-8 0v3h8v-3z" />
+            </svg>
+            Teacher Management
+          </div>
+          <h1 className="mb-4 text-4xl font-bold tracking-tight sm:text-5xl">
+            Add New Teacher
+          </h1>
+          <p className="mx-auto max-w-2xl text-lg text-emerald-100">
+            Create comprehensive teacher profiles with contact information and banking details for seamless onboarding.
+          </p>
         </div>
-      </section>
+        
+        {/* Animated background elements */}
+        <div className="absolute -top-10 -left-10 h-40 w-40 rounded-full bg-white/10 animate-pulse"></div>
+        <div className="absolute -bottom-10 -right-10 h-32 w-32 rounded-full bg-white/10 animate-bounce"></div>
+        <div className="absolute top-1/2 right-1/4 h-6 w-6 rounded-full bg-white/20 animate-ping"></div>
+      </div>
 
-      <section className="rounded-2xl border border-slate/10 bg-white p-6">
-        {isSuperAdmin ? (
-          <div className="mb-4">
+      <div className="mx-auto max-w-4xl px-6 py-12">
+        {/* Progress Stepper */}
+        <div className="mb-12">
+          <div className="flex items-center justify-between">
+            {steps.map((item, index) => (
+              <div key={item.id} className="flex items-center">
+                <div className={`flex h-12 w-12 items-center justify-center rounded-full text-lg font-bold transition-all duration-300 ${
+                  step === item.id
+                    ? 'bg-gradient-to-r from-emerald-500 to-teal-600 text-white shadow-lg scale-110'
+                    : step > item.id
+                    ? 'bg-emerald-100 text-emerald-600'
+                    : 'bg-gray-200 text-gray-500'
+                }`}>
+                  {step > item.id ? '✓' : item.icon}
+                </div>
+                <div className="ml-3 hidden sm:block">
+                  <p className={`text-sm font-semibold ${
+                    step === item.id ? 'text-emerald-600' : step > item.id ? 'text-emerald-500' : 'text-gray-500'
+                  }`}>
+                    Step {item.id}
+                  </p>
+                  <p className={`text-xs ${
+                    step === item.id ? 'text-gray-900' : 'text-gray-600'
+                  }`}>
+                    {item.title}
+                  </p>
+                </div>
+                {index < steps.length - 1 && (
+                  <div className={`mx-4 h-0.5 w-8 sm:w-16 transition-colors duration-300 ${
+                    step > item.id ? 'bg-emerald-300' : 'bg-gray-300'
+                  }`}></div>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* School Selection for Super Admin */}
+        {isSuperAdmin && (
+          <div className="mb-8 rounded-2xl bg-white p-6 shadow-lg ring-1 ring-gray-200">
+            <h3 className="mb-4 text-lg font-semibold text-gray-900">Select School</h3>
             <select
               value={schoolId}
               onChange={(e) => setSchoolId(e.target.value)}
-              className="rounded-lg border border-slate/20 px-3 py-2 text-sm"
+              className="w-full rounded-xl border border-gray-300 px-4 py-3 text-sm focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-200"
             >
-              <option value="">Select school</option>
+              <option value="">Choose a school...</option>
               {schools?.items.map((school) => (
                 <option key={school.id} value={school.id}>
                   {school.name} ({school.code})
@@ -226,218 +272,341 @@ export default function AddTeacherPage() {
               ))}
             </select>
           </div>
-        ) : null}
+        )}
 
-        {step === 1 ? (
-          <>
-            <h2 className="mt-4 text-lg font-semibold">Teacher Profile</h2>
-            <div className="mt-4 grid gap-3 md:grid-cols-2">
-              <input
-                value={form.email}
-                onChange={(e) => setForm({ ...form, email: e.target.value })}
-                placeholder="Email"
-                className="rounded-lg border border-slate/20 px-3 py-2 text-sm"
-              />
-              <input
-                value={form.employeeNo}
-                onChange={(e) => setForm({ ...form, employeeNo: e.target.value })}
-                placeholder="Employee No"
-                className="rounded-lg border border-slate/20 px-3 py-2 text-sm"
-              />
-              <input
-                value={form.firstName}
-                onChange={(e) => setForm({ ...form, firstName: toTitleCase(e.target.value) })}
-                placeholder="First name"
-                className="rounded-lg border border-slate/20 px-3 py-2 text-sm"
-              />
-              <input
-                value={form.lastName}
-                onChange={(e) => setForm({ ...form, lastName: toTitleCase(e.target.value) })}
-                placeholder="Last name"
-                className="rounded-lg border border-slate/20 px-3 py-2 text-sm"
-              />
-            </div>
-          </>
-        ) : null}
-
-        {step === 2 ? (
-          <>
-            <h2 className="mt-4 text-lg font-semibold">Contact Information</h2>
-            <div className="mt-4 grid gap-3 md:grid-cols-2">
-              <input
-                value={form.phone}
-                onChange={(e) => {
-                  const value = e.target.value.replace(/[^0-9]/g, '');
-                  setForm({ ...form, phone: value });
-                }}
-                placeholder="Phone"
-                maxLength={10}
-                className="rounded-lg border border-slate/20 px-3 py-2 text-sm"
-              />
-              <input
-                value={form.address}
-                onChange={(e) => setForm({ ...form, address: toTitleCase(e.target.value) })}
-                placeholder="Address"
-                className="rounded-lg border border-slate/20 px-3 py-2 text-sm"
-              />
-            </div>
-          </>
-        ) : null}
-
-        {step === 3 ? (
-          <>
-            <h3 className="mt-4 text-sm font-semibold text-ink">Banking Details (optional)</h3>
-            <div className="mt-3 grid gap-3 md:grid-cols-2">
-              <input
-                value={form.accountHolderName}
-                onChange={(e) => setForm({ ...form, accountHolderName: toUpperCase(e.target.value) })}
-                placeholder="Account holder name"
-                className="rounded-lg border border-slate/20 px-3 py-2 text-sm"
-              />
-              <input
-                value={form.accountNumber}
-                onChange={(e) => {
-                  const value = e.target.value.replace(/[^0-9]/g, '');
-                  if (value.length <= 18) setForm({ ...form, accountNumber: value });
-                }}
-                placeholder="Account number (9-18 digits)"
-                className="rounded-lg border border-slate/20 px-3 py-2 text-sm"
-              />
-              <input
-                value={form.ifscCode}
-                onChange={(e) => {
-                  const value = e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, '');
-                  if (value.length <= 11) setForm({ ...form, ifscCode: value });
-                }}
-                placeholder="IFSC code (AAAA0BBBBBB)"
-                className="rounded-lg border border-slate/20 px-3 py-2 text-sm"
-              />
-              <select
-                value={form.accountType}
-                onChange={(e) => setForm({ ...form, accountType: e.target.value })}
-                className="rounded-lg border border-slate/20 px-3 py-2 text-sm"
-              >
-                <option value="">Select account type</option>
-                <option value="Savings">Savings</option>
-                <option value="Current">Current</option>
-                <option value="Salary">Salary</option>
-              </select>
-              <select
-                value={form.bankName}
-                onChange={(e) => setForm({ ...form, bankName: e.target.value, customBankName: '' })}
-                className="rounded-lg border border-slate/20 px-3 py-2 text-sm"
-              >
-                <option value="">Select bank</option>
-                {indianBanks.map((bank) => (
-                  <option key={bank} value={bank}>{bank}</option>
-                ))}
-              </select>
-              {form.bankName === 'Others' && (
-                <input
-                  value={form.customBankName}
-                  onChange={(e) => setForm({ ...form, customBankName: toUpperCase(e.target.value) })}
-                  placeholder="Enter bank name"
-                  className="rounded-lg border border-slate/20 px-3 py-2 text-sm"
-                />
-              )}
-              <input
-                value={form.branchName}
-                onChange={(e) => setForm({ ...form, branchName: toUpperCase(e.target.value) })}
-                placeholder="Branch name"
-                className="rounded-lg border border-slate/20 px-3 py-2 text-sm"
-              />
-              <input
-                value={form.panNumber}
-                onChange={(e) => {
-                  const value = e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, '');
-                  if (value.length <= 10) setForm({ ...form, panNumber: value });
-                }}
-                placeholder="PAN number (ABCDE1234F)"
-                className="rounded-lg border border-slate/20 px-3 py-2 text-sm"
-              />
-            </div>
-          </>
-        ) : null}
-
-        {step === 4 ? (
-          <>
-            <h2 className="mt-4 text-lg font-semibold">Review</h2>
-            <div className="mt-4 grid gap-4 text-sm text-slate md:grid-cols-2">
-              <div className="rounded-xl border border-slate/10 p-4">
-                <p className="text-xs uppercase text-slate">Profile</p>
-                <p className="mt-2">Email: {summary.profile.email || '—'}</p>
-                <p>Name: {summary.profile.firstName} {summary.profile.lastName}</p>
-                <p>Employee No: {summary.profile.employeeNo || '—'}</p>
+        {/* Form Content */}
+        <div className="rounded-2xl bg-white p-8 shadow-xl ring-1 ring-gray-200">
+          {step === 1 && (
+            <div className="space-y-6">
+              <div className="text-center">
+                <h2 className="text-2xl font-bold text-gray-900">Teacher Profile</h2>
+                <p className="mt-2 text-gray-600">Basic information and credentials</p>
               </div>
-              <div className="rounded-xl border border-slate/10 p-4">
-                <p className="text-xs uppercase text-slate">Contact</p>
-                <p className="mt-2">Phone: {summary.contact.phone || '—'}</p>
-                <p>Address: {summary.contact.address || '—'}</p>
-              </div>
-              <div className="rounded-xl border border-slate/10 p-4 md:col-span-2">
-                <p className="text-xs uppercase text-slate">Banking</p>
-                <p className="mt-2">Account: {summary.banking.accountNumber || '—'}</p>
-                <p>IFSC: {summary.banking.ifscCode || '—'}</p>
-                <p>Bank: {summary.banking.bankName || '—'}</p>
+              
+              <div className="grid gap-6 md:grid-cols-2">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Email Address *</label>
+                  <input
+                    value={form.email}
+                    onChange={(e) => setForm({ ...form, email: e.target.value })}
+                    placeholder="teacher@school.com"
+                    className="w-full rounded-xl border border-gray-300 px-4 py-3 text-sm focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-200"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Employee Number</label>
+                  <input
+                    value={form.employeeNo}
+                    onChange={(e) => setForm({ ...form, employeeNo: e.target.value })}
+                    placeholder="EMP001"
+                    className="w-full rounded-xl border border-gray-300 px-4 py-3 text-sm focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-200"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">First Name *</label>
+                  <input
+                    value={form.firstName}
+                    onChange={(e) => setForm({ ...form, firstName: toTitleCase(e.target.value) })}
+                    placeholder="John"
+                    className="w-full rounded-xl border border-gray-300 px-4 py-3 text-sm focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-200"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Last Name *</label>
+                  <input
+                    value={form.lastName}
+                    onChange={(e) => setForm({ ...form, lastName: toTitleCase(e.target.value) })}
+                    placeholder="Doe"
+                    className="w-full rounded-xl border border-gray-300 px-4 py-3 text-sm focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-200"
+                  />
+                </div>
               </div>
             </div>
-          </>
-        ) : null}
-
-        {step === 5 ? (
-          <>
-            <h2 className="mt-4 text-lg font-semibold">Confirm</h2>
-            <p className="mt-2 text-sm text-slate">Create the teacher profile and generate a temporary password.</p>
-          </>
-        ) : null}
-
-        <button
-          className="mt-4 rounded-lg bg-ink px-4 py-2 text-sm font-semibold text-white"
-          onClick={() => {
-            if (step < 5) return nextStep();
-            if (!validateBeforeCreate()) return;
-            notify.info('Creating teacher...', 'Please wait while we process your request');
-            createMutation.mutate({
-              email: form.email,
-              firstName: form.firstName,
-              lastName: form.lastName,
-              employeeNo: form.employeeNo || null,
-              phone: form.phone || null,
-              address: form.address || null,
-              bankDetails: {
-                accountHolderName: form.accountHolderName || null,
-                accountNumber: form.accountNumber || null,
-                ifscCode: form.ifscCode || null,
-                accountType: form.accountType || null,
-                bankName: form.bankName === 'Others' ? form.customBankName : form.bankName || null,
-                branchName: form.branchName || null,
-                panNumber: form.panNumber || null,
-              },
-              schoolId: effectiveSchoolId,
-            });
-          }}
-          disabled={createMutation.isPending || !effectiveSchoolId}
-        >
-          {step < 5 ? 'Save & Continue' : createMutation.isPending ? 'Creating...' : 'Create Teacher'}
-        </button>
-
-        <div className="mt-3 flex justify-between">
-          {step > 1 ? (
-            <button className="rounded-lg border border-slate/20 px-4 py-2 text-sm" onClick={prevStep}>
-              Back
-            </button>
-          ) : (
-            <span />
           )}
-        </div>
-        {createdTeacher ? (
-          <div className="mt-4 rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-sm">
-            <p className="font-semibold text-emerald-700">Teacher account created</p>
-            <p className="text-emerald-700">Email: {createdTeacher.email}</p>
-            <p className="text-emerald-700">Temporary Password: {createdTeacher.tempPassword}</p>
+
+          {step === 2 && (
+            <div className="space-y-6">
+              <div className="text-center">
+                <h2 className="text-2xl font-bold text-gray-900">Contact Information</h2>
+                <p className="mt-2 text-gray-600">Phone and address details</p>
+              </div>
+              
+              <div className="grid gap-6 md:grid-cols-2">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Phone Number *</label>
+                  <input
+                    value={form.phone}
+                    onChange={(e) => {
+                      const value = e.target.value.replace(/[^0-9]/g, '');
+                      setForm({ ...form, phone: value });
+                    }}
+                    placeholder="9876543210"
+                    maxLength={10}
+                    className="w-full rounded-xl border border-gray-300 px-4 py-3 text-sm focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-200"
+                  />
+                </div>
+                <div className="md:col-span-2">
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Address *</label>
+                  <textarea
+                    value={form.address}
+                    onChange={(e) => setForm({ ...form, address: toTitleCase(e.target.value) })}
+                    placeholder="Complete address with city and state"
+                    rows={3}
+                    className="w-full rounded-xl border border-gray-300 px-4 py-3 text-sm focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-200"
+                  />
+                </div>
+              </div>
+            </div>
+          )}
+
+          {step === 3 && (
+            <div className="space-y-6">
+              <div className="text-center">
+                <h2 className="text-2xl font-bold text-gray-900">Banking Details</h2>
+                <p className="mt-2 text-gray-600">Optional salary account information</p>
+              </div>
+              
+              <div className="grid gap-6 md:grid-cols-2">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Account Holder Name</label>
+                  <input
+                    value={form.accountHolderName}
+                    onChange={(e) => setForm({ ...form, accountHolderName: toUpperCase(e.target.value) })}
+                    placeholder="JOHN DOE"
+                    className="w-full rounded-xl border border-gray-300 px-4 py-3 text-sm focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-200"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Account Number</label>
+                  <input
+                    value={form.accountNumber}
+                    onChange={(e) => {
+                      const value = e.target.value.replace(/[^0-9]/g, '');
+                      if (value.length <= 18) setForm({ ...form, accountNumber: value });
+                    }}
+                    placeholder="123456789012345"
+                    className="w-full rounded-xl border border-gray-300 px-4 py-3 text-sm focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-200"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">IFSC Code</label>
+                  <input
+                    value={form.ifscCode}
+                    onChange={(e) => {
+                      const value = e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, '');
+                      if (value.length <= 11) setForm({ ...form, ifscCode: value });
+                    }}
+                    placeholder="SBIN0001234"
+                    className="w-full rounded-xl border border-gray-300 px-4 py-3 text-sm focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-200"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Account Type</label>
+                  <select
+                    value={form.accountType}
+                    onChange={(e) => setForm({ ...form, accountType: e.target.value })}
+                    className="w-full rounded-xl border border-gray-300 px-4 py-3 text-sm focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-200"
+                  >
+                    <option value="">Select account type</option>
+                    <option value="Savings">Savings</option>
+                    <option value="Current">Current</option>
+                    <option value="Salary">Salary</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Bank Name</label>
+                  <select
+                    value={form.bankName}
+                    onChange={(e) => setForm({ ...form, bankName: e.target.value, customBankName: '' })}
+                    className="w-full rounded-xl border border-gray-300 px-4 py-3 text-sm focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-200"
+                  >
+                    <option value="">Select bank</option>
+                    {indianBanks.map((bank) => (
+                      <option key={bank} value={bank}>{bank}</option>
+                    ))}
+                  </select>
+                </div>
+                {form.bankName === 'Others' && (
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">Custom Bank Name</label>
+                    <input
+                      value={form.customBankName}
+                      onChange={(e) => setForm({ ...form, customBankName: toUpperCase(e.target.value) })}
+                      placeholder="ENTER BANK NAME"
+                      className="w-full rounded-xl border border-gray-300 px-4 py-3 text-sm focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-200"
+                    />
+                  </div>
+                )}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Branch Name</label>
+                  <input
+                    value={form.branchName}
+                    onChange={(e) => setForm({ ...form, branchName: toUpperCase(e.target.value) })}
+                    placeholder="MAIN BRANCH"
+                    className="w-full rounded-xl border border-gray-300 px-4 py-3 text-sm focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-200"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">PAN Number</label>
+                  <input
+                    value={form.panNumber}
+                    onChange={(e) => {
+                      const value = e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, '');
+                      if (value.length <= 10) setForm({ ...form, panNumber: value });
+                    }}
+                    placeholder="ABCDE1234F"
+                    className="w-full rounded-xl border border-gray-300 px-4 py-3 text-sm focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-200"
+                  />
+                </div>
+              </div>
+            </div>
+          )}
+
+          {step === 4 && (
+            <div className="space-y-6">
+              <div className="text-center">
+                <h2 className="text-2xl font-bold text-gray-900">Review Details</h2>
+                <p className="mt-2 text-gray-600">Please verify all information before proceeding</p>
+              </div>
+              
+              <div className="grid gap-6 md:grid-cols-2">
+                <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-6">
+                  <h3 className="mb-4 flex items-center text-lg font-semibold text-emerald-800">
+                    <span className="mr-2">👤</span> Profile Information
+                  </h3>
+                  <div className="space-y-2 text-sm">
+                    <p><span className="font-medium">Email:</span> {summary.profile.email || '—'}</p>
+                    <p><span className="font-medium">Name:</span> {summary.profile.firstName} {summary.profile.lastName}</p>
+                    <p><span className="font-medium">Employee No:</span> {summary.profile.employeeNo || '—'}</p>
+                  </div>
+                </div>
+                
+                <div className="rounded-xl border border-blue-200 bg-blue-50 p-6">
+                  <h3 className="mb-4 flex items-center text-lg font-semibold text-blue-800">
+                    <span className="mr-2">📞</span> Contact Information
+                  </h3>
+                  <div className="space-y-2 text-sm">
+                    <p><span className="font-medium">Phone:</span> {summary.contact.phone || '—'}</p>
+                    <p><span className="font-medium">Address:</span> {summary.contact.address || '—'}</p>
+                  </div>
+                </div>
+                
+                <div className="md:col-span-2 rounded-xl border border-purple-200 bg-purple-50 p-6">
+                  <h3 className="mb-4 flex items-center text-lg font-semibold text-purple-800">
+                    <span className="mr-2">🏦</span> Banking Details
+                  </h3>
+                  <div className="grid gap-4 md:grid-cols-3 text-sm">
+                    <p><span className="font-medium">Account:</span> {summary.banking.accountNumber || '—'}</p>
+                    <p><span className="font-medium">IFSC:</span> {summary.banking.ifscCode || '—'}</p>
+                    <p><span className="font-medium">Bank:</span> {summary.banking.bankName || '—'}</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {step === 5 && (
+            <div className="space-y-6 text-center">
+              <div className="mx-auto h-16 w-16 rounded-full bg-gradient-to-r from-emerald-500 to-teal-600 flex items-center justify-center">
+                <span className="text-2xl text-white">✅</span>
+              </div>
+              <h2 className="text-2xl font-bold text-gray-900">Ready to Create</h2>
+              <p className="text-gray-600">All information has been validated. Click below to create the teacher profile and generate login credentials.</p>
+            </div>
+          )}
+
+          {/* Action Buttons */}
+          <div className="mt-8 flex items-center justify-between">
+            {step > 1 ? (
+              <button
+                onClick={prevStep}
+                className="flex items-center rounded-xl border border-gray-300 px-6 py-3 text-sm font-semibold text-gray-700 hover:bg-gray-50 transition-colors"
+              >
+                <svg className="mr-2 h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+                </svg>
+                Previous
+              </button>
+            ) : (
+              <div></div>
+            )}
+            
+            <button
+              onClick={() => {
+                if (step < 5) return nextStep();
+                if (!validateBeforeCreate()) return;
+                createMutation.mutate({
+                  email: form.email,
+                  firstName: form.firstName,
+                  lastName: form.lastName,
+                  employeeNo: form.employeeNo || null,
+                  phone: form.phone || null,
+                  address: form.address || null,
+                  bankDetails: {
+                    accountHolderName: form.accountHolderName || null,
+                    accountNumber: form.accountNumber || null,
+                    ifscCode: form.ifscCode || null,
+                    accountType: form.accountType || null,
+                    bankName: form.bankName === 'Others' ? form.customBankName : form.bankName || null,
+                    branchName: form.branchName || null,
+                    panNumber: form.panNumber || null,
+                  },
+                  schoolId: effectiveSchoolId,
+                });
+              }}
+              disabled={createMutation.isPending || !effectiveSchoolId}
+              className={`flex items-center rounded-xl px-8 py-3 text-sm font-semibold text-white transition-all ${
+                step < 5
+                  ? 'bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-600 hover:to-teal-700 shadow-lg hover:shadow-xl'
+                  : 'bg-gradient-to-r from-green-500 to-emerald-600 hover:from-green-600 hover:to-emerald-700 shadow-lg hover:shadow-xl'
+              }`}
+            >
+              {step < 5 ? (
+                <>
+                  Continue
+                  <svg className="ml-2 h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                  </svg>
+                </>
+              ) : createMutation.isPending ? (
+                <>
+                  <svg className="mr-2 h-4 w-4 animate-spin" fill="none" viewBox="0 0 24 24">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                    <path className="opacity-75" fill="currentColor" d="m4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                  </svg>
+                  Creating...
+                </>
+              ) : (
+                <>
+                  Create Teacher
+                  <svg className="ml-2 h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+                  </svg>
+                </>
+              )}
+            </button>
           </div>
-        ) : null}
-      </section>
+        </div>
+
+        {/* Success Message */}
+        {createdTeacher && (
+          <div className="mt-8 rounded-2xl border border-emerald-200 bg-gradient-to-r from-emerald-50 to-teal-50 p-8 shadow-lg">
+            <div className="text-center">
+              <div className="mx-auto mb-4 h-16 w-16 rounded-full bg-emerald-100 flex items-center justify-center">
+                <svg className="h-8 w-8 text-emerald-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                </svg>
+              </div>
+              <h3 className="text-xl font-bold text-emerald-800 mb-2">Teacher Created Successfully!</h3>
+              <div className="rounded-xl bg-white p-4 text-left">
+                <p className="text-sm text-gray-600 mb-2">Login credentials:</p>
+                <p className="font-mono text-sm"><span className="font-semibold">Email:</span> {createdTeacher.email}</p>
+                <p className="font-mono text-sm"><span className="font-semibold">Password:</span> {createdTeacher.tempPassword}</p>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
     </div>
   );
 }

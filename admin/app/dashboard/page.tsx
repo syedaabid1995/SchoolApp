@@ -9,9 +9,15 @@ import {
 } from '../../services/adminDashboard.service';
 import { listAuditLogs } from '../../services/audit.service';
 import { useNotify } from '../../components/NotificationProvider';
+import FullPageLoader from '../../components/FullPageLoader';
+import { getSession } from '../../services/auth.service';
+import { getSubscription } from '../../services/subscription.service';
 
 export default function DashboardPage() {
   const notify = useNotify();
+  const { data: session } = useQuery({ queryKey: ['session'], queryFn: getSession });
+  const isSchoolAdmin = session?.role === 'SCHOOL_ADMIN';
+  const schoolId = session?.schoolId ?? undefined;
   const { data, isLoading, isError } = useQuery({
     queryKey: ['admin-dashboard'],
     queryFn: getAdminDashboardMetrics,
@@ -31,8 +37,25 @@ export default function DashboardPage() {
     queryKey: ['recent-audit-logs'],
     queryFn: () => listAuditLogs({ limit: 5 }),
   });
-
-
+  const { data: subscription } = useQuery({
+    queryKey: ['subscription', schoolId],
+    queryFn: () => getSubscription(schoolId),
+    enabled: Boolean(schoolId) && isSchoolAdmin,
+  });
+  const defaultSeries = [0, 0, 0, 0, 0, 0, 0];
+  const weeklyDays = Array.isArray(weeklyData)
+    ? weeklyData.map((item) =>
+        new Date(item.date).toLocaleDateString('en-US', { weekday: 'short' }),
+      )
+    : weeklyData?.days ?? ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+  const attendanceSeries = Array.isArray(weeklyData)
+    ? weeklyData.map((item) => item.attendanceRate ?? 0)
+    : weeklyData?.attendance ?? defaultSeries;
+  const performanceSeries = weeklyData?.performance ?? defaultSeries;
+  const enrollmentSeries = weeklyData?.enrollment ?? defaultSeries;
+  if (isLoading) {
+    return <FullPageLoader label="Loading dashboard..." />;
+  }
 
   const stats = [
     { 
@@ -71,24 +94,25 @@ export default function DashboardPage() {
     { title: 'View Reports', href: '/dashboard/reports', icon: '📈', desc: 'Academic reports' },
   ];
 
-  const SimpleChart = ({ data, color, label }: { data: number[], color: string, label: string }) => {
+  const SimpleChart = ({ data, color, label }: { data: number[]; color: string; label: string }) => {
     const max = Math.max(...data);
     const min = Math.min(...data);
+    const denom = max - min;
     
     return (
       <div className="space-y-3">
         <h4 className="text-sm font-medium text-gray-700">{label}</h4>
         <div className="flex items-end space-x-1 h-20">
           {data.map((value, index) => {
-            const height = ((value - min) / (max - min)) * 100;
+            const height = denom === 0 ? 100 : ((value - min) / denom) * 100;
             return (
               <div key={index} className="flex-1 flex flex-col items-center">
                 <div 
                   className={`w-full ${color} rounded-t transition-all duration-500 hover:opacity-80`}
                   style={{ height: `${Math.max(height, 10)}%` }}
-                  title={`${weeklyData?.days[index] || 'Day'}: ${value}%`}
+                  title={`${weeklyDays[index] || 'Day'}: ${value}%`}
                 ></div>
-                <span className="text-xs text-gray-500 mt-1">{weeklyData?.days[index] || 'Day'}</span>
+                <span className="text-xs text-gray-500 mt-1">{weeklyDays[index] || 'Day'}</span>
               </div>
             );
           })}
@@ -175,6 +199,30 @@ export default function DashboardPage() {
         ))}
       </section>
 
+      {isSchoolAdmin ? (
+        <section className="rounded-2xl border border-slate/10 bg-white p-6">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <h2 className="text-xl font-semibold text-gray-900">Current Plan</h2>
+            <Link href="/dashboard/plans" className="text-sm font-semibold text-blue-600 hover:underline">
+              Manage Plans
+            </Link>
+          </div>
+          <div className="mt-4 grid gap-4 md:grid-cols-2">
+            <div className="rounded-xl border border-slate/10 p-4">
+              <p className="text-xs uppercase text-slate">Plan</p>
+              <p className="mt-2 text-lg font-semibold">{subscription?.planName ?? '—'}</p>
+              <p className="text-sm text-slate">{subscription?.status ?? 'N/A'}</p>
+            </div>
+            <div className="rounded-xl border border-slate/10 p-4">
+              <p className="text-xs uppercase text-slate">Limits</p>
+              <p className="mt-2 text-sm text-slate">
+                Students: {subscription?.studentLimit ?? 0} · Teachers: {subscription?.teacherLimit ?? 0}
+              </p>
+            </div>
+          </div>
+        </section>
+      ) : null}
+
       {/* Quick Actions */}
       <section>
         <h2 className="text-xl font-semibold text-gray-900 mb-6">Quick Actions</h2>
@@ -207,12 +255,12 @@ export default function DashboardPage() {
             <h2 className="text-xl font-semibold text-gray-900 mb-6">Weekly Analytics</h2>
             <div className="grid gap-6 md:grid-cols-2">
               <SimpleChart 
-                data={weeklyData?.attendance || [0, 0, 0, 0, 0, 0, 0]} 
+                data={attendanceSeries} 
                 color="bg-blue-500" 
                 label="Attendance Rate" 
               />
               <SimpleChart 
-                data={weeklyData?.performance || [0, 0, 0, 0, 0, 0, 0]} 
+                data={performanceSeries} 
                 color="bg-green-500" 
                 label="Performance Score" 
               />
@@ -222,7 +270,7 @@ export default function DashboardPage() {
           <div className="bg-white rounded-2xl border border-slate/10 p-6">
             <h2 className="text-xl font-semibold text-gray-900 mb-6">Enrollment Trend</h2>
             <SimpleChart 
-              data={weeklyData?.enrollment || [0, 0, 0, 0, 0, 0, 0]} 
+              data={enrollmentSeries} 
               color="bg-purple-500" 
               label="Total Students" 
             />

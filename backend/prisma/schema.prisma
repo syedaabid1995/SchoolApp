@@ -1076,19 +1076,43 @@ model AuditLog {
 model Subscription {
   id        String   @id @default(uuid()) @db.Uuid
   schoolId  String   @unique @map("school_id") @db.Uuid
+  planId    String?  @map("plan_id") @db.Uuid
   planName  String   @map("plan_name")
   status    String   @default("ACTIVE")
   startsAt  DateTime @map("starts_at")
   endsAt    DateTime? @map("ends_at")
+  billingCycle String @default("MONTHLY") @map("billing_cycle")
+  discountPercent Int @default(0) @map("discount_percent")
+  graceDays Int @default(15) @map("grace_days")
+  paidAt DateTime? @map("paid_at")
+  nextDueAt DateTime? @map("next_due_at")
   studentLimit Int   @map("student_limit")
   teacherLimit Int   @map("teacher_limit")
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
   school School @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  plan   SubscriptionPlanDef? @relation(fields: [planId], references: [id], onDelete: SetNull)
 
   @@index([schoolId])
+  @@index([planId])
   @@map("subscriptions")
+}
+
+model SubscriptionPlanDef {
+  id           String   @id @default(uuid()) @db.Uuid
+  name         String   @unique
+  status       String   @default("ACTIVE")
+  priceCents   Int      @default(0) @map("price_cents")
+  features     String[] @default([]) @map("features")
+  studentLimit Int      @map("student_limit")
+  teacherLimit Int      @map("teacher_limit")
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  subscriptions Subscription[]
+
+  @@map("subscription_plans")
 }
 
 model UsageCounter {

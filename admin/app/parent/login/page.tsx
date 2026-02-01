@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import FullPageLoader from '../../../components/FullPageLoader';
 import { useRouter } from 'next/navigation';
 
 export default function ParentLoginPage() {
@@ -26,12 +27,28 @@ export default function ParentLoginPage() {
         body: JSON.stringify({ phone: form.phone.trim() }),
       });
       if (!res.ok) {
-        const text = await res.text();
-        throw new Error(text || 'Failed to send OTP');
+        const data = await res.json().catch(() => null);
+        const message =
+          (data as any)?.error?.message ||
+          (data as any)?.message ||
+          'Failed to send OTP';
+        throw new Error(message);
       }
       setMessage('OTP sent. Please check your phone.');
     } catch (err: any) {
-      setError(err?.message || 'Failed to send OTP');
+      const message = err?.message || 'Failed to send OTP';
+      const lower = message.toLowerCase();
+      if (lower.includes('suspend') || lower.includes('inactive')) {
+        window.dispatchEvent(
+          new CustomEvent('account-suspended', {
+            detail: {
+              title: 'Account Suspended',
+              message: 'Your access has been suspended. Please contact support.',
+            },
+          }),
+        );
+      }
+      setError(message);
     } finally {
       setLoading(false);
     }
@@ -54,8 +71,12 @@ export default function ParentLoginPage() {
           body: JSON.stringify({ phone: form.phone.trim(), code: form.otp.trim() }),
         });
         if (!res.ok) {
-          const text = await res.text();
-          throw new Error(text || 'OTP verification failed');
+          const data = await res.json().catch(() => null);
+          const message =
+            (data as any)?.error?.message ||
+            (data as any)?.message ||
+            'OTP verification failed';
+          throw new Error(message);
         }
       } else {
         if (!form.email.trim() || !form.password.trim()) {
@@ -67,13 +88,29 @@ export default function ParentLoginPage() {
           body: JSON.stringify({ email: form.email.trim(), password: form.password }),
         });
         if (!res.ok) {
-          const text = await res.text();
-          throw new Error(text || 'Login failed');
+          const data = await res.json().catch(() => null);
+          const message =
+            (data as any)?.error?.message ||
+            (data as any)?.message ||
+            'Login failed';
+          throw new Error(message);
         }
       }
       router.replace('/parent/dashboard');
     } catch (err) {
-      setError((err as Error).message || 'Invalid credentials');
+      const message = (err as Error).message || 'Invalid credentials';
+      const lower = message.toLowerCase();
+      if (lower.includes('suspend') || lower.includes('inactive')) {
+        window.dispatchEvent(
+          new CustomEvent('account-suspended', {
+            detail: {
+              title: 'Account Suspended',
+              message: 'Your access has been suspended. Please contact support.',
+            },
+          }),
+        );
+      }
+      setError(message);
     } finally {
       setLoading(false);
     }
@@ -81,6 +118,7 @@ export default function ParentLoginPage() {
 
   return (
     <main className="min-h-screen grid place-items-center bg-sand px-4">
+      {loading ? <FullPageLoader label="Signing in..." /> : null}
       <div className="w-full max-w-md rounded-2xl border border-slate/10 bg-white p-6 shadow-sm sm:p-8">
         <div className="text-center">
           <h1 className="text-2xl font-semibold text-ink">Parent Login</h1>

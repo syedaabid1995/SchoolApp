@@ -4,12 +4,17 @@ import { upsertSubscription, getSubscription } from '../services/subscription.se
 import { resolveSchoolId } from '../utils/tenant';
 
 const upsertSchema = z.object({
-  planName: z.string().min(1),
+  planId: z.string().uuid().optional(),
+  planName: z.string().min(1).optional(),
   status: z.string().min(1),
   startsAt: z.coerce.date(),
   endsAt: z.coerce.date().optional().nullable(),
-  studentLimit: z.number().int().min(1),
-  teacherLimit: z.number().int().min(1),
+  billingCycle: z.enum(['MONTHLY', 'ANNUAL']).optional(),
+  discountPercent: z.number().int().min(0).max(100).optional(),
+  graceDays: z.number().int().min(0).optional(),
+  paidAt: z.coerce.date().optional().nullable(),
+  studentLimit: z.number().int().min(1).optional(),
+  teacherLimit: z.number().int().min(1).optional(),
   schoolId: z.string().uuid().optional(),
 });
 
@@ -20,9 +25,14 @@ export const upsertSubscriptionApi = async (req: Request, res: Response) => {
   const subscription = await upsertSubscription({
     schoolId,
     planName: payload.planName,
+    planId: payload.planId,
     status: payload.status,
     startsAt: payload.startsAt,
     endsAt: payload.endsAt ?? null,
+    billingCycle: payload.billingCycle,
+    discountPercent: payload.discountPercent,
+    graceDays: payload.graceDays,
+    paidAt: payload.paidAt ?? null,
     studentLimit: payload.studentLimit,
     teacherLimit: payload.teacherLimit,
   });

@@ -56,7 +56,13 @@ export const updateTicketApi = async (req: Request, res: Response) => {
 };
 
 export const listTicketsApi = async (req: Request, res: Response) => {
-  const schoolId = resolveSchoolId(req, req.query.schoolId as string | undefined);
+  const requestedSchoolId = req.query.schoolId as string | undefined;
+  let schoolId: string | undefined;
+  if (requestedSchoolId) {
+    schoolId = resolveSchoolId(req, requestedSchoolId);
+  } else if (req.auth?.role !== 'SUPER_ADMIN') {
+    schoolId = resolveSchoolId(req, req.auth?.schoolId);
+  }
   const tickets = await listTickets(schoolId);
   res.status(200).json(tickets);
 };

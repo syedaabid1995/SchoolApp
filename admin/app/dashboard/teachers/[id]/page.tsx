@@ -142,206 +142,313 @@ export default function TeacherDetailPage() {
   const prevStep = () => setStep((prev) => (prev > 1 ? ((prev - 1) as Step) : prev));
 
   return (
-    <div className="space-y-6">
-      <header className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h1 className="text-2xl font-semibold text-ink">Teacher Details</h1>
-          <p className="text-sm text-slate">View and edit teacher profile.</p>
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-purple-50/30 to-pink-50/40">
+      {/* Hero Section */}
+      <div className="relative overflow-hidden bg-gradient-to-r from-purple-600 via-pink-600 to-rose-700 px-6 py-16 text-white">
+        <div className="absolute inset-0 bg-black/10"></div>
+        <div className="relative mx-auto max-w-6xl">
+          <div className="flex items-center justify-between">
+            <div>
+              <div className="mb-4 inline-flex items-center rounded-full bg-white/20 px-4 py-2 text-sm font-medium backdrop-blur-sm">
+                <svg className="mr-2 h-4 w-4" fill="currentColor" viewBox="0 0 20 20">
+                  <path d="M13 6a3 3 0 11-6 0 3 3 0 016 0zM18 8a2 2 0 11-4 0 2 2 0 014 0zM14 15a4 4 0 00-8 0v3h8v-3z" />
+                </svg>
+                Teacher Profile
+              </div>
+              <h1 className="mb-4 text-4xl font-bold tracking-tight sm:text-5xl">
+                {teacher ? `${teacher.firstName} ${teacher.lastName}` : 'Teacher Details'}
+              </h1>
+              <p className="max-w-2xl text-lg text-purple-100">
+                View and manage comprehensive teacher information, contact details, and banking information.
+              </p>
+            </div>
+            
+            <div className="hidden sm:flex gap-3">
+              {isEditing ? (
+                <>
+                  <button
+                    onClick={() => setIsEditing(false)}
+                    className="rounded-xl border border-white/30 px-6 py-3 font-semibold text-white backdrop-blur-sm transition-all hover:bg-white/10"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={() => updateMutation.mutate()}
+                    disabled={updateMutation.isPending}
+                    className="rounded-xl bg-white/20 px-6 py-3 font-semibold text-white backdrop-blur-sm transition-all hover:bg-white/30 hover:scale-105 disabled:opacity-50"
+                  >
+                    {updateMutation.isPending ? 'Saving...' : 'Save Changes'}
+                  </button>
+                </>
+              ) : (
+                <button
+                  onClick={() => setIsEditing(true)}
+                  className="rounded-xl bg-white/20 px-6 py-3 font-semibold text-white backdrop-blur-sm transition-all hover:bg-white/30 hover:scale-105"
+                >
+                  <svg className="mr-2 inline h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                  </svg>
+                  Edit Profile
+                </button>
+              )}
+            </div>
+          </div>
         </div>
-        <div className="flex items-center gap-2">
-          {isEditing ? (
-            <>
-              <button
-                className="rounded-lg border border-slate/20 px-4 py-2 text-sm"
-                onClick={() => setIsEditing(false)}
-              >
-                Cancel
-              </button>
-              <button
-                className="rounded-lg bg-ink px-4 py-2 text-sm font-semibold text-white"
-                onClick={() => updateMutation.mutate()}
-              >
-                Save changes
-              </button>
-            </>
-          ) : (
-            <button className="rounded-lg border border-slate/20 px-4 py-2 text-sm" onClick={() => setIsEditing(true)}>
-              Edit
-            </button>
+        
+        {/* Animated background elements */}
+        <div className="absolute -top-10 -left-10 h-40 w-40 rounded-full bg-white/10 animate-pulse"></div>
+        <div className="absolute -bottom-10 -right-10 h-32 w-32 rounded-full bg-white/10 animate-bounce"></div>
+        <div className="absolute top-1/2 left-1/3 h-6 w-6 rounded-full bg-white/20 animate-ping"></div>
+      </div>
+
+      <div className="mx-auto max-w-4xl px-6 py-12">
+        {/* Enhanced Stepper */}
+        <div className="mb-8 rounded-2xl bg-white p-6 shadow-lg ring-1 ring-gray-200">
+          <div className="flex items-center justify-between overflow-x-auto pb-2">
+            {steps.map((item, index) => {
+              const isActive = step === item.id;
+              const stepIcons = {
+                1: <svg className="h-4 w-4" fill="currentColor" viewBox="0 0 20 20"><path d="M10 9a3 3 0 100-6 3 3 0 000 6zm-7 9a7 7 0 1114 0H3z" /></svg>,
+                2: <svg className="h-4 w-4" fill="currentColor" viewBox="0 0 20 20"><path d="M3 4a1 1 0 011-1h12a1 1 0 011 1v2a1 1 0 01-1 1H4a1 1 0 01-1-1V4zM3 10a1 1 0 011-1h6a1 1 0 011 1v6a1 1 0 01-1 1H4a1 1 0 01-1-1v-6zM14 9a1 1 0 00-1 1v6a1 1 0 001 1h2a1 1 0 001-1v-6a1 1 0 00-1-1h-2z" /></svg>,
+                3: <svg className="h-4 w-4" fill="currentColor" viewBox="0 0 20 20"><path d="M4 4a2 2 0 00-2 2v1h16V6a2 2 0 00-2-2H4zM18 9H2v5a2 2 0 002 2h12a2 2 0 002-2V9zM4 13a1 1 0 011-1h1a1 1 0 110 2H5a1 1 0 01-1-1zm5-1a1 1 0 100 2h1a1 1 0 100-2H9z" /></svg>
+              };
+              
+              return (
+                <div key={item.id} className="flex items-center">
+                  <div className="flex flex-col items-center">
+                    <button
+                      onClick={() => setStep(item.id)}
+                      className={`flex h-10 w-10 items-center justify-center rounded-full border-2 transition-all ${
+                        isActive 
+                          ? 'border-purple-500 bg-purple-500 text-white' 
+                          : 'border-gray-300 bg-white text-gray-400 hover:border-purple-300 hover:text-purple-500'
+                      }`}
+                    >
+                      {stepIcons[item.id as keyof typeof stepIcons] || item.id}
+                    </button>
+                    <span className={`mt-2 text-xs font-medium ${
+                      isActive ? 'text-purple-600' : 'text-gray-500'
+                    }`}>
+                      {item.title}
+                    </span>
+                  </div>
+                  {index < steps.length - 1 && (
+                    <div className="mx-4 h-0.5 w-12 bg-gray-300" />
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* Content Sections */}
+        <div className="rounded-2xl bg-white p-8 shadow-lg ring-1 ring-gray-200">
+          {step === 1 && (
+            <div>
+              <div className="mb-6">
+                <h2 className="text-2xl font-bold text-gray-900">Profile Information</h2>
+                <p className="mt-2 text-sm text-gray-600">Basic teacher profile details and identification information.</p>
+              </div>
+              <div className="grid gap-6 md:grid-cols-2">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Email Address</label>
+                  <input
+                    value={form.email}
+                    onChange={(e) => setForm({ ...form, email: e.target.value })}
+                    placeholder="Enter email address"
+                    className="w-full rounded-xl border border-gray-300 px-4 py-3 text-sm focus:border-purple-500 focus:outline-none focus:ring-2 focus:ring-purple-200 transition-colors"
+                    disabled={!isEditing}
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Employee Number</label>
+                  <input
+                    value={form.employeeNo}
+                    onChange={(e) => setForm({ ...form, employeeNo: e.target.value })}
+                    placeholder="Enter employee number"
+                    className="w-full rounded-xl border border-gray-300 px-4 py-3 text-sm focus:border-purple-500 focus:outline-none focus:ring-2 focus:ring-purple-200 transition-colors"
+                    disabled={!isEditing}
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">First Name</label>
+                  <input
+                    value={form.firstName}
+                    onChange={(e) => setForm({ ...form, firstName: e.target.value })}
+                    placeholder="Enter first name"
+                    className="w-full rounded-xl border border-gray-300 px-4 py-3 text-sm focus:border-purple-500 focus:outline-none focus:ring-2 focus:ring-purple-200 transition-colors"
+                    disabled={!isEditing}
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Last Name</label>
+                  <input
+                    value={form.lastName}
+                    onChange={(e) => setForm({ ...form, lastName: e.target.value })}
+                    placeholder="Enter last name"
+                    className="w-full rounded-xl border border-gray-300 px-4 py-3 text-sm focus:border-purple-500 focus:outline-none focus:ring-2 focus:ring-purple-200 transition-colors"
+                    disabled={!isEditing}
+                  />
+                </div>
+              </div>
+            </div>
           )}
-        </div>
-      </header>
 
-      <section className="rounded-2xl border border-slate/10 bg-white p-6">
-        <div className="flex flex-wrap items-center gap-2">
-          {steps.map((item) => (
+          {step === 2 && (
+            <div>
+              <div className="mb-6">
+                <h2 className="text-2xl font-bold text-gray-900">Contact Information</h2>
+                <p className="mt-2 text-sm text-gray-600">Phone number and address details for communication.</p>
+              </div>
+              <div className="grid gap-6 md:grid-cols-2">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Phone Number</label>
+                  <input
+                    value={form.phone}
+                    onChange={(e) => setForm({ ...form, phone: e.target.value })}
+                    placeholder="Enter phone number"
+                    className="w-full rounded-xl border border-gray-300 px-4 py-3 text-sm focus:border-purple-500 focus:outline-none focus:ring-2 focus:ring-purple-200 transition-colors"
+                    disabled={!isEditing}
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Address</label>
+                  <input
+                    value={form.address}
+                    onChange={(e) => setForm({ ...form, address: e.target.value })}
+                    placeholder="Enter complete address"
+                    className="w-full rounded-xl border border-gray-300 px-4 py-3 text-sm focus:border-purple-500 focus:outline-none focus:ring-2 focus:ring-purple-200 transition-colors"
+                    disabled={!isEditing}
+                  />
+                </div>
+              </div>
+            </div>
+          )}
+
+          {step === 3 && (
+            <div>
+              <div className="mb-6">
+                <h2 className="text-2xl font-bold text-gray-900">Banking Details</h2>
+                <p className="mt-2 text-sm text-gray-600">Bank account information for salary and payment processing.</p>
+              </div>
+              <div className="grid gap-6 md:grid-cols-2">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Account Holder Name</label>
+                  <input
+                    value={form.accountHolderName}
+                    onChange={(e) => setForm({ ...form, accountHolderName: e.target.value })}
+                    placeholder="Enter account holder name"
+                    className="w-full rounded-xl border border-gray-300 px-4 py-3 text-sm focus:border-purple-500 focus:outline-none focus:ring-2 focus:ring-purple-200 transition-colors"
+                    disabled={!isEditing}
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Account Number</label>
+                  <input
+                    value={form.accountNumber}
+                    onChange={(e) => setForm({ ...form, accountNumber: e.target.value })}
+                    placeholder="Enter account number"
+                    className="w-full rounded-xl border border-gray-300 px-4 py-3 text-sm focus:border-purple-500 focus:outline-none focus:ring-2 focus:ring-purple-200 transition-colors"
+                    disabled={!isEditing}
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">IFSC Code</label>
+                  <input
+                    value={form.ifscCode}
+                    onChange={(e) => setForm({ ...form, ifscCode: e.target.value.toUpperCase() })}
+                    placeholder="Enter IFSC code"
+                    className="w-full rounded-xl border border-gray-300 px-4 py-3 text-sm focus:border-purple-500 focus:outline-none focus:ring-2 focus:ring-purple-200 transition-colors"
+                    disabled={!isEditing}
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Account Type</label>
+                  <input
+                    value={form.accountType}
+                    onChange={(e) => setForm({ ...form, accountType: e.target.value })}
+                    placeholder="Enter account type (Savings/Current)"
+                    className="w-full rounded-xl border border-gray-300 px-4 py-3 text-sm focus:border-purple-500 focus:outline-none focus:ring-2 focus:ring-purple-200 transition-colors"
+                    disabled={!isEditing}
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Bank Name</label>
+                  <select
+                    value={form.bankName}
+                    onChange={(e) => setForm({ ...form, bankName: e.target.value })}
+                    className="w-full rounded-xl border border-gray-300 px-4 py-3 text-sm focus:border-purple-500 focus:outline-none focus:ring-2 focus:ring-purple-200 transition-colors"
+                    disabled={!isEditing}
+                  >
+                    <option value="">Select bank name</option>
+                    {indianBanks.map((bank) => (
+                      <option key={bank} value={bank}>
+                        {bank}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                {form.bankName === 'Others' && (
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">Custom Bank Name</label>
+                    <input
+                      value={form.customBankName}
+                      onChange={(e) => setForm({ ...form, customBankName: e.target.value })}
+                      placeholder="Enter bank name"
+                      className="w-full rounded-xl border border-gray-300 px-4 py-3 text-sm focus:border-purple-500 focus:outline-none focus:ring-2 focus:ring-purple-200 transition-colors"
+                      disabled={!isEditing}
+                    />
+                  </div>
+                )}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Branch Name</label>
+                  <input
+                    value={form.branchName}
+                    onChange={(e) => setForm({ ...form, branchName: e.target.value })}
+                    placeholder="Enter branch name"
+                    className="w-full rounded-xl border border-gray-300 px-4 py-3 text-sm focus:border-purple-500 focus:outline-none focus:ring-2 focus:ring-purple-200 transition-colors"
+                    disabled={!isEditing}
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">PAN Number</label>
+                  <input
+                    value={form.panNumber}
+                    onChange={(e) => setForm({ ...form, panNumber: e.target.value.toUpperCase() })}
+                    placeholder="Enter PAN number"
+                    className="w-full rounded-xl border border-gray-300 px-4 py-3 text-sm focus:border-purple-500 focus:outline-none focus:ring-2 focus:ring-purple-200 transition-colors"
+                    disabled={!isEditing}
+                  />
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Navigation */}
+          <div className="flex justify-between mt-8 pt-6 border-t border-gray-200">
             <button
-              key={item.id}
-              type="button"
-              onClick={() => setStep(item.id)}
-              className={`rounded-full px-3 py-1 text-xs font-semibold transition ${
-                step === item.id ? 'bg-ink text-white' : 'bg-sand text-slate hover:bg-sand/70'
-              }`}
+              onClick={prevStep}
+              disabled={step === 1}
+              className="rounded-xl border border-gray-300 px-6 py-3 font-medium text-gray-700 transition-colors hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              {item.id}. {item.title}
+              <svg className="mr-2 inline h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+              </svg>
+              Previous
             </button>
-          ))}
+            <button
+              onClick={nextStep}
+              disabled={step === 3}
+              className="rounded-xl bg-gradient-to-r from-purple-600 to-pink-600 px-8 py-3 font-semibold text-white shadow-lg transition-all hover:from-purple-700 hover:to-pink-700 hover:shadow-xl hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100"
+            >
+              Next
+              <svg className="ml-2 inline h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+              </svg>
+            </button>
+          </div>
         </div>
-      </section>
-
-      {step === 1 ? (
-        <section className="rounded-2xl border border-slate/10 bg-white p-6">
-          <h2 className="text-lg font-semibold">Profile</h2>
-          <div className="mt-4 grid gap-3 md:grid-cols-2">
-            <input
-              value={form.email}
-              onChange={(e) => setForm({ ...form, email: e.target.value })}
-              placeholder="Email"
-              className="rounded-lg border border-slate/20 px-3 py-2 text-sm"
-              disabled={!isEditing}
-            />
-            <input
-              value={form.employeeNo}
-              onChange={(e) => setForm({ ...form, employeeNo: e.target.value })}
-              placeholder="Employee no"
-              className="rounded-lg border border-slate/20 px-3 py-2 text-sm"
-              disabled={!isEditing}
-            />
-            <input
-              value={form.firstName}
-              onChange={(e) => setForm({ ...form, firstName: e.target.value })}
-              placeholder="First name"
-              className="rounded-lg border border-slate/20 px-3 py-2 text-sm"
-              disabled={!isEditing}
-            />
-            <input
-              value={form.lastName}
-              onChange={(e) => setForm({ ...form, lastName: e.target.value })}
-              placeholder="Last name"
-              className="rounded-lg border border-slate/20 px-3 py-2 text-sm"
-              disabled={!isEditing}
-            />
-          </div>
-          <div className="mt-4 flex justify-between">
-            <button className="rounded-lg border border-slate/20 px-4 py-2 text-sm" disabled>
-              Back
-            </button>
-            <button className="rounded-lg bg-ink px-4 py-2 text-sm font-semibold text-white" onClick={nextStep}>
-              Save &amp; Continue
-            </button>
-          </div>
-        </section>
-      ) : null}
-
-      {step === 2 ? (
-        <section className="rounded-2xl border border-slate/10 bg-white p-6">
-          <h2 className="text-lg font-semibold">Contact</h2>
-          <div className="mt-4 grid gap-3 md:grid-cols-2">
-            <input
-              value={form.phone}
-              onChange={(e) => setForm({ ...form, phone: e.target.value })}
-              placeholder="Phone"
-              className="rounded-lg border border-slate/20 px-3 py-2 text-sm"
-              disabled={!isEditing}
-            />
-            <input
-              value={form.address}
-              onChange={(e) => setForm({ ...form, address: e.target.value })}
-              placeholder="Address"
-              className="rounded-lg border border-slate/20 px-3 py-2 text-sm"
-              disabled={!isEditing}
-            />
-          </div>
-          <div className="mt-4 flex justify-between">
-            <button className="rounded-lg border border-slate/20 px-4 py-2 text-sm" onClick={prevStep}>
-              Back
-            </button>
-            <button className="rounded-lg bg-ink px-4 py-2 text-sm font-semibold text-white" onClick={nextStep}>
-              Save &amp; Continue
-            </button>
-          </div>
-        </section>
-      ) : null}
-
-      {step === 3 ? (
-        <section className="rounded-2xl border border-slate/10 bg-white p-6">
-          <h2 className="text-lg font-semibold">Banking Details</h2>
-          <div className="mt-4 grid gap-3 md:grid-cols-2">
-            <input
-              value={form.accountHolderName}
-              onChange={(e) => setForm({ ...form, accountHolderName: e.target.value })}
-              placeholder="Account holder name"
-              className="rounded-lg border border-slate/20 px-3 py-2 text-sm"
-              disabled={!isEditing}
-            />
-            <input
-              value={form.accountNumber}
-              onChange={(e) => setForm({ ...form, accountNumber: e.target.value })}
-              placeholder="Account number"
-              className="rounded-lg border border-slate/20 px-3 py-2 text-sm"
-              disabled={!isEditing}
-            />
-            <input
-              value={form.ifscCode}
-              onChange={(e) => setForm({ ...form, ifscCode: e.target.value.toUpperCase() })}
-              placeholder="IFSC code"
-              className="rounded-lg border border-slate/20 px-3 py-2 text-sm"
-              disabled={!isEditing}
-            />
-            <input
-              value={form.accountType}
-              onChange={(e) => setForm({ ...form, accountType: e.target.value })}
-              placeholder="Account type"
-              className="rounded-lg border border-slate/20 px-3 py-2 text-sm"
-              disabled={!isEditing}
-            />
-            <select
-              value={form.bankName}
-              onChange={(e) => setForm({ ...form, bankName: e.target.value })}
-              className="rounded-lg border border-slate/20 px-3 py-2 text-sm"
-              disabled={!isEditing}
-            >
-              <option value="">Bank name</option>
-              {indianBanks.map((bank) => (
-                <option key={bank} value={bank}>
-                  {bank}
-                </option>
-              ))}
-            </select>
-            {form.bankName === 'Others' ? (
-              <input
-                value={form.customBankName}
-                onChange={(e) => setForm({ ...form, customBankName: e.target.value })}
-                placeholder="Enter bank name"
-                className="rounded-lg border border-slate/20 px-3 py-2 text-sm"
-                disabled={!isEditing}
-              />
-            ) : null}
-            <input
-              value={form.branchName}
-              onChange={(e) => setForm({ ...form, branchName: e.target.value })}
-              placeholder="Branch name"
-              className="rounded-lg border border-slate/20 px-3 py-2 text-sm"
-              disabled={!isEditing}
-            />
-            <input
-              value={form.panNumber}
-              onChange={(e) => setForm({ ...form, panNumber: e.target.value.toUpperCase() })}
-              placeholder="PAN number"
-              className="rounded-lg border border-slate/20 px-3 py-2 text-sm"
-              disabled={!isEditing}
-            />
-          </div>
-          <div className="mt-4 flex justify-between">
-            <button className="rounded-lg border border-slate/20 px-4 py-2 text-sm" onClick={prevStep}>
-              Back
-            </button>
-            <button className="rounded-lg bg-ink px-4 py-2 text-sm font-semibold text-white" onClick={nextStep}>
-              Save &amp; Continue
-            </button>
-          </div>
-        </section>
-      ) : null}
+      </div>
     </div>
   );
 }

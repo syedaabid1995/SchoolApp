@@ -59,14 +59,13 @@ export type TransferRequest = {
 };
 
 export const listStudents = async (params?: { status?: string; schoolId?: string }) => {
-  const sanitized =
-    params && (params as any).queryKey ? undefined : params;
+  const sanitized = params && (params as any).queryKey ? undefined : params;
   const { data } = await api.get<Student[]>('/students/students', { params: sanitized });
   return data;
 };
 
-export const getStudent = async (id: string) => {
-  const { data } = await api.get<Student>(`/students/students/${id}`);
+export const getStudent = async (id: string, params?: { schoolId?: string }) => {
+  const { data } = await api.get<Student>(`/students/students/${id}`, { params });
   return data;
 };
 
@@ -135,8 +134,9 @@ export const updateStudent = async (
     classId: string | null;
     sectionId: string | null;
   }>,
+  params?: { schoolId?: string },
 ) => {
-  const { data } = await api.patch(`/students/students/${id}`, payload);
+  const { data } = await api.patch(`/students/students/${id}`, payload, { params });
   return data;
 };
 
