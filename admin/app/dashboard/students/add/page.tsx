@@ -7,7 +7,7 @@ import { useRouter } from 'next/navigation';
 import { useQuery } from '@tanstack/react-query';
 import { listAcademicYears, listClasses, listSections } from '../../../../services/academic.service';
 import { getSession } from '../../../../services/auth.service';
-import { createParent, createStudent, linkParent, lookupParentByPhone, deleteStudent } from '../../../../services/student.service';
+import { createParent, createStudent, linkParent, lookupParentByPhone, deleteStudent, uploadStudentPhoto, uploadStudentDocument, resolveUploadUrl, addStudentPhoto } from '../../../../services/student.service';
 import { useNotify } from '../../../../components/NotificationProvider';
 
 type Step = 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8;
@@ -41,6 +41,8 @@ export default function StudentOnboardingPage() {
     bloodGroup: '',
     photo: '',
   });
+  const [photoPreview, setPhotoPreview] = useState<string | null>(null);
+  const [additionalPhotos, setAdditionalPhotos] = useState<string[]>([]);
   const [parent, setParent] = useState({
     fatherName: '',
     motherName: '',
@@ -225,9 +227,6 @@ export default function StudentOnboardingPage() {
   });
 
   const handleConfirmCreate = async () => {
-    const nameParts = student.fullName.trim().split(/\s+/);
-    const firstName = nameParts[0] ?? '';
-    const lastName = nameParts.slice(1).join(' ') || 'Student';
     let createdStudentId: string | null = null;
     try {
       setErrorMessage('');
@@ -235,14 +234,41 @@ export default function StudentOnboardingPage() {
       
       const createdStudent = await createMutation.mutateAsync({
         admissionNo: academic.admissionNo,
-        firstName,
-        lastName,
+        fullName: student.fullName,
         dob: student.dob || undefined,
+        gender: student.gender || undefined,
+        bloodGroup: student.bloodGroup || undefined,
+        photoUrl: student.photo || undefined,
+        fatherName: parent.fatherName || undefined,
+        motherName: parent.motherName || undefined,
+        guardianName: parent.guardianName || undefined,
+        guardianRelationship: parent.relationship || undefined,
+        parentPhone: parent.phone || undefined,
+        parentEmail: parent.email || undefined,
+        addressLine1: address.line1 || undefined,
+        addressLine2: address.line2 || undefined,
+        city: address.city || undefined,
+        state: address.state || undefined,
+        pincode: address.pincode || undefined,
+        emergencyContact: address.emergency || undefined,
+        medicalConditions: medical.conditions || undefined,
+        allergies: medical.allergies || undefined,
+        doctorContact: medical.doctor || undefined,
+        docBirthCert: documents.birthCert || undefined,
+        docTransferCert: documents.transferCert || undefined,
+        docAadhaar: documents.aadhaar || undefined,
+        docReportCard: documents.reportCard || undefined,
         classId: academic.classId || undefined,
         sectionId: academic.sectionId || undefined,
         schoolId,
       });
       createdStudentId = createdStudent?.id ?? null;
+
+      if (createdStudentId && additionalPhotos.length) {
+        for (const url of additionalPhotos) {
+          await addStudentPhoto(createdStudentId, url);
+        }
+      }
 
       const guardianName = parent.guardianName || parent.fatherName || parent.motherName;
       if (selectedParentUserId) {
@@ -444,9 +470,54 @@ export default function StudentOnboardingPage() {
             <input
               type="file"
               accept="image/*"
-              onChange={(e) => setStudent({ ...student, photo: e.target.files?.[0]?.name ?? '' })}
+              onChange={async (e) => {
+                const file = e.target.files?.[0];
+                if (!file) return;
+                setPhotoPreview(URL.createObjectURL(file));
+                try {
+                  const uploaded = await uploadStudentPhoto(file);
+                  const resolved = resolveUploadUrl(uploaded.url) ?? uploaded.url;
+                  setStudent({ ...student, photo: uploaded.url });
+                  setPhotoPreview(resolved);
+                  notify.success('Photo uploaded', 'Student photo saved.');
+                } catch (error: any) {
+                  const message =
+                    error?.response?.data?.error?.message || error?.message || 'Failed to upload photo';
+                  notify.error('Upload failed', message);
+                }
+              }}
               className="rounded-lg border border-slate/20 px-3 py-2 text-sm"
             />
+            {photoPreview ? (
+              <div className="md:col-span-2">
+                <img src={photoPreview} alt="Student preview" className="h-24 w-24 rounded-lg object-cover" />
+              </div>
+            ) : null}
+            <div className="md:col-span-2">
+              <label className="block text-sm font-medium text-slate mb-1">Additional Photos (max 5)</label>
+              <div className="flex flex-wrap gap-2">
+                {additionalPhotos.map((photo) => (
+                  <img key={photo} src={photo} alt="Student" className="h-20 w-20 rounded-lg object-cover" />
+                ))}
+              </div>
+              <input
+                type="file"
+                accept="image/*"
+                multiple
+                onChange={async (e) => {
+                  const files = Array.from(e.target.files ?? []);
+                  if (!files.length) return;
+                  const remaining = Math.max(0, 5 - additionalPhotos.length);
+                  const toUpload = files.slice(0, remaining);
+                  for (const file of toUpload) {
+                    const uploaded = await uploadStudentPhoto(file);
+                    const resolved = resolveUploadUrl(uploaded.url) ?? uploaded.url;
+                    setAdditionalPhotos((prev) => [...prev, resolved]);
+                  }
+                }}
+                className="mt-2 w-full rounded-lg border border-slate/20 px-3 py-2 text-sm"
+              />
+            </div>
           </div>
           <div className="mt-4 flex justify-between">
             <button className="rounded-lg border border-slate/20 px-4 py-2 text-sm" onClick={prevStep}>
@@ -637,9 +708,25 @@ export default function StudentOnboardingPage() {
                 <span>{item.label}</span>
                 <input
                   type="file"
-                  onChange={(e) => setDocuments({ ...documents, [item.key]: e.target.files?.[0]?.name ?? '' })}
+                  accept=".pdf,.doc,.docx,image/*"
+                  onChange={async (e) => {
+                    const file = e.target.files?.[0];
+                    if (!file) return;
+                    try {
+                      const uploaded = await uploadStudentDocument(file);
+                      setDocuments({ ...documents, [item.key]: uploaded.url });
+                      notify.success('Document uploaded', `${item.label} saved.`);
+                    } catch (error: any) {
+                      const message =
+                        error?.response?.data?.error?.message || error?.message || 'Failed to upload document';
+                      notify.error('Upload failed', message);
+                    }
+                  }}
                   className="text-xs"
                 />
+                {documents[item.key as keyof typeof documents] ? (
+                  <span className="text-xs text-slate">Uploaded</span>
+                ) : null}
               </label>
             ))}
           </div>

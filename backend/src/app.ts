@@ -38,6 +38,7 @@ import { attendanceSummaryRouter } from './routes/attendanceSummary.routes';
 import { adminDashboardRouter } from './routes/adminDashboard.routes';
 import { userRouter } from './routes/user.routes';
 import { parentPortalRouter } from './routes/parentPortal.routes';
+import { uploadRouter } from './routes/upload.routes';
 import { rateLimit } from './middlewares/rate-limit.middleware';
 import { apiVersionMiddleware } from './middlewares/version.middleware';
 
@@ -47,7 +48,26 @@ export const createApp = () => {
   const openapiSpec = YAML.load(openapiPath);
 
   app.disable('x-powered-by');
-  app.use(helmet());
+  app.use(
+    helmet({
+      crossOriginResourcePolicy: { policy: 'cross-origin' },
+      contentSecurityPolicy: {
+        directives: {
+          defaultSrc: ["'self'"],
+          baseUri: ["'self'"],
+          fontSrc: ["'self'", 'https:', 'data:'],
+          formAction: ["'self'"],
+          frameAncestors: ["'self'"],
+          imgSrc: ["'self'", 'data:', 'http://127.0.0.1:3000', 'http://localhost:3000'],
+          objectSrc: ["'none'"],
+          scriptSrc: ["'self'"],
+          scriptSrcAttr: ["'none'"],
+          styleSrc: ["'self'", 'https:', "'unsafe-inline'"],
+          upgradeInsecureRequests: [],
+        },
+      },
+    }),
+  );
   app.use(cors({ origin: true, credentials: true }));
   app.use(express.json({ limit: '10mb' }));
   app.use(express.urlencoded({ extended: false, limit: '10mb' }));
@@ -91,6 +111,8 @@ export const createApp = () => {
   app.use('/api/v1/admin/dashboard', adminDashboardRouter);
   app.use('/api/v1/users', userRouter);
   app.use('/api/v1/parents/portal', parentPortalRouter);
+  app.use('/api/v1/uploads', uploadRouter);
+  app.use('/uploads', express.static(path.join(process.cwd(), 'uploads')));
 
   app.use(notFoundMiddleware);
   app.use(errorMiddleware);

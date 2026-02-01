@@ -281,7 +281,30 @@ model Student {
   admissionNo  String        @map("admission_no")
   firstName    String        @map("first_name")
   lastName     String        @map("last_name")
+  fullName     String        @map("full_name")
   dob          DateTime?     @map("dob")
+  gender       String?       @map("gender")
+  bloodGroup   String?       @map("blood_group")
+  photoUrl     String?       @map("photo_url")
+  fatherName   String?       @map("father_name")
+  motherName   String?       @map("mother_name")
+  guardianName String?       @map("guardian_name")
+  guardianRelationship String? @map("guardian_relationship")
+  parentPhone  String?       @map("parent_phone")
+  parentEmail  String?       @map("parent_email")
+  addressLine1 String?       @map("address_line1")
+  addressLine2 String?       @map("address_line2")
+  city         String?       @map("city")
+  state        String?       @map("state")
+  pincode      String?       @map("pincode")
+  emergencyContact String?   @map("emergency_contact")
+  medicalConditions String?  @map("medical_conditions")
+  allergies    String?       @map("allergies")
+  doctorContact String?      @map("doctor_contact")
+  docBirthCert String?       @map("doc_birth_cert")
+  docTransferCert String?    @map("doc_transfer_cert")
+  docAadhaar   String?       @map("doc_aadhaar")
+  docReportCard String?      @map("doc_report_card")
   status       StudentStatus @default(ENROLLED)
   createdAt    DateTime      @default(now()) @map("created_at")
   updatedAt    DateTime      @updatedAt @map("updated_at")
@@ -295,12 +318,25 @@ model Student {
   faceProfile  FaceProfile?
   attendanceRecords AttendanceRecord[]
   marks Mark[]
+  photos StudentPhoto[]
 
   @@index([schoolId])
   @@index([classId])
   @@index([sectionId])
   @@unique([schoolId, admissionNo])
   @@map("students")
+}
+
+model StudentPhoto {
+  id        String   @id @default(uuid()) @db.Uuid
+  studentId String   @map("student_id") @db.Uuid
+  url       String
+  createdAt DateTime @default(now()) @map("created_at")
+
+  student Student @relation(fields: [studentId], references: [id], onDelete: Cascade)
+
+  @@index([studentId])
+  @@map("student_photos")
 }
 
 model StudentTransferRequest {

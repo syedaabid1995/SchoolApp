@@ -1,16 +1,41 @@
 import { api } from '../lib/api';
+import { env } from '../lib/env';
 
 export type Student = {
   id: string;
   admissionNo: string;
   firstName: string;
   lastName: string;
+  fullName?: string;
   dob: string | null;
+  gender?: string | null;
+  bloodGroup?: string | null;
+  photoUrl?: string | null;
+  fatherName?: string | null;
+  motherName?: string | null;
+  guardianName?: string | null;
+  guardianRelationship?: string | null;
+  parentPhone?: string | null;
+  parentEmail?: string | null;
+  addressLine1?: string | null;
+  addressLine2?: string | null;
+  city?: string | null;
+  state?: string | null;
+  pincode?: string | null;
+  emergencyContact?: string | null;
+  medicalConditions?: string | null;
+  allergies?: string | null;
+  doctorContact?: string | null;
+  docBirthCert?: string | null;
+  docTransferCert?: string | null;
+  docAadhaar?: string | null;
+  docReportCard?: string | null;
   status: string;
   classId: string | null;
   sectionId: string | null;
   class?: { id: string; name: string } | null;
   section?: { id: string; name: string } | null;
+  photos?: Array<{ id: string; url: string; createdAt: string }>;
   parentLinks?: Array<{
     parentId: string;
     parent: { id: string; firstName: string; lastName: string; phone: string | null; email: string | null };
@@ -47,9 +72,30 @@ export const getStudent = async (id: string) => {
 
 export const createStudent = async (payload: {
   admissionNo: string;
-  firstName: string;
-  lastName: string;
+  fullName: string;
   dob?: string;
+  gender?: string;
+  bloodGroup?: string;
+  photoUrl?: string;
+  fatherName?: string;
+  motherName?: string;
+  guardianName?: string;
+  guardianRelationship?: string;
+  parentPhone?: string;
+  parentEmail?: string;
+  addressLine1?: string;
+  addressLine2?: string;
+  city?: string;
+  state?: string;
+  pincode?: string;
+  emergencyContact?: string;
+  medicalConditions?: string;
+  allergies?: string;
+  doctorContact?: string;
+  docBirthCert?: string;
+  docTransferCert?: string;
+  docAadhaar?: string;
+  docReportCard?: string;
   classId?: string | null;
   sectionId?: string | null;
   schoolId?: string;
@@ -62,9 +108,30 @@ export const updateStudent = async (
   id: string,
   payload: Partial<{
     admissionNo: string;
-    firstName: string;
-    lastName: string;
+    fullName: string;
     dob: string | null;
+    gender: string | null;
+    bloodGroup: string | null;
+    photoUrl: string | null;
+    fatherName: string | null;
+    motherName: string | null;
+    guardianName: string | null;
+    guardianRelationship: string | null;
+    parentPhone: string | null;
+    parentEmail: string | null;
+    addressLine1: string | null;
+    addressLine2: string | null;
+    city: string | null;
+    state: string | null;
+    pincode: string | null;
+    emergencyContact: string | null;
+    medicalConditions: string | null;
+    allergies: string | null;
+    doctorContact: string | null;
+    docBirthCert: string | null;
+    docTransferCert: string | null;
+    docAadhaar: string | null;
+    docReportCard: string | null;
     classId: string | null;
     sectionId: string | null;
   }>,
@@ -76,6 +143,51 @@ export const updateStudent = async (
 export const deleteStudent = async (id: string) => {
   const { data } = await api.delete(`/students/students/${id}`);
   return data;
+};
+
+export const uploadStudentPhoto = async (file: File) => {
+  const form = new FormData();
+  form.append('file', file);
+  const res = await fetch(`${env.apiBaseUrl}/uploads/photos`, {
+    method: 'POST',
+    body: form,
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err?.error?.message || 'Upload failed');
+  }
+  return (await res.json()) as { url: string; filename: string };
+};
+
+export const uploadStudentDocument = async (file: File) => {
+  const form = new FormData();
+  form.append('file', file);
+  const res = await fetch(`${env.apiBaseUrl}/uploads/documents`, {
+    method: 'POST',
+    body: form,
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err?.error?.message || 'Upload failed');
+  }
+  return (await res.json()) as { url: string; filename: string };
+};
+
+export const resolveUploadUrl = (value?: string | null) => {
+  if (!value) return null;
+  if (/^https?:\/\//i.test(value)) return value;
+  const base = env.apiBaseUrl.replace(/\/api\/v1\/?$/, '');
+  const url = value.startsWith('/') ? `${base}${value}` : `${base}/${value}`;
+  return url;
+};
+
+export const addStudentPhoto = async (studentId: string, url: string) => {
+  const { data } = await api.post(`/students/students/${studentId}/photos`, { url });
+  return data as { id: string; url: string; createdAt: string };
+};
+
+export const deleteStudentPhoto = async (studentId: string, photoId: string) => {
+  await api.delete(`/students/students/${studentId}/photos/${photoId}`);
 };
 
 export const linkParent = async (studentId: string, parentId: string) => {

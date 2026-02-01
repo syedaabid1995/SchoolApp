@@ -15,7 +15,15 @@ const forward = async (req: Request, method: string, path: string[]) => {
   if (contentType) headers['Content-Type'] = contentType;
   if (accessToken) headers.Authorization = `Bearer ${accessToken}`;
 
-  const body = method === 'GET' || method === 'DELETE' ? undefined : await req.text();
+  let body: BodyInit | undefined;
+  if (method !== 'GET' && method !== 'DELETE') {
+    if (contentType && contentType.includes('application/json')) {
+      body = await req.text();
+    } else {
+      const buffer = await req.arrayBuffer();
+      body = buffer;
+    }
+  }
 
   const res = await fetch(target, {
     method,

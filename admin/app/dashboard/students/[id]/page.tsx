@@ -1,10 +1,11 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useParams } from 'next/navigation';
 import Link from 'next/link';
-import { getStudent, updateStudent } from '../../../../services/student.service';
+import { getStudent, updateStudent, uploadStudentPhoto, uploadStudentDocument, resolveUploadUrl, addStudentPhoto, deleteStudentPhoto } from '../../../../services/student.service';
+import { City, State } from 'country-state-city';
 
 type Step = 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8;
 
@@ -24,40 +25,41 @@ export default function StudentDetailPage() {
   const queryClient = useQueryClient();
   const [step, setStep] = useState<Step>(1);
   const [isEditing, setIsEditing] = useState(false);
+  const [photoPreview, setPhotoPreview] = useState<string | null>(null);
   const [editData, setEditData] = useState({
     // Academic
     admissionNo: '',
     classId: '',
     sectionId: '',
     // Student
-    firstName: '',
-    lastName: '',
+    fullName: '',
     dob: '',
     gender: '',
     bloodGroup: '',
+    photoUrl: '',
     // Parent
     fatherName: '',
     motherName: '',
     guardianName: '',
-    relationship: '',
-    phone: '',
-    email: '',
+    guardianRelationship: '',
+    parentPhone: '',
+    parentEmail: '',
     // Address
-    line1: '',
-    line2: '',
+    addressLine1: '',
+    addressLine2: '',
     city: '',
     state: '',
     pincode: '',
-    emergency: '',
+    emergencyContact: '',
     // Medical
-    conditions: '',
+    medicalConditions: '',
     allergies: '',
-    doctor: '',
+    doctorContact: '',
     // Documents
-    birthCert: '',
-    transferCert: '',
-    aadhaar: '',
-    reportCard: '',
+    docBirthCert: '',
+    docTransferCert: '',
+    docAadhaar: '',
+    docReportCard: '',
   });
   const studentId = params.id as string;
 
@@ -72,45 +74,145 @@ export default function StudentDetailPage() {
         classId: data.classId || '',
         sectionId: data.sectionId || '',
         // Student
-        firstName: data.firstName,
-        lastName: data.lastName,
+        fullName: data.fullName ?? `${data.firstName} ${data.lastName}`.trim(),
         dob: data.dob || '',
-        gender: '',
-        bloodGroup: '',
+        gender: data.gender ?? '',
+        bloodGroup: data.bloodGroup ?? '',
+        photoUrl: data.photoUrl ?? '',
         // Parent
-        fatherName: data.parentLinks?.[0]?.parent?.firstName || '',
-        motherName: '',
-        guardianName: data.parentLinks?.[0]?.parent?.firstName || '',
-        relationship: '',
-        phone: data.parentLinks?.[0]?.parent?.phone || '',
-        email: data.parentLinks?.[0]?.parent?.email || '',
+        fatherName: data.fatherName ?? '',
+        motherName: data.motherName ?? '',
+        guardianName: data.guardianName ?? '',
+        guardianRelationship: data.guardianRelationship ?? '',
+        parentPhone: data.parentPhone ?? '',
+        parentEmail: data.parentEmail ?? '',
         // Address
-        line1: '',
-        line2: '',
-        city: '',
-        state: '',
-        pincode: '',
-        emergency: '',
+        addressLine1: data.addressLine1 ?? '',
+        addressLine2: data.addressLine2 ?? '',
+        city: data.city ?? '',
+        state: data.state ?? '',
+        pincode: data.pincode ?? '',
+        emergencyContact: data.emergencyContact ?? '',
         // Medical
-        conditions: '',
-        allergies: '',
-        doctor: '',
+        medicalConditions: data.medicalConditions ?? '',
+        allergies: data.allergies ?? '',
+        doctorContact: data.doctorContact ?? '',
         // Documents
-        birthCert: '',
-        transferCert: '',
-        aadhaar: '',
-        reportCard: '',
+        docBirthCert: data.docBirthCert ?? '',
+        docTransferCert: data.docTransferCert ?? '',
+        docAadhaar: data.docAadhaar ?? '',
+        docReportCard: data.docReportCard ?? '',
       });
     },
   });
 
   const updateMutation = useMutation({
-    mutationFn: () => updateStudent(studentId, editData),
+    mutationFn: (payload: Parameters<typeof updateStudent>[1]) => updateStudent(studentId, payload),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['student', studentId] });
       setIsEditing(false);
     },
   });
+
+  const saveAll = () =>
+    updateMutation.mutate({
+      admissionNo: editData.admissionNo,
+      fullName: editData.fullName,
+      dob: editData.dob || null,
+      gender: editData.gender || null,
+      bloodGroup: editData.bloodGroup || null,
+      photoUrl: editData.photoUrl || null,
+      fatherName: editData.fatherName || null,
+      motherName: editData.motherName || null,
+      guardianName: editData.guardianName || null,
+      guardianRelationship: editData.guardianRelationship || null,
+      parentPhone: editData.parentPhone || null,
+      parentEmail: editData.parentEmail || null,
+      addressLine1: editData.addressLine1 || null,
+      addressLine2: editData.addressLine2 || null,
+      city: editData.city || null,
+      state: editData.state || null,
+      pincode: editData.pincode || null,
+      emergencyContact: editData.emergencyContact || null,
+      medicalConditions: editData.medicalConditions || null,
+      allergies: editData.allergies || null,
+      doctorContact: editData.doctorContact || null,
+      docBirthCert: editData.docBirthCert || null,
+      docTransferCert: editData.docTransferCert || null,
+      docAadhaar: editData.docAadhaar || null,
+      docReportCard: editData.docReportCard || null,
+      classId: editData.classId || null,
+      sectionId: editData.sectionId || null,
+    });
+
+  const quickUpdateMutation = useMutation({
+    mutationFn: (payload: Parameters<typeof updateStudent>[1]) => updateStudent(studentId, payload),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['student', studentId] });
+    },
+  });
+
+  const addPhotoMutation = useMutation({
+    mutationFn: (url: string) => addStudentPhoto(studentId, url),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['student', studentId] });
+    },
+  });
+
+  const deletePhotoMutation = useMutation({
+    mutationFn: (photoId: string) => deleteStudentPhoto(studentId, photoId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['student', studentId] });
+    },
+  });
+
+  useEffect(() => {
+    if (!isEditing || !student) return;
+    setEditData({
+      admissionNo: student.admissionNo,
+      classId: student.classId || '',
+      sectionId: student.sectionId || '',
+      fullName: student.fullName ?? `${student.firstName} ${student.lastName}`.trim(),
+      dob: student.dob ? new Date(student.dob).toISOString().slice(0, 10) : '',
+      gender: student.gender ?? '',
+      bloodGroup: student.bloodGroup ?? '',
+      photoUrl: student.photoUrl ?? '',
+      fatherName: student.fatherName ?? '',
+      motherName: student.motherName ?? '',
+      guardianName: student.guardianName ?? '',
+      guardianRelationship: student.guardianRelationship ?? '',
+      parentPhone: student.parentPhone ?? '',
+      parentEmail: student.parentEmail ?? '',
+      addressLine1: student.addressLine1 ?? '',
+      addressLine2: student.addressLine2 ?? '',
+      city: student.city ?? '',
+      state: student.state ?? '',
+      pincode: student.pincode ?? '',
+      emergencyContact: student.emergencyContact ?? '',
+      medicalConditions: student.medicalConditions ?? '',
+      allergies: student.allergies ?? '',
+      doctorContact: student.doctorContact ?? '',
+      docBirthCert: student.docBirthCert ?? '',
+      docTransferCert: student.docTransferCert ?? '',
+      docAadhaar: student.docAadhaar ?? '',
+      docReportCard: student.docReportCard ?? '',
+    });
+  }, [isEditing, student]);
+
+  useEffect(() => {
+    if (!student?.photoUrl) return;
+    setPhotoPreview(resolveUploadUrl(student.photoUrl));
+  }, [student?.photoUrl]);
+
+  const stateOptions = useMemo(() => State.getStatesOfCountry('IN'), []);
+  const selectedStateCode = useMemo(() => {
+    const match = stateOptions.find((state) => state.name === editData.state);
+    return match?.isoCode ?? '';
+  }, [stateOptions, editData.state]);
+  const cityOptions = useMemo(() => {
+    if (!selectedStateCode) return [];
+    return City.getCitiesOfState('IN', selectedStateCode);
+  }, [selectedStateCode]);
 
   if (isLoading) {
     return (
@@ -134,14 +236,14 @@ export default function StudentDetailPage() {
     );
   }
 
-  const primaryParent = student.parentLinks?.[0]?.parent;
+  const displayName = student.fullName ?? `${student.firstName} ${student.lastName}`.trim();
 
   return (
     <div className="space-y-6">
       <header className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-semibold text-ink">
-            {student.firstName} {student.lastName}
+            {displayName}
           </h1>
           <p className="text-sm text-slate">Student details and information</p>
         </div>
@@ -155,7 +257,7 @@ export default function StudentDetailPage() {
                 Cancel
               </button>
               <button
-                onClick={() => updateMutation.mutate()}
+                onClick={saveAll}
                 disabled={updateMutation.isPending}
                 className="rounded-lg bg-ink px-4 py-2 text-sm font-semibold text-white hover:bg-ink/90 disabled:opacity-50"
               >
@@ -242,30 +344,16 @@ export default function StudentDetailPage() {
               <h3 className="text-lg font-semibold mb-4">Student Information</h3>
               <div className="grid gap-4 md:grid-cols-2">
                 <div>
-                  <label className="block text-sm font-medium text-slate mb-1">First Name</label>
+                  <label className="block text-sm font-medium text-slate mb-1">Full Name</label>
                   {isEditing ? (
                     <input
-                      value={editData.firstName}
-                      onChange={(e) => setEditData({ ...editData, firstName: e.target.value })}
+                      value={editData.fullName}
+                      onChange={(e) => setEditData({ ...editData, fullName: e.target.value })}
                       className="w-full rounded-lg border border-slate/20 px-3 py-2 text-sm"
                     />
                   ) : (
                     <div className="rounded-lg border border-slate/20 px-3 py-2 text-sm bg-slate/5">
-                      {student.firstName}
-                    </div>
-                  )}
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-slate mb-1">Last Name</label>
-                  {isEditing ? (
-                    <input
-                      value={editData.lastName}
-                      onChange={(e) => setEditData({ ...editData, lastName: e.target.value })}
-                      className="w-full rounded-lg border border-slate/20 px-3 py-2 text-sm"
-                    />
-                  ) : (
-                    <div className="rounded-lg border border-slate/20 px-3 py-2 text-sm bg-slate/5">
-                      {student.lastName}
+                      {displayName}
                     </div>
                   )}
                 </div>
@@ -293,12 +381,13 @@ export default function StudentDetailPage() {
                       className="w-full rounded-lg border border-slate/20 px-3 py-2 text-sm"
                     >
                       <option value="">Select Gender</option>
-                      <option value="Male">Male</option>
-                      <option value="Female">Female</option>
+                      <option value="MALE">Male</option>
+                      <option value="FEMALE">Female</option>
+                      <option value="OTHER">Other</option>
                     </select>
                   ) : (
                     <div className="rounded-lg border border-slate/20 px-3 py-2 text-sm bg-slate/5">
-                      {editData.gender || '—'}
+                      {editData.gender || student.gender || '—'}
                     </div>
                   )}
                 </div>
@@ -327,6 +416,90 @@ export default function StudentDetailPage() {
                   )}
                 </div>
                 <div>
+                  <label className="block text-sm font-medium text-slate mb-1">Photo</label>
+                  {isEditing ? (
+                    <div className="space-y-2">
+                      <input
+                        type="file"
+                        accept="image/*"
+                        onChange={async (e) => {
+                          const file = e.target.files?.[0];
+                          if (!file) return;
+                          setPhotoPreview(URL.createObjectURL(file));
+                          try {
+                            const uploaded = await uploadStudentPhoto(file);
+                            const resolved = resolveUploadUrl(uploaded.url) ?? uploaded.url;
+                            setEditData({ ...editData, photoUrl: uploaded.url });
+                            setPhotoPreview(resolved);
+                            quickUpdateMutation.mutate({ photoUrl: uploaded.url });
+                          } catch {
+                            // Keep preview but do not update url.
+                          }
+                        }}
+                        className="w-full rounded-lg border border-slate/20 px-3 py-2 text-sm"
+                      />
+                      {photoPreview ? (
+                        <img src={photoPreview} alt="Student preview" className="h-24 w-24 rounded-lg object-cover" />
+                      ) : null}
+                    </div>
+                  ) : (
+                    <div className="rounded-lg border border-slate/20 bg-slate/5 p-2">
+                      {photoPreview ? (
+                        <img
+                          src={photoPreview}
+                          alt="Student photo"
+                          className="h-24 w-24 rounded-lg object-cover"
+                        />
+                      ) : (
+                        <div className="text-sm text-slate">No photo</div>
+                      )}
+                    </div>
+                  )}
+                </div>
+                <div className="md:col-span-2">
+                  <label className="block text-sm font-medium text-slate mb-1">Additional Photos (max 5)</label>
+                  <div className="flex flex-wrap gap-2">
+                    {(student.photos ?? []).map((photo) => (
+                      <div key={photo.id} className="relative">
+                        <img
+                          src={resolveUploadUrl(photo.url) ?? ''}
+                          alt="Student"
+                          className="h-20 w-20 rounded-lg object-cover"
+                        />
+                        {isEditing ? (
+                          <button
+                            type="button"
+                            onClick={() => deletePhotoMutation.mutate(photo.id)}
+                            className="absolute -right-2 -top-2 flex h-5 w-5 items-center justify-center rounded-full bg-rose-600 text-[10px] font-semibold text-white shadow"
+                            aria-label="Remove photo"
+                          >
+                            ×
+                          </button>
+                        ) : null}
+                      </div>
+                    ))}
+                  </div>
+                  {isEditing ? (
+                    <input
+                      type="file"
+                      accept="image/*"
+                      multiple
+                      onChange={async (e) => {
+                        const files = Array.from(e.target.files ?? []);
+                        if (!files.length) return;
+                        const existing = student.photos?.length ?? 0;
+                        const remaining = Math.max(0, 5 - existing);
+                        const toUpload = files.slice(0, remaining);
+                        for (const file of toUpload) {
+                          const uploaded = await uploadStudentPhoto(file);
+                          await addPhotoMutation.mutateAsync(uploaded.url);
+                        }
+                      }}
+                      className="mt-2 w-full rounded-lg border border-slate/20 px-3 py-2 text-sm"
+                    />
+                  ) : null}
+                </div>
+                <div>
                   <label className="block text-sm font-medium text-slate mb-1">Created</label>
                   <div className="rounded-lg border border-slate/20 px-3 py-2 text-sm bg-slate/5">
                     {new Date(student.createdAt).toLocaleDateString()}
@@ -350,7 +523,7 @@ export default function StudentDetailPage() {
                     />
                   ) : (
                     <div className="rounded-lg border border-slate/20 px-3 py-2 text-sm bg-slate/5">
-                      {editData.fatherName || '—'}
+                      {student.fatherName ?? '—'}
                     </div>
                   )}
                 </div>
@@ -364,7 +537,7 @@ export default function StudentDetailPage() {
                     />
                   ) : (
                     <div className="rounded-lg border border-slate/20 px-3 py-2 text-sm bg-slate/5">
-                      {editData.motherName || '—'}
+                      {student.motherName ?? '—'}
                     </div>
                   )}
                 </div>
@@ -378,21 +551,27 @@ export default function StudentDetailPage() {
                     />
                   ) : (
                     <div className="rounded-lg border border-slate/20 px-3 py-2 text-sm bg-slate/5">
-                      {editData.guardianName || '—'}
+                      {student.guardianName ?? '—'}
                     </div>
                   )}
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-slate mb-1">Relationship</label>
                   {isEditing ? (
-                    <input
-                      value={editData.relationship}
-                      onChange={(e) => setEditData({ ...editData, relationship: e.target.value })}
+                    <select
+                      value={editData.guardianRelationship}
+                      onChange={(e) => setEditData({ ...editData, guardianRelationship: e.target.value })}
                       className="w-full rounded-lg border border-slate/20 px-3 py-2 text-sm"
-                    />
+                    >
+                      <option value="">Relationship</option>
+                      <option value="FATHER">Father</option>
+                      <option value="MOTHER">Mother</option>
+                      <option value="GUARDIAN">Guardian</option>
+                      <option value="OTHER">Other</option>
+                    </select>
                   ) : (
                     <div className="rounded-lg border border-slate/20 px-3 py-2 text-sm bg-slate/5">
-                      {editData.relationship || '—'}
+                      {student.guardianRelationship ?? '—'}
                     </div>
                   )}
                 </div>
@@ -400,13 +579,13 @@ export default function StudentDetailPage() {
                   <label className="block text-sm font-medium text-slate mb-1">Phone</label>
                   {isEditing ? (
                     <input
-                      value={editData.phone}
-                      onChange={(e) => setEditData({ ...editData, phone: e.target.value })}
+                      value={editData.parentPhone}
+                      onChange={(e) => setEditData({ ...editData, parentPhone: e.target.value })}
                       className="w-full rounded-lg border border-slate/20 px-3 py-2 text-sm"
                     />
                   ) : (
                     <div className="rounded-lg border border-slate/20 px-3 py-2 text-sm bg-slate/5">
-                      {editData.phone || '—'}
+                      {student.parentPhone ?? '—'}
                     </div>
                   )}
                 </div>
@@ -415,13 +594,13 @@ export default function StudentDetailPage() {
                   {isEditing ? (
                     <input
                       type="email"
-                      value={editData.email}
-                      onChange={(e) => setEditData({ ...editData, email: e.target.value })}
+                      value={editData.parentEmail}
+                      onChange={(e) => setEditData({ ...editData, parentEmail: e.target.value })}
                       className="w-full rounded-lg border border-slate/20 px-3 py-2 text-sm"
                     />
                   ) : (
                     <div className="rounded-lg border border-slate/20 px-3 py-2 text-sm bg-slate/5">
-                      {editData.email || '—'}
+                      {student.parentEmail ?? '—'}
                     </div>
                   )}
                 </div>
@@ -437,13 +616,13 @@ export default function StudentDetailPage() {
                   <label className="block text-sm font-medium text-slate mb-1">Address Line 1</label>
                   {isEditing ? (
                     <input
-                      value={editData.line1}
-                      onChange={(e) => setEditData({ ...editData, line1: e.target.value })}
+                      value={editData.addressLine1}
+                      onChange={(e) => setEditData({ ...editData, addressLine1: e.target.value })}
                       className="w-full rounded-lg border border-slate/20 px-3 py-2 text-sm"
                     />
                   ) : (
                     <div className="rounded-lg border border-slate/20 px-3 py-2 text-sm bg-slate/5">
-                      {editData.line1 || '—'}
+                      {student.addressLine1 ?? '—'}
                     </div>
                   )}
                 </div>
@@ -451,41 +630,62 @@ export default function StudentDetailPage() {
                   <label className="block text-sm font-medium text-slate mb-1">Address Line 2</label>
                   {isEditing ? (
                     <input
-                      value={editData.line2}
-                      onChange={(e) => setEditData({ ...editData, line2: e.target.value })}
+                      value={editData.addressLine2}
+                      onChange={(e) => setEditData({ ...editData, addressLine2: e.target.value })}
                       className="w-full rounded-lg border border-slate/20 px-3 py-2 text-sm"
                     />
                   ) : (
                     <div className="rounded-lg border border-slate/20 px-3 py-2 text-sm bg-slate/5">
-                      {editData.line2 || '—'}
+                      {student.addressLine2 ?? '—'}
                     </div>
                   )}
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-slate mb-1">City</label>
                   {isEditing ? (
-                    <input
+                    <select
                       value={editData.city}
                       onChange={(e) => setEditData({ ...editData, city: e.target.value })}
                       className="w-full rounded-lg border border-slate/20 px-3 py-2 text-sm"
-                    />
+                      disabled={!editData.state || cityOptions.length === 0}
+                    >
+                      <option value="">
+                        {!editData.state
+                          ? 'Select state first'
+                          : cityOptions.length
+                            ? 'Select city'
+                            : 'No cities available'}
+                      </option>
+                      {cityOptions.map((city) => (
+                        <option key={`${city.name}-${city.latitude}-${city.longitude}`} value={city.name}>
+                          {city.name}
+                        </option>
+                      ))}
+                    </select>
                   ) : (
                     <div className="rounded-lg border border-slate/20 px-3 py-2 text-sm bg-slate/5">
-                      {editData.city || '—'}
+                      {student.city ?? '—'}
                     </div>
                   )}
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-slate mb-1">State</label>
                   {isEditing ? (
-                    <input
+                    <select
                       value={editData.state}
-                      onChange={(e) => setEditData({ ...editData, state: e.target.value })}
+                      onChange={(e) => setEditData({ ...editData, state: e.target.value, city: '' })}
                       className="w-full rounded-lg border border-slate/20 px-3 py-2 text-sm"
-                    />
+                    >
+                      <option value="">Select state</option>
+                      {stateOptions.map((state) => (
+                        <option key={state.isoCode} value={state.name}>
+                          {state.name}
+                        </option>
+                      ))}
+                    </select>
                   ) : (
                     <div className="rounded-lg border border-slate/20 px-3 py-2 text-sm bg-slate/5">
-                      {editData.state || '—'}
+                      {student.state ?? '—'}
                     </div>
                   )}
                 </div>
@@ -499,7 +699,7 @@ export default function StudentDetailPage() {
                     />
                   ) : (
                     <div className="rounded-lg border border-slate/20 px-3 py-2 text-sm bg-slate/5">
-                      {editData.pincode || '—'}
+                      {student.pincode ?? '—'}
                     </div>
                   )}
                 </div>
@@ -507,13 +707,13 @@ export default function StudentDetailPage() {
                   <label className="block text-sm font-medium text-slate mb-1">Emergency Contact</label>
                   {isEditing ? (
                     <input
-                      value={editData.emergency}
-                      onChange={(e) => setEditData({ ...editData, emergency: e.target.value })}
+                      value={editData.emergencyContact}
+                      onChange={(e) => setEditData({ ...editData, emergencyContact: e.target.value })}
                       className="w-full rounded-lg border border-slate/20 px-3 py-2 text-sm"
                     />
                   ) : (
                     <div className="rounded-lg border border-slate/20 px-3 py-2 text-sm bg-slate/5">
-                      {editData.emergency || '—'}
+                      {student.emergencyContact ?? '—'}
                     </div>
                   )}
                 </div>
@@ -529,14 +729,14 @@ export default function StudentDetailPage() {
                   <label className="block text-sm font-medium text-slate mb-1">Medical Conditions</label>
                   {isEditing ? (
                     <textarea
-                      value={editData.conditions}
-                      onChange={(e) => setEditData({ ...editData, conditions: e.target.value })}
+                      value={editData.medicalConditions}
+                      onChange={(e) => setEditData({ ...editData, medicalConditions: e.target.value })}
                       className="w-full rounded-lg border border-slate/20 px-3 py-2 text-sm"
                       rows={3}
                     />
                   ) : (
                     <div className="rounded-lg border border-slate/20 px-3 py-2 text-sm bg-slate/5 min-h-[80px]">
-                      {editData.conditions || '—'}
+                      {student.medicalConditions ?? '—'}
                     </div>
                   )}
                 </div>
@@ -551,7 +751,7 @@ export default function StudentDetailPage() {
                     />
                   ) : (
                     <div className="rounded-lg border border-slate/20 px-3 py-2 text-sm bg-slate/5 min-h-[80px]">
-                      {editData.allergies || '—'}
+                      {student.allergies ?? '—'}
                     </div>
                   )}
                 </div>
@@ -559,13 +759,13 @@ export default function StudentDetailPage() {
                   <label className="block text-sm font-medium text-slate mb-1">Doctor Name</label>
                   {isEditing ? (
                     <input
-                      value={editData.doctor}
-                      onChange={(e) => setEditData({ ...editData, doctor: e.target.value })}
+                      value={editData.doctorContact}
+                      onChange={(e) => setEditData({ ...editData, doctorContact: e.target.value })}
                       className="w-full rounded-lg border border-slate/20 px-3 py-2 text-sm"
                     />
                   ) : (
                     <div className="rounded-lg border border-slate/20 px-3 py-2 text-sm bg-slate/5">
-                      {editData.doctor || '—'}
+                      {student.doctorContact ?? '—'}
                     </div>
                   )}
                 </div>
@@ -577,27 +777,49 @@ export default function StudentDetailPage() {
             <div>
               <h3 className="text-lg font-semibold mb-4">Documents</h3>
               <div className="grid gap-4 md:grid-cols-2">
-                {[
-                  { key: 'birthCert', label: 'Birth Certificate' },
-                  { key: 'transferCert', label: 'Transfer Certificate' },
-                  { key: 'aadhaar', label: 'Aadhaar Card' },
-                  { key: 'reportCard', label: 'Report Card' },
-                ].map((item) => (
-                  <div key={item.key} className="flex flex-col gap-2 rounded-lg border border-slate/20 px-3 py-2">
-                    <label className="text-sm font-medium text-slate">{item.label}</label>
-                    {isEditing ? (
-                      <input
-                        type="file"
-                        onChange={(e) => setEditData({ ...editData, [item.key]: e.target.files?.[0]?.name ?? '' })}
-                        className="text-xs"
-                      />
-                    ) : (
-                      <div className="text-sm bg-slate/5 px-2 py-1 rounded">
-                        {editData[item.key as keyof typeof editData] || 'No file uploaded'}
-                      </div>
-                    )}
-                  </div>
-                ))}
+                  {[
+                    { key: 'docBirthCert', label: 'Birth Certificate' },
+                    { key: 'docTransferCert', label: 'Transfer Certificate' },
+                    { key: 'docAadhaar', label: 'Aadhaar Card' },
+                    { key: 'docReportCard', label: 'Report Card' },
+                  ].map((item) => (
+                    <div key={item.key} className="flex flex-col gap-2 rounded-lg border border-slate/20 px-3 py-2">
+                      <label className="text-sm font-medium text-slate">{item.label}</label>
+                      {isEditing ? (
+                        <input
+                          type="file"
+                          accept=".pdf,.doc,.docx,image/*"
+                          onChange={async (e) => {
+                            const file = e.target.files?.[0];
+                            if (!file) return;
+                            try {
+                              const uploaded = await uploadStudentDocument(file);
+                              setEditData({ ...editData, [item.key]: uploaded.url });
+                              quickUpdateMutation.mutate({ [item.key]: uploaded.url } as any);
+                            } catch {
+                              // ignore upload error in UI
+                            }
+                          }}
+                          className="text-xs"
+                        />
+                      ) : (
+                        <div className="text-sm bg-slate/5 px-2 py-1 rounded">
+                          {(student as any)[item.key] ? (
+                            <a
+                              className="text-ink underline"
+                              href={resolveUploadUrl((student as any)[item.key]) ?? undefined}
+                              target="_blank"
+                              rel="noreferrer"
+                            >
+                              View document
+                            </a>
+                          ) : (
+                            'No file uploaded'
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  ))}
               </div>
             </div>
           )}
@@ -623,19 +845,17 @@ export default function StudentDetailPage() {
                 <div className="rounded-lg border border-slate/10 p-4">
                   <h4 className="font-medium mb-2">Student Details</h4>
                   <p className="text-sm text-slate">
-                    Name: {student.firstName} {student.lastName} | 
+                    Name: {displayName} | 
                     DOB: {student.dob ? new Date(student.dob).toLocaleDateString() : '—'}
                   </p>
                 </div>
-                {primaryParent && (
-                  <div className="rounded-lg border border-slate/10 p-4">
-                    <h4 className="font-medium mb-2">Parent Details</h4>
-                    <p className="text-sm text-slate">
-                      Name: {primaryParent.firstName} {primaryParent.lastName} | 
-                      Phone: {primaryParent.phone || '—'} | Email: {primaryParent.email || '—'}
-                    </p>
-                  </div>
-                )}
+                <div className="rounded-lg border border-slate/10 p-4">
+                  <h4 className="font-medium mb-2">Parent Details</h4>
+                  <p className="text-sm text-slate">
+                    Father: {student.fatherName ?? '—'} | Mother: {student.motherName ?? '—'} | 
+                    Guardian: {student.guardianName ?? '—'} | Phone: {student.parentPhone ?? '—'} | Email: {student.parentEmail ?? '—'}
+                  </p>
+                </div>
               </div>
             </div>
           )}

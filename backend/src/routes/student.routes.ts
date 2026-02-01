@@ -13,6 +13,8 @@ import {
   listIncomingTransferRequests,
   acceptTransferRequest,
   rejectTransferRequest,
+  addStudentPhoto,
+  deleteStudentPhoto,
 } from '../controllers/student.controller';
 import {
   createParent,
@@ -33,6 +35,8 @@ studentRouter.get('/students', listStudents);
 studentRouter.get('/students/:id', getStudent);
 studentRouter.patch('/students/:id', updateStudent);
 studentRouter.delete('/students/:id', deleteStudent);
+studentRouter.post('/students/:id/photos', addStudentPhoto);
+studentRouter.delete('/students/:id/photos/:photoId', deleteStudentPhoto);
 studentRouter.post('/students/:id/parents', linkParent);
 studentRouter.delete('/students/:id/parents/:parentId', unlinkParent);
 studentRouter.post('/students/:id/status', changeStudentStatus);
