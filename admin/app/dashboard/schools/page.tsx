@@ -25,6 +25,7 @@ export default function SchoolsPage() {
   });
   const [createdAdmin, setCreatedAdmin] = useState<{ email: string; tempPassword: string } | null>(null);
   const [formError, setFormError] = useState('');
+  const [expiryDates, setExpiryDates] = useState<Record<string, string>>({});
 
   const { data, isLoading } = useQuery({
     queryKey: ['schools', query],
@@ -99,9 +100,45 @@ export default function SchoolsPage() {
     },
   });
 
+  const testExpiryMutation = useMutation({
+    mutationFn: async (payload: { schoolId: string; endsAt: string }) => {
+      const school = rows.find((item) => item.id === payload.schoolId);
+      if (!school) throw new Error('School not found');
+      const plan = plans?.find((item) => item.name === school.subscriptionPlan);
+      if (!plan) throw new Error('Plan not found for this school');
+      const endsAt = new Date(`${payload.endsAt}T23:59:59`);
+      if (Number.isNaN(endsAt.getTime())) throw new Error('Invalid expiry date');
+      return upsertSubscription({
+        schoolId: payload.schoolId,
+        planId: plan.id,
+        planName: plan.name,
+        status: 'ACTIVE',
+        startsAt: new Date().toISOString(),
+        endsAt: endsAt.toISOString(),
+        paidAt: new Date().toISOString(),
+        studentLimit: plan.studentLimit,
+        teacherLimit: plan.teacherLimit,
+      });
+    },
+    onSuccess: (_, variables) => {
+      notify.success('Expiry date updated', 'Test subscription expiry date saved');
+      setExpiryDates((prev) => ({ ...prev, [variables.schoolId]: '' }));
+      queryClient.invalidateQueries({ queryKey: ['schools'] });
+      queryClient.invalidateQueries({ queryKey: ['subscription'] });
+    },
+    onError: (error: any) => {
+      const message = error?.response?.data?.error?.message || error?.message || 'Failed to set expiry date';
+      notify.error('Expiry update failed', message);
+    },
+  });
+
   const rows = useMemo(() => data?.items ?? [], [data]);
   const isBusy =
-    isLoading || createMutation.isPending || actionMutation.isPending || planUpdateMutation.isPending;
+    isLoading ||
+    createMutation.isPending ||
+    actionMutation.isPending ||
+    planUpdateMutation.isPending ||
+    testExpiryMutation.isPending;
 
   return (
     <div className="space-y-6">
@@ -215,19 +252,20 @@ export default function SchoolsPage() {
                 <th>Status</th>
                 <th>Admin Email</th>
                 <th>Plan</th>
+                <th>Test Expiry</th>
                 <th className="text-right">Actions</th>
               </tr>
             </thead>
             <tbody>
               {isLoading ? (
                 <tr>
-                  <td colSpan={5} className="py-6 text-center text-slate">
+                  <td colSpan={7} className="py-6 text-center text-slate">
                     Loading...
                   </td>
                 </tr>
               ) : rows.length === 0 ? (
                 <tr>
-                  <td colSpan={5} className="py-6 text-center text-slate">
+                  <td colSpan={7} className="py-6 text-center text-slate">
                     No schools found.
                   </td>
                 </tr>
@@ -273,6 +311,30 @@ export default function SchoolsPage() {
                           </option>
                         ))}
                       </select>
+                    </td>
+                    <td>
+                      <div className="flex items-center gap-2">
+                        <input
+                          type="date"
+                          value={expiryDates[school.id] ?? ''}
+                          onChange={(e) =>
+                            setExpiryDates((prev) => ({ ...prev, [school.id]: e.target.value }))
+                          }
+                          className="rounded-lg border border-slate/20 px-2 py-1 text-xs"
+                        />
+                        <button
+                          className="rounded-lg border border-slate/20 px-2 py-1 text-xs disabled:opacity-50"
+                          disabled={!expiryDates[school.id]}
+                          onClick={() =>
+                            testExpiryMutation.mutate({
+                              schoolId: school.id,
+                              endsAt: expiryDates[school.id],
+                            })
+                          }
+                        >
+                          Set
+                        </button>
+                      </div>
                     </td>
                     <td className="text-right">
                       <div className="flex justify-end gap-2">

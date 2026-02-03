@@ -33,7 +33,15 @@ export const authMiddleware = async (req: Request, _res: Response, next: NextFun
     return;
   }
 
-  let decoded: JwtPayload | { sub?: string; schoolId?: string | null; typ?: string; role?: string | null };
+  let decoded:
+    | JwtPayload
+    | {
+        sub?: string;
+        schoolId?: string | null;
+        typ?: string;
+        role?: string | null;
+        subscriptionRestricted?: boolean;
+      };
   try {
     decoded = jwt.verify(token, env.JWT_SECRET) as JwtPayload | {
       sub?: string;
@@ -56,11 +64,25 @@ export const authMiddleware = async (req: Request, _res: Response, next: NextFun
   if (schoolId) {
     const school = await prisma.school.findUnique({
       where: { id: schoolId },
-      select: { status: true },
+      select: { status: true, statusReason: true },
     });
-    if (!school || school.status !== 'ACTIVE') {
+    if (!school) {
       next(new HttpError(403, 'Account suspended'));
       return;
+    }
+    if (school.status !== 'ACTIVE') {
+      const reason = (school.statusReason ?? '').toLowerCase();
+      const isPaymentRestricted =
+        reason.includes('payment') || reason.includes('subscription') || reason.includes('overdue');
+      const isSubscriptionPath = req.originalUrl.startsWith('/api/v1/subscriptions');
+      if (isPaymentRestricted && !isSubscriptionPath) {
+        next(new HttpError(403, 'Payment overdue - access limited to plans page'));
+        return;
+      }
+      if (!isPaymentRestricted) {
+        next(new HttpError(403, 'Account suspended'));
+        return;
+      }
     }
   }
 

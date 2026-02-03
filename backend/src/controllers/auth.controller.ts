@@ -29,20 +29,29 @@ export type AuthTokenPayload = {
   schoolId: string | null;
   role: string | null;
   email?: string | null;
+  subscriptionRestricted?: boolean;
   typ: 'access' | 'refresh';
 };
 
 const signToken = (payload: AuthTokenPayload, expiresIn: string) =>
   jwt.sign(payload, env.JWT_SECRET, { expiresIn });
 
-const ensureSchoolActive = async (schoolId: string) => {
+const getSchoolAccessState = async (schoolId: string): Promise<'ACTIVE' | 'PAYMENT_RESTRICTED' | 'SUSPENDED'> => {
   const school = await prisma.school.findUnique({
     where: { id: schoolId },
-    select: { id: true, status: true },
+    select: { id: true, status: true, statusReason: true },
   });
-  if (!school || school.status !== 'ACTIVE') {
+  if (!school) {
     throw new HttpError(403, 'School is suspended');
   }
+  if (school.status === 'ACTIVE') return 'ACTIVE';
+
+  const reason = (school.statusReason ?? '').toLowerCase();
+  if (reason.includes('payment') || reason.includes('subscription') || reason.includes('overdue')) {
+    return 'PAYMENT_RESTRICTED';
+  }
+
+  return 'SUSPENDED';
 };
 
 const ensureTeacherActive = async (userId: string, schoolId: string | null) => {
@@ -92,9 +101,8 @@ export const login = async (req: Request, res: Response) => {
     throw new HttpError(403, 'User is not active');
   }
 
-  if (user.schoolId) {
-    await ensureSchoolActive(user.schoolId);
-  }
+  const schoolAccessState = user.schoolId ? await getSchoolAccessState(user.schoolId) : 'ACTIVE';
+  if (schoolAccessState === 'SUSPENDED') throw new HttpError(403, 'School is suspended');
 
   const isValid = await verifyPassword(password, user.passwordHash);
   if (!isValid) {
@@ -111,6 +119,7 @@ export const login = async (req: Request, res: Response) => {
     schoolId: user.schoolId ?? null,
     role: roleRow?.role.name ?? null,
     email: user.email,
+    subscriptionRestricted: schoolAccessState === 'PAYMENT_RESTRICTED',
   };
 
   if (payloadBase.role === 'TEACHER') {
@@ -129,6 +138,7 @@ export const login = async (req: Request, res: Response) => {
     tokenType: 'Bearer',
     expiresIn: ACCESS_TOKEN_TTL,
     mustChangePassword: user.mustChangePassword,
+    subscriptionRestricted: payloadBase.subscriptionRestricted,
   });
 };
 
@@ -158,9 +168,8 @@ export const refreshToken = async (req: Request, res: Response) => {
     throw new HttpError(401, 'Invalid refresh token');
   }
 
-  if (user.schoolId) {
-    await ensureSchoolActive(user.schoolId);
-  }
+  const schoolAccessState = user.schoolId ? await getSchoolAccessState(user.schoolId) : 'ACTIVE';
+  if (schoolAccessState === 'SUSPENDED') throw new HttpError(403, 'School is suspended');
 
   const roleRow = await prisma.userRole.findFirst({
     where: { userId: user.id },
@@ -181,6 +190,7 @@ export const refreshToken = async (req: Request, res: Response) => {
       schoolId: user.schoolId ?? null,
       role: roleName,
       email: user.email,
+      subscriptionRestricted: schoolAccessState === 'PAYMENT_RESTRICTED',
       typ: 'access',
     },
     ACCESS_TOKEN_TTL,

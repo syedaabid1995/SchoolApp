@@ -1,10 +1,11 @@
 'use client';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Sidebar } from './Sidebar';
 import { Header } from './Header';
 import { useQuery } from '@tanstack/react-query';
 import { getSession } from '../services/auth.service';
 import { NotificationProvider } from './NotificationProvider';
+import { usePathname, useRouter } from 'next/navigation';
 
 export default function DashboardClientLayout({ 
   children, 
@@ -17,6 +18,25 @@ export default function DashboardClientLayout({
 }) {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const { data: session } = useQuery({ queryKey: ['session'], queryFn: getSession });
+  const pathname = usePathname();
+  const router = useRouter();
+  const isSubscriptionRestricted = Boolean(session?.subscriptionRestricted);
+
+  useEffect(() => {
+    if (isSubscriptionRestricted && pathname !== '/dashboard/plans') {
+      router.replace('/dashboard/plans');
+    }
+  }, [isSubscriptionRestricted, pathname, router]);
+
+  if (isSubscriptionRestricted) {
+    return (
+      <NotificationProvider>
+        <main className="min-h-screen bg-sand p-4 sm:p-6">
+          <div className="mx-auto max-w-7xl animate-fade-in">{children}</div>
+        </main>
+      </NotificationProvider>
+    );
+  }
   
   return (
     <NotificationProvider>

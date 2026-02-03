@@ -1,6 +1,7 @@
 'use client';
 
 import { useMemo, useState } from 'react';
+import { useRouter } from 'next/navigation';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { getSession } from '../../../services/auth.service';
 import { getSubscription, listActivePlans, upsertSubscription } from '../../../services/subscription.service';
@@ -10,6 +11,7 @@ import FullPageLoader from '../../../components/FullPageLoader';
 export default function PlansPage() {
   const queryClient = useQueryClient();
   const notify = useNotify();
+  const router = useRouter();
   const { data: session } = useQuery({ queryKey: ['session'], queryFn: getSession });
   const schoolId = session?.schoolId ?? undefined;
   const [billingCycle, setBillingCycle] = useState<'MONTHLY' | 'ANNUAL'>('MONTHLY');
@@ -49,6 +51,11 @@ export default function PlansPage() {
     onSuccess: () => {
       notify.success('Plan updated', 'Your subscription plan has been updated.');
       queryClient.invalidateQueries({ queryKey: ['subscription', schoolId] });
+      fetch('/api/auth/refresh', { method: 'POST' })
+        .catch(() => null)
+        .finally(() => {
+          router.replace('/dashboard');
+        });
     },
     onError: (error: any) => {
       const message = error?.response?.data?.error?.message || error?.message || 'Failed to update plan';
@@ -97,6 +104,16 @@ export default function PlansPage() {
     }
     
     return null;
+  }, [subscription]);
+  const isSubscriptionExpired = useMemo(() => {
+    if (!subscription) return false;
+    const now = new Date();
+    const endsAt = subscription.endsAt ? new Date(subscription.endsAt) : null;
+    const nextDueAt = subscription.nextDueAt ? new Date(subscription.nextDueAt) : null;
+    if (subscription.status === 'EXPIRED') return true;
+    if (nextDueAt && !Number.isNaN(nextDueAt.getTime()) && nextDueAt < now) return true;
+    if (endsAt && !Number.isNaN(endsAt.getTime()) && endsAt < now) return true;
+    return false;
   }, [subscription]);
 
   return (
@@ -256,6 +273,7 @@ export default function PlansPage() {
         <div className="grid gap-8 lg:grid-cols-3">
           {planCards.map((plan, index) => {
             const isCurrent = currentPlanId === plan.id;
+            const canRenewCurrent = isCurrent && isSubscriptionExpired;
             const isPopular = index === 1; // Middle plan is popular
             
             return (
@@ -280,7 +298,7 @@ export default function PlansPage() {
                 {isCurrent && (
                   <div className="absolute -top-1 left-1/2 -translate-x-1/2 transform">
                     <div className="rounded-full bg-gradient-to-r from-emerald-600 to-teal-600 px-4 py-1 text-xs font-semibold text-white">
-                      Current Plan
+                      {canRenewCurrent ? 'Expired Plan' : 'Current Plan'}
                     </div>
                   </div>
                 )}
@@ -320,16 +338,20 @@ export default function PlansPage() {
 
                   <button
                     className={`w-full rounded-xl px-6 py-3 font-semibold transition-all duration-200 ${
-                      isCurrent
+                      isCurrent && !canRenewCurrent
                         ? 'bg-gray-200 text-gray-600 cursor-not-allowed'
                         : isPopular
                         ? 'bg-gradient-to-r from-blue-600 to-purple-600 text-white hover:from-blue-700 hover:to-purple-700 shadow-lg hover:shadow-xl'
                         : 'bg-gray-900 text-white hover:bg-gray-800 shadow-lg hover:shadow-xl'
                     }`}
-                    disabled={isCurrent || upgradeMutation.isPending}
+                    disabled={(isCurrent && !canRenewCurrent) || upgradeMutation.isPending}
                     onClick={() => upgradeMutation.mutate(plan.id)}
                   >
-                    {isCurrent ? (
+                    {canRenewCurrent ? (
+                      <span className="flex items-center justify-center">
+                        Renew Plan
+                      </span>
+                    ) : isCurrent ? (
                       <span className="flex items-center justify-center">
                         <svg className="mr-2 h-4 w-4" fill="currentColor" viewBox="0 0 20 20">
                           <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />

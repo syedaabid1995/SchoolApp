@@ -3,14 +3,17 @@ import { isSuperAdmin } from './utils/roles';
 
 const ACCESS_COOKIE = 'access_token';
 
-const decodeRole = (token: string) => {
+const decodeToken = (token: string) => {
   const parts = token.split('.');
   if (parts.length < 2) return null;
   const payload = parts[1].replace(/-/g, '+').replace(/_/g, '/');
   try {
     const json = Buffer.from(payload, 'base64').toString('utf8');
     const parsed = JSON.parse(json) as Record<string, unknown>;
-    return (parsed.role as string | undefined) ?? null;
+    return {
+      role: (parsed.role as string | undefined) ?? null,
+      subscriptionRestricted: Boolean(parsed.subscriptionRestricted),
+    };
   } catch {
     return null;
   }
@@ -38,7 +41,13 @@ export function middleware(req: NextRequest) {
       return NextResponse.redirect(new URL('/reset-password', req.url));
     }
 
-    const role = decodeRole(token);
+    const tokenData = decodeToken(token);
+    const role = tokenData?.role ?? null;
+    const subscriptionRestricted = tokenData?.subscriptionRestricted ?? false;
+
+    if (subscriptionRestricted && pathname !== '/dashboard/plans') {
+      return NextResponse.redirect(new URL('/dashboard/plans', req.url));
+    }
 
     if (
       (pathname.startsWith('/dashboard/schools') || pathname.startsWith('/dashboard/subscriptions')) &&

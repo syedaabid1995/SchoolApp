@@ -21,6 +21,8 @@ export default function LoginPage() {
       const result = await login({ email, password, schoolId: schoolId || undefined });
       if (result?.mustChangePassword) {
         router.replace('/reset-password');
+      } else if (result?.subscriptionRestricted) {
+        router.replace('/dashboard/plans');
       } else {
         router.replace('/dashboard');
       }
