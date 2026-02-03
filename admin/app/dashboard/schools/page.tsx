@@ -1,7 +1,8 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import Link from 'next/link';
 import {
   listSchools,
   createSchool,
@@ -26,10 +27,16 @@ export default function SchoolsPage() {
   const [createdAdmin, setCreatedAdmin] = useState<{ email: string; tempPassword: string } | null>(null);
   const [formError, setFormError] = useState('');
   const [expiryDates, setExpiryDates] = useState<Record<string, string>>({});
+  const [debouncedQuery, setDebouncedQuery] = useState('');
+
+  useEffect(() => {
+    const timer = setTimeout(() => setDebouncedQuery(query.trim()), 350);
+    return () => clearTimeout(timer);
+  }, [query]);
 
   const { data, isLoading } = useQuery({
-    queryKey: ['schools', query],
-    queryFn: () => listSchools({ query }),
+    queryKey: ['schools', debouncedQuery],
+    queryFn: () => listSchools({ query: debouncedQuery }),
   });
   const { data: plans } = useQuery({
     queryKey: ['subscription-plans'],
@@ -250,7 +257,6 @@ export default function SchoolsPage() {
                 <th className="py-2">Name</th>
                 <th>Code</th>
                 <th>Status</th>
-                <th>Admin Email</th>
                 <th>Plan</th>
                 <th>Test Expiry</th>
                 <th className="text-right">Actions</th>
@@ -259,13 +265,13 @@ export default function SchoolsPage() {
             <tbody>
               {isLoading ? (
                 <tr>
-                  <td colSpan={7} className="py-6 text-center text-slate">
+                  <td colSpan={6} className="py-6 text-center text-slate">
                     Loading...
                   </td>
                 </tr>
               ) : rows.length === 0 ? (
                 <tr>
-                  <td colSpan={7} className="py-6 text-center text-slate">
+                  <td colSpan={6} className="py-6 text-center text-slate">
                     No schools found.
                   </td>
                 </tr>
@@ -295,7 +301,6 @@ export default function SchoolsPage() {
                         />
                       </button>
                     </td>
-                    <td>{school.adminEmail ?? '—'}</td>
                     <td>
                       <select
                         value={plans?.find((plan) => plan.name === school.subscriptionPlan)?.id ?? ''}
@@ -338,6 +343,12 @@ export default function SchoolsPage() {
                     </td>
                     <td className="text-right">
                       <div className="flex justify-end gap-2">
+                        <Link
+                          href={`/dashboard/schools/${school.id}/admins`}
+                          className="rounded-lg border border-slate/20 px-3 py-1 text-xs"
+                        >
+                          Admins
+                        </Link>
                         <button
                           className="rounded-lg border border-slate/20 px-3 py-1 text-xs"
                           onClick={() =>

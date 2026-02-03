@@ -22,12 +22,17 @@ const teacherItems = [
   { href: '/dashboard/teachers', label: 'List' },
 ];
 
+const employeeItems = [
+  { href: '/dashboard/teachers/add', label: 'Add User' },
+  { href: '/dashboard/teachers', label: 'List Users' },
+];
+
 export const Sidebar = ({ role, isOpen, onClose, schoolName }: { role: string | null; isOpen?: boolean; onClose?: () => void; schoolName?: string }) => {
   const [isAcademicOpen, setIsAcademicOpen] = useState(false);
   const [isStudentsOpen, setIsStudentsOpen] = useState(false);
   const [isTeachersOpen, setIsTeachersOpen] = useState(false);
   const pathname = usePathname();
-  const isTeacher = role === 'TEACHER';
+  const isTeacher = ['TEACHER', 'ACCOUNTANT', 'LIBRARIAN', 'STAFF'].includes(role ?? '');
   const isSchoolAdmin = role === 'SCHOOL_ADMIN';
   const renderLink = (item: { href: string; label: string }) => (
     <Link
@@ -172,12 +177,12 @@ export const Sidebar = ({ role, isOpen, onClose, schoolName }: { role: string | 
                 <button
                   onClick={() => setIsTeachersOpen(!isTeachersOpen)}
                   className={`flex w-full items-center justify-between rounded-lg px-3 py-2 text-sm font-medium transition-all duration-200 ${
-                    isSectionActive(teacherItems)
+                    isSectionActive(employeeItems)
                       ? 'bg-white/20 text-white'
                       : 'text-white/90 hover:bg-white/10 hover:text-white'
                   }`}
                 >
-                  Teachers
+                  Employees
                   <span className={`transform transition-all duration-300 ${isTeachersOpen ? 'rotate-90 text-white' : 'text-white/70'}`}>
                     ▶
                   </span>
@@ -186,7 +191,7 @@ export const Sidebar = ({ role, isOpen, onClose, schoolName }: { role: string | 
                   isTeachersOpen ? 'max-h-32 opacity-100' : 'max-h-0 opacity-0'
                 }`}>
                   <div className="mt-1 flex flex-col gap-1">
-                    {teacherItems.map((item) => (
+                    {employeeItems.map((item) => (
                       <Link
                         key={item.href}
                         href={item.href}

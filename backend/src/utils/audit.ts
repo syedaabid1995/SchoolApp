@@ -11,6 +11,9 @@ export const resolveActorRole = async (userId: string) => {
   if (names.includes('SUPER_ADMIN')) return 'SUPER_ADMIN';
   if (names.includes('SCHOOL_ADMIN')) return 'SCHOOL_ADMIN';
   if (names.includes('TEACHER')) return 'TEACHER';
+  if (names.includes('ACCOUNTANT')) return 'ACCOUNTANT';
+  if (names.includes('LIBRARIAN')) return 'LIBRARIAN';
+  if (names.includes('STAFF')) return 'STAFF';
   if (names.includes('PARENT')) return 'PARENT';
   return 'UNKNOWN';
 };

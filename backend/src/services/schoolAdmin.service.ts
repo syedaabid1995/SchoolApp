@@ -20,6 +20,150 @@ export type SchoolUpdateInput = {
   activeUsersCount?: number;
 };
 
+export const createSchoolAdmin = async (schoolId: string, adminEmail: string) => {
+  return prisma.$transaction(async (tx) => {
+    const school = await tx.school.findFirst({
+      where: { id: schoolId, deletedAt: null },
+      select: { id: true },
+    });
+    if (!school) {
+      throw new HttpError(404, 'School not found');
+    }
+
+    const existingUser = await tx.user.findFirst({
+      where: { email: adminEmail, schoolId },
+      select: {
+        id: true,
+        roles: { select: { role: { select: { name: true } } } },
+      },
+    });
+
+    if (existingUser?.roles.some((entry) => entry.role.name === 'SCHOOL_ADMIN')) {
+      throw new HttpError(409, 'School admin already exists for this email');
+    }
+    if (existingUser) {
+      throw new HttpError(409, 'User with this email already exists in this school');
+    }
+
+    const tempPassword = crypto.randomBytes(9).toString('base64url');
+    const passwordHash = await hashPassword(tempPassword);
+
+    const role = await tx.role.upsert({
+      where: { name: 'SCHOOL_ADMIN' },
+      update: {},
+      create: { name: 'SCHOOL_ADMIN' },
+    });
+
+    const adminUser = await tx.user.create({
+      data: {
+        email: adminEmail,
+        passwordHash,
+        status: 'ACTIVE',
+        schoolId,
+        mustChangePassword: true,
+      },
+      select: { id: true, email: true, schoolId: true, status: true, createdAt: true },
+    });
+
+    await tx.userRole.create({
+      data: { userId: adminUser.id, roleId: role.id },
+    });
+
+    return { adminUser, tempPassword };
+  });
+};
+
+export const listSchoolAdmins = async (schoolId: string) => {
+  const school = await prisma.school.findFirst({
+    where: { id: schoolId, deletedAt: null },
+    select: { id: true, name: true, code: true },
+  });
+  if (!school) {
+    throw new HttpError(404, 'School not found');
+  }
+
+  const admins = await prisma.user.findMany({
+    where: {
+      schoolId,
+      roles: {
+        some: { role: { name: 'SCHOOL_ADMIN' } },
+      },
+    },
+    select: {
+      id: true,
+      email: true,
+      status: true,
+      createdAt: true,
+    },
+    orderBy: { createdAt: 'desc' },
+  });
+
+  const adminIds = admins.map((admin) => admin.id);
+  const createdLogs = adminIds.length
+    ? await prisma.auditLog.findMany({
+        where: {
+          entityType: 'USER',
+          action: 'SCHOOL_ADMIN_CREATED',
+          entityId: { in: adminIds },
+        },
+        orderBy: { createdAt: 'desc' },
+        select: {
+          entityId: true,
+          actor: { select: { email: true } },
+        },
+      })
+    : [];
+
+  const createdByMap = new Map<string, string>();
+  createdLogs.forEach((log) => {
+    if (!createdByMap.has(log.entityId)) {
+      createdByMap.set(log.entityId, log.actor.email);
+    }
+  });
+
+  return {
+    school,
+    admins: admins.map((admin) => ({
+      ...admin,
+      createdBy: createdByMap.get(admin.id) ?? 'System',
+    })),
+  };
+};
+
+export const setSchoolAdminStatus = async (
+  schoolId: string,
+  adminUserId: string,
+  status: 'ACTIVE' | 'INACTIVE',
+) => {
+  const school = await prisma.school.findFirst({
+    where: { id: schoolId, deletedAt: null },
+    select: { id: true },
+  });
+  if (!school) {
+    throw new HttpError(404, 'School not found');
+  }
+
+  const admin = await prisma.user.findFirst({
+    where: {
+      id: adminUserId,
+      schoolId,
+      roles: {
+        some: { role: { name: 'SCHOOL_ADMIN' } },
+      },
+    },
+    select: { id: true, status: true, email: true },
+  });
+  if (!admin) {
+    throw new HttpError(404, 'School admin not found');
+  }
+
+  return prisma.user.update({
+    where: { id: adminUserId },
+    data: { status },
+    select: { id: true, email: true, status: true, createdAt: true },
+  });
+};
+
 export const createSchool = async (payload: SchoolCreateInput) => {
   return prisma.$transaction(async (tx) => {
     const school = await tx.school.create({
@@ -163,12 +307,13 @@ export const listSchools = async (params: {
 
   const items = itemsRaw.map((school) => {
     const adminEmail = school.users[0]?.email ?? null;
+    const adminEmails = school.users.map((user) => user.email);
     const planName =
       school.subscription?.plan?.name ??
       school.subscription?.planName ??
       school.subscriptionPlan;
     const { users, subscription, ...rest } = school;
-    return { ...rest, subscriptionPlan: planName, adminEmail };
+    return { ...rest, subscriptionPlan: planName, adminEmail, adminEmails };
   });
 
   return {

@@ -3,6 +3,7 @@
 import { useMemo, useState } from 'react';
 import { useMutation, useQuery } from '@tanstack/react-query';
 import { createTeacher } from '../../../../services/teacher.service';
+import { createSchoolUser } from '../../../../services/user.service';
 import { listSchools } from '../../../../services/school.service';
 import { getSession } from '../../../../services/auth.service';
 import { useNotify } from '../../../../components/NotificationProvider';
@@ -41,6 +42,7 @@ export default function AddTeacherPage() {
   const notify = useNotify();
   const [step, setStep] = useState<Step>(1);
   const [form, setForm] = useState({
+    roleName: 'TEACHER' as 'SCHOOL_ADMIN' | 'TEACHER' | 'ACCOUNTANT' | 'LIBRARIAN' | 'STAFF',
     email: '',
     firstName: '',
     lastName: '',
@@ -71,8 +73,41 @@ export default function AddTeacherPage() {
     enabled: isSuperAdmin,
   });
 
+  const isTeacherRole = form.roleName === 'TEACHER';
+
   const createMutation = useMutation({
-    mutationFn: createTeacher,
+    mutationFn: async () => {
+      if (isTeacherRole) {
+        return createTeacher({
+          email: form.email,
+          firstName: form.firstName,
+          lastName: form.lastName,
+          employeeNo: form.employeeNo || null,
+          phone: form.phone || null,
+          address: form.address || null,
+          bankDetails: {
+            accountHolderName: form.accountHolderName || null,
+            accountNumber: form.accountNumber || null,
+            ifscCode: form.ifscCode || null,
+            accountType: form.accountType || null,
+            bankName: form.bankName === 'Others' ? form.customBankName : form.bankName || null,
+            branchName: form.branchName || null,
+            panNumber: form.panNumber || null,
+          },
+          schoolId: effectiveSchoolId,
+        });
+      }
+      return createSchoolUser({
+        email: form.email,
+        roleName: form.roleName,
+        firstName: form.firstName,
+        lastName: form.lastName,
+        employeeNo: form.employeeNo || null,
+        phone: form.phone || null,
+        address: form.address || null,
+        schoolId: effectiveSchoolId,
+      });
+    },
     onSuccess: (result) => {
       if (result?.user?.email && result?.tempPassword) {
         setCreatedTeacher({ email: result.user.email, tempPassword: result.tempPassword });
@@ -82,6 +117,7 @@ export default function AddTeacherPage() {
         notify.warning('Teacher created', 'Account created but no login credentials generated');
       }
       setForm({
+        roleName: 'TEACHER',
         email: '',
         firstName: '',
         lastName: '',
@@ -99,7 +135,7 @@ export default function AddTeacherPage() {
       });
     },
     onError: (error: any) => {
-      const message = error?.response?.data?.error?.message || error?.message || 'Failed to create teacher';
+      const message = error?.response?.data?.error?.message || error?.message || 'Failed to create employee';
       notify.error('Creation failed', message);
     },
   });
@@ -107,6 +143,7 @@ export default function AddTeacherPage() {
   const summary = useMemo(
     () => ({
       profile: {
+        roleName: form.roleName,
         email: form.email,
         firstName: form.firstName,
         lastName: form.lastName,
@@ -145,7 +182,7 @@ export default function AddTeacherPage() {
       else if (!/^[0-9]{10}$/.test(form.phone.trim())) error = 'Enter a valid 10-digit phone number.';
       else if (!form.address.trim()) error = 'Address is required.';
     }
-    if (step === 3) {
+    if (step === 3 && isTeacherRole) {
       if (form.accountNumber && !form.ifscCode.trim()) error = 'IFSC code is required when account number is provided.';
       else if (form.ifscCode && !form.accountNumber.trim()) error = 'Account number is required when IFSC code is provided.';
       else if (form.ifscCode && !/^[A-Z]{4}0[A-Z0-9]{6}$/.test(form.ifscCode.trim())) error = 'Enter a valid IFSC code (AAAA0BBBBBB format).';
@@ -173,12 +210,12 @@ export default function AddTeacherPage() {
     else if (!form.phone.trim()) error = 'Phone is required.';
     else if (!/^[0-9]{10}$/.test(form.phone.trim())) error = 'Enter a valid 10-digit phone number.';
     else if (!form.address.trim()) error = 'Address is required.';
-    else if (form.accountNumber && !form.ifscCode.trim()) error = 'IFSC code is required when account number is provided.';
-    else if (form.ifscCode && !form.accountNumber.trim()) error = 'Account number is required when IFSC code is provided.';
-    else if (form.ifscCode && !/^[A-Z]{4}0[A-Z0-9]{6}$/.test(form.ifscCode.trim())) error = 'Enter a valid IFSC code (AAAA0BBBBBB format).';
-    else if (form.accountNumber && (form.accountNumber.length < 9 || form.accountNumber.length > 18)) error = 'Account number must be 9-18 digits.';
-    else if (form.panNumber && !/^[A-Z]{5}[0-9]{4}[A-Z]{1}$/.test(form.panNumber.trim())) error = 'Enter a valid PAN number (ABCDE1234F).';
-    else if (form.bankName === 'Others' && !form.customBankName.trim()) error = 'Enter bank name when Others is selected.';
+    else if (isTeacherRole && form.accountNumber && !form.ifscCode.trim()) error = 'IFSC code is required when account number is provided.';
+    else if (isTeacherRole && form.ifscCode && !form.accountNumber.trim()) error = 'Account number is required when IFSC code is provided.';
+    else if (isTeacherRole && form.ifscCode && !/^[A-Z]{4}0[A-Z0-9]{6}$/.test(form.ifscCode.trim())) error = 'Enter a valid IFSC code (AAAA0BBBBBB format).';
+    else if (isTeacherRole && form.accountNumber && (form.accountNumber.length < 9 || form.accountNumber.length > 18)) error = 'Account number must be 9-18 digits.';
+    else if (isTeacherRole && form.panNumber && !/^[A-Z]{5}[0-9]{4}[A-Z]{1}$/.test(form.panNumber.trim())) error = 'Enter a valid PAN number (ABCDE1234F).';
+    else if (isTeacherRole && form.bankName === 'Others' && !form.customBankName.trim()) error = 'Enter bank name when Others is selected.';
     else if (isSuperAdmin && !effectiveSchoolId) error = 'Select a school before creating.';
     setStepError(error);
     if (error) notify.error('Validation error', error);
@@ -192,7 +229,7 @@ export default function AddTeacherPage() {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50/30 to-indigo-50/40">
-      {createMutation.isPending ? <FullPageLoader label="Saving teacher..." /> : null}
+      {createMutation.isPending ? <FullPageLoader label="Saving employee..." /> : null}
       
       {/* Hero Section */}
       <div className="relative overflow-hidden bg-gradient-to-r from-emerald-600 via-teal-600 to-cyan-700 px-6 py-16 text-white">
@@ -202,13 +239,13 @@ export default function AddTeacherPage() {
             <svg className="mr-2 h-4 w-4" fill="currentColor" viewBox="0 0 20 20">
               <path d="M13 6a3 3 0 11-6 0 3 3 0 016 0zM18 8a2 2 0 11-4 0 2 2 0 014 0zM14 15a4 4 0 00-8 0v3h8v-3z" />
             </svg>
-            Teacher Management
+            Employee Management
           </div>
           <h1 className="mb-4 text-4xl font-bold tracking-tight sm:text-5xl">
-            Add New Teacher
+            Add New Employee
           </h1>
           <p className="mx-auto max-w-2xl text-lg text-emerald-100">
-            Create comprehensive teacher profiles with contact information and banking details for seamless onboarding.
+            Create employee profiles and assign the right user category for your school operations.
           </p>
         </div>
         
@@ -279,11 +316,25 @@ export default function AddTeacherPage() {
           {step === 1 && (
             <div className="space-y-6">
               <div className="text-center">
-                <h2 className="text-2xl font-bold text-gray-900">Teacher Profile</h2>
-                <p className="mt-2 text-gray-600">Basic information and credentials</p>
+                <h2 className="text-2xl font-bold text-gray-900">Employee Profile</h2>
+                <p className="mt-2 text-gray-600">Basic user information and credentials</p>
               </div>
               
               <div className="grid gap-6 md:grid-cols-2">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">User Category *</label>
+                  <select
+                    value={form.roleName}
+                    onChange={(e) => setForm({ ...form, roleName: e.target.value as typeof form.roleName })}
+                    className="w-full rounded-xl border border-gray-300 px-4 py-3 text-sm focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-200"
+                  >
+                    <option value="SCHOOL_ADMIN">School Admin</option>
+                    <option value="TEACHER">Teacher</option>
+                    <option value="ACCOUNTANT">Accountant</option>
+                    <option value="LIBRARIAN">Librarian</option>
+                    <option value="STAFF">Other Staff</option>
+                  </select>
+                </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">Email Address *</label>
                   <input
@@ -293,6 +344,7 @@ export default function AddTeacherPage() {
                     className="w-full rounded-xl border border-gray-300 px-4 py-3 text-sm focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-200"
                   />
                 </div>
+                {isTeacherRole ? (
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">Employee Number</label>
                   <input
@@ -302,6 +354,7 @@ export default function AddTeacherPage() {
                     className="w-full rounded-xl border border-gray-300 px-4 py-3 text-sm focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-200"
                   />
                 </div>
+                ) : null}
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">First Name *</label>
                   <input
@@ -365,7 +418,11 @@ export default function AddTeacherPage() {
                 <h2 className="text-2xl font-bold text-gray-900">Banking Details</h2>
                 <p className="mt-2 text-gray-600">Optional salary account information</p>
               </div>
-              
+              {!isTeacherRole ? (
+                <div className="rounded-xl border border-slate/200 bg-slate-50 p-6 text-center text-sm text-slate">
+                  Banking details are only captured for Teacher category.
+                </div>
+              ) : (
               <div className="grid gap-6 md:grid-cols-2">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">Account Holder Name</label>
@@ -459,6 +516,7 @@ export default function AddTeacherPage() {
                   />
                 </div>
               </div>
+              )}
             </div>
           )}
 
@@ -476,6 +534,7 @@ export default function AddTeacherPage() {
                   </h3>
                   <div className="space-y-2 text-sm">
                     <p><span className="font-medium">Email:</span> {summary.profile.email || '—'}</p>
+                    <p><span className="font-medium">Category:</span> {summary.profile.roleName || '—'}</p>
                     <p><span className="font-medium">Name:</span> {summary.profile.firstName} {summary.profile.lastName}</p>
                     <p><span className="font-medium">Employee No:</span> {summary.profile.employeeNo || '—'}</p>
                   </div>
@@ -511,7 +570,7 @@ export default function AddTeacherPage() {
                 <span className="text-2xl text-white">✅</span>
               </div>
               <h2 className="text-2xl font-bold text-gray-900">Ready to Create</h2>
-              <p className="text-gray-600">All information has been validated. Click below to create the teacher profile and generate login credentials.</p>
+              <p className="text-gray-600">All information has been validated. Click below to create the employee profile and generate login credentials.</p>
             </div>
           )}
 
@@ -535,24 +594,7 @@ export default function AddTeacherPage() {
               onClick={() => {
                 if (step < 5) return nextStep();
                 if (!validateBeforeCreate()) return;
-                createMutation.mutate({
-                  email: form.email,
-                  firstName: form.firstName,
-                  lastName: form.lastName,
-                  employeeNo: form.employeeNo || null,
-                  phone: form.phone || null,
-                  address: form.address || null,
-                  bankDetails: {
-                    accountHolderName: form.accountHolderName || null,
-                    accountNumber: form.accountNumber || null,
-                    ifscCode: form.ifscCode || null,
-                    accountType: form.accountType || null,
-                    bankName: form.bankName === 'Others' ? form.customBankName : form.bankName || null,
-                    branchName: form.branchName || null,
-                    panNumber: form.panNumber || null,
-                  },
-                  schoolId: effectiveSchoolId,
-                });
+                createMutation.mutate();
               }}
               disabled={createMutation.isPending || !effectiveSchoolId}
               className={`flex items-center rounded-xl px-8 py-3 text-sm font-semibold text-white transition-all ${
@@ -578,7 +620,7 @@ export default function AddTeacherPage() {
                 </>
               ) : (
                 <>
-                  Create Teacher
+                  Create Employee
                   <svg className="ml-2 h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
                   </svg>
@@ -597,7 +639,7 @@ export default function AddTeacherPage() {
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
                 </svg>
               </div>
-              <h3 className="text-xl font-bold text-emerald-800 mb-2">Teacher Created Successfully!</h3>
+              <h3 className="text-xl font-bold text-emerald-800 mb-2">Employee Created Successfully!</h3>
               <div className="rounded-xl bg-white p-4 text-left">
                 <p className="text-sm text-gray-600 mb-2">Login credentials:</p>
                 <p className="font-mono text-sm"><span className="font-semibold">Email:</span> {createdTeacher.email}</p>

@@ -1,6 +1,23 @@
 import type { Request, Response } from 'express';
+import crypto from 'crypto';
+import { z } from 'zod';
 import { prisma } from '../config/db';
 import { HttpError } from '../middlewares/error.middleware';
+import { resolveSchoolId } from '../utils/tenant';
+import { hashPassword } from '../utils/password';
+import { createTeacher } from '../services/teacher.service';
+import { logAudit } from '../utils/audit';
+
+const createSchoolUserSchema = z.object({
+  email: z.string().email(),
+  roleName: z.enum(['SCHOOL_ADMIN', 'TEACHER', 'ACCOUNTANT', 'LIBRARIAN', 'STAFF']),
+  firstName: z.string().min(1).optional(),
+  lastName: z.string().min(1).optional(),
+  employeeNo: z.string().min(1).optional().nullable(),
+  phone: z.string().min(1).optional().nullable(),
+  address: z.string().min(1).optional().nullable(),
+  schoolId: z.string().uuid().optional(),
+});
 
 export const getMe = async (req: Request, res: Response) => {
   if (!req.auth?.userId) {
@@ -102,5 +119,104 @@ export const getUserById = async (req: Request, res: Response) => {
     parentProfiles: user.parentProfiles,
     displayName: teacherName || parentName || user.email,
     createdAt: user.createdAt,
+  });
+};
+
+export const createSchoolUserApi = async (req: Request, res: Response) => {
+  if (!req.auth?.userId) {
+    throw new HttpError(401, 'Unauthorized');
+  }
+
+  const payload = createSchoolUserSchema.parse(req.body);
+  const schoolId = resolveSchoolId(req, payload.schoolId);
+
+  if (payload.roleName === 'TEACHER') {
+    if (!payload.firstName || !payload.lastName) {
+      throw new HttpError(400, 'First name and last name are required for teachers');
+    }
+
+    const result = await createTeacher({
+      schoolId,
+      email: payload.email,
+      firstName: payload.firstName,
+      lastName: payload.lastName,
+      employeeNo: payload.employeeNo ?? null,
+      phone: payload.phone ?? null,
+      address: payload.address ?? null,
+    });
+
+    await logAudit(req, {
+      schoolId,
+      entityType: 'USER',
+      entityId: result.user.id,
+      action: 'CREATE',
+      afterState: { email: result.user.email, roleName: 'TEACHER' },
+    });
+
+    res.status(201).json({
+      user: {
+        id: result.user.id,
+        email: result.user.email,
+        schoolId,
+        roleName: 'TEACHER',
+        status: result.user.status,
+      },
+      tempPassword: result.tempPassword,
+    });
+    return;
+  }
+
+  const existingUser = await prisma.user.findFirst({
+    where: { email: payload.email, schoolId },
+    select: { id: true },
+  });
+  if (existingUser) {
+    throw new HttpError(409, 'User with this email already exists in this school');
+  }
+
+  const tempPassword = crypto.randomBytes(9).toString('base64url');
+  const passwordHash = await hashPassword(tempPassword);
+
+  const role = await prisma.role.upsert({
+    where: { name: payload.roleName },
+    update: {},
+    create: { name: payload.roleName },
+  });
+
+  const user = await prisma.user.create({
+    data: {
+      schoolId,
+      email: payload.email,
+      passwordHash,
+      status: 'ACTIVE',
+      mustChangePassword: true,
+      roles: {
+        create: {
+          roleId: role.id,
+        },
+      },
+    },
+    select: {
+      id: true,
+      email: true,
+      schoolId: true,
+      status: true,
+    },
+  });
+
+  await logAudit(req, {
+    schoolId,
+    entityType: 'USER',
+    entityId: user.id,
+    action: 'CREATE',
+    afterState: { email: user.email, roleName: payload.roleName },
+  });
+
+  res.status(201).json({
+    user: {
+      ...user,
+      roleName: payload.roleName,
+    },
+    tempPassword,
   });
 };

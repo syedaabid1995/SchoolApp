@@ -18,7 +18,12 @@ export const idempotencyMiddleware = async (req: Request, res: Response, next: N
     .digest('hex');
 
   const redisKey = `idempotency:${key}`;
-  const existing = await redis.get(redisKey);
+  let existing: string | null = null;
+  try {
+    existing = await redis.get(redisKey);
+  } catch {
+    return next();
+  }
 
   if (existing) {
     const parsed = JSON.parse(existing) as {
@@ -41,7 +46,9 @@ export const idempotencyMiddleware = async (req: Request, res: Response, next: N
       status: res.statusCode,
       body,
     });
-    void redis.set(redisKey, payload, 'EX', ttlSeconds);
+    void redis.set(redisKey, payload, 'EX', ttlSeconds).catch(() => {
+      // Ignore cache failures; request already succeeded.
+    });
     return originalJson(body);
   };
 
