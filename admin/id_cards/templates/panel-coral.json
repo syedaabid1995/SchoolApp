@@ -1,0 +1,10 @@
+{
+  "slug": "panel-coral",
+  "name": "Panel Coral",
+  "description": "Color panel with high readability.",
+  "variant": "panel",
+  "bgFrom": "#c2410c",
+  "bgTo": "#fb923c",
+  "accent": "#ffedd5",
+  "text": "light"
+}

@@ -1,0 +1,11 @@
+{
+  "slug": "duotone-rose",
+  "name": "Duotone Rose",
+  "description": "Dual-tone rose look for staff IDs.",
+  "variant": "duotone",
+  "backgroundPattern": "crystal",
+  "bgFrom": "#be185d",
+  "bgTo": "#f472b6",
+  "accent": "#fce7f3",
+  "text": "light"
+}

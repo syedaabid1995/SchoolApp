@@ -7,7 +7,7 @@ export type EmployeePermissionItem = {
   code: string;
   label: string;
   path: string;
-  group: 'Overview' | 'Plans' | 'Employees' | 'Academics' | 'Students' | 'Attendance' | 'Support' | 'Audit';
+  group: 'Overview' | 'Plans' | 'Employees' | 'Academics' | 'Students' | 'Attendance' | 'Support' | 'Audit' | 'Utilities';
 };
 
 export const EMPLOYEE_PERMISSION_CATALOG: EmployeePermissionItem[] = [
@@ -20,6 +20,7 @@ export const EMPLOYEE_PERMISSION_CATALOG: EmployeePermissionItem[] = [
   { code: 'academics.marks', label: 'Upload Marks', path: '/dashboard/academics/marks', group: 'Academics' },
   { code: 'students.list', label: 'Students - List', path: '/dashboard/students', group: 'Students' },
   { code: 'students.add', label: 'Students - Add', path: '/dashboard/students/add', group: 'Students' },
+  { code: 'idcards.view', label: 'ID Cards', path: '/dashboard/id-cards', group: 'Utilities' },
   {
     code: 'students.transfers',
     label: 'Incoming Transfer Requests',
@@ -39,13 +40,14 @@ const DEFAULT_PERMISSION_BY_ROLE: Record<ManagedEmployeeRole, string[]> = {
     'academics.exams',
     'academics.marks',
     'students.list',
+    'idcards.view',
     'attendance.view',
     'support.view',
     'plans.view',
   ],
-  ACCOUNTANT: ['dashboard.overview', 'students.list', 'support.view', 'plans.view'],
-  LIBRARIAN: ['dashboard.overview', 'students.list', 'support.view', 'plans.view'],
-  STAFF: ['dashboard.overview', 'students.list', 'support.view', 'plans.view'],
+  ACCOUNTANT: ['dashboard.overview', 'students.list', 'idcards.view', 'support.view', 'plans.view'],
+  LIBRARIAN: ['dashboard.overview', 'students.list', 'idcards.view', 'support.view', 'plans.view'],
+  STAFF: ['dashboard.overview', 'students.list', 'idcards.view', 'support.view', 'plans.view'],
 };
 
 export const getDefaultPermissionCodes = (roleName: string | null | undefined) => {

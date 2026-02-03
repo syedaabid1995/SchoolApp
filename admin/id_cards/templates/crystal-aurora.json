@@ -1,0 +1,11 @@
+{
+  "slug": "crystal-aurora",
+  "name": "Crystal Aurora",
+  "description": "Aurora-toned crystal background for premium employee cards.",
+  "variant": "duotone",
+  "backgroundPattern": "crystal",
+  "bgFrom": "#0f766e",
+  "bgTo": "#7c3aed",
+  "accent": "#a7f3d0",
+  "text": "light"
+}

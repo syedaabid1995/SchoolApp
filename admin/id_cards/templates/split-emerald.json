@@ -1,0 +1,10 @@
+{
+  "slug": "split-emerald",
+  "name": "Split Emerald",
+  "description": "Split layout with green side panel.",
+  "variant": "split",
+  "bgFrom": "#047857",
+  "bgTo": "#34d399",
+  "accent": "#bbf7d0",
+  "text": "light"
+}

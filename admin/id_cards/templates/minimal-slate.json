@@ -1,0 +1,10 @@
+{
+  "slug": "minimal-slate",
+  "name": "Minimal Slate",
+  "description": "Clean minimal card with slate palette.",
+  "variant": "minimal",
+  "bgFrom": "#334155",
+  "bgTo": "#94a3b8",
+  "accent": "#f1f5f9",
+  "text": "light"
+}

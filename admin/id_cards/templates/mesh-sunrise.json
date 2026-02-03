@@ -1,0 +1,11 @@
+{
+  "slug": "mesh-sunrise",
+  "name": "Mesh Sunrise",
+  "description": "Warm sunrise gradients with soft mesh overlays.",
+  "variant": "panel",
+  "backgroundPattern": "mesh",
+  "bgFrom": "#be123c",
+  "bgTo": "#fb923c",
+  "accent": "#fde68a",
+  "text": "light"
+}

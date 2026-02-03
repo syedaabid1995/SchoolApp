@@ -1,0 +1,11 @@
+{
+  "slug": "frame-gold",
+  "name": "Frame Gold",
+  "description": "Premium framed card with gold accent.",
+  "variant": "frame",
+  "backgroundPattern": "rings",
+  "bgFrom": "#92400e",
+  "bgTo": "#f59e0b",
+  "accent": "#fef3c7",
+  "text": "dark"
+}

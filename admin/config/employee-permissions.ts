@@ -5,7 +5,7 @@ export type PermissionCatalogItem = {
   code: string;
   label: string;
   path: string;
-  group: 'Overview' | 'Plans' | 'Employees' | 'Academics' | 'Students' | 'Attendance' | 'Support' | 'Audit';
+  group: 'Overview' | 'Plans' | 'Employees' | 'Academics' | 'Students' | 'Attendance' | 'Support' | 'Audit' | 'Utilities';
 };
 
 export const EMPLOYEE_PERMISSION_CATALOG: PermissionCatalogItem[] = [
@@ -18,6 +18,7 @@ export const EMPLOYEE_PERMISSION_CATALOG: PermissionCatalogItem[] = [
   { code: 'academics.marks', label: 'Upload Marks', path: '/dashboard/academics/marks', group: 'Academics' },
   { code: 'students.list', label: 'Students - List', path: '/dashboard/students', group: 'Students' },
   { code: 'students.add', label: 'Students - Add', path: '/dashboard/students/add', group: 'Students' },
+  { code: 'idcards.view', label: 'ID Cards', path: '/dashboard/id-cards', group: 'Utilities' },
   {
     code: 'students.transfers',
     label: 'Incoming Transfer Requests',
@@ -43,6 +44,7 @@ export const getRequiredPermissionForPath = (pathname: string) => {
   if (pathname.startsWith('/dashboard/students/add')) return 'students.add';
   if (pathname.startsWith('/dashboard/students/transfers')) return 'students.transfers';
   if (pathname.startsWith('/dashboard/students')) return 'students.list';
+  if (pathname.startsWith('/dashboard/id-cards')) return 'idcards.view';
 
   if (pathname.startsWith('/dashboard/attendance')) return 'attendance.view';
   if (pathname.startsWith('/dashboard/support')) return 'support.view';

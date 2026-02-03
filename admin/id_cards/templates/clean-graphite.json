@@ -1,0 +1,10 @@
+{
+  "slug": "clean-graphite",
+  "name": "Clean Graphite",
+  "description": "Simple grayscale format for easy printing.",
+  "variant": "clean",
+  "bgFrom": "#111827",
+  "bgTo": "#6b7280",
+  "accent": "#e5e7eb",
+  "text": "light"
+}

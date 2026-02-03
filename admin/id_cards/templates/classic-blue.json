@@ -1,0 +1,10 @@
+{
+  "slug": "classic-blue",
+  "name": "Classic Blue",
+  "description": "Traditional school ID style with soft blue gradient.",
+  "variant": "classic",
+  "bgFrom": "#1d4ed8",
+  "bgTo": "#60a5fa",
+  "accent": "#dbeafe",
+  "text": "light"
+}

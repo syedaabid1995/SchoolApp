@@ -15,6 +15,7 @@ const academicItems = [
 const studentItems = [
   { href: '/dashboard/students/add', label: 'Add' },
   { href: '/dashboard/students', label: 'List' },
+  { href: '/dashboard/id-cards', label: 'ID Cards' },
   { href: '/dashboard/students/transfers', label: 'Incoming Transfer Requests' },
 ];
 

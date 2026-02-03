@@ -1,0 +1,10 @@
+{
+  "slug": "wave-teal",
+  "name": "Wave Teal",
+  "description": "Wave style background with teal shades.",
+  "variant": "wave",
+  "bgFrom": "#0f766e",
+  "bgTo": "#2dd4bf",
+  "accent": "#ccfbf1",
+  "text": "light"
+}

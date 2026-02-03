@@ -1,0 +1,11 @@
+{
+  "slug": "ocean-night",
+  "name": "Ocean Night",
+  "description": "Deep navy gradient with cool cyan accent for high-contrast IDs.",
+  "variant": "panel",
+  "backgroundPattern": "wavy",
+  "bgFrom": "#0f172a",
+  "bgTo": "#1d4ed8",
+  "accent": "#67e8f9",
+  "text": "light"
+}

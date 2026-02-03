@@ -1,0 +1,10 @@
+{
+  "slug": "ribbon-crimson",
+  "name": "Ribbon Crimson",
+  "description": "Bold ribbon accent for event style IDs.",
+  "variant": "ribbon",
+  "bgFrom": "#991b1b",
+  "bgTo": "#ef4444",
+  "accent": "#fee2e2",
+  "text": "light"
+}

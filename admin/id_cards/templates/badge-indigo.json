@@ -1,0 +1,10 @@
+{
+  "slug": "badge-indigo",
+  "name": "Badge Indigo",
+  "description": "Compact modern badge with indigo tone.",
+  "variant": "badge",
+  "bgFrom": "#4338ca",
+  "bgTo": "#818cf8",
+  "accent": "#e0e7ff",
+  "text": "light"
+}
