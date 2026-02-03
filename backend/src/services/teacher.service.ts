@@ -45,13 +45,11 @@ export type TeacherUpdateInput = {
 export const createTeacher = async (payload: TeacherCreateInput) => {
   await enforceLimits(payload.schoolId, 'teachers');
 
-  const teacherRole = await prisma.role.findUnique({
+  const teacherRole = await prisma.role.upsert({
     where: { name: 'TEACHER' },
+    update: {},
+    create: { name: 'TEACHER' },
   });
-
-  if (!teacherRole) {
-    throw new Error('Teacher role not configured');
-  }
 
   const tempPassword = payload.password ?? crypto.randomBytes(9).toString('base64url');
   const passwordHash = await hashPassword(tempPassword);

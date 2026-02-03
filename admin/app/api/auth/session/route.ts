@@ -14,24 +14,27 @@ export async function GET() {
   const token = store.get('access_token')?.value;
   const mustChangePassword = store.get('must_change_password')?.value === '1';
   if (!token) {
-    return NextResponse.json({ role: null, schoolId: null, mustChangePassword: false });
+    return NextResponse.json({ role: null, schoolId: null, mustChangePassword: false, permissionCodes: [] });
   }
   try {
     const payload = decodePayload(token);
     const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL ?? 'http://localhost:3000/api/v1';
     let subscriptionRestricted = Boolean(payload?.subscriptionRestricted);
     let displayName: string | null = null;
+    let permissionCodes: string[] = [];
     try {
       const res = await fetch(`${API_BASE}/users/me`, {
         headers: { Authorization: `Bearer ${token}` },
         cache: 'no-store',
       });
       if (res.ok) {
-        const data = (await res.json()) as { displayName?: string | null };
+        const data = (await res.json()) as { displayName?: string | null; permissionCodes?: string[] };
         displayName = data.displayName ?? null;
+        permissionCodes = Array.isArray(data.permissionCodes) ? data.permissionCodes : [];
       }
     } catch {
       displayName = null;
+      permissionCodes = [];
     }
     if (!subscriptionRestricted && payload?.schoolId) {
       try {
@@ -67,6 +70,7 @@ export async function GET() {
       subscriptionRestricted,
       mustChangePassword,
       displayName,
+      permissionCodes,
     });
   } catch {
     return NextResponse.json({
@@ -76,6 +80,7 @@ export async function GET() {
       subscriptionRestricted: false,
       mustChangePassword: false,
       displayName: null,
+      permissionCodes: [],
     });
   }
 }

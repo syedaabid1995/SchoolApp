@@ -4,6 +4,7 @@ import { usePathname } from 'next/navigation';
 import { useContext, useEffect, useState } from 'react';
 import { isSuperAdmin } from '../utils/roles';
 import { ThemeContext } from './ThemeProvider';
+import { EMPLOYEE_PERMISSION_CATALOG } from '../config/employee-permissions';
 
 const academicItems = [
   { href: '/dashboard/academics', label: 'Academic Setup' },
@@ -27,13 +28,26 @@ const employeeItems = [
   { href: '/dashboard/teachers', label: 'List Users' },
 ];
 
-export const Sidebar = ({ role, isOpen, onClose, schoolName }: { role: string | null; isOpen?: boolean; onClose?: () => void; schoolName?: string }) => {
+export const Sidebar = ({
+  role,
+  isOpen,
+  onClose,
+  schoolName,
+  permissionCodes = [],
+}: {
+  role: string | null;
+  isOpen?: boolean;
+  onClose?: () => void;
+  schoolName?: string;
+  permissionCodes?: string[];
+}) => {
   const [isAcademicOpen, setIsAcademicOpen] = useState(false);
   const [isStudentsOpen, setIsStudentsOpen] = useState(false);
   const [isTeachersOpen, setIsTeachersOpen] = useState(false);
   const pathname = usePathname();
   const isTeacher = ['TEACHER', 'ACCOUNTANT', 'LIBRARIAN', 'STAFF'].includes(role ?? '');
   const isSchoolAdmin = role === 'SCHOOL_ADMIN';
+  const allowedCodes = new Set(permissionCodes);
   const renderLink = (item: { href: string; label: string }) => (
     <Link
       key={item.href}
@@ -53,12 +67,22 @@ export const Sidebar = ({ role, isOpen, onClose, schoolName }: { role: string | 
   const isSectionActive = (itemsToCheck: { href: string }[]) =>
     itemsToCheck.some((item) => pathname === item.href || pathname.startsWith(`${item.href}/`));
   const isActive = (href: string) => pathname === href || pathname.startsWith(`${href}/`);
+  const getCodeForPath = (href: string) =>
+    EMPLOYEE_PERMISSION_CATALOG.find((permission) => permission.path === href)?.code;
+  const isAllowedNavItem = (href: string) => {
+    if (!isTeacher) return true;
+    const code = getCodeForPath(href);
+    if (!code) return false;
+    return allowedCodes.has(code);
+  };
+  const visibleAcademicItems = academicItems.filter((item) => isAllowedNavItem(item.href));
+  const visibleStudentItems = studentItems.filter((item) => isAllowedNavItem(item.href));
 
   useEffect(() => {
-    if (isSectionActive(academicItems)) setIsAcademicOpen(true);
-    if (isSectionActive(studentItems)) setIsStudentsOpen(true);
+    if (isSectionActive(visibleAcademicItems)) setIsAcademicOpen(true);
+    if (isSectionActive(visibleStudentItems)) setIsStudentsOpen(true);
     if (isSectionActive(teacherItems)) setIsTeachersOpen(true);
-  }, [pathname]);
+  }, [pathname, permissionCodes]);
 
   return (
     <>
@@ -103,7 +127,7 @@ export const Sidebar = ({ role, isOpen, onClose, schoolName }: { role: string | 
                 <button
                   onClick={() => setIsAcademicOpen(!isAcademicOpen)}
                   className={`flex w-full items-center justify-between rounded-lg px-3 py-2 text-sm font-medium transition-all duration-200 ${
-                    isSectionActive(academicItems)
+                    isSectionActive(visibleAcademicItems)
                       ? 'bg-white/20 text-white'
                       : 'text-white/90 hover:bg-white/10 hover:text-white'
                   }`}
@@ -117,7 +141,7 @@ export const Sidebar = ({ role, isOpen, onClose, schoolName }: { role: string | 
                   isAcademicOpen ? 'max-h-32 opacity-100' : 'max-h-0 opacity-0'
                 }`}>
                   <div className="mt-1 flex flex-col gap-1">
-                    {academicItems.map((item) => (
+                    {visibleAcademicItems.map((item) => (
                       <Link
                         key={item.href}
                         href={item.href}
@@ -140,7 +164,7 @@ export const Sidebar = ({ role, isOpen, onClose, schoolName }: { role: string | 
                 <button
                   onClick={() => setIsStudentsOpen(!isStudentsOpen)}
                   className={`flex w-full items-center justify-between rounded-lg px-3 py-2 text-sm font-medium transition-all duration-200 ${
-                    isSectionActive(studentItems)
+                    isSectionActive(visibleStudentItems)
                       ? 'bg-white/20 text-white'
                       : 'text-white/90 hover:bg-white/10 hover:text-white'
                   }`}
@@ -154,7 +178,7 @@ export const Sidebar = ({ role, isOpen, onClose, schoolName }: { role: string | 
                   isStudentsOpen ? 'max-h-32 opacity-100' : 'max-h-0 opacity-0'
                 }`}>
                   <div className="mt-1 flex flex-col gap-1">
-                    {studentItems.map((item) => (
+                    {visibleStudentItems.map((item) => (
                       <Link
                         key={item.href}
                         href={item.href}
@@ -209,9 +233,13 @@ export const Sidebar = ({ role, isOpen, onClose, schoolName }: { role: string | 
                 </div>
               </div>
               <div className="border-t border-white/10 my-2"></div>
-              {renderLink({ href: '/dashboard/attendance', label: 'Attendance' })}
+              {isAllowedNavItem('/dashboard/attendance')
+                ? renderLink({ href: '/dashboard/attendance', label: 'Attendance' })
+                : null}
               <div className="border-t border-white/10 my-2"></div>
-              {renderLink({ href: '/dashboard/support', label: 'Support' })}
+              {isAllowedNavItem('/dashboard/support')
+                ? renderLink({ href: '/dashboard/support', label: 'Support' })
+                : null}
               <div className="border-t border-white/10 my-2"></div>
               {renderLink({ href: '/dashboard/audit', label: 'Audit Logs' })}
               <div className="border-t border-white/10 my-2"></div>
@@ -317,12 +345,12 @@ export const Sidebar = ({ role, isOpen, onClose, schoolName }: { role: string | 
                 <button
                   onClick={() => setIsTeachersOpen(!isTeachersOpen)}
                   className={`flex w-full items-center justify-between rounded-lg px-3 py-2 text-sm font-medium transition-all duration-200 ${
-                    isSectionActive(teacherItems)
+                    isSectionActive(employeeItems)
                       ? 'bg-white/20 text-white'
                       : 'text-white/90 hover:bg-white/10 hover:text-white'
                   }`}
                 >
-                  Teachers
+                  Employees
                   <span className={`transform transition-all duration-300 ${isTeachersOpen ? 'rotate-90 text-white' : 'text-white/70'}`}>
                     ▶
                   </span>
@@ -331,7 +359,7 @@ export const Sidebar = ({ role, isOpen, onClose, schoolName }: { role: string | 
                   isTeachersOpen ? 'max-h-32 opacity-100' : 'max-h-0 opacity-0'
                 }`}>
                   <div className="mt-1 flex flex-col gap-1">
-                    {teacherItems.map((item) => (
+                    {employeeItems.map((item) => (
                       <Link
                         key={item.href}
                         href={item.href}
@@ -428,6 +456,8 @@ export const Sidebar = ({ role, isOpen, onClose, schoolName }: { role: string | 
               {renderLink({ href: '/dashboard/support', label: 'Support' })}
               <div className="border-t border-white/10 my-2"></div>
               {renderLink({ href: '/dashboard/audit', label: 'Audit Logs' })}
+              <div className="border-t border-white/10 my-2"></div>
+              {renderLink({ href: '/dashboard/settings/access', label: 'Access Control' })}
             </>
           ) : null}
 

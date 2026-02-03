@@ -56,6 +56,7 @@ model School {
   supportTickets SupportTicket[]
   transferRequestsFrom StudentTransferRequest[] @relation("TransferFromSchool")
   transferRequestsTo StudentTransferRequest[] @relation("TransferToSchool")
+  employeeRolePermissions EmployeeRolePermission[]
 
   @@map("schools")
 }
@@ -163,6 +164,22 @@ model RolePermission {
   @@id([roleId, permissionId])
   @@index([permissionId])
   @@map("role_permissions")
+}
+
+model EmployeeRolePermission {
+  id             String   @id @default(uuid()) @db.Uuid
+  schoolId       String   @map("school_id") @db.Uuid
+  roleName       RoleName @map("role_name")
+  permissionCode String   @map("permission_code")
+  enabled        Boolean  @default(true)
+  createdAt      DateTime @default(now()) @map("created_at")
+  updatedAt      DateTime @updatedAt @map("updated_at")
+
+  school School @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+
+  @@unique([schoolId, roleName, permissionCode])
+  @@index([schoolId, roleName])
+  @@map("employee_role_permissions")
 }
 
 model AcademicYear {

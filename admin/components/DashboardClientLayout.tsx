@@ -6,6 +6,7 @@ import { useQuery } from '@tanstack/react-query';
 import { getSession } from '../services/auth.service';
 import { NotificationProvider } from './NotificationProvider';
 import { usePathname, useRouter } from 'next/navigation';
+import { EMPLOYEE_MANAGED_ROLES, getRequiredPermissionForPath } from '../config/employee-permissions';
 
 export default function DashboardClientLayout({ 
   children, 
@@ -21,6 +22,11 @@ export default function DashboardClientLayout({
   const pathname = usePathname();
   const router = useRouter();
   const isSubscriptionRestricted = Boolean(session?.subscriptionRestricted);
+  const permissionCodes = session?.permissionCodes ?? [];
+  const isManagedEmployeeRole = EMPLOYEE_MANAGED_ROLES.includes((session?.role ?? '') as (typeof EMPLOYEE_MANAGED_ROLES)[number]);
+  const requiredPermission = getRequiredPermissionForPath(pathname);
+  const canAccessRoute =
+    !isManagedEmployeeRole || (requiredPermission ? permissionCodes.includes(requiredPermission) : false);
 
   useEffect(() => {
     if (isSubscriptionRestricted && pathname !== '/dashboard/plans') {
@@ -37,6 +43,39 @@ export default function DashboardClientLayout({
       </NotificationProvider>
     );
   }
+
+  if (isManagedEmployeeRole && !canAccessRoute) {
+    return (
+      <NotificationProvider>
+        <div className="flex h-screen bg-sand">
+          <Sidebar
+            role={role}
+            isOpen={isSidebarOpen}
+            onClose={() => setIsSidebarOpen(false)}
+            schoolName={session?.schoolName ?? undefined}
+            permissionCodes={permissionCodes}
+          />
+          <div className="flex flex-1 flex-col h-screen">
+            <Header
+              role={role}
+              email={email}
+              displayName={session && 'displayName' in session ? session.displayName ?? null : null}
+              permissionCodes={permissionCodes}
+              onMenuToggle={() => setIsSidebarOpen(!isSidebarOpen)}
+            />
+            <main className="flex-1 overflow-y-auto p-4 transition-all duration-200 sm:p-6">
+              <section className="mx-auto max-w-3xl rounded-2xl border border-slate/10 bg-white p-8 text-center">
+                <h1 className="text-2xl font-semibold text-ink">Permission Not Available</h1>
+                <p className="mt-2 text-sm text-slate">
+                  The requested page is not available for your role. Contact your school admin.
+                </p>
+              </section>
+            </main>
+          </div>
+        </div>
+      </NotificationProvider>
+    );
+  }
   
   return (
     <NotificationProvider>
@@ -46,12 +85,14 @@ export default function DashboardClientLayout({
           isOpen={isSidebarOpen} 
           onClose={() => setIsSidebarOpen(false)}
           schoolName={session?.schoolName ?? undefined}
+          permissionCodes={permissionCodes}
         />
         <div className="flex flex-1 flex-col h-screen">
           <Header 
             role={role} 
             email={email} 
             displayName={session && 'displayName' in session ? session.displayName ?? null : null}
+            permissionCodes={permissionCodes}
             onMenuToggle={() => setIsSidebarOpen(!isSidebarOpen)} 
           />
           <main className="flex-1 overflow-y-auto p-4 transition-all duration-200 sm:p-6">

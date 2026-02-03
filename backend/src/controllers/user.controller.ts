@@ -7,6 +7,12 @@ import { resolveSchoolId } from '../utils/tenant';
 import { hashPassword } from '../utils/password';
 import { createTeacher } from '../services/teacher.service';
 import { logAudit } from '../utils/audit';
+import {
+  EMPLOYEE_PERMISSION_CATALOG,
+  MANAGED_EMPLOYEE_ROLES,
+  getEffectivePermissionCodesForRole,
+  type ManagedEmployeeRole,
+} from '../utils/employeePermissions';
 
 const createSchoolUserSchema = z.object({
   email: z.string().email(),
@@ -16,6 +22,14 @@ const createSchoolUserSchema = z.object({
   employeeNo: z.string().min(1).optional().nullable(),
   phone: z.string().min(1).optional().nullable(),
   address: z.string().min(1).optional().nullable(),
+  schoolId: z.string().uuid().optional(),
+});
+
+const managedRoleSchema = z.enum(MANAGED_EMPLOYEE_ROLES);
+
+const updateEmployeePermissionsSchema = z.object({
+  roleName: managedRoleSchema,
+  enabledCodes: z.array(z.string()).default([]),
   schoolId: z.string().uuid().optional(),
 });
 
@@ -48,6 +62,10 @@ export const getMe = async (req: Request, res: Response) => {
     ? `${user.parentProfiles[0].firstName} ${user.parentProfiles[0].lastName}`.trim()
     : null;
   const displayName = teacherName || parentName || user.email;
+  const permissionCodes =
+    user.schoolId && role
+      ? await getEffectivePermissionCodesForRole(user.schoolId, role)
+      : [];
 
   res.status(200).json({
     id: user.id,
@@ -55,6 +73,7 @@ export const getMe = async (req: Request, res: Response) => {
     schoolId: user.schoolId,
     role,
     displayName,
+    permissionCodes,
   });
 };
 
@@ -219,4 +238,78 @@ export const createSchoolUserApi = async (req: Request, res: Response) => {
     },
     tempPassword,
   });
+};
+
+export const listEmployeePermissionsApi = async (req: Request, res: Response) => {
+  const roleName = managedRoleSchema.parse((req.query.roleName as string | undefined) ?? 'TEACHER');
+  const schoolId = resolveSchoolId(req, req.query.schoolId as string | undefined);
+  const enabledCodes = await getEffectivePermissionCodesForRole(schoolId, roleName);
+
+  const users = await prisma.user.findMany({
+    where: {
+      schoolId,
+      roles: {
+        some: { role: { name: roleName } },
+      },
+    },
+    select: {
+      id: true,
+      email: true,
+      status: true,
+      createdAt: true,
+      teacherProfile: {
+        select: { firstName: true, lastName: true },
+      },
+    },
+    orderBy: { createdAt: 'desc' },
+  });
+
+  res.status(200).json({
+    roleName,
+    employees: users.map((user) => ({
+      id: user.id,
+      email: user.email,
+      status: user.status,
+      createdAt: user.createdAt,
+      displayName: user.teacherProfile
+        ? `${user.teacherProfile.firstName} ${user.teacherProfile.lastName}`.trim()
+        : user.email,
+    })),
+    permissions: EMPLOYEE_PERMISSION_CATALOG.map((permission) => ({
+      ...permission,
+      enabled: enabledCodes.includes(permission.code),
+    })),
+  });
+};
+
+export const updateEmployeePermissionsApi = async (req: Request, res: Response) => {
+  const payload = updateEmployeePermissionsSchema.parse(req.body);
+  const schoolId = resolveSchoolId(req, payload.schoolId);
+  const validCodes = new Set(EMPLOYEE_PERMISSION_CATALOG.map((permission) => permission.code));
+  const enabledCodes = payload.enabledCodes.filter((code) => validCodes.has(code));
+
+  await prisma.$transaction(async (tx) => {
+    await tx.employeeRolePermission.deleteMany({
+      where: { schoolId, roleName: payload.roleName },
+    });
+
+    await tx.employeeRolePermission.createMany({
+      data: EMPLOYEE_PERMISSION_CATALOG.map((permission) => ({
+        schoolId,
+        roleName: payload.roleName as ManagedEmployeeRole,
+        permissionCode: permission.code,
+        enabled: enabledCodes.includes(permission.code),
+      })),
+    });
+  });
+
+  await logAudit(req, {
+    schoolId,
+    entityType: 'USER',
+    entityId: payload.roleName,
+    action: 'UPDATE',
+    afterState: { roleName: payload.roleName, enabledCodes },
+  });
+
+  res.status(200).json({ success: true });
 };

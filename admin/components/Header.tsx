@@ -18,11 +18,13 @@ export const Header = ({
   role,
   email,
   displayName,
+  permissionCodes = [],
   onMenuToggle,
 }: {
   role: string | null;
   email: string | null;
   displayName?: string | null;
+  permissionCodes?: string[];
   onMenuToggle?: () => void;
 }) => {
   const router = useRouter();
@@ -45,6 +47,7 @@ export const Header = ({
     return () => document.removeEventListener('mousedown', handleClick);
   }, [showNotifications]);
   const resolvedName = displayName || email?.split('@')[0] || 'User';
+  const roleLabel = role ? role.replace(/_/g, ' ') : 'USER';
 
   const handleLogout = async () => {
     await logout();
@@ -67,7 +70,12 @@ export const Header = ({
           <h2 className="text-lg font-semibold text-white transition-colors duration-200">
             Welcome, {resolvedName}
           </h2>
-          <p className="text-sm text-white/80 transition-colors duration-200">{resolveConsoleTitle(role)}</p>
+          <div className="flex items-center gap-2">
+            <p className="text-sm text-white/80 transition-colors duration-200">{resolveConsoleTitle(role)}</p>
+            <span className="rounded-full bg-white/15 px-2 py-0.5 text-xs font-semibold text-white/95">
+              {roleLabel} • {permissionCodes.length} access
+            </span>
+          </div>
         </div>
       </div>
       <div className="flex items-center gap-4">

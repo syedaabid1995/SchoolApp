@@ -1,4 +1,5 @@
 import { api } from '../lib/api';
+import type { EmployeeManagedRole } from '../config/employee-permissions';
 
 export type UserProfile = {
   id: string;
@@ -36,5 +37,41 @@ export const createSchoolUser = async (payload: {
     };
     tempPassword: string;
   }>('/users/school-users', payload);
+  return data;
+};
+
+export type EmployeePermissionItem = {
+  code: string;
+  label: string;
+  path: string;
+  group: string;
+  enabled: boolean;
+};
+
+export type EmployeePermissionPayload = {
+  roleName: EmployeeManagedRole | 'SCHOOL_ADMIN';
+  employees: Array<{
+    id: string;
+    email: string;
+    status: string;
+    createdAt: string;
+    displayName: string;
+  }>;
+  permissions: EmployeePermissionItem[];
+};
+
+export const getEmployeePermissions = async (roleName: EmployeeManagedRole | 'SCHOOL_ADMIN', schoolId?: string) => {
+  const { data } = await api.get<EmployeePermissionPayload>('/users/employee-permissions', {
+    params: { roleName, ...(schoolId ? { schoolId } : {}) },
+  });
+  return data;
+};
+
+export const updateEmployeePermissions = async (payload: {
+  roleName: EmployeeManagedRole | 'SCHOOL_ADMIN';
+  enabledCodes: string[];
+  schoolId?: string;
+}) => {
+  const { data } = await api.put<{ success: boolean }>('/users/employee-permissions', payload);
   return data;
 };

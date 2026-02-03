@@ -1,5 +1,11 @@
 import { Router } from 'express';
-import { createSchoolUserApi, getMe, getUserById } from '../controllers/user.controller';
+import {
+  createSchoolUserApi,
+  getMe,
+  getUserById,
+  listEmployeePermissionsApi,
+  updateEmployeePermissionsApi,
+} from '../controllers/user.controller';
 import { authMiddleware } from '../middlewares/auth.middleware';
 import { requireRole } from '../middlewares/rbac.middleware';
 
@@ -9,4 +15,6 @@ userRouter.use(authMiddleware);
 
 userRouter.get('/me', getMe);
 userRouter.post('/school-users', requireRole('SCHOOL_ADMIN'), createSchoolUserApi);
+userRouter.get('/employee-permissions', requireRole('SCHOOL_ADMIN'), listEmployeePermissionsApi);
+userRouter.put('/employee-permissions', requireRole('SCHOOL_ADMIN'), updateEmployeePermissionsApi);
 userRouter.get('/:id', getUserById);
