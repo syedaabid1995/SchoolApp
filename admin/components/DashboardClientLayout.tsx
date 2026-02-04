@@ -23,16 +23,35 @@ export default function DashboardClientLayout({
   const router = useRouter();
   const isSubscriptionRestricted = Boolean(session?.subscriptionRestricted);
   const permissionCodes = session?.permissionCodes ?? [];
+  const isSuperAdmin = session?.role === 'SUPER_ADMIN';
+  const superAdminAllowedPaths = [
+    '/dashboard',
+    '/dashboard/analytics',
+    '/dashboard/schools',
+    '/dashboard/subscriptions',
+    '/dashboard/support',
+    '/dashboard/audit',
+    '/dashboard/themes',
+    '/dashboard/settings',
+  ];
   const isManagedEmployeeRole = EMPLOYEE_MANAGED_ROLES.includes((session?.role ?? '') as (typeof EMPLOYEE_MANAGED_ROLES)[number]);
   const requiredPermission = getRequiredPermissionForPath(pathname);
   const canAccessRoute =
     !isManagedEmployeeRole || (requiredPermission ? permissionCodes.includes(requiredPermission) : false);
+  const canAccessSuperAdminRoute =
+    !isSuperAdmin || superAdminAllowedPaths.some((allowedPath) => pathname === allowedPath || pathname.startsWith(`${allowedPath}/`));
 
   useEffect(() => {
     if (isSubscriptionRestricted && pathname !== '/dashboard/plans') {
       router.replace('/dashboard/plans');
     }
   }, [isSubscriptionRestricted, pathname, router]);
+
+  useEffect(() => {
+    if (isSuperAdmin && !canAccessSuperAdminRoute) {
+      router.replace('/dashboard/analytics');
+    }
+  }, [isSuperAdmin, canAccessSuperAdminRoute, router]);
 
   if (isSubscriptionRestricted) {
     return (
@@ -75,6 +94,10 @@ export default function DashboardClientLayout({
         </div>
       </NotificationProvider>
     );
+  }
+
+  if (isSuperAdmin && !canAccessSuperAdminRoute) {
+    return null;
   }
   
   return (

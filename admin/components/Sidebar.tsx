@@ -78,6 +78,15 @@ export const Sidebar = ({
   };
   const visibleAcademicItems = academicItems.filter((item) => isAllowedNavItem(item.href));
   const visibleStudentItems = studentItems.filter((item) => isAllowedNavItem(item.href));
+  const superAdminItems = [
+    { href: '/dashboard/analytics', label: 'Analytics' },
+    { href: '/dashboard/schools', label: 'Schools' },
+    { href: '/dashboard/subscriptions', label: 'Subscriptions' },
+    { href: '/dashboard/support', label: 'Support' },
+    { href: '/dashboard/audit', label: 'Logs' },
+    { href: '/dashboard/themes', label: 'Themes' },
+    { href: '/dashboard/settings', label: 'Settings' },
+  ];
 
   useEffect(() => {
     if (isSectionActive(visibleAcademicItems)) setIsAcademicOpen(true);
@@ -117,137 +126,12 @@ export const Sidebar = ({
         <nav className="flex flex-col gap-2 overflow-y-auto flex-1 scrollbar-thin scrollbar-thumb-white/20 scrollbar-track-transparent">
           {isSuperAdmin(role) ? (
             <>
-              {renderLink({ href: '/dashboard/analytics', label: 'Analytics' })}
-              <div className="border-t border-white/10 my-2"></div>
-              {renderLink({ href: '/dashboard/schools', label: 'Schools' })}
-              <div className="border-t border-white/10 my-2"></div>
-              {renderLink({ href: '/dashboard/subscriptions', label: 'Subscriptions' })}
-              <div className="border-t border-white/10 my-2"></div>
-              {/* Academic Section */}
-              <div className="flex-shrink-0">
-                <button
-                  onClick={() => setIsAcademicOpen(!isAcademicOpen)}
-                  className={`flex w-full items-center justify-between rounded-lg px-3 py-2 text-sm font-medium transition-all duration-200 ${
-                    isSectionActive(visibleAcademicItems)
-                      ? 'bg-white/20 text-white'
-                      : 'text-white/90 hover:bg-white/10 hover:text-white'
-                  }`}
-                >
-                  Academic
-                  <span className={`transform transition-all duration-300 ${isAcademicOpen ? 'rotate-90 text-white' : 'text-white/70'}`}>
-                    ▶
-                  </span>
-                </button>
-                <div className={`ml-4 overflow-hidden transition-all duration-300 ease-in-out ${
-                  isAcademicOpen ? 'max-h-32 opacity-100' : 'max-h-0 opacity-0'
-                }`}>
-                  <div className="mt-1 flex flex-col gap-1">
-                    {visibleAcademicItems.map((item) => (
-                      <Link
-                        key={item.href}
-                        href={item.href}
-                        className={`rounded-lg px-3 py-2 text-sm transition-all duration-200 ${
-                          isExactActive(item.href)
-                            ? 'bg-white/20 text-white'
-                            : 'text-white/80 hover:bg-white/10 hover:text-white hover:translate-x-1'
-                        }`}
-                        onClick={onClose}
-                      >
-                        {item.label}
-                      </Link>
-                    ))}
-                  </div>
+              {superAdminItems.map((item, index) => (
+                <div key={item.href}>
+                  {renderLink(item)}
+                  {index < superAdminItems.length - 1 ? <div className="border-t border-white/10 my-2"></div> : null}
                 </div>
-              </div>
-              <div className="border-t border-white/10 my-2"></div>
-              {/* Students Section */}
-              <div className="flex-shrink-0">
-                <button
-                  onClick={() => setIsStudentsOpen(!isStudentsOpen)}
-                  className={`flex w-full items-center justify-between rounded-lg px-3 py-2 text-sm font-medium transition-all duration-200 ${
-                    isSectionActive(visibleStudentItems)
-                      ? 'bg-white/20 text-white'
-                      : 'text-white/90 hover:bg-white/10 hover:text-white'
-                  }`}
-                >
-                  Students
-                  <span className={`transform transition-all duration-300 ${isStudentsOpen ? 'rotate-90 text-white' : 'text-white/70'}`}>
-                    ▶
-                  </span>
-                </button>
-                <div className={`ml-4 overflow-hidden transition-all duration-300 ease-in-out ${
-                  isStudentsOpen ? 'max-h-32 opacity-100' : 'max-h-0 opacity-0'
-                }`}>
-                  <div className="mt-1 flex flex-col gap-1">
-                    {visibleStudentItems.map((item) => (
-                      <Link
-                        key={item.href}
-                        href={item.href}
-                        className={`rounded-lg px-3 py-2 text-sm transition-all duration-200 ${
-                          isExactActive(item.href)
-                            ? 'bg-white/20 text-white'
-                            : 'text-white/80 hover:bg-white/10 hover:text-white hover:translate-x-1'
-                        }`}
-                        onClick={onClose}
-                      >
-                        {item.label}
-                      </Link>
-                    ))}
-                  </div>
-                </div>
-              </div>
-              <div className="border-t border-white/10 my-2"></div>
-              {/* Teachers Section */}
-              <div className="flex-shrink-0">
-                <button
-                  onClick={() => setIsTeachersOpen(!isTeachersOpen)}
-                  className={`flex w-full items-center justify-between rounded-lg px-3 py-2 text-sm font-medium transition-all duration-200 ${
-                    isSectionActive(employeeItems)
-                      ? 'bg-white/20 text-white'
-                      : 'text-white/90 hover:bg-white/10 hover:text-white'
-                  }`}
-                >
-                  Employees
-                  <span className={`transform transition-all duration-300 ${isTeachersOpen ? 'rotate-90 text-white' : 'text-white/70'}`}>
-                    ▶
-                  </span>
-                </button>
-                <div className={`ml-4 overflow-hidden transition-all duration-300 ease-in-out ${
-                  isTeachersOpen ? 'max-h-32 opacity-100' : 'max-h-0 opacity-0'
-                }`}>
-                  <div className="mt-1 flex flex-col gap-1">
-                    {employeeItems.map((item) => (
-                      <Link
-                        key={item.href}
-                        href={item.href}
-                        className={`rounded-lg px-3 py-2 text-sm transition-all duration-200 ${
-                          isExactActive(item.href)
-                            ? 'bg-white/20 text-white'
-                            : 'text-white/80 hover:bg-white/10 hover:text-white hover:translate-x-1'
-                        }`}
-                        onClick={onClose}
-                      >
-                        {item.label}
-                      </Link>
-                    ))}
-                  </div>
-                </div>
-              </div>
-              <div className="border-t border-white/10 my-2"></div>
-              {isAllowedNavItem('/dashboard/attendance')
-                ? renderLink({ href: '/dashboard/attendance', label: 'Attendance' })
-                : null}
-              <div className="border-t border-white/10 my-2"></div>
-              {isAllowedNavItem('/dashboard/support')
-                ? renderLink({ href: '/dashboard/support', label: 'Support' })
-                : null}
-              <div className="border-t border-white/10 my-2"></div>
-              {renderLink({ href: '/dashboard/audit', label: 'Audit Logs' })}
-              <div className="border-t border-white/10 my-2"></div>
-              {renderLink({ href: '/dashboard/themes', label: 'Themes' })}
-              <div className="border-t border-white/10 my-2"></div>
-              {renderLink({ href: '/dashboard/settings', label: 'Settings' })}
-              <div className="border-t border-white/10 my-2"></div>
+              ))}
             </>
           ) : null}
 
