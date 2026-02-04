@@ -49,6 +49,10 @@ jobs:
           -t school-backend-local:latest \
           backend/
         
+        # Debug AWS permissions
+        aws sts get-caller-identity
+        aws lightsail get-container-services --region ${{ secrets.AWS_REGION }} || echo "Failed to list container services"
+        
         aws lightsail push-container-image \
           --service-name ${{ secrets.LIGHTSAIL_BACKEND_SERVICE }} \
           --label school-backend-${{ github.sha }} \
