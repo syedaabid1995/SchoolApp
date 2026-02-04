@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import { authMiddleware } from '../middlewares/auth.middleware';
+import { superAdminGuard } from '../middlewares/superAdminGuard.middleware';
 import {
   getAdminDashboardApi,
   getWeeklyAnalyticsApi,
@@ -11,6 +12,7 @@ import {
 export const adminDashboardRouter = Router();
 
 adminDashboardRouter.use(authMiddleware);
+//adminDashboardRouter.use(superAdminGuard);
 
 adminDashboardRouter.get('/', getAdminDashboardApi);
 adminDashboardRouter.get('/analytics/weekly', getWeeklyAnalyticsApi);
