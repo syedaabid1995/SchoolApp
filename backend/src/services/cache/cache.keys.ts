@@ -7,6 +7,9 @@ export const buildCacheKey = (...parts: Array<string | number | boolean | null |
   return parts.map((part) => sanitize(part)).join(':');
 };
 
+// Prompt-3 alias (stable API name)
+export const buildKey = buildCacheKey;
+
 const normalizeForFingerprint = (value: unknown): unknown => {
   if (Array.isArray(value)) return value.map((item) => normalizeForFingerprint(item));
   if (value && typeof value === 'object') {

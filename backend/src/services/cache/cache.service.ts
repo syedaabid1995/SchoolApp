@@ -63,6 +63,23 @@ export const deleteCacheByPattern = async (pattern: string) => {
   }
 };
 
+// Prompt-3 aliases (stable API names)
+export const getJson = getCacheJson;
+export const setJson = setCacheJson;
+
+/**
+ * Deletes explicit keys or a wildcard pattern.
+ * - string[] => direct DEL
+ * - string   => SCAN + DEL by pattern
+ */
+export const delKeys = async (keysOrPattern: string[] | string) => {
+  if (Array.isArray(keysOrPattern)) {
+    await deleteCacheKeys(keysOrPattern);
+    return;
+  }
+  await deleteCacheByPattern(keysOrPattern);
+};
+
 export const rememberCache = async <T>(
   key: string,
   ttlSeconds: number,
@@ -85,7 +102,8 @@ export const rememberCache = async <T>(
   return { value, status: 'MISS' };
 };
 
+export const remember = rememberCache;
+
 export const setCacheHeader = (res: { setHeader: (name: string, value: string) => void }, status: CacheStatus) => {
   res.setHeader('X-Cache', status);
 };
-
