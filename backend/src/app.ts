@@ -7,6 +7,7 @@ import swaggerUi from 'swagger-ui-express';
 import YAML from 'yamljs';
 import path from 'path';
 import { logger } from './config/logger';
+import { env } from './config/env';
 import { errorMiddleware, notFoundMiddleware } from './middlewares/error.middleware';
 import { writeOperationGuard } from './middlewares/subscriptionGuard.middleware';
 import { authRouter } from './routes/auth.routes';
@@ -49,6 +50,10 @@ export const createApp = () => {
   const app = express();
   const openapiPath = path.resolve(process.cwd(), 'openapi.yaml');
   const openapiSpec = YAML.load(openapiPath);
+  const allowedOrigins = env.CORS_ORIGINS.split(',')
+    .map((origin) => origin.trim())
+    .filter(Boolean);
+  const allowAllOrigins = env.NODE_ENV !== 'production' || allowedOrigins.includes('*');
 
   app.disable('x-powered-by');
   app.use(
@@ -71,7 +76,16 @@ export const createApp = () => {
       },
     }),
   );
-  app.use(cors({ origin: true, credentials: true }));
+  app.use(
+    cors({
+      origin: (origin: string | undefined, callback: (err: Error | null, allow?: boolean) => void) => {
+        if (!origin || allowAllOrigins) return callback(null, true);
+        if (allowedOrigins.includes(origin)) return callback(null, true);
+        return callback(new Error('Origin not allowed by CORS'));
+      },
+      credentials: true,
+    }),
+  );
   app.use(express.json({ limit: '10mb' }));
   app.use(express.urlencoded({ extended: false, limit: '10mb' }));
   app.use(rateLimit());

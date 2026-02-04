@@ -80,7 +80,8 @@ jobs:
             "ports": {"3000": "HTTP"},
             "environment": {
               "NODE_ENV": "production",
-              "PORT": "3000"
+              "PORT": "3000",
+              "CORS_ORIGINS": "${{ secrets.CORS_ORIGINS }}"
             }
           }
         }

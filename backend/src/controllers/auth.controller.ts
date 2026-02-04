@@ -85,6 +85,7 @@ const ensureParentActive = async (userId: string) => {
 
 export const login = async (req: Request, res: Response) => {
   const { email, password, schoolId } = loginSchema.parse(req.body);
+  const invalidCredentialsError = new HttpError(401, 'Invalid credentials');
 
   const user = await prisma.user.findFirst({
     where: {
@@ -94,19 +95,19 @@ export const login = async (req: Request, res: Response) => {
   });
 
   if (!user) {
-    throw new HttpError(401, 'Invalid credentials');
+    throw invalidCredentialsError;
   }
 
   if (user.status !== 'ACTIVE') {
-    throw new HttpError(403, 'User is not active');
+    throw invalidCredentialsError;
   }
 
   const schoolAccessState = user.schoolId ? await getSchoolAccessState(user.schoolId) : 'ACTIVE';
-  if (schoolAccessState === 'SUSPENDED') throw new HttpError(403, 'School is suspended');
+  if (schoolAccessState === 'SUSPENDED') throw invalidCredentialsError;
 
   const isValid = await verifyPassword(password, user.passwordHash);
   if (!isValid) {
-    throw new HttpError(401, 'Invalid credentials');
+    throw invalidCredentialsError;
   }
 
   const roleRow = await prisma.userRole.findFirst({
