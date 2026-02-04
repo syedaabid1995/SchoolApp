@@ -49,26 +49,10 @@ jobs:
           -t school-backend-local:latest \
           backend/
         
-        # Debug AWS and Lightsail setup
-        echo "AWS Identity:"
-        aws sts get-caller-identity
-        echo "Lightsail Container Services:"
-        aws lightsail get-container-services --region ${{ secrets.AWS_REGION }}
-        echo "Attempting to push to service: ${{ secrets.LIGHTSAIL_BACKEND_SERVICE }}"
-        
-        # Try to create container service if it doesn't exist
-        aws lightsail create-container-service \
-          --service-name ${{ secrets.LIGHTSAIL_BACKEND_SERVICE }} \
-          --power nano \
-          --scale 1 \
-          --region ${{ secrets.AWS_REGION }} || echo "Service might already exist"
-        
-        # Wait a moment for service to be ready
-        sleep 10
-        
+        # Push with SHORT label
         aws lightsail push-container-image \
           --service-name ${{ secrets.LIGHTSAIL_BACKEND_SERVICE }} \
-          --label school-backend-${{ github.sha }} \
+          --label backend \
           --image school-backend-local:latest \
           --region ${{ secrets.AWS_REGION }}
 
@@ -114,8 +98,9 @@ jobs:
           -t school-frontend-local:latest \
           admin/
         
+        # Push with SHORT label
         aws lightsail push-container-image \
           --service-name ${{ secrets.LIGHTSAIL_FRONTEND_SERVICE }} \
-          --label school-frontend-${{ github.sha }} \
+          --label frontend \
           --image school-frontend-local:latest \
           --region ${{ secrets.AWS_REGION }}
