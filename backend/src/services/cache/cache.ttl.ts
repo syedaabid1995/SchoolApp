@@ -1,0 +1,12 @@
+export const CACHE_TTL = {
+  DASHBOARD: 60,
+  ANALYTICS: 60,
+  SCHOOLS: 120,
+  STUDENTS: 90,
+  TEACHERS: 90,
+  ATTENDANCE: 45,
+  NOTIFICATIONS: 30,
+  SUBSCRIPTION: 60,
+} as const;
+
+export const cacheTTL = CACHE_TTL;

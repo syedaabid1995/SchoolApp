@@ -1,8 +1,9 @@
 import type { NextFunction, Request, Response } from 'express';
+import type { RoleName } from '@prisma/client';
 import { prisma } from '../config/db';
 import { HttpError } from './error.middleware';
 
-const SUPER_ADMIN_ROLE = 'SUPER_ADMIN';
+const SUPER_ADMIN_ROLE: RoleName = 'SUPER_ADMIN';
 
 export const requireAuth = (req: Request) => {
   if (!req.auth) {
@@ -11,7 +12,7 @@ export const requireAuth = (req: Request) => {
   return req.auth;
 };
 
-export const requireRole = (...roles: string[]) => {
+export const requireRole = (...roles: RoleName[]) => {
   return async (req: Request, _res: Response, next: NextFunction) => {
     try {
       const auth = requireAuth(req);

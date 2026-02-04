@@ -1,4 +1,5 @@
 import type { Request, Response } from 'express';
+import type { Prisma } from '@prisma/client';
 import { z } from 'zod';
 import { prisma } from '../config/db';
 import { HttpError } from '../middlewares/error.middleware';
@@ -93,7 +94,7 @@ export const createConfigEntry = async (req: Request, res: Response) => {
   const payload = configSchema.parse(req.body);
 
   const config = await prisma.configEntry.create({
-    data: { key: payload.key, value: payload.value },
+    data: { key: payload.key, value: payload.value as Prisma.InputJsonValue },
   });
 
   res.status(201).json(config);
@@ -113,7 +114,7 @@ export const updateConfigEntry = async (req: Request, res: Response) => {
 
   const config = await prisma.configEntry.update({
     where: { id },
-    data: { key: payload.key, value: payload.value, version: existing.version + 1 },
+    data: { key: payload.key, value: payload.value as Prisma.InputJsonValue, version: existing.version + 1 },
   });
 
   res.status(200).json(config);
@@ -125,8 +126,8 @@ export const setTenantConfigOverride = async (req: Request, res: Response) => {
 
   const override = await prisma.tenantConfigOverride.upsert({
     where: { configId_schoolId: { configId: payload.configId, schoolId } },
-    update: { value: payload.value, version: { increment: 1 } },
-    create: { configId: payload.configId, schoolId, value: payload.value },
+    update: { value: payload.value as Prisma.InputJsonValue, version: { increment: 1 } },
+    create: { configId: payload.configId, schoolId, value: payload.value as Prisma.InputJsonValue },
   });
 
   res.status(200).json(override);

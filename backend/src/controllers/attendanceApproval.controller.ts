@@ -4,6 +4,7 @@ import { resolveSchoolId } from '../utils/tenant';
 import { HttpError } from '../middlewares/error.middleware';
 import { approveAttendanceSession, rejectAttendanceSession } from '../services/attendanceApproval.service';
 import { logAudit } from '../utils/audit';
+import { invalidateAttendanceCache } from '../services/cache/cache.invalidation';
 
 const approveSchema = z.object({
   schoolId: z.string().uuid().optional(),
@@ -33,6 +34,7 @@ export const approveSession = async (req: Request, res: Response) => {
     action: 'APPROVE',
     afterState: { approvalStatus: session.approvalStatus },
   });
+  await invalidateAttendanceCache(schoolId);
 
   res.status(200).json(session);
 };
@@ -57,6 +59,7 @@ export const rejectSession = async (req: Request, res: Response) => {
     action: 'REJECT',
     afterState: { approvalStatus: result.approvalStatus, reason: payload.reason },
   });
+  await invalidateAttendanceCache(schoolId);
 
   res.status(200).json(result);
 };

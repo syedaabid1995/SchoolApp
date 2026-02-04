@@ -1,7 +1,12 @@
 import type { Request, Response } from 'express';
+import { Prisma, type SubscriptionPlan } from '@prisma/client';
 import { z } from 'zod';
 import { prisma } from '../config/db';
 import { HttpError } from '../middlewares/error.middleware';
+import { cacheKeys } from '../services/cache/cache.keys';
+import { rememberCache, setCacheHeader } from '../services/cache/cache.service';
+import { cacheTTL } from '../services/cache/cache.ttl';
+import { invalidateSchoolCache, invalidateSubscriptionCache } from '../services/cache/cache.invalidation';
 
 const createSchema = z.object({
   name: z.string().min(1),
@@ -22,17 +27,29 @@ const updateSchema = z.object({
 });
 
 export const listSubscriptionPlansApi = async (_req: Request, res: Response) => {
-  const plans = await prisma.subscriptionPlanDef.findMany({
-    orderBy: { studentLimit: 'asc' },
-  });
+  const { value: plans, status } = await rememberCache(
+    cacheKeys.subscriptionPlansAll(),
+    cacheTTL.SUBSCRIPTION,
+    () =>
+      prisma.subscriptionPlanDef.findMany({
+        orderBy: { studentLimit: 'asc' },
+      }),
+  );
+  setCacheHeader(res, status);
   res.status(200).json(plans);
 };
 
 export const listActivePlansApi = async (_req: Request, res: Response) => {
-  const plans = await prisma.subscriptionPlanDef.findMany({
-    where: { status: 'ACTIVE' },
-    orderBy: { studentLimit: 'asc' },
-  });
+  const { value: plans, status } = await rememberCache(
+    cacheKeys.subscriptionPlansActive(),
+    cacheTTL.SUBSCRIPTION,
+    () =>
+      prisma.subscriptionPlanDef.findMany({
+        where: { status: 'ACTIVE' },
+        orderBy: { studentLimit: 'asc' },
+      }),
+  );
+  setCacheHeader(res, status);
   res.status(200).json(plans);
 };
 
@@ -42,7 +59,18 @@ export const createSubscriptionPlanApi = async (req: Request, res: Response) => 
   if (existing) {
     throw new HttpError(409, 'Plan name already exists');
   }
-  const plan = await prisma.subscriptionPlanDef.create({ data: payload });
+  const plan = await prisma.subscriptionPlanDef.create({
+    data: {
+      name: payload.name,
+      status: payload.status,
+      priceCents: payload.priceCents,
+      features: payload.features,
+      studentLimit: payload.studentLimit,
+      teacherLimit: payload.teacherLimit,
+    },
+  });
+  await invalidateSubscriptionCache();
+  await invalidateSchoolCache();
   res.status(201).json(plan);
 };
 
@@ -57,7 +85,7 @@ export const updateSubscriptionPlanApi = async (req: Request, res: Response) => 
   const updated = await prisma.$transaction(async (tx) => {
     const plan = await tx.subscriptionPlanDef.update({
       where: { id },
-      data: payload,
+      data: payload as Prisma.SubscriptionPlanDefUpdateInput,
     });
 
     if (payload.name && payload.name !== existing.name) {
@@ -65,10 +93,12 @@ export const updateSubscriptionPlanApi = async (req: Request, res: Response) => 
         where: { planId: id },
         data: { planName: payload.name },
       });
-      await tx.school.updateMany({
-        where: { subscriptionPlan: existing.name },
-        data: { subscriptionPlan: payload.name },
-      });
+      if (['STARTER', 'STANDARD', 'PREMIUM'].includes(existing.name) && ['STARTER', 'STANDARD', 'PREMIUM'].includes(payload.name)) {
+        await tx.school.updateMany({
+          where: { subscriptionPlan: existing.name as SubscriptionPlan },
+          data: { subscriptionPlan: payload.name as SubscriptionPlan },
+        });
+      }
     }
 
     if (payload.studentLimit || payload.teacherLimit) {
@@ -83,6 +113,8 @@ export const updateSubscriptionPlanApi = async (req: Request, res: Response) => 
 
     return plan;
   });
+  await invalidateSubscriptionCache();
+  await invalidateSchoolCache();
 
   res.status(200).json(updated);
 };
@@ -94,6 +126,8 @@ export const deleteSubscriptionPlanApi = async (req: Request, res: Response) => 
     throw new HttpError(409, 'Plan is in use by existing subscriptions');
   }
   const plan = await prisma.subscriptionPlanDef.delete({ where: { id } });
+  await invalidateSubscriptionCache();
+  await invalidateSchoolCache();
   res.status(200).json(plan);
 };
 

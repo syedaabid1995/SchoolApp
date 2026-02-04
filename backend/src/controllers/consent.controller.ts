@@ -27,7 +27,11 @@ const withdrawSchema = z.object({
 
 export const createDocumentApi = async (req: Request, res: Response) => {
   const payload = docSchema.parse(req.body);
-  const doc = await createConsentDocument(payload);
+  const doc = await createConsentDocument({
+    version: payload.version,
+    type: payload.type,
+    text: payload.text,
+  });
   res.status(201).json(doc);
 };
 

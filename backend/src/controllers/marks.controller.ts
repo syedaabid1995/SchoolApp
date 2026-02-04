@@ -5,6 +5,10 @@ import { HttpError } from '../middlewares/error.middleware';
 import { resolveSchoolId } from '../utils/tenant';
 import { calculateGrade } from '../services/grade.service';
 import { logAudit } from '../utils/audit';
+import { invalidateAdminDashboardCache, invalidateAttendanceCache } from '../services/cache/cache.invalidation';
+import { buildQueryFingerprint, cacheKeys } from '../services/cache/cache.keys';
+import { rememberCache, setCacheHeader } from '../services/cache/cache.service';
+import { cacheTTL } from '../services/cache/cache.ttl';
 
 const createPaperSchema = z.object({
   examId: z.string().uuid(),
@@ -97,6 +101,7 @@ export const createExamPaper = async (req: Request, res: Response) => {
       weightage: paper.weightage,
     },
   });
+  await invalidateAdminDashboardCache(schoolId);
 
   res.status(201).json(paper);
 };
@@ -161,6 +166,8 @@ export const uploadMarks = async (req: Request, res: Response) => {
       entries: payload.entries.length,
     },
   });
+  await invalidateAdminDashboardCache(schoolId);
+  await invalidateAttendanceCache(schoolId);
 
   res.status(200).json({ results });
 };
@@ -172,17 +179,24 @@ export const listMarks = async (req: Request, res: Response) => {
   }
   const schoolId = resolveSchoolId(req, req.query.schoolId as string | undefined);
 
-  const marks = await prisma.mark.findMany({
-    where: { examPaperId, examPaper: { exam: { schoolId } } },
-    select: {
-      id: true,
-      studentId: true,
-      marks: true,
-      grade: true,
-      status: true,
-      moderated: true,
-    },
-  });
+  const queryFingerprint = buildQueryFingerprint({ schoolId, examPaperId });
+  const { value: marks, status } = await rememberCache(
+    cacheKeys.marksList(schoolId, queryFingerprint),
+    cacheTTL.ATTENDANCE,
+    () =>
+      prisma.mark.findMany({
+        where: { examPaperId, examPaper: { exam: { schoolId } } },
+        select: {
+          id: true,
+          studentId: true,
+          marks: true,
+          grade: true,
+          status: true,
+          moderated: true,
+        },
+      }),
+  );
+  setCacheHeader(res, status);
 
   res.status(200).json(marks);
 };
@@ -239,6 +253,7 @@ export const moderateMark = async (req: Request, res: Response) => {
     beforeState: { marks: mark.marks, grade: mark.grade },
     afterState: { marks: updated.marks, grade: updated.grade, moderated: true },
   });
+  await invalidateAdminDashboardCache(schoolId);
 
   res.status(200).json(updated);
 };
@@ -274,6 +289,7 @@ export const requestRevaluation = async (req: Request, res: Response) => {
     action: 'REVALUATION_REQUEST',
     afterState: { remarks: payload.remarks ?? null },
   });
+  await invalidateAdminDashboardCache(schoolId);
 
   res.status(201).json(revaluation);
 };

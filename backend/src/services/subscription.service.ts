@@ -1,5 +1,6 @@
 import { prisma } from '../config/db';
 import { HttpError } from '../middlewares/error.middleware';
+import { invalidateSchoolCache, invalidateSubscriptionCache } from './cache/cache.invalidation';
 
 export const getSubscription = async (schoolId: string) => {
   return prisma.subscription.findUnique({ where: { schoolId }, include: { plan: true } });
@@ -107,7 +108,7 @@ export const upsertSubscription = async (params: {
     });
   }
 
-  return prisma.subscription.upsert({
+  const subscription = await prisma.subscription.upsert({
     where: { schoolId: params.schoolId },
     update: {
       planName: planName ?? '',
@@ -139,6 +140,9 @@ export const upsertSubscription = async (params: {
       teacherLimit,
     },
   });
+  await invalidateSubscriptionCache(params.schoolId);
+  await invalidateSchoolCache(params.schoolId);
+  return subscription;
 };
 
 export const incrementUsage = async (schoolId: string, type: 'students' | 'teachers', delta = 1) => {

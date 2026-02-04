@@ -50,7 +50,7 @@ export const processExpiredSubscriptions = async () => {
 
     logger.info(`Processed ${expiredSubscriptions.length} expired subscriptions, ${graceSubscriptions.length} in grace period`);
   } catch (error) {
-    logger.error('Error processing expired subscriptions:', error);
+    logger.error({ err: error }, 'Error processing expired subscriptions');
   }
 };
 

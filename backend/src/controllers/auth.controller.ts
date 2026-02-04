@@ -1,5 +1,5 @@
 import type { Request, Response } from 'express';
-import jwt, { type JwtPayload } from 'jsonwebtoken';
+import jwt, { type JwtPayload, type Secret, type SignOptions } from 'jsonwebtoken';
 import { z } from 'zod';
 import { prisma } from '../config/db';
 import { env } from '../config/env';
@@ -23,6 +23,7 @@ const changePasswordSchema = z.object({
 
 const ACCESS_TOKEN_TTL = '15m';
 const REFRESH_TOKEN_TTL = '30d';
+const jwtSecret: Secret = env.JWT_SECRET;
 
 export type AuthTokenPayload = {
   sub: string;
@@ -33,8 +34,8 @@ export type AuthTokenPayload = {
   typ: 'access' | 'refresh';
 };
 
-const signToken = (payload: AuthTokenPayload, expiresIn: string) =>
-  jwt.sign(payload, env.JWT_SECRET, { expiresIn });
+const signToken = (payload: AuthTokenPayload, expiresIn: SignOptions['expiresIn']) =>
+  jwt.sign(payload, jwtSecret, { expiresIn });
 
 const getSchoolAccessState = async (schoolId: string): Promise<'ACTIVE' | 'PAYMENT_RESTRICTED' | 'SUSPENDED'> => {
   const school = await prisma.school.findUnique({
@@ -151,7 +152,7 @@ export const refreshToken = async (req: Request, res: Response) => {
 
   let decoded: JwtPayload | AuthTokenPayload;
   try {
-    decoded = jwt.verify(token, env.JWT_SECRET) as JwtPayload | AuthTokenPayload;
+    decoded = jwt.verify(token, jwtSecret) as JwtPayload | AuthTokenPayload;
   } catch {
     throw new HttpError(401, 'Invalid refresh token');
   }

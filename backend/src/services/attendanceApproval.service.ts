@@ -58,7 +58,7 @@ export const rejectAttendanceSession = async (req: Request, params: {
     throw new HttpError(409, 'Attendance session already locked');
   }
 
-  await prisma.attendanceSession.update({
+  const updated = await prisma.attendanceSession.update({
     where: { id: session.id },
     data: { approvalStatus: 'REJECTED', approvalReason: params.reason },
   });
@@ -73,5 +73,5 @@ export const rejectAttendanceSession = async (req: Request, params: {
     });
   }
 
-  return { rejected: true, reason: params.reason };
+  return updated;
 };

@@ -6,6 +6,7 @@ import { HttpError } from '../middlewares/error.middleware';
 import { resolveSchoolId } from '../utils/tenant';
 import { hashPassword } from '../utils/password';
 import { logAudit } from '../utils/audit';
+import { invalidateStudentCache } from '../services/cache/cache.invalidation';
 
 const createSchema = z.object({
   firstName: z.string().min(1),
@@ -146,6 +147,7 @@ export const createParent = async (req: Request, res: Response) => {
       },
     });
   }
+  await invalidateStudentCache(schoolId);
 
   res.status(201).json({ ...result.parent, tempPassword: result.tempPassword, sendVia: payload.sendVia ?? null });
 };
@@ -244,6 +246,7 @@ export const updateParent = async (req: Request, res: Response) => {
       userId: parent.userId,
     },
   });
+  await invalidateStudentCache(schoolId);
 
   res.status(200).json(parent);
 };
@@ -270,6 +273,7 @@ export const deleteParent = async (req: Request, res: Response) => {
     action: 'DELETE',
     beforeState: existing,
   });
+  await invalidateStudentCache(schoolId);
 
   res.status(204).send();
 };

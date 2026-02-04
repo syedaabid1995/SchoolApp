@@ -6,6 +6,10 @@ import { resolveSchoolId } from '../utils/tenant';
 import { computeStatus, isWithinWindow } from '../utils/attendance';
 import { auditAttendance } from '../middlewares/audit.middleware';
 import { logAudit } from '../utils/audit';
+import { invalidateAttendanceCache } from '../services/cache/cache.invalidation';
+import { buildQueryFingerprint, cacheKeys } from '../services/cache/cache.keys';
+import { rememberCache, setCacheHeader } from '../services/cache/cache.service';
+import { cacheTTL } from '../services/cache/cache.ttl';
 
 const startSchema = z.object({
   periodId: z.string().uuid(),
@@ -103,6 +107,7 @@ export const startSession = async (req: Request, res: Response) => {
       deviceId: session.deviceId,
     },
   });
+  await invalidateAttendanceCache(schoolId);
 
   res.status(201).json(session);
 };
@@ -202,6 +207,7 @@ export const markAttendance = async (req: Request, res: Response) => {
       deviceId: payload.deviceId,
     },
   });
+  await invalidateAttendanceCache(schoolId);
 
   res.status(201).json({ records: created });
 };
@@ -239,6 +245,7 @@ export const closeSession = async (req: Request, res: Response) => {
     action: 'CLOSE',
     afterState: { status: updated.status },
   });
+  await invalidateAttendanceCache(schoolId);
 
   res.status(200).json(updated);
 };
@@ -288,6 +295,7 @@ export const overrideAttendance = async (req: Request, res: Response) => {
     beforeState: { status: record.status, manualOverrideReason: record.manualOverrideReason },
     afterState: { status: updated.status, manualOverrideReason: updated.manualOverrideReason },
   });
+  await invalidateAttendanceCache(schoolId);
 
   res.status(200).json(updated);
 };
@@ -320,19 +328,31 @@ export const listSessions = async (req: Request, res: Response) => {
   const to = payload.dateTo ?? new Date();
   const from = payload.dateFrom ?? new Date(to.getTime() - 6 * 24 * 60 * 60 * 1000);
 
-  const sessions = await prisma.attendanceSession.findMany({
-    where: {
-      schoolId,
-      date: { gte: from, lte: to },
-      ...(payload.approvalStatus ? { approvalStatus: payload.approvalStatus } : {}),
-    },
-    include: {
-      period: true,
-      startedBy: { select: { id: true, email: true } },
-      _count: { select: { records: true } },
-    },
-    orderBy: { date: 'desc' },
+  const queryFingerprint = buildQueryFingerprint({
+    schoolId,
+    dateFrom: from.toISOString(),
+    dateTo: to.toISOString(),
+    approvalStatus: payload.approvalStatus ?? null,
   });
+  const { value: sessions, status } = await rememberCache(
+    cacheKeys.attendanceSummary(schoolId, queryFingerprint),
+    cacheTTL.ATTENDANCE,
+    () =>
+      prisma.attendanceSession.findMany({
+        where: {
+          schoolId,
+          date: { gte: from, lte: to },
+          ...(payload.approvalStatus ? { approvalStatus: payload.approvalStatus } : {}),
+        },
+        include: {
+          period: true,
+          startedBy: { select: { id: true, email: true } },
+          _count: { select: { records: true } },
+        },
+        orderBy: { date: 'desc' },
+      }),
+  );
+  setCacheHeader(res, status);
 
   res.status(200).json(sessions);
 };

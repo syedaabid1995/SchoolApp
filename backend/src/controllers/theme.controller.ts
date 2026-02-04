@@ -1,8 +1,13 @@
 import type { Request, Response } from 'express';
+import type { Prisma } from '@prisma/client';
 import { z } from 'zod';
 import { prisma } from '../config/db';
 import { HttpError } from '../middlewares/error.middleware';
 import { resolveSchoolId } from '../utils/tenant';
+import { cacheKeys } from '../services/cache/cache.keys';
+import { rememberCache, setCacheHeader } from '../services/cache/cache.service';
+import { cacheTTL } from '../services/cache/cache.ttl';
+import { invalidateThemeCache } from '../services/cache/cache.invalidation';
 
 const createSchema = z.object({
   name: z.string().min(1),
@@ -30,11 +35,12 @@ export const createTheme = async (req: Request, res: Response) => {
     data: {
       schoolId,
       name: payload.name,
-      tokens: payload.tokens,
+      tokens: payload.tokens as Prisma.InputJsonValue,
       version,
       status: 'DRAFT',
     },
   });
+  await invalidateThemeCache(schoolId);
 
   res.status(201).json(theme);
 };
@@ -54,8 +60,9 @@ export const updateThemeTokens = async (req: Request, res: Response) => {
 
   const updated = await prisma.theme.update({
     where: { id },
-    data: { tokens: payload.tokens },
+    data: { tokens: payload.tokens as Prisma.InputJsonValue },
   });
+  await invalidateThemeCache(schoolId);
 
   res.status(200).json(updated);
 };
@@ -75,7 +82,7 @@ export const publishTheme = async (req: Request, res: Response) => {
   await prisma.themeHistory.create({
     data: {
       themeId: theme.id,
-      snapshot: { tokens: theme.tokens, status: theme.status, version: theme.version },
+      snapshot: { tokens: theme.tokens, status: theme.status, version: theme.version } as Prisma.InputJsonValue,
     },
   });
 
@@ -83,6 +90,7 @@ export const publishTheme = async (req: Request, res: Response) => {
     where: { id },
     data: { status: 'PUBLISHED' },
   });
+  await invalidateThemeCache(schoolId);
 
   res.status(200).json(updated);
 };
@@ -113,10 +121,11 @@ export const rollbackTheme = async (req: Request, res: Response) => {
   const updated = await prisma.theme.update({
     where: { id },
     data: {
-      tokens: snapshot.tokens ?? theme.tokens,
+      tokens: (snapshot.tokens ?? theme.tokens) as Prisma.InputJsonValue,
       status: 'ROLLED_BACK',
     },
   });
+  await invalidateThemeCache(schoolId);
 
   res.status(200).json(updated);
 };
@@ -124,10 +133,16 @@ export const rollbackTheme = async (req: Request, res: Response) => {
 export const listThemes = async (req: Request, res: Response) => {
   const schoolId = resolveSchoolId(req, req.query.schoolId as string | undefined);
 
-  const themes = await prisma.theme.findMany({
-    where: { schoolId },
-    orderBy: [{ name: 'asc' }, { version: 'desc' }],
-  });
+  const { value: themes, status } = await rememberCache(
+    cacheKeys.themesList(schoolId),
+    cacheTTL.SCHOOLS,
+    () =>
+      prisma.theme.findMany({
+        where: { schoolId },
+        orderBy: [{ name: 'asc' }, { version: 'desc' }],
+      }),
+  );
+  setCacheHeader(res, status);
 
   res.status(200).json(themes);
 };
@@ -135,14 +150,20 @@ export const listThemes = async (req: Request, res: Response) => {
 export const getActiveTheme = async (req: Request, res: Response) => {
   const schoolId = resolveSchoolId(req, req.query.schoolId as string | undefined);
 
-  const theme = await prisma.theme.findFirst({
-    where: { schoolId, status: 'PUBLISHED' },
-    orderBy: { updatedAt: 'desc' },
-  });
+  const { value: theme, status } = await rememberCache(
+    cacheKeys.themesActive(schoolId),
+    cacheTTL.SCHOOLS,
+    () =>
+      prisma.theme.findFirst({
+        where: { schoolId, status: 'PUBLISHED' },
+        orderBy: { updatedAt: 'desc' },
+      }),
+  );
 
   if (!theme) {
     throw new HttpError(404, 'Active theme not found');
   }
 
+  setCacheHeader(res, status);
   res.status(200).json(theme);
 };

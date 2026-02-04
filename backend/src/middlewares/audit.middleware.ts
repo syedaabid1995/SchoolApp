@@ -6,8 +6,8 @@ import { HttpError } from './error.middleware';
 export type AuditPayload = {
   recordId: string;
   action: 'CREATE' | 'UPDATE' | 'DELETE' | 'APPROVE' | 'REJECT' | 'OVERRIDE';
-  previousValue?: Record<string, unknown> | null;
-  newValue?: Record<string, unknown> | null;
+  previousValue?: Prisma.InputJsonValue | null;
+  newValue?: Prisma.InputJsonValue | null;
   reason?: string | null;
 };
 

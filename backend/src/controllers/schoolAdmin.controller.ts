@@ -11,6 +11,10 @@ import {
   softDeleteSchool,
 } from '../services/schoolAdmin.service';
 import { logAudit } from '../utils/audit';
+import { buildQueryFingerprint, cacheKeys } from '../services/cache/cache.keys';
+import { rememberCache, setCacheHeader } from '../services/cache/cache.service';
+import { cacheTTL } from '../services/cache/cache.ttl';
+import { invalidateSchoolCache, invalidateSubscriptionCache } from '../services/cache/cache.invalidation';
 
 const createSchema = z.object({
   name: z.string().min(1),
@@ -49,7 +53,15 @@ const schoolAdminStatusSchema = z.object({
 
 export const createSchoolApi = async (req: Request, res: Response) => {
   const payload = createSchema.parse(req.body);
-  const result = await createSchool(payload);
+  const result = await createSchool({
+    name: payload.name,
+    code: payload.code,
+    subscriptionPlan: payload.subscriptionPlan,
+    status: payload.status,
+    adminEmail: payload.adminEmail,
+  });
+  await invalidateSchoolCache(result.school.id);
+  await invalidateSubscriptionCache(result.school.id);
   if (result.adminUser) {
     await logAudit(req, {
       schoolId: result.school.id,
@@ -64,41 +76,67 @@ export const createSchoolApi = async (req: Request, res: Response) => {
 
 export const listSchoolsApi = async (req: Request, res: Response) => {
   const payload = listSchema.parse(req.query);
-  const result = await listSchools(payload);
+  const params = {
+    page: payload.page,
+    limit: payload.limit,
+    status: payload.status,
+    query: payload.query,
+  };
+  const queryFingerprint = buildQueryFingerprint(payload);
+  const { value: result, status } = await rememberCache(
+    cacheKeys.schoolsList(queryFingerprint),
+    cacheTTL.SCHOOLS,
+    () => listSchools(params),
+  );
+  setCacheHeader(res, status);
   res.status(200).json(result);
 };
 
 export const listSchoolAdminsApi = async (req: Request, res: Response) => {
-  const result = await listSchoolAdmins(req.params.id);
+  const { value: result, status } = await rememberCache(
+    cacheKeys.schoolAdmins(req.params.id),
+    cacheTTL.SCHOOLS,
+    () => listSchoolAdmins(req.params.id),
+  );
+  setCacheHeader(res, status);
   res.status(200).json(result);
 };
 
 export const updateSchoolApi = async (req: Request, res: Response) => {
   const payload = updateSchema.parse(req.body);
   const school = await updateSchool(req.params.id, payload);
+  await invalidateSchoolCache(school.id);
+  await invalidateSubscriptionCache(school.id);
   res.status(200).json(school);
 };
 
 export const activateSchoolApi = async (req: Request, res: Response) => {
   const payload = statusSchema.parse(req.body);
   const school = await setSchoolStatus(req.params.id, 'ACTIVE', payload.reason ?? null);
+  await invalidateSchoolCache(school.id);
+  await invalidateSubscriptionCache(school.id);
   res.status(200).json(school);
 };
 
 export const suspendSchoolApi = async (req: Request, res: Response) => {
   const payload = statusSchema.parse(req.body);
   const school = await setSchoolStatus(req.params.id, 'SUSPENDED', payload.reason ?? null);
+  await invalidateSchoolCache(school.id);
+  await invalidateSubscriptionCache(school.id);
   res.status(200).json(school);
 };
 
 export const deleteSchoolApi = async (req: Request, res: Response) => {
   const school = await softDeleteSchool(req.params.id);
+  await invalidateSchoolCache(school.id);
+  await invalidateSubscriptionCache(school.id);
   res.status(200).json(school);
 };
 
 export const createSchoolAdminApi = async (req: Request, res: Response) => {
   const payload = createSchoolAdminSchema.parse(req.body);
   const result = await createSchoolAdmin(req.params.id, payload.adminEmail);
+  await invalidateSchoolCache(req.params.id);
   await logAudit(req, {
     schoolId: req.params.id,
     entityType: 'USER',
@@ -112,6 +150,7 @@ export const createSchoolAdminApi = async (req: Request, res: Response) => {
 export const setSchoolAdminStatusApi = async (req: Request, res: Response) => {
   const payload = schoolAdminStatusSchema.parse(req.body);
   const updated = await setSchoolAdminStatus(req.params.id, req.params.adminId, payload.status);
+  await invalidateSchoolCache(req.params.id);
   await logAudit(req, {
     schoolId: req.params.id,
     entityType: 'USER',

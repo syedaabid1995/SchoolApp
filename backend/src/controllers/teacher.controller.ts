@@ -5,6 +5,10 @@ import { createTeacher, listTeachers, updateTeacher, getTeacher } from '../servi
 import { HttpError } from '../middlewares/error.middleware';
 import { logAudit } from '../utils/audit';
 import { prisma } from '../config/db';
+import { buildQueryFingerprint, cacheKeys } from '../services/cache/cache.keys';
+import { rememberCache, setCacheHeader } from '../services/cache/cache.service';
+import { cacheTTL } from '../services/cache/cache.ttl';
+import { invalidateTeacherCache } from '../services/cache/cache.invalidation';
 
 const createSchema = z.object({
   email: z.string().email(),
@@ -98,20 +102,34 @@ export const createTeacherApi = async (req: Request, res: Response) => {
     },
   });
 
+  await invalidateTeacherCache(schoolId, teacher.profile.id);
+
   res.status(201).json(teacher);
 };
 
 export const listTeachersApi = async (req: Request, res: Response) => {
   const payload = listSchema.parse(req.query);
   const schoolId = resolveSchoolId(req, payload.schoolId);
-  const result = await listTeachers({
-    schoolId,
+  const queryFingerprint = buildQueryFingerprint({
     page: payload.page,
     limit: payload.limit,
-    query: payload.query,
-    isActive: payload.isActive,
+    query: payload.query ?? null,
+    isActive: payload.isActive ?? null,
   });
-  res.status(200).json(result);
+  const { value: cachedResult, status } = await rememberCache(
+    cacheKeys.teachersList(schoolId, queryFingerprint),
+    cacheTTL.TEACHERS,
+    () =>
+      listTeachers({
+        schoolId,
+        page: payload.page,
+        limit: payload.limit,
+        query: payload.query,
+        isActive: payload.isActive,
+      }),
+  );
+  setCacheHeader(res, status);
+  res.status(200).json(cachedResult);
 };
 
 export const updateTeacherApi = async (req: Request, res: Response) => {
@@ -152,6 +170,8 @@ export const updateTeacherApi = async (req: Request, res: Response) => {
       },
     });
 
+    await invalidateTeacherCache(schoolId, updated.id);
+
     res.status(200).json(updated);
   } catch (err) {
     throw new HttpError(404, 'Teacher not found');
@@ -160,7 +180,12 @@ export const updateTeacherApi = async (req: Request, res: Response) => {
 
 export const getTeacherApi = async (req: Request, res: Response) => {
   const schoolId = resolveSchoolId(req, req.query.schoolId as string | undefined);
-  const teacher = await getTeacher(req.params.id, schoolId);
+  const { value: teacher, status } = await rememberCache(
+    cacheKeys.teacherDetail(schoolId, req.params.id),
+    cacheTTL.TEACHERS,
+    () => getTeacher(req.params.id, schoolId),
+  );
+  setCacheHeader(res, status);
   if (!teacher) {
     throw new HttpError(404, 'Teacher not found');
   }
@@ -197,6 +222,8 @@ export const deleteTeacherApi = async (req: Request, res: Response) => {
       isActive: existing.isActive,
     },
   });
+
+  await invalidateTeacherCache(schoolId, id);
 
   res.status(200).json({ success: true });
 };

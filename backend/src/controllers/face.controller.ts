@@ -5,6 +5,7 @@ import { HttpError } from '../middlewares/error.middleware';
 import {
   approveFaceEnrollment,
   createFaceEnrollment,
+  type FaceSampleInput,
   reEnrollFace,
   rejectFaceEnrollment,
 } from '../services/face.service';
@@ -40,7 +41,7 @@ export const enrollFace = async (req: Request, res: Response) => {
     schoolId,
     studentId: payload.studentId,
     createdById: auth.userId,
-    samples: payload.samples,
+    samples: payload.samples as FaceSampleInput[],
   });
 
   res.status(201).json(profile);
@@ -56,7 +57,7 @@ export const reEnroll = async (req: Request, res: Response) => {
     schoolId,
     studentId: payload.studentId,
     createdById: auth.userId,
-    samples: payload.samples,
+    samples: payload.samples as FaceSampleInput[],
   });
 
   res.status(200).json(profile);

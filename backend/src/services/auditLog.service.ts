@@ -1,4 +1,5 @@
 import { prisma } from '../config/db';
+import type { Prisma } from '@prisma/client';
 
 export type AuditCreateInput = {
   schoolId?: string | null;
@@ -7,8 +8,8 @@ export type AuditCreateInput = {
   entityType: string;
   entityId: string;
   action: string;
-  beforeState?: Record<string, unknown> | null;
-  afterState?: Record<string, unknown> | null;
+  beforeState?: Prisma.InputJsonValue | null;
+  afterState?: Prisma.InputJsonValue | null;
 };
 
 export const createAuditLog = async (payload: AuditCreateInput) => {

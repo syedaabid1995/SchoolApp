@@ -1,4 +1,5 @@
 import type { Request, Response } from 'express';
+import type { Prisma } from '@prisma/client';
 import { z } from 'zod';
 import { prisma } from '../config/db';
 import { HttpError } from '../middlewares/error.middleware';
@@ -32,7 +33,7 @@ export const createEvidence = async (req: Request, res: Response) => {
       imageUrl: payload.imageUrl ?? null,
       confidence: payload.confidence ?? null,
       modelVersion: payload.modelVersion ?? null,
-      metadata: payload.metadata ?? null,
+      metadata: (payload.metadata ?? null) as Prisma.InputJsonValue | null,
     },
   });
 

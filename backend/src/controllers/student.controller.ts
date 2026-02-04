@@ -6,9 +6,12 @@ import { resolveSchoolId } from '../utils/tenant';
 import { enforceLimits } from '../services/subscription.service';
 import { logAudit } from '../utils/audit';
 import path from 'path';
-import { fileURLToPath } from 'url';
 import fs from 'fs/promises';
 import { constants as fsConstants } from 'fs';
+import { buildQueryFingerprint, cacheKeys } from '../services/cache/cache.keys';
+import { rememberCache, setCacheHeader } from '../services/cache/cache.service';
+import { cacheTTL } from '../services/cache/cache.ttl';
+import { invalidateStudentCache, invalidateAttendanceCache } from '../services/cache/cache.invalidation';
 
 const createSchema = z.object({
   admissionNo: z.string().min(1),
@@ -181,32 +184,39 @@ export const createStudent = async (req: Request, res: Response) => {
     },
   });
 
+  await invalidateStudentCache(schoolId, student.id);
+
   res.status(201).json(student);
 };
 
 export const listStudents = async (req: Request, res: Response) => {
   const schoolId = resolveSchoolId(req, req.query.schoolId as string | undefined);
   const status = req.query.status as string | undefined;
-
-  const students = await prisma.student.findMany({
-    where: {
-      schoolId,
-      ...(status ? { status: status as 'ENROLLED' | 'TRANSFERRED' | 'EXITED' } : {}),
-    },
-    orderBy: { createdAt: 'desc' },
-    include: {
-      class: { select: { id: true, name: true } },
-      section: { select: { id: true, name: true } },
-      parentLinks: {
+  const queryFingerprint = buildQueryFingerprint({ status: status ?? null });
+  const { value: students, status: cacheStatus } = await rememberCache(
+    cacheKeys.studentsList(schoolId, queryFingerprint),
+    cacheTTL.STUDENTS,
+    () =>
+      prisma.student.findMany({
+        where: {
+          schoolId,
+          ...(status ? { status: status as 'ENROLLED' | 'TRANSFERRED' | 'EXITED' } : {}),
+        },
+        orderBy: { createdAt: 'desc' },
         include: {
-          parent: {
-            select: { id: true, firstName: true, lastName: true, phone: true, email: true },
+          class: { select: { id: true, name: true } },
+          section: { select: { id: true, name: true } },
+          parentLinks: {
+            include: {
+              parent: {
+                select: { id: true, firstName: true, lastName: true, phone: true, email: true },
+              },
+            },
           },
         },
-      },
-    },
-  });
-
+      }),
+  );
+  setCacheHeader(res, cacheStatus);
   res.status(200).json(students);
 };
 
@@ -214,19 +224,25 @@ export const getStudent = async (req: Request, res: Response) => {
   const schoolId = resolveSchoolId(req, req.query.schoolId as string | undefined);
   const { id } = req.params;
 
-  const student = await prisma.student.findFirst({
-    where: { id, schoolId },
-    include: {
-      parentLinks: { include: { parent: true } },
-      photos: { orderBy: { createdAt: 'desc' } },
-      statusEvents: { orderBy: { changedAt: 'desc' } },
-    },
-  });
+  const { value: student, status: cacheStatus } = await rememberCache(
+    cacheKeys.studentDetail(schoolId, id),
+    cacheTTL.STUDENTS,
+    () =>
+      prisma.student.findFirst({
+        where: { id, schoolId },
+        include: {
+          parentLinks: { include: { parent: true } },
+          photos: { orderBy: { createdAt: 'desc' } },
+          statusEvents: { orderBy: { changedAt: 'desc' } },
+        },
+      }),
+  );
 
   if (!student) {
     throw new HttpError(404, 'Student not found');
   }
 
+  setCacheHeader(res, cacheStatus);
   res.status(200).json(student);
 };
 
@@ -303,6 +319,8 @@ export const updateStudent = async (req: Request, res: Response) => {
     },
   });
 
+  await invalidateStudentCache(schoolId, student.id);
+
   res.status(200).json(student);
 };
 
@@ -338,6 +356,8 @@ export const deleteStudent = async (req: Request, res: Response) => {
     beforeState: existing,
   });
 
+  await invalidateStudentCache(schoolId, id);
+
   res.status(200).json({ success: true });
 };
 
@@ -372,6 +392,8 @@ export const addStudentPhoto = async (req: Request, res: Response) => {
     afterState: { studentId: id, url: payload.url },
   });
 
+  await invalidateStudentCache(schoolId, id);
+
   res.status(201).json(photo);
 };
 
@@ -405,6 +427,8 @@ export const deleteStudentPhoto = async (req: Request, res: Response) => {
     action: 'DELETE',
     beforeState: { studentId: id, url: photo.url },
   });
+
+  await invalidateStudentCache(schoolId, id);
 
   res.status(204).send();
 };
@@ -446,6 +470,8 @@ export const linkParent = async (req: Request, res: Response) => {
     afterState: { studentId: id, parentId: payload.parentId },
   });
 
+  await invalidateStudentCache(schoolId, id);
+
   res.status(201).json(link);
 };
 
@@ -473,6 +499,8 @@ export const unlinkParent = async (req: Request, res: Response) => {
     action: 'UNLINK',
     beforeState: { studentId: id, parentId },
   });
+
+  await invalidateStudentCache(schoolId, id);
 
   res.status(204).send();
 };
@@ -515,6 +543,8 @@ export const changeStudentStatus = async (req: Request, res: Response) => {
     beforeState: { status: student.status },
     afterState: { status: updated.status, reason: payload.reason ?? null },
   });
+
+  await invalidateStudentCache(schoolId, updated.id);
 
   res.status(200).json(updated);
 };
@@ -628,8 +658,7 @@ export const acceptTransferRequest = async (req: Request, res: Response) => {
     throw new HttpError(404, 'Transfer request not found');
   }
 
-  const __dirname = path.dirname(fileURLToPath(import.meta.url));
-  const uploadsRoot = path.resolve(__dirname, '../../uploads');
+  const uploadsRoot = path.resolve(process.cwd(), 'uploads');
   const fromSchoolId = request.fromSchoolId;
   const toSchoolId = request.toSchoolId;
   const studentId = request.studentId;
@@ -735,6 +764,11 @@ export const acceptTransferRequest = async (req: Request, res: Response) => {
     afterState: { status: result.status, reason: result.reason },
   });
 
+  await invalidateStudentCache(fromSchoolId, request.studentId);
+  await invalidateStudentCache(schoolId, request.studentId);
+  await invalidateAttendanceCache(fromSchoolId);
+  await invalidateAttendanceCache(schoolId);
+
   res.status(200).json(result);
 };
 
@@ -773,6 +807,8 @@ export const rejectTransferRequest = async (req: Request, res: Response) => {
     beforeState: { status: 'PENDING' },
     afterState: { status: request.status, reason: request.reason },
   });
+
+  await invalidateStudentCache(schoolId);
 
   res.status(200).json(request);
 };

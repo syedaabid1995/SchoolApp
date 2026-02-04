@@ -1,4 +1,5 @@
 import crypto from 'crypto';
+import { Prisma } from '@prisma/client';
 import { prisma } from '../config/db';
 import { hashPassword } from '../utils/password';
 import { incrementUsage, enforceLimits } from './subscription.service';
@@ -124,16 +125,16 @@ export const listTeachers = async (params: {
   isActive?: boolean;
 }) => {
   const skip = (params.page - 1) * params.limit;
-  const where = {
+  const where: Prisma.TeacherProfileWhereInput = {
     schoolId: params.schoolId,
     ...(params.isActive !== undefined ? { isActive: params.isActive } : {}),
     ...(params.query
       ? {
           OR: [
-            { firstName: { contains: params.query, mode: 'insensitive' } },
-            { lastName: { contains: params.query, mode: 'insensitive' } },
-            { employeeNo: { contains: params.query, mode: 'insensitive' } },
-            { user: { email: { contains: params.query, mode: 'insensitive' } } },
+            { firstName: { contains: params.query, mode: Prisma.QueryMode.insensitive } },
+            { lastName: { contains: params.query, mode: Prisma.QueryMode.insensitive } },
+            { employeeNo: { contains: params.query, mode: Prisma.QueryMode.insensitive } },
+            { user: { email: { contains: params.query, mode: Prisma.QueryMode.insensitive } } },
           ],
         }
       : {}),

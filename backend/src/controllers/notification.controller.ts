@@ -4,6 +4,10 @@ import { prisma } from '../config/db';
 import { resolveSchoolId } from '../utils/tenant';
 import { sendNotification } from '../services/notification.service';
 import { HttpError } from '../middlewares/error.middleware';
+import { buildQueryFingerprint, cacheKeys } from '../services/cache/cache.keys';
+import { rememberCache, setCacheHeader } from '../services/cache/cache.service';
+import { cacheTTL } from '../services/cache/cache.ttl';
+import { invalidateNotificationCache } from '../services/cache/cache.invalidation';
 
 const templateSchema = z.object({
   key: z.string().min(1),
@@ -32,11 +36,18 @@ export const createTemplate = async (req: Request, res: Response) => {
     },
   });
 
+  await invalidateNotificationCache();
+
   res.status(201).json(template);
 };
 
 export const listTemplates = async (_req: Request, res: Response) => {
-  const templates = await prisma.notificationTemplate.findMany({ orderBy: { key: 'asc' } });
+  const { value: templates, status } = await rememberCache(
+    cacheKeys.notificationTemplates(),
+    cacheTTL.NOTIFICATIONS,
+    () => prisma.notificationTemplate.findMany({ orderBy: { key: 'asc' } }),
+  );
+  setCacheHeader(res, status);
   res.status(200).json(templates);
 };
 
@@ -54,16 +65,28 @@ export const sendNotificationApi = async (req: Request, res: Response) => {
     data: payload.data,
   });
 
+  await invalidateNotificationCache(schoolId);
+
   res.status(202).json(result);
 };
 
 export const listNotificationLogs = async (req: Request, res: Response) => {
   const schoolId = resolveSchoolId(req, req.query.schoolId as string | undefined);
-
-  const logs = await prisma.notificationLog.findMany({
-    where: { schoolId },
-    orderBy: { createdAt: 'desc' },
+  const queryFingerprint = buildQueryFingerprint({
+    schoolId,
+    page: req.query.page ?? null,
+    limit: req.query.limit ?? null,
   });
+  const { value: logs, status } = await rememberCache(
+    cacheKeys.notificationLogs(queryFingerprint),
+    cacheTTL.NOTIFICATIONS,
+    () =>
+      prisma.notificationLog.findMany({
+        where: { schoolId },
+        orderBy: { createdAt: 'desc' },
+      }),
+  );
+  setCacheHeader(res, status);
 
   res.status(200).json(logs);
 };
@@ -75,23 +98,28 @@ export const listNotificationSummary = async (req: Request, res: Response) => {
   const userId = req.auth.userId;
   const schoolId = req.auth.schoolId ?? null;
   const now = new Date();
+  const cacheKey = cacheKeys.notificationSummary(schoolId, role, userId);
 
-  const items: Array<{ id: string; title: string; message?: string; type: 'info' | 'warning' | 'danger' | 'success'; href?: string }> = [];
+  const { value, status } = await rememberCache(
+    cacheKey,
+    cacheTTL.NOTIFICATIONS,
+    async () => {
+      const items: Array<{ id: string; title: string; message?: string; type: 'info' | 'warning' | 'danger' | 'success'; href?: string }> = [];
 
-  const addItem = (payload: { id: string; title: string; message?: string; type: 'info' | 'warning' | 'danger' | 'success'; href?: string }) => {
-    items.push(payload);
-  };
+      const addItem = (payload: { id: string; title: string; message?: string; type: 'info' | 'warning' | 'danger' | 'success'; href?: string }) => {
+        items.push(payload);
+      };
 
-  if (role === 'SUPER_ADMIN') {
-    const [openTickets, expiringPlans, gracePlans] = await Promise.all([
-      prisma.supportTicket.count({ where: { status: { in: ['OPEN', 'IN_PROGRESS'] } } }),
-      prisma.subscription.count({
-        where: {
-          nextDueAt: { lte: new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000), gte: now },
-        },
-      }),
-      prisma.subscription.count({ where: { status: 'GRACE_PERIOD' } }),
-    ]);
+      if (role === 'SUPER_ADMIN') {
+        const [openTickets, expiringPlans, gracePlans] = await Promise.all([
+          prisma.supportTicket.count({ where: { status: { in: ['OPEN', 'IN_PROGRESS'] } } }),
+          prisma.subscription.count({
+            where: {
+              nextDueAt: { lte: new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000), gte: now },
+            },
+          }),
+          prisma.subscription.count({ where: { status: 'GRACE_PERIOD' } }),
+        ]);
 
     if (openTickets > 0) {
       addItem({
@@ -122,23 +150,23 @@ export const listNotificationSummary = async (req: Request, res: Response) => {
         href: '/dashboard/subscriptions',
       });
     }
-  } else {
-    const resolvedSchoolId = resolveSchoolId(req, schoolId ?? undefined);
-    const [pendingAttendance, transferRequests, openTickets] = await Promise.all([
-      prisma.attendanceSession.count({
-        where: role === 'TEACHER'
-          ? { schoolId: resolvedSchoolId, startedById: userId, approvalStatus: 'PENDING' }
-          : { schoolId: resolvedSchoolId, approvalStatus: 'PENDING' },
-      }),
-      role === 'SCHOOL_ADMIN'
-        ? prisma.studentTransferRequest.count({ where: { toSchoolId: resolvedSchoolId, status: 'PENDING' } })
-        : Promise.resolve(0),
-      prisma.supportTicket.count({
-        where: role === 'TEACHER'
-          ? { createdById: userId, status: { in: ['IN_PROGRESS', 'RESOLVED', 'CLOSED'] } }
-          : { schoolId: resolvedSchoolId, status: { in: ['OPEN', 'IN_PROGRESS'] } },
-      }),
-    ]);
+      } else {
+        const resolvedSchoolId = resolveSchoolId(req, schoolId ?? undefined);
+        const [pendingAttendance, transferRequests, openTickets] = await Promise.all([
+          prisma.attendanceSession.count({
+            where: role === 'TEACHER'
+              ? { schoolId: resolvedSchoolId, startedById: userId, approvalStatus: 'PENDING' }
+              : { schoolId: resolvedSchoolId, approvalStatus: 'PENDING' },
+          }),
+          role === 'SCHOOL_ADMIN'
+            ? prisma.studentTransferRequest.count({ where: { toSchoolId: resolvedSchoolId, status: 'PENDING' } })
+            : Promise.resolve(0),
+          prisma.supportTicket.count({
+            where: role === 'TEACHER'
+              ? { createdById: userId, status: { in: ['IN_PROGRESS', 'RESOLVED', 'CLOSED'] } }
+              : { schoolId: resolvedSchoolId, status: { in: ['OPEN', 'IN_PROGRESS'] } },
+          }),
+        ]);
 
     const subscription = await prisma.subscription.findFirst({ where: { schoolId: resolvedSchoolId } });
     const dueDate = subscription?.nextDueAt ?? subscription?.endsAt ?? null;
@@ -194,7 +222,12 @@ export const listNotificationSummary = async (req: Request, res: Response) => {
         href: '/dashboard/support',
       });
     }
-  }
+      }
 
-  res.status(200).json({ items });
+      return { items };
+    },
+  );
+  setCacheHeader(res, status);
+
+  res.status(200).json(value);
 };

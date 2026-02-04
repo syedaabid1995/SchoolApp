@@ -1,6 +1,8 @@
 import type { Request } from 'express';
+import type { Prisma } from '@prisma/client';
 import { prisma } from '../config/db';
 import { createAuditLog } from '../services/auditLog.service';
+import { deleteCacheByPattern } from '../services/cache/cache.service';
 
 export const resolveActorRole = async (userId: string) => {
   const roles = await prisma.userRole.findMany({
@@ -25,8 +27,8 @@ export const logAudit = async (
     entityType: string;
     entityId: string;
     action: string;
-    beforeState?: Record<string, unknown> | null;
-    afterState?: Record<string, unknown> | null;
+    beforeState?: Prisma.InputJsonValue | null;
+    afterState?: Prisma.InputJsonValue | null;
   },
 ) => {
   if (!req.auth?.userId) return;
@@ -42,6 +44,7 @@ export const logAudit = async (
       beforeState: payload.beforeState ?? null,
       afterState: payload.afterState ?? null,
     });
+    await deleteCacheByPattern('cache:audit_logs:*');
   } catch {
     // Do not block primary flow on audit failure.
   }

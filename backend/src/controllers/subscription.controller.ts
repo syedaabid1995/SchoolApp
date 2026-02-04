@@ -2,6 +2,10 @@ import type { Request, Response } from 'express';
 import { z } from 'zod';
 import { upsertSubscription, getSubscription } from '../services/subscription.service';
 import { resolveSchoolId } from '../utils/tenant';
+import { cacheKeys } from '../services/cache/cache.keys';
+import { rememberCache, setCacheHeader } from '../services/cache/cache.service';
+import { cacheTTL } from '../services/cache/cache.ttl';
+import { invalidateSubscriptionCache, invalidateSchoolCache } from '../services/cache/cache.invalidation';
 
 const upsertSchema = z.object({
   planId: z.string().uuid().optional(),
@@ -36,12 +40,19 @@ export const upsertSubscriptionApi = async (req: Request, res: Response) => {
     studentLimit: payload.studentLimit,
     teacherLimit: payload.teacherLimit,
   });
+  await invalidateSubscriptionCache(schoolId);
+  await invalidateSchoolCache(schoolId);
 
   res.status(200).json(subscription);
 };
 
 export const getSubscriptionApi = async (req: Request, res: Response) => {
   const schoolId = resolveSchoolId(req, req.query.schoolId as string | undefined);
-  const subscription = await getSubscription(schoolId);
+  const { value: subscription, status } = await rememberCache(
+    cacheKeys.subscriptionBySchool(schoolId),
+    cacheTTL.SUBSCRIPTION,
+    () => getSubscription(schoolId),
+  );
+  setCacheHeader(res, status);
   res.status(200).json(subscription);
 };

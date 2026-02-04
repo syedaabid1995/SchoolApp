@@ -1,4 +1,5 @@
 import { prisma } from '../config/db';
+import type { Prisma } from '@prisma/client';
 import { dispatchNotification } from './notificationDispatcher.service';
 
 export type NotificationPayload = {
@@ -39,7 +40,7 @@ export const sendNotification = async (payload: NotificationPayload) => {
       userId: payload.userId ?? null,
       channel: payload.channel,
       templateId: templateId ?? null,
-      payload: payload.data,
+      payload: payload.data as Prisma.InputJsonValue,
       status: 'QUEUED',
     },
   });

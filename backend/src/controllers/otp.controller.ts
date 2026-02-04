@@ -1,5 +1,5 @@
 import type { Request, Response } from 'express';
-import jwt from 'jsonwebtoken';
+import jwt, { type Secret, type SignOptions } from 'jsonwebtoken';
 import { z } from 'zod';
 import { requestOtp, verifyOtp } from '../services/otp.service';
 import { resolveSchoolId } from '../utils/tenant';
@@ -21,6 +21,7 @@ const verifySchema = z.object({
 
 const ACCESS_TOKEN_TTL = '15m';
 const REFRESH_TOKEN_TTL = '30d';
+const jwtSecret: Secret = env.JWT_SECRET;
 
 const normalizePhone = (phone: string) => phone.replace(/\s+/g, '');
 
@@ -57,8 +58,10 @@ const resolveSchoolForPhone = async (req: Request, phone: string, schoolId?: str
   return sorted[0];
 };
 
-const signToken = (payload: { sub: string; schoolId: string | null; role: string | null; email?: string | null; typ: 'access' | 'refresh' }, expiresIn: string) =>
-  jwt.sign(payload, env.JWT_SECRET, { expiresIn });
+const signToken = (
+  payload: { sub: string; schoolId: string | null; role: string | null; email?: string | null; typ: 'access' | 'refresh' },
+  expiresIn: SignOptions['expiresIn'],
+) => jwt.sign(payload, jwtSecret, { expiresIn });
 
 export const requestOtpApi = async (req: Request, res: Response) => {
   const payload = requestSchema.parse(req.body);

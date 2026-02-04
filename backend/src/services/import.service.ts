@@ -1,6 +1,7 @@
 import fs from 'fs';
 import path from 'path';
 import crypto from 'crypto';
+import type { Prisma } from '@prisma/client';
 import { parse } from 'csv-parse/sync';
 import ExcelJS from 'exceljs';
 import { prisma } from '../config/db';
@@ -61,7 +62,8 @@ const loadFileRows = async (filePath: string) => {
     const sheet = wb.worksheets[0];
     if (!sheet) return [];
     const headerRow = sheet.getRow(1);
-    const headers = headerRow.values
+    const headerValues = Array.isArray(headerRow.values) ? headerRow.values : [];
+    const headers = headerValues
       .slice(1)
       .map((value) => String(value ?? '').trim())
       .filter((value) => value);
@@ -276,7 +278,7 @@ export const processImportJob = async (importJobId: string) => {
           rowNumber: err.rowNumber,
           field: err.field ?? null,
           message: err.message,
-          rawData: err.rawData ?? null,
+          rawData: (err.rawData ?? null) as Prisma.InputJsonValue | null,
         })),
       });
     }
@@ -287,10 +289,11 @@ export const processImportJob = async (importJobId: string) => {
           await enforceLimits(importJob.schoolId, 'students');
           const student = await prisma.student.create({
             data: {
-              schoolId: importJob.schoolId,
+              school: { connect: { id: importJob.schoolId } },
               admissionNo: row.admission_no,
               firstName: row.first_name,
               lastName: row.last_name,
+              fullName: `${row.first_name} ${row.last_name}`.trim(),
               dob: row.dob ? new Date(row.dob) : null,
             },
           });

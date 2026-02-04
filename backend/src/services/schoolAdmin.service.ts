@@ -1,4 +1,5 @@
 import crypto from 'crypto';
+import { Prisma } from '@prisma/client';
 import { prisma } from '../config/db';
 import { HttpError } from '../middlewares/error.middleware';
 import { hashPassword } from '../utils/password';
@@ -269,14 +270,14 @@ export const listSchools = async (params: {
   query?: string;
 }) => {
   const skip = (params.page - 1) * params.limit;
-  const where = {
+  const where: Prisma.SchoolWhereInput = {
     deletedAt: null,
     ...(params.status ? { status: params.status } : {}),
     ...(params.query
       ? {
           OR: [
-            { name: { contains: params.query, mode: 'insensitive' } },
-            { code: { contains: params.query, mode: 'insensitive' } },
+            { name: { contains: params.query, mode: Prisma.QueryMode.insensitive } },
+            { code: { contains: params.query, mode: Prisma.QueryMode.insensitive } },
           ],
         }
       : {}),
