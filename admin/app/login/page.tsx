@@ -229,6 +229,9 @@ export default function LoginPage() {
                 Contact Support
               </a>
             </p>
+            <p className="text-xs text-gray-400 mt-2">
+              © 2026 SchoolApp by TechStage IT. All rights reserved.
+            </p>
           </div>
         </div>
       </div>

@@ -152,6 +152,12 @@ jobs:
     - name: Resolve latest frontend image
       if: steps.admin-changes.outputs.admin == 'true' || github.event_name == 'workflow_dispatch'
       run: |
+        # Debug: List all images in service
+        echo "All images in service:"
+        aws lightsail get-container-images \
+          --service-name ${{ secrets.LIGHTSAIL_FRONTEND_SERVICE }} \
+          --region ${{ secrets.AWS_REGION }}
+          
         IMAGE=$(aws lightsail get-container-images \
           --service-name ${{ secrets.LIGHTSAIL_FRONTEND_SERVICE }} \
           --region ${{ secrets.AWS_REGION }} \
