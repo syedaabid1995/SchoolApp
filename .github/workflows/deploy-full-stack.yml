@@ -61,7 +61,7 @@ jobs:
           --service-name ${{ secrets.LIGHTSAIL_BACKEND_SERVICE }} \
           --containers '{
             "backend": {
-              "image": ":backend",
+              "image": null,
               "ports": {"3000": "HTTP"},
               "environment": {
                 "NODE_ENV": "production",
@@ -130,7 +130,7 @@ jobs:
           --service-name ${{ secrets.LIGHTSAIL_FRONTEND_SERVICE }} \
           --containers '{
             "frontend": {
-              "image": ":frontend",
+              "image": null,
               "ports": {"3000": "HTTP"}
             }
           }' \

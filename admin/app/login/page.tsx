@@ -219,7 +219,15 @@ export default function LoginPage() {
           {/* Footer */}
           <div className="mt-8 text-center">
             <p className="text-sm text-gray-500">
-              Need help? <a href="#" className="text-blue-600 hover:text-blue-700 font-medium transition-colors">Contact Support</a>
+              Need help?{' '}
+              <a
+                href="https://techstageit.com/#contact"
+                target="_blank"
+                rel="noreferrer"
+                className="text-blue-600 hover:text-blue-700 font-medium transition-colors"
+              >
+                Contact Support
+              </a>
             </p>
           </div>
         </div>
