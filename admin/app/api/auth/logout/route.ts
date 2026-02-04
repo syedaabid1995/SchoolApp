@@ -1,8 +1,8 @@
 import { NextResponse } from 'next/server';
-
-const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL ?? 'http://localhost:3000/api/v1';
+import { getApiBase } from '../../../../lib/getApiBase';
 
 export async function POST() {
+  const API_BASE = getApiBase();
   await fetch(`${API_BASE}/auth/logout`, { method: 'POST' }).catch(() => undefined);
 
   const response = NextResponse.json({ success: true });

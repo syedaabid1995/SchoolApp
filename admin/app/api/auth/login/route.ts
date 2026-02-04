@@ -1,45 +1,60 @@
 import { NextResponse } from 'next/server';
-
-const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL ?? 'http://localhost:3000/api/v1';
+import { getApiBase } from '../../../../lib/getApiBase';
+import axios from 'axios';
 
 export async function POST(req: Request) {
+  const API_BASE = getApiBase();
   const payload = await req.json();
-  const res = await fetch(`${API_BASE}/auth/login`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(payload),
-  });
+  
+  try {
+    const response = await axios.post(`${API_BASE}/auth/login`, payload, {
+      timeout: 30000,
+      headers: {
+        'Content-Type': 'application/json',
+        'User-Agent': 'SchoolApp-Admin/1.0'
+      }
+    });
 
-  if (!res.ok) {
-    const text = await res.text();
-    return new NextResponse(text, { status: res.status });
-  }
+    const data = response.data;
+    const nextResponse = NextResponse.json(data);
 
-  const data = await res.json();
-  const response = NextResponse.json(data);
-
-  response.cookies.set('access_token', data.accessToken, {
-    httpOnly: true,
-    sameSite: 'lax',
-    secure: process.env.NODE_ENV === 'production',
-    path: '/',
-  });
-  response.cookies.set('refresh_token', data.refreshToken, {
-    httpOnly: true,
-    sameSite: 'lax',
-    secure: process.env.NODE_ENV === 'production',
-    path: '/',
-  });
-  if (data.mustChangePassword) {
-    response.cookies.set('must_change_password', '1', {
+    nextResponse.cookies.set('access_token', data.accessToken, {
       httpOnly: true,
       sameSite: 'lax',
       secure: process.env.NODE_ENV === 'production',
       path: '/',
     });
-  } else {
-    response.cookies.delete('must_change_password');
-  }
+    nextResponse.cookies.set('refresh_token', data.refreshToken, {
+      httpOnly: true,
+      sameSite: 'lax',
+      secure: process.env.NODE_ENV === 'production',
+      path: '/',
+    });
+    if (data.mustChangePassword) {
+      nextResponse.cookies.set('must_change_password', '1', {
+        httpOnly: true,
+        sameSite: 'lax',
+        secure: process.env.NODE_ENV === 'production',
+        path: '/',
+      });
+    } else {
+      nextResponse.cookies.delete('must_change_password');
+    }
 
-  return response;
+    return nextResponse;
+  } catch (error: any) {
+    console.error('Login API error:', error.message);
+    
+    if (error.response) {
+      return new NextResponse(
+        JSON.stringify(error.response.data),
+        { status: error.response.status, headers: { 'Content-Type': 'application/json' } }
+      );
+    }
+    
+    return new NextResponse(
+      JSON.stringify({ error: { message: 'Connection failed. Please try again.' } }),
+      { status: 408, headers: { 'Content-Type': 'application/json' } }
+    );
+  }
 }

@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { cookies } from 'next/headers';
+import { getApiBase } from '../../../../lib/getApiBase';
 
 const decodePayload = (token: string) => {
   const parts = token.split('.');
@@ -18,7 +19,7 @@ export async function GET() {
   }
   try {
     const payload = decodePayload(token);
-    const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL ?? 'http://localhost:3000/api/v1';
+    const API_BASE = getApiBase();
     let subscriptionRestricted = Boolean(payload?.subscriptionRestricted);
     let displayName: string | null = null;
     let permissionCodes: string[] = [];

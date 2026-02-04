@@ -1,8 +1,8 @@
 import { NextResponse } from 'next/server';
-
-const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL ?? 'http://localhost:3000/api/v1';
+import { getApiBase } from '../../../../../lib/getApiBase';
 
 export async function POST(req: Request) {
+  const API_BASE = getApiBase();
   const payload = await req.json();
   const res = await fetch(`${API_BASE}/otp/verify`, {
     method: 'POST',

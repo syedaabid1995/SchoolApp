@@ -1,0 +1,88 @@
+name: Deploy Full Stack to Lightsail
+
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - 'backend/**'
+      - 'admin/**'
+  workflow_dispatch:
+
+jobs:
+  deploy-backend:
+    runs-on: ubuntu-latest
+    environment: production
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Check for backend changes
+      uses: dorny/paths-filter@v2
+      id: backend-changes
+      with:
+        filters: |
+          backend:
+            - 'backend/**'
+            
+    - name: Configure AWS credentials
+      if: steps.backend-changes.outputs.backend == 'true' || github.event_name == 'workflow_dispatch'
+      uses: aws-actions/configure-aws-credentials@v4
+      with:
+        aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+        aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+        aws-region: ${{ secrets.AWS_REGION }}
+        
+    - name: Build and Push Backend
+      if: steps.backend-changes.outputs.backend == 'true' || github.event_name == 'workflow_dispatch'
+      run: |
+        docker build --platform linux/amd64 \
+          -f docker/backend/Dockerfile \
+          -t school-backend-local:latest \
+          backend/
+        
+        aws lightsail push-container-image \
+          --service-name ${{ secrets.LIGHTSAIL_BACKEND_SERVICE }} \
+          --label school-backend-${{ github.sha }} \
+          --image school-backend-local:latest \
+          --region ${{ secrets.AWS_REGION }}
+
+  deploy-frontend:
+    runs-on: ubuntu-latest
+    environment: production
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Check for admin changes
+      uses: dorny/paths-filter@v2
+      id: admin-changes
+      with:
+        filters: |
+          admin:
+            - 'admin/**'
+            
+    - name: Configure AWS credentials
+      if: steps.admin-changes.outputs.admin == 'true' || github.event_name == 'workflow_dispatch'
+      uses: aws-actions/configure-aws-credentials@v4
+      with:
+        aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+        aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+        aws-region: ${{ secrets.AWS_REGION }}
+        
+    - name: Build and Push Frontend
+      if: steps.admin-changes.outputs.admin == 'true' || github.event_name == 'workflow_dispatch'
+      run: |
+        docker build --platform linux/amd64 --no-cache \
+          --build-arg NEXT_PUBLIC_API_BASE_URL=${{ secrets.NEXT_PUBLIC_API_BASE_URL }} \
+          --build-arg API_BASE_URL=${{ secrets.API_BASE_URL }} \
+          -f docker/admin/Dockerfile \
+          -t school-frontend-local:latest \
+          admin/
+        
+        aws lightsail push-container-image \
+          --service-name ${{ secrets.LIGHTSAIL_FRONTEND_SERVICE }} \
+          --label school-frontend-${{ github.sha }} \
+          --image school-frontend-local:latest \
+          --region ${{ secrets.AWS_REGION }}

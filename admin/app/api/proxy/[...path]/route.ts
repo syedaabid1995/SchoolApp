@@ -1,9 +1,9 @@
 import { NextResponse } from 'next/server';
 import { cookies } from 'next/headers';
-
-const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL ?? 'http://localhost:3000/api/v1';
+import { getApiBase } from '../../../../lib/getApiBase';
 
 const forward = async (req: Request, method: string, path: string[]) => {
+  const API_BASE = getApiBase();
   const store = await cookies();
   const accessToken = store.get('access_token')?.value;
 
