@@ -62,7 +62,7 @@ jobs:
         IMAGE=$(aws lightsail get-container-images \
           --service-name ${{ secrets.LIGHTSAIL_BACKEND_SERVICE }} \
           --region ${{ secrets.AWS_REGION }} \
-          --query "containerImages[?imageLabel=='backend'] | sort_by(@,&createdAt)[-1].image" \
+          --query "containerImages[?contains(image, 'backend')] | sort_by(@, &createdAt)[-1].image" \
           --output text)
         if [ -z "$IMAGE" ] || [ "$IMAGE" = "None" ]; then
           echo "Failed to resolve backend image reference" >&2
@@ -161,7 +161,7 @@ jobs:
         IMAGE=$(aws lightsail get-container-images \
           --service-name ${{ secrets.LIGHTSAIL_FRONTEND_SERVICE }} \
           --region ${{ secrets.AWS_REGION }} \
-          --query "containerImages[?imageLabel=='frontend'] | sort_by(@,&createdAt)[-1].image" \
+          --query "containerImages[?contains(image, 'frontend')] | sort_by(@, &createdAt)[-1].image" \
           --output text)
         if [ -z "$IMAGE" ] || [ "$IMAGE" = "None" ]; then
           echo "Failed to resolve frontend image reference" >&2
