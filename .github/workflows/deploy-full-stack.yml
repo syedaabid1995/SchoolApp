@@ -36,7 +36,7 @@ jobs:
     - name: Install Lightsail CLI
       if: steps.backend-changes.outputs.backend == 'true' || github.event_name == 'workflow_dispatch'
       run: |
-        curl -s https://lightsail.aws.amazon.com/ls/docs/en_us/articles/amazon-lightsail-install-software | grep -o 'https://s3.us-west-2.amazonaws.com/lightsailctl/latest/linux-amd64/lightsailctl' | head -1 | xargs curl -o lightsailctl
+        curl -o lightsailctl https://s3.us-west-2.amazonaws.com/lightsailctl/latest/linux-amd64/lightsailctl
         chmod +x lightsailctl
         sudo mv lightsailctl /usr/local/bin/
         
@@ -82,7 +82,7 @@ jobs:
     - name: Install Lightsail CLI
       if: steps.admin-changes.outputs.admin == 'true' || github.event_name == 'workflow_dispatch'
       run: |
-        curl -s https://lightsail.aws.amazon.com/ls/docs/en_us/articles/amazon-lightsail-install-software | grep -o 'https://s3.us-west-2.amazonaws.com/lightsailctl/latest/linux-amd64/lightsailctl' | head -1 | xargs curl -o lightsailctl
+        curl -o lightsailctl https://s3.us-west-2.amazonaws.com/lightsailctl/latest/linux-amd64/lightsailctl
         chmod +x lightsailctl
         sudo mv lightsailctl /usr/local/bin/
         
