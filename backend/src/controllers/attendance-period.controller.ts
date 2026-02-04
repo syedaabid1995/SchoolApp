@@ -4,6 +4,7 @@ import { prisma } from '../config/db';
 import { HttpError } from '../middlewares/error.middleware';
 import { resolveSchoolId } from '../utils/tenant';
 import { isValidTime } from '../utils/attendance';
+import { invalidateAttendanceCache } from '../services/cache/cache.invalidation';
 
 const timeSchema = z.string().refine(isValidTime, 'Invalid time format');
 
@@ -39,6 +40,8 @@ export const createAttendancePeriod = async (req: Request, res: Response) => {
       earlyThresholdMinutes: payload.earlyThresholdMinutes ?? 0,
     },
   });
+
+  await invalidateAttendanceCache(schoolId);
 
   res.status(201).json(period);
 };
@@ -94,6 +97,8 @@ export const updateAttendancePeriod = async (req: Request, res: Response) => {
     },
   });
 
+  await invalidateAttendanceCache(schoolId);
+
   res.status(200).json(period);
 };
 
@@ -111,6 +116,7 @@ export const deleteAttendancePeriod = async (req: Request, res: Response) => {
   }
 
   await prisma.attendancePeriod.delete({ where: { id } });
+  await invalidateAttendanceCache(schoolId);
 
   res.status(204).send();
 };

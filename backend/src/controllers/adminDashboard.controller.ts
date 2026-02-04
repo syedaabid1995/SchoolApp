@@ -9,6 +9,7 @@ import { cacheTTL } from '../services/cache/cache.ttl';
 
 export const getAdminDashboardApi = async (req: Request, res: Response) => {
   if (req.auth?.role === 'SUPER_ADMIN' && !req.query.schoolId) {
+    setCacheHeader(res, 'BYPASS');
     res.status(200).json({
       totalStudents: 0,
       totalTeachers: 0,
@@ -30,6 +31,7 @@ export const getAdminDashboardApi = async (req: Request, res: Response) => {
 
 export const getWeeklyAnalyticsApi = async (req: Request, res: Response) => {
   if (req.auth?.role === 'SUPER_ADMIN' && !req.query.schoolId) {
+    setCacheHeader(res, 'BYPASS');
     res.status(200).json([]);
     return;
   }
@@ -45,6 +47,7 @@ export const getWeeklyAnalyticsApi = async (req: Request, res: Response) => {
 
 export const getPerformanceMetricsApi = async (req: Request, res: Response) => {
   if (req.auth?.role === 'SUPER_ADMIN' && !req.query.schoolId) {
+    setCacheHeader(res, 'BYPASS');
     res.status(200).json({ exams: 0, marks: 0, students: 0 });
     return;
   }
@@ -60,6 +63,7 @@ export const getPerformanceMetricsApi = async (req: Request, res: Response) => {
 
 export const getRecentActivitiesApi = async (req: Request, res: Response) => {
   if (req.auth?.role === 'SUPER_ADMIN' && !req.query.schoolId) {
+    setCacheHeader(res, 'BYPASS');
     res.status(200).json([]);
     return;
   }

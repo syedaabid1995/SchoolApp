@@ -4,6 +4,7 @@ import { prisma } from '../config/db';
 import { HttpError } from '../middlewares/error.middleware';
 import { resolveSchoolId } from '../utils/tenant';
 import { logAudit } from '../utils/audit';
+import { invalidateAdminDashboardCache, invalidateAttendanceCache } from '../services/cache/cache.invalidation';
 
 const subjectMappingSchema = z.object({
   subjectId: z.string().uuid(),
@@ -156,6 +157,9 @@ export const createExam = async (req: Request, res: Response) => {
     },
   });
 
+  await invalidateAdminDashboardCache(schoolId);
+  await invalidateAttendanceCache(schoolId);
+
   res.status(201).json(exam);
 };
 
@@ -247,6 +251,9 @@ export const updateExam = async (req: Request, res: Response) => {
     },
   });
 
+  await invalidateAdminDashboardCache(schoolId);
+  await invalidateAttendanceCache(schoolId);
+
   res.status(200).json(exam);
 };
 
@@ -279,6 +286,9 @@ export const deleteExam = async (req: Request, res: Response) => {
       scheduledAt: existing.scheduledAt,
     } : null,
   });
+
+  await invalidateAdminDashboardCache(schoolId);
+  await invalidateAttendanceCache(schoolId);
 
   res.status(204).send();
 };

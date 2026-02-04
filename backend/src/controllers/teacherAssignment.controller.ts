@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { resolveSchoolId } from '../utils/tenant';
 import { HttpError } from '../middlewares/error.middleware';
 import { prisma } from '../config/db';
+import { invalidateTeacherCache } from '../services/cache/cache.invalidation';
 import {
   assignTeacherToClass,
   unassignTeacherFromClass,
@@ -56,6 +57,8 @@ export const setTeacherStatus = async (req: Request, res: Response) => {
     isActive: payload.isActive,
   });
 
+  await invalidateTeacherCache(schoolId, req.params.teacherId);
+
   res.status(200).json(updated);
 };
 
@@ -73,6 +76,8 @@ export const assignClass = async (req: Request, res: Response) => {
     actorId: auth.userId,
     actorRole,
   });
+
+  await invalidateTeacherCache(schoolId, payload.teacherId);
 
   res.status(201).json(assignment);
 };
@@ -92,6 +97,8 @@ export const unassignClass = async (req: Request, res: Response) => {
     actorRole,
   });
 
+  await invalidateTeacherCache(schoolId, payload.teacherId);
+
   res.status(200).json(result);
 };
 
@@ -110,6 +117,8 @@ export const assignSubject = async (req: Request, res: Response) => {
     actorRole,
   });
 
+  await invalidateTeacherCache(schoolId, payload.teacherId);
+
   res.status(201).json(assignment);
 };
 
@@ -127,6 +136,8 @@ export const unassignSubject = async (req: Request, res: Response) => {
     actorId: auth.userId,
     actorRole,
   });
+
+  await invalidateTeacherCache(schoolId, payload.teacherId);
 
   res.status(200).json(result);
 };
