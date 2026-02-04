@@ -55,25 +55,49 @@ jobs:
           --label backend \
           --image school-backend-local:latest \
           --region ${{ secrets.AWS_REGION }}
-          
-        # Deploy the pushed image
+
+    - name: Resolve latest backend image
+      if: steps.backend-changes.outputs.backend == 'true' || github.event_name == 'workflow_dispatch'
+      run: |
+        IMAGE=$(aws lightsail get-container-images \
+          --service-name ${{ secrets.LIGHTSAIL_BACKEND_SERVICE }} \
+          --region ${{ secrets.AWS_REGION }} \
+          --query "containerImages[?imageLabel=='backend'] | sort_by(@,&createdAt)[-1].image" \
+          --output text)
+        if [ -z "$IMAGE" ] || [ "$IMAGE" = "None" ]; then
+          echo "Failed to resolve backend image reference" >&2
+          exit 1
+        fi
+        echo "BACKEND_IMAGE=$IMAGE" >> "$GITHUB_ENV"
+
+    - name: Deploy Backend
+      if: steps.backend-changes.outputs.backend == 'true' || github.event_name == 'workflow_dispatch'
+      run: |
+        cat > backend-deployment.json <<EOF
+        {
+          "backend": {
+            "image": "${BACKEND_IMAGE}",
+            "ports": {"3000": "HTTP"},
+            "environment": {
+              "NODE_ENV": "production",
+              "PORT": "3000"
+            }
+          }
+        }
+        EOF
+
+        cat > backend-endpoint.json <<EOF
+        {
+          "containerName": "backend",
+          "containerPort": 3000,
+          "healthCheck": {"path": "/health"}
+        }
+        EOF
+
         aws lightsail create-container-service-deployment \
           --service-name ${{ secrets.LIGHTSAIL_BACKEND_SERVICE }} \
-          --containers '{
-            "backend": {
-              "image": null,
-              "ports": {"3000": "HTTP"},
-              "environment": {
-                "NODE_ENV": "production",
-                "PORT": "3000"
-              }
-            }
-          }' \
-          --public-endpoint '{
-            "containerName": "backend",
-            "containerPort": 3000,
-            "healthCheck": {"path": "/health"}
-          }' \
+          --containers file://backend-deployment.json \
+          --public-endpoint file://backend-endpoint.json \
           --region ${{ secrets.AWS_REGION }}
 
   deploy-frontend:
@@ -124,19 +148,43 @@ jobs:
           --label frontend \
           --image school-frontend-local:latest \
           --region ${{ secrets.AWS_REGION }}
-          
-        # Deploy the pushed image
+
+    - name: Resolve latest frontend image
+      if: steps.admin-changes.outputs.admin == 'true' || github.event_name == 'workflow_dispatch'
+      run: |
+        IMAGE=$(aws lightsail get-container-images \
+          --service-name ${{ secrets.LIGHTSAIL_FRONTEND_SERVICE }} \
+          --region ${{ secrets.AWS_REGION }} \
+          --query "containerImages[?imageLabel=='frontend'] | sort_by(@,&createdAt)[-1].image" \
+          --output text)
+        if [ -z "$IMAGE" ] || [ "$IMAGE" = "None" ]; then
+          echo "Failed to resolve frontend image reference" >&2
+          exit 1
+        fi
+        echo "FRONTEND_IMAGE=$IMAGE" >> "$GITHUB_ENV"
+
+    - name: Deploy Frontend
+      if: steps.admin-changes.outputs.admin == 'true' || github.event_name == 'workflow_dispatch'
+      run: |
+        cat > frontend-deployment.json <<EOF
+        {
+          "frontend": {
+            "image": "${FRONTEND_IMAGE}",
+            "ports": {"3000": "HTTP"}
+          }
+        }
+        EOF
+
+        cat > frontend-endpoint.json <<EOF
+        {
+          "containerName": "frontend",
+          "containerPort": 3000,
+          "healthCheck": {"path": "/"}
+        }
+        EOF
+
         aws lightsail create-container-service-deployment \
           --service-name ${{ secrets.LIGHTSAIL_FRONTEND_SERVICE }} \
-          --containers '{
-            "frontend": {
-              "image": null,
-              "ports": {"3000": "HTTP"}
-            }
-          }' \
-          --public-endpoint '{
-            "containerName": "frontend",
-            "containerPort": 3000,
-            "healthCheck": {"path": "/"}
-          }' \
+          --containers file://frontend-deployment.json \
+          --public-endpoint file://frontend-endpoint.json \
           --region ${{ secrets.AWS_REGION }}
