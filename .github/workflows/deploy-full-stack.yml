@@ -35,11 +35,12 @@ jobs:
         
     - name: Build and Push Backend
       if: steps.backend-changes.outputs.backend == 'true' || github.event_name == 'workflow_dispatch'
+      working-directory: .
       run: |
         docker build --platform linux/amd64 \
-          -f ./docker/backend/Dockerfile \
+          -f docker/backend/Dockerfile \
           -t school-backend-local:latest \
-          ./backend/
+          backend/
         
         aws lightsail push-container-image \
           --service-name ${{ secrets.LIGHTSAIL_BACKEND_SERVICE }} \
@@ -73,13 +74,14 @@ jobs:
         
     - name: Build and Push Frontend
       if: steps.admin-changes.outputs.admin == 'true' || github.event_name == 'workflow_dispatch'
+      working-directory: .
       run: |
         docker build --platform linux/amd64 --no-cache \
           --build-arg NEXT_PUBLIC_API_BASE_URL=${{ secrets.NEXT_PUBLIC_API_BASE_URL }} \
           --build-arg API_BASE_URL=${{ secrets.API_BASE_URL }} \
-          -f ./docker/admin/Dockerfile \
+          -f docker/admin/Dockerfile \
           -t school-frontend-local:latest \
-          ./admin/
+          admin/
         
         aws lightsail push-container-image \
           --service-name ${{ secrets.LIGHTSAIL_FRONTEND_SERVICE }} \

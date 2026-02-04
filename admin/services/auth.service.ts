@@ -1,3 +1,4 @@
+// Test deployment - updated at $(date)
 export const login = async (payload: { email: string; password: string; schoolId?: string }) => {
   const res = await fetch('/api/auth/login', {
     method: 'POST',
