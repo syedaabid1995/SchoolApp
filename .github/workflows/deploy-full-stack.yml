@@ -55,6 +55,26 @@ jobs:
           --label backend \
           --image school-backend-local:latest \
           --region ${{ secrets.AWS_REGION }}
+          
+        # Deploy the pushed image
+        aws lightsail create-container-service-deployment \
+          --service-name ${{ secrets.LIGHTSAIL_BACKEND_SERVICE }} \
+          --containers '{
+            "backend": {
+              "image": ":backend",
+              "ports": {"3000": "HTTP"},
+              "environment": {
+                "NODE_ENV": "production",
+                "PORT": "3000"
+              }
+            }
+          }' \
+          --public-endpoint '{
+            "containerName": "backend",
+            "containerPort": 3000,
+            "healthCheck": {"path": "/health"}
+          }' \
+          --region ${{ secrets.AWS_REGION }}
 
   deploy-frontend:
     runs-on: ubuntu-latest
@@ -103,4 +123,20 @@ jobs:
           --service-name ${{ secrets.LIGHTSAIL_FRONTEND_SERVICE }} \
           --label frontend \
           --image school-frontend-local:latest \
+          --region ${{ secrets.AWS_REGION }}
+          
+        # Deploy the pushed image
+        aws lightsail create-container-service-deployment \
+          --service-name ${{ secrets.LIGHTSAIL_FRONTEND_SERVICE }} \
+          --containers '{
+            "frontend": {
+              "image": ":frontend",
+              "ports": {"3000": "HTTP"}
+            }
+          }' \
+          --public-endpoint '{
+            "containerName": "frontend",
+            "containerPort": 3000,
+            "healthCheck": {"path": "/"}
+          }' \
           --region ${{ secrets.AWS_REGION }}

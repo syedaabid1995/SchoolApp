@@ -203,6 +203,17 @@ export default function LoginPage() {
                 </>
               )}
             </button>
+
+            {/* Forgot Password */}
+            <div className="text-center">
+              <button
+                type="button"
+                className="text-sm text-blue-600 hover:text-blue-700 font-medium transition-colors hover:underline"
+                onClick={() => {/* TODO: Add forgot password functionality */}}
+              >
+                Forgot your password?
+              </button>
+            </div>
           </form>
 
           {/* Footer */}
