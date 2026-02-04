@@ -49,9 +49,22 @@ jobs:
           -t school-backend-local:latest \
           backend/
         
-        # Debug AWS permissions
+        # Debug AWS and Lightsail setup
+        echo "AWS Identity:"
         aws sts get-caller-identity
-        aws lightsail get-container-services --region ${{ secrets.AWS_REGION }} || echo "Failed to list container services"
+        echo "Lightsail Container Services:"
+        aws lightsail get-container-services --region ${{ secrets.AWS_REGION }}
+        echo "Attempting to push to service: ${{ secrets.LIGHTSAIL_BACKEND_SERVICE }}"
+        
+        # Try to create container service if it doesn't exist
+        aws lightsail create-container-service \
+          --service-name ${{ secrets.LIGHTSAIL_BACKEND_SERVICE }} \
+          --power nano \
+          --scale 1 \
+          --region ${{ secrets.AWS_REGION }} || echo "Service might already exist"
+        
+        # Wait a moment for service to be ready
+        sleep 10
         
         aws lightsail push-container-image \
           --service-name ${{ secrets.LIGHTSAIL_BACKEND_SERVICE }} \
