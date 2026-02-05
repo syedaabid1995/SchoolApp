@@ -2,7 +2,6 @@
 import { useEffect, useState } from 'react';
 import { Sidebar } from './Sidebar';
 import { Header } from './Header';
-import { useQuery } from '@tanstack/react-query';
 import { getSession } from '../services/auth.service';
 import { NotificationProvider } from './NotificationProvider';
 import { usePathname, useRouter } from 'next/navigation';
@@ -18,7 +17,16 @@ export default function DashboardClientLayout({
   email: string | null;
 }) {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
-  const { data: session } = useQuery({ queryKey: ['session'], queryFn: getSession });
+  const [session, setSession] = useState<{
+    role: string | null;
+    schoolId: string | null;
+    email: string | null;
+    subscriptionRestricted?: boolean;
+    mustChangePassword?: boolean;
+    displayName?: string | null;
+    schoolName?: string | null;
+    permissionCodes?: string[];
+  } | null>(null);
   const pathname = usePathname();
   const router = useRouter();
   const isSubscriptionRestricted = Boolean(session?.subscriptionRestricted);
@@ -40,6 +48,18 @@ export default function DashboardClientLayout({
     !isManagedEmployeeRole || (requiredPermission ? permissionCodes.includes(requiredPermission) : false);
   const canAccessSuperAdminRoute =
     !isSuperAdmin || superAdminAllowedPaths.some((allowedPath) => pathname === allowedPath || pathname.startsWith(`${allowedPath}/`));
+
+  useEffect(() => {
+    let mounted = true;
+    const loadSession = async () => {
+      const data = await getSession();
+      if (mounted) setSession(data);
+    };
+    void loadSession();
+    return () => {
+      mounted = false;
+    };
+  }, []);
 
   useEffect(() => {
     if (isSubscriptionRestricted && pathname !== '/dashboard/plans') {

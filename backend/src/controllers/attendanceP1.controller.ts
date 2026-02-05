@@ -147,9 +147,15 @@ export const lockAttendanceSessionApi = async (req: Request, res: Response) => {
 
 export const attendanceSummaryApi = async (req: Request, res: Response) => {
   ensureAttendanceEnabled();
+  const auth = requireAuth(req);
   const payload = summaryQuerySchema.parse(req.query);
   const schoolId = resolveSchoolId(req, payload.schoolId);
-  const summary = await getAttendanceSummary({ schoolId, date: payload.date });
+  const summary = await getAttendanceSummary({
+    schoolId,
+    date: payload.date,
+    actorId: auth.userId,
+    actorRole: auth.role ?? 'UNKNOWN',
+  });
   res.status(200).json(summary);
 };
 

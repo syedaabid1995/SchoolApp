@@ -5,17 +5,28 @@ import { createAuditLog } from './auditLog.service';
 
 const normalizeDate = (value?: Date | string | null) => {
   const date = value ? new Date(value) : new Date();
-  date.setHours(0, 0, 0, 0);
-  return date;
+  return new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate()));
 };
 
 const endOfDay = (value: Date) => {
-  const date = new Date(value);
-  date.setHours(23, 59, 59, 999);
-  return date;
+  return new Date(Date.UTC(value.getUTCFullYear(), value.getUTCMonth(), value.getUTCDate(), 23, 59, 59, 999));
 };
 
 export const isAdminRole = (role?: string | null) => role === 'SUPER_ADMIN' || role === 'SCHOOL_ADMIN';
+
+const mapRecordsForCompare = (rows: Array<{ studentId: string; status: StudentAttendanceStatus; remarks?: string | null }>) =>
+  rows
+    .map((row) => ({
+      studentId: row.studentId,
+      status: row.status,
+      remarks: (row.remarks ?? '').trim() || null,
+    }))
+    .sort((a, b) => a.studentId.localeCompare(b.studentId));
+
+const isSameRecordSet = (
+  left: Array<{ studentId: string; status: StudentAttendanceStatus; remarks?: string | null }>,
+  right: Array<{ studentId: string; status: StudentAttendanceStatus; remarks?: string | null }>,
+) => JSON.stringify(mapRecordsForCompare(left)) === JSON.stringify(mapRecordsForCompare(right));
 
 const getTeacherProfile = async (schoolId: string, userId: string) => {
   const profile = await prisma.teacherProfile.findFirst({
@@ -66,44 +77,56 @@ export const createStudentAttendanceSession = async (params: {
   date?: Date | string;
 }) => {
   const date = normalizeDate(params.date);
-  const existing = await prisma.studentAttendanceSession.findFirst({
-    where: {
+  const today = normalizeDate(new Date());
+  if (date > today) {
+    throw new HttpError(400, 'Future date attendance is not allowed');
+  }
+  const lockKey = `${params.schoolId}:${params.classId}:${params.sectionId ?? 'na'}:${date.toISOString()}`;
+  const { session, didCreate } = await prisma.$transaction(async (tx) => {
+    // Prevent duplicate sessions under concurrent requests, including NULL sectionId cases.
+    await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${lockKey}))`;
+
+    const existing = await tx.studentAttendanceSession.findFirst({
+      where: {
+        schoolId: params.schoolId,
+        classId: params.classId,
+        sectionId: params.sectionId ?? null,
+        date,
+      },
+      include: { records: true },
+    });
+    if (existing) return { session: existing, didCreate: false };
+
+    const created = await tx.studentAttendanceSession.create({
+      data: {
+        schoolId: params.schoolId,
+        classId: params.classId,
+        sectionId: params.sectionId ?? null,
+        date,
+        createdById: params.actorId,
+        status: 'DRAFT',
+      },
+      include: { records: true },
+    });
+    return { session: created, didCreate: true };
+  });
+
+  if (didCreate) {
+    await createAuditLog({
       schoolId: params.schoolId,
-      classId: params.classId,
-      sectionId: params.sectionId ?? null,
-      date,
-    },
-    include: { records: true },
-  });
-
-  if (existing) return existing;
-
-  const session = await prisma.studentAttendanceSession.create({
-    data: {
-      schoolId: params.schoolId,
-      classId: params.classId,
-      sectionId: params.sectionId ?? null,
-      date,
-      createdById: params.actorId,
-      status: 'DRAFT',
-    },
-    include: { records: true },
-  });
-
-  await createAuditLog({
-    schoolId: params.schoolId,
-    actorId: params.actorId,
-    actorRole: params.actorRole,
-    entityType: 'StudentAttendanceSession',
-    entityId: session.id,
-    action: 'CREATE',
-    afterState: {
-      classId: session.classId,
-      sectionId: session.sectionId,
-      date: session.date.toISOString(),
-      status: session.status,
-    },
-  });
+      actorId: params.actorId,
+      actorRole: params.actorRole,
+      entityType: 'StudentAttendanceSession',
+      entityId: session.id,
+      action: 'CREATE',
+      afterState: {
+        classId: session.classId,
+        sectionId: session.sectionId,
+        date: session.date.toISOString(),
+        status: session.status,
+      },
+    });
+  }
 
   return session;
 };
@@ -124,7 +147,32 @@ export const updateStudentAttendanceSession = async (params: {
   if (!session) throw new HttpError(404, 'Attendance session not found');
 
   const admin = isAdminRole(params.actorRole);
+  if (!admin) {
+    await ensureTeacherAssignedToClassSection({
+      schoolId: params.schoolId,
+      userId: params.actorId,
+      classId: session.classId,
+      sectionId: session.sectionId ?? undefined,
+    });
+  }
+
+  if (!params.unlock && params.records.length === 0) {
+    throw new HttpError(400, 'Attendance records are required');
+  }
+
   if (session.status === 'LOCKED' && !params.unlock) {
+    if (params.submit) {
+      const current = await prisma.studentAttendanceRecord.findMany({
+        where: { sessionId: session.id },
+        select: { studentId: true, status: true, remarks: true },
+      });
+      if (isSameRecordSet(current, params.records)) {
+        return prisma.studentAttendanceSession.findFirstOrThrow({
+          where: { id: session.id, schoolId: params.schoolId },
+          include: { records: true },
+        });
+      }
+    }
     throw new HttpError(409, 'Attendance session is locked');
   }
 
@@ -152,16 +200,20 @@ export const updateStudentAttendanceSession = async (params: {
   }
 
   const studentIds = params.records.map((r) => r.studentId);
+  const uniqueStudentIds = new Set(studentIds);
+  if (uniqueStudentIds.size !== studentIds.length) {
+    throw new HttpError(400, 'Duplicate student entries are not allowed');
+  }
   const students = await prisma.student.findMany({
     where: {
       schoolId: params.schoolId,
-      id: { in: studentIds },
+      id: { in: [...uniqueStudentIds] },
       classId: session.classId,
       ...(session.sectionId ? { sectionId: session.sectionId } : {}),
     },
     select: { id: true },
   });
-  if (students.length !== studentIds.length) {
+  if (students.length !== uniqueStudentIds.size) {
     throw new HttpError(400, 'All students must belong to selected class and section');
   }
 
@@ -258,12 +310,27 @@ export const lockStudentAttendanceSession = async (params: {
 export const getAttendanceSummary = async (params: {
   schoolId: string;
   date?: Date | string;
+  actorId?: string;
+  actorRole?: string;
 }) => {
   const date = params.date ? normalizeDate(params.date) : undefined;
-  const where = {
+  const where: {
+    schoolId: string;
+    date?: Date;
+    classId?: { in: string[] };
+  } = {
     schoolId: params.schoolId,
     ...(date ? { date } : {}),
   };
+
+  if (params.actorRole && !isAdminRole(params.actorRole) && params.actorId) {
+    const teacher = await getTeacherProfile(params.schoolId, params.actorId);
+    const assignments = await prisma.teacherClassAssignment.findMany({
+      where: { teacherId: teacher.id },
+      select: { classId: true },
+    });
+    where.classId = { in: assignments.map((row) => row.classId) };
+  }
 
   const sessions = await prisma.studentAttendanceSession.findMany({
     where,
@@ -516,7 +583,16 @@ export const reviewLeaveRequest = async (params: {
 
   if (params.status === 'APPROVED') {
     const dates = enumerateDays(leave.fromDate, leave.toDate);
-    await prisma.$transaction(
+    const existingByDay = await prisma.teacherSelfAttendance.findMany({
+      where: {
+        schoolId: leave.schoolId,
+        teacherId: leave.teacherId,
+        date: { in: dates },
+      },
+      select: { id: true, date: true, status: true, overrideReason: true },
+    });
+    const existingMap = new Map(existingByDay.map((item) => [normalizeDate(item.date).toISOString(), item]));
+    const upserted = await prisma.$transaction(
       dates.map((date) =>
         prisma.teacherSelfAttendance.upsert({
           where: {
@@ -545,6 +621,31 @@ export const reviewLeaveRequest = async (params: {
         }),
       ),
     );
+
+    await Promise.all(
+      upserted.map((attendance) => {
+        const previous = existingMap.get(normalizeDate(attendance.date).toISOString());
+        return createAuditLog({
+          schoolId: leave.schoolId,
+          actorId: params.actorId,
+          actorRole: params.actorRole,
+          entityType: 'TeacherSelfAttendance',
+          entityId: attendance.id,
+          action: previous ? 'UPDATE' : 'CREATE',
+          beforeState: previous
+            ? {
+                status: previous.status,
+                overrideReason: previous.overrideReason,
+              }
+            : null,
+          afterState: {
+            status: attendance.status,
+            leaveRequestId: attendance.leaveRequestId,
+            overrideReason: attendance.overrideReason,
+          },
+        });
+      }),
+    );
   }
 
   await createAuditLog({
@@ -559,4 +660,10 @@ export const reviewLeaveRequest = async (params: {
   });
 
   return reviewed;
+};
+
+export const __attendanceP1Internals = {
+  normalizeDate,
+  endOfDay,
+  isSameRecordSet,
 };

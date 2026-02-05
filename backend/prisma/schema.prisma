@@ -699,6 +699,7 @@ model StudentAttendanceSession {
   @@unique([schoolId, classId, sectionId, date])
   @@index([schoolId, date])
   @@index([classId, sectionId, date])
+  @@index([schoolId, classId, date, status])
   @@map("student_attendance_sessions")
 }
 
@@ -716,6 +717,7 @@ model StudentAttendanceRecord {
 
   @@unique([sessionId, studentId])
   @@index([studentId, createdAt])
+  @@index([sessionId, status])
   @@map("student_attendance_records")
 }
 

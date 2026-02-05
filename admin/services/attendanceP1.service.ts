@@ -5,7 +5,7 @@ export type StudentAttendanceStatus = 'PRESENT' | 'ABSENT' | 'LATE' | 'HALF_DAY'
 export type StudentAttendanceSession = {
   id: string;
   classId: string;
-  sectionId: string;
+  sectionId?: string | null;
   date: string;
   status: 'DRAFT' | 'LOCKED';
   lockReason: string | null;
@@ -19,7 +19,7 @@ export type StudentAttendanceSession = {
 
 export const createStudentAttendanceSession = async (payload: {
   classId: string;
-  sectionId: string;
+  sectionId?: string;
   date: string;
   schoolId?: string;
 }) => {
