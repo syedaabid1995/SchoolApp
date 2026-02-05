@@ -25,6 +25,15 @@ export const createSchoolUser = async (payload: {
   employeeNo?: string | null;
   phone?: string | null;
   address?: string | null;
+  bankDetails?: {
+    accountHolderName?: string | null;
+    accountNumber?: string | null;
+    ifscCode?: string | null;
+    accountType?: string | null;
+    bankName?: string | null;
+    branchName?: string | null;
+    panNumber?: string | null;
+  };
   schoolId?: string;
 }) => {
   const { data } = await api.post<{
@@ -36,6 +45,10 @@ export const createSchoolUser = async (payload: {
       roleName: string;
     };
     tempPassword: string;
+    whatsappSentTo?: string | null;
+    manualShareRequired?: boolean;
+    manualShareText?: string | null;
+    manualShareUrl?: string | null;
   }>('/users/school-users', payload);
   return data;
 };

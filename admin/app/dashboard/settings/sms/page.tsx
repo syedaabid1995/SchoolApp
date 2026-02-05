@@ -8,6 +8,7 @@ import {
   listMessagingServicesAdmin,
   listMessagingServicesForSchool,
   upsertSchoolMessagingConfig,
+  toggleSchoolMessagingConfigStatus,
   updateMessagingServiceStatus,
 } from '../../../../services/messaging.service';
 
@@ -45,6 +46,16 @@ export default function SmsSettingsPage() {
     queryFn: () => getSchoolMessagingConfig(channel),
     enabled: !isSuperAdmin,
   });
+  const { data: currentSmsConfig } = useQuery({
+    queryKey: ['messaging-config', 'SMS'],
+    queryFn: () => getSchoolMessagingConfig('SMS'),
+    enabled: !isSuperAdmin,
+  });
+  const { data: currentWhatsappConfig } = useQuery({
+    queryKey: ['messaging-config', 'WHATSAPP'],
+    queryFn: () => getSchoolMessagingConfig('WHATSAPP'),
+    enabled: !isSuperAdmin,
+  });
 
   const toggleMutation = useMutation({
     mutationFn: ({ id, status }: { id: string; status: 'ACTIVE' | 'INACTIVE' }) => updateMessagingServiceStatus(id, status),
@@ -56,6 +67,12 @@ export default function SmsSettingsPage() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['messaging-config', channel] });
       queryClient.invalidateQueries({ queryKey: ['messaging-services-school', channel] });
+    },
+  });
+  const toggleSchoolConfigMutation = useMutation({
+    mutationFn: toggleSchoolMessagingConfigStatus,
+    onSuccess: (_, vars) => {
+      queryClient.invalidateQueries({ queryKey: ['messaging-config', vars.channel] });
     },
   });
 
@@ -108,6 +125,33 @@ export default function SmsSettingsPage() {
       ) : (
         <section className="rounded-2xl border border-slate/10 bg-white p-6">
           <h2 className="text-lg font-semibold text-ink">School Messaging Provider</h2>
+          <div className="mt-4 grid gap-3 md:grid-cols-2">
+            {[currentWhatsappConfig, currentSmsConfig].map((cfg, index) => {
+              const channelName = index === 0 ? 'WHATSAPP' : 'SMS';
+              return (
+                <div key={channelName} className="rounded-xl border border-slate/10 p-4">
+                  <p className="text-sm font-semibold text-ink">{channelName}</p>
+                  <p className="text-xs text-slate">{cfg?.serviceName ?? 'Not configured'}</p>
+                  <button
+                    className={`mt-3 rounded-full px-3 py-1 text-xs font-semibold ${
+                      cfg?.isEnabled ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-200 text-slate-700'
+                    }`}
+                    disabled={!cfg}
+                    onClick={() =>
+                      cfg
+                        ? toggleSchoolConfigMutation.mutate({
+                            channel: channelName as 'WHATSAPP' | 'SMS',
+                            isEnabled: !cfg.isEnabled,
+                          })
+                        : undefined
+                    }
+                  >
+                    {cfg?.isEnabled ? 'Active (Click to Inactivate)' : 'Inactive (Click to Activate)'}
+                  </button>
+                </div>
+              );
+            })}
+          </div>
           <div className="mt-4 grid gap-4 md:grid-cols-2">
             <label className="space-y-1">
               <span className="text-sm font-medium text-ink">Channel</span>
@@ -201,4 +245,3 @@ export default function SmsSettingsPage() {
     </div>
   );
 }
-

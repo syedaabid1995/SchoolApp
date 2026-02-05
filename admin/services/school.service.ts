@@ -50,6 +50,10 @@ export type CreateSchoolResponse = {
   school: School;
   adminUser?: SchoolAdminUser;
   tempPassword?: string;
+  whatsappSentTo?: string | null;
+  manualShareRequired?: boolean;
+  manualShareText?: string | null;
+  manualShareUrl?: string | null;
 };
 
 export const listSchools = async (params?: { page?: number; limit?: number; status?: string; query?: string }) => {
@@ -101,7 +105,14 @@ export const deleteSchool = async (id: string) => {
 };
 
 export const createSchoolAdmin = async (schoolId: string, adminEmail: string) => {
-  const { data } = await api.post<{ adminUser: SchoolAdminUser; tempPassword: string }>(
+  const { data } = await api.post<{
+    adminUser: SchoolAdminUser;
+    tempPassword: string;
+    whatsappSentTo?: string | null;
+    manualShareRequired?: boolean;
+    manualShareText?: string | null;
+    manualShareUrl?: string | null;
+  }>(
     `/admin/schools/${schoolId}/admins`,
     { adminEmail },
   );

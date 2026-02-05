@@ -4,6 +4,7 @@ import { requireRole } from '../middlewares/rbac.middleware';
 import {
   getSchoolMessagingConfigApi,
   listMessagingServicesForSchoolApi,
+  toggleSchoolMessagingConfigApi,
   upsertSchoolMessagingConfigApi,
 } from '../controllers/messagingSettings.controller';
 
@@ -15,4 +16,4 @@ messagingSettingsRouter.use(requireRole('SCHOOL_ADMIN'));
 messagingSettingsRouter.get('/services', listMessagingServicesForSchoolApi);
 messagingSettingsRouter.get('/config', getSchoolMessagingConfigApi);
 messagingSettingsRouter.put('/config', upsertSchoolMessagingConfigApi);
-
+messagingSettingsRouter.patch('/config/status', toggleSchoolMessagingConfigApi);

@@ -114,7 +114,14 @@ export const createTeacherApi = async (req: Request, res: Response) => {
     fullName: `${teacher.profile.firstName} ${teacher.profile.lastName}`.trim(),
   });
 
-  res.status(201).json({ ...teacher, whatsappSentTo: whatsapp.sentTo });
+  res.status(201).json({
+    ...teacher,
+    mappedSchoolId: schoolId,
+    whatsappSentTo: whatsapp.sentTo,
+    manualShareRequired: whatsapp.manualShareRequired,
+    manualShareText: whatsapp.manualShareText,
+    manualShareUrl: whatsapp.manualShareUrl,
+  });
 };
 
 export const listTeachersApi = async (req: Request, res: Response) => {

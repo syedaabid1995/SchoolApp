@@ -92,6 +92,7 @@ model User {
   roles  UserRole[]
   parentProfiles ParentProfile[]
   teacherProfile TeacherProfile?
+  bankDetails UserBankDetails?
   importJobs     ImportJob[]
   faceProfilesCreated FaceProfile[] @relation("FaceProfileCreatedBy")
   faceProfilesApproved FaceProfile[] @relation("FaceProfileApprovedBy")
@@ -446,6 +447,25 @@ model TeacherBankDetails {
 
   @@index([teacherId])
   @@map("teacher_bank_details")
+}
+
+model UserBankDetails {
+  id                String   @id @default(uuid()) @db.Uuid
+  userId            String   @unique @map("user_id") @db.Uuid
+  accountHolderName String?  @map("account_holder_name")
+  accountNumber     String?  @map("account_number")
+  ifscCode          String?  @map("ifsc_code")
+  accountType       String?  @map("account_type")
+  bankName          String?  @map("bank_name")
+  branchName        String?  @map("branch_name")
+  panNumber         String?  @map("pan_number")
+  createdAt         DateTime @default(now()) @map("created_at")
+  updatedAt         DateTime @updatedAt @map("updated_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("user_bank_details")
 }
 
 model TeacherClassAssignment {

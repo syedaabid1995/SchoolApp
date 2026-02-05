@@ -57,3 +57,10 @@ export const upsertSchoolMessagingConfig = async (payload: {
   return data;
 };
 
+export const toggleSchoolMessagingConfigStatus = async (payload: {
+  channel: 'SMS' | 'WHATSAPP' | 'EMAIL' | 'PUSH';
+  isEnabled: boolean;
+}) => {
+  const { data } = await api.patch('/messaging-services/config/status', payload);
+  return data;
+};

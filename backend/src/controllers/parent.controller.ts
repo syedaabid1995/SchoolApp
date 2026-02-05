@@ -161,9 +161,13 @@ export const createParent = async (req: Request, res: Response) => {
 
   res.status(201).json({
     ...result.parent,
+    mappedSchoolId: schoolId,
     tempPassword: result.tempPassword,
     sendVia: payload.sendVia ?? null,
     whatsappSentTo: whatsapp.sentTo,
+    manualShareRequired: whatsapp.manualShareRequired,
+    manualShareText: whatsapp.manualShareText,
+    manualShareUrl: whatsapp.manualShareUrl,
   });
 };
 

@@ -17,12 +17,25 @@ import { cacheTTL } from '../services/cache/cache.ttl';
 import { invalidateSchoolCache, invalidateSubscriptionCache } from '../services/cache/cache.invalidation';
 import { sendAccountCreatedWhatsapp } from '../services/accountOnboardingWhatsapp.service';
 
+const bankDetailsSchema = z
+  .object({
+    accountHolderName: z.string().min(1).optional().nullable(),
+    accountNumber: z.string().min(1).optional().nullable(),
+    ifscCode: z.string().min(1).optional().nullable(),
+    accountType: z.string().min(1).optional().nullable(),
+    bankName: z.string().min(1).optional().nullable(),
+    branchName: z.string().min(1).optional().nullable(),
+    panNumber: z.string().min(1).optional().nullable(),
+  })
+  .optional();
+
 const createSchema = z.object({
   name: z.string().min(1),
   code: z.string().min(1),
   subscriptionPlan: z.enum(['STARTER', 'STANDARD', 'PREMIUM']),
   status: z.enum(['ACTIVE', 'SUSPENDED']).optional(),
   adminEmail: z.string().email().optional(),
+  adminBankDetails: bankDetailsSchema,
 });
 
 const listSchema = z.object({
@@ -46,6 +59,7 @@ const statusSchema = z.object({
 
 const createSchoolAdminSchema = z.object({
   adminEmail: z.string().email(),
+  bankDetails: bankDetailsSchema,
 });
 
 const schoolAdminStatusSchema = z.object({
@@ -60,10 +74,14 @@ export const createSchoolApi = async (req: Request, res: Response) => {
     subscriptionPlan: payload.subscriptionPlan,
     status: payload.status,
     adminEmail: payload.adminEmail,
+    adminBankDetails: payload.adminBankDetails,
   });
   await invalidateSchoolCache(result.school.id);
   await invalidateSubscriptionCache(result.school.id);
   let whatsappSentTo: string | null = null;
+  let manualShareRequired = false;
+  let manualShareText: string | null = null;
+  let manualShareUrl: string | null = null;
   if (result.adminUser) {
     await logAudit(req, {
       schoolId: result.school.id,
@@ -81,8 +99,18 @@ export const createSchoolApi = async (req: Request, res: Response) => {
       fullName: result.adminUser.email,
     });
     whatsappSentTo = whatsapp.sentTo;
+    manualShareRequired = whatsapp.manualShareRequired;
+    manualShareText = whatsapp.manualShareText;
+    manualShareUrl = whatsapp.manualShareUrl;
   }
-  res.status(201).json({ ...result, whatsappSentTo });
+  res.status(201).json({
+    ...result,
+    mappedSchoolId: result.school.id,
+    whatsappSentTo,
+    manualShareRequired,
+    manualShareText,
+    manualShareUrl,
+  });
 };
 
 export const listSchoolsApi = async (req: Request, res: Response) => {
@@ -146,7 +174,7 @@ export const deleteSchoolApi = async (req: Request, res: Response) => {
 
 export const createSchoolAdminApi = async (req: Request, res: Response) => {
   const payload = createSchoolAdminSchema.parse(req.body);
-  const result = await createSchoolAdmin(req.params.id, payload.adminEmail);
+  const result = await createSchoolAdmin(req.params.id, payload.adminEmail, payload.bankDetails);
   await invalidateSchoolCache(req.params.id);
   await logAudit(req, {
     schoolId: req.params.id,
@@ -163,7 +191,14 @@ export const createSchoolAdminApi = async (req: Request, res: Response) => {
     tempPassword: result.tempPassword,
     fullName: result.adminUser.email,
   });
-  res.status(201).json({ ...result, whatsappSentTo: whatsapp.sentTo });
+  res.status(201).json({
+    ...result,
+    mappedSchoolId: req.params.id,
+    whatsappSentTo: whatsapp.sentTo,
+    manualShareRequired: whatsapp.manualShareRequired,
+    manualShareText: whatsapp.manualShareText,
+    manualShareUrl: whatsapp.manualShareUrl,
+  });
 };
 
 export const setSchoolAdminStatusApi = async (req: Request, res: Response) => {

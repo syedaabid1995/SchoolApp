@@ -15,6 +15,18 @@ import {
 } from '../utils/employeePermissions';
 import { sendAccountCreatedWhatsapp } from '../services/accountOnboardingWhatsapp.service';
 
+const bankDetailsSchema = z
+  .object({
+    accountHolderName: z.string().min(1).optional().nullable(),
+    accountNumber: z.string().min(1).optional().nullable(),
+    ifscCode: z.string().min(1).optional().nullable(),
+    accountType: z.string().min(1).optional().nullable(),
+    bankName: z.string().min(1).optional().nullable(),
+    branchName: z.string().min(1).optional().nullable(),
+    panNumber: z.string().min(1).optional().nullable(),
+  })
+  .optional();
+
 const createSchoolUserSchema = z.object({
   email: z.string().email(),
   roleName: z.enum(['SCHOOL_ADMIN', 'TEACHER', 'ACCOUNTANT', 'LIBRARIAN', 'STAFF']),
@@ -23,6 +35,7 @@ const createSchoolUserSchema = z.object({
   employeeNo: z.string().min(1).optional().nullable(),
   phone: z.string().min(1).optional().nullable(),
   address: z.string().min(1).optional().nullable(),
+  bankDetails: bankDetailsSchema,
   schoolId: z.string().uuid().optional(),
 });
 
@@ -190,8 +203,12 @@ export const createSchoolUserApi = async (req: Request, res: Response) => {
         roleName: 'TEACHER',
         status: result.user.status,
       },
+      mappedSchoolId: schoolId,
       tempPassword: result.tempPassword,
       whatsappSentTo: whatsapp.sentTo,
+      manualShareRequired: whatsapp.manualShareRequired,
+      manualShareText: whatsapp.manualShareText,
+      manualShareUrl: whatsapp.manualShareUrl,
     });
     return;
   }
@@ -254,13 +271,42 @@ export const createSchoolUserApi = async (req: Request, res: Response) => {
         })
       : null;
 
+  if (
+    payload.roleName === 'SCHOOL_ADMIN' &&
+    payload.bankDetails &&
+    (payload.bankDetails.accountHolderName ||
+      payload.bankDetails.accountNumber ||
+      payload.bankDetails.ifscCode ||
+      payload.bankDetails.accountType ||
+      payload.bankDetails.bankName ||
+      payload.bankDetails.branchName ||
+      payload.bankDetails.panNumber)
+  ) {
+    await prisma.userBankDetails.create({
+      data: {
+        userId: user.id,
+        accountHolderName: payload.bankDetails.accountHolderName ?? null,
+        accountNumber: payload.bankDetails.accountNumber ?? null,
+        ifscCode: payload.bankDetails.ifscCode ?? null,
+        accountType: payload.bankDetails.accountType ?? null,
+        bankName: payload.bankDetails.bankName ?? null,
+        branchName: payload.bankDetails.branchName ?? null,
+        panNumber: payload.bankDetails.panNumber ?? null,
+      },
+    });
+  }
+
   res.status(201).json({
     user: {
       ...user,
       roleName: payload.roleName,
     },
+    mappedSchoolId: schoolId,
     tempPassword,
     whatsappSentTo: whatsapp?.sentTo ?? null,
+    manualShareRequired: whatsapp?.manualShareRequired ?? false,
+    manualShareText: whatsapp?.manualShareText ?? null,
+    manualShareUrl: whatsapp?.manualShareUrl ?? null,
   });
 };
 

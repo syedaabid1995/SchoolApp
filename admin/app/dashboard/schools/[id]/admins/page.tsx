@@ -14,7 +14,12 @@ export default function SchoolAdminsPage() {
   const queryClient = useQueryClient();
   const notify = useNotify();
   const [adminEmail, setAdminEmail] = useState('');
-  const [createdAdmin, setCreatedAdmin] = useState<{ email: string; tempPassword: string } | null>(null);
+  const [createdAdmin, setCreatedAdmin] = useState<{
+    email: string;
+    tempPassword: string;
+    manualShareRequired?: boolean;
+    manualShareUrl?: string | null;
+  } | null>(null);
 
   const { data, isLoading } = useQuery({
     queryKey: ['school-admins', schoolId],
@@ -25,7 +30,12 @@ export default function SchoolAdminsPage() {
   const addAdminMutation = useMutation({
     mutationFn: () => createSchoolAdmin(schoolId, adminEmail.trim()),
     onSuccess: (result) => {
-      setCreatedAdmin({ email: result.adminUser.email, tempPassword: result.tempPassword });
+      setCreatedAdmin({
+        email: result.adminUser.email,
+        tempPassword: result.tempPassword,
+        manualShareRequired: result.manualShareRequired,
+        manualShareUrl: result.manualShareUrl,
+      });
       setAdminEmail('');
       queryClient.invalidateQueries({ queryKey: ['school-admins', schoolId] });
       queryClient.invalidateQueries({ queryKey: ['schools'] });
@@ -90,6 +100,16 @@ export default function SchoolAdminsPage() {
             <div className="font-semibold">School admin created</div>
             <div className="mt-1">Email: {createdAdmin.email}</div>
             <div className="mt-1">Temporary password: {createdAdmin.tempPassword}</div>
+            {createdAdmin.manualShareUrl ? (
+              <a
+                href={createdAdmin.manualShareUrl}
+                target="_blank"
+                rel="noreferrer"
+                className="mt-2 inline-flex items-center gap-1 rounded-lg border border-emerald-300 px-2 py-1 text-xs font-semibold text-emerald-800"
+              >
+                Share via WhatsApp
+              </a>
+            ) : null}
             <div className="mt-2 text-xs text-emerald-700">Share this once. It will not be shown again.</div>
           </div>
         ) : null}

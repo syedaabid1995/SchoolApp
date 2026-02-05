@@ -5,6 +5,7 @@ import { resolveSchoolId } from '../utils/tenant';
 import {
   getSchoolMessagingConfig,
   listMessagingServicesForSchool,
+  setSchoolMessagingConfigStatus,
   upsertSchoolMessagingConfig,
 } from '../services/messagingSettings.service';
 
@@ -16,6 +17,12 @@ const upsertSchema = z.object({
   serviceId: z.string().uuid(),
   isEnabled: z.boolean().default(true),
   credentials: z.record(z.string(), z.string()).default({}),
+});
+
+const toggleSchema = z.object({
+  schoolId: z.string().uuid().optional(),
+  channel: z.nativeEnum(NotificationChannel),
+  isEnabled: z.boolean(),
 });
 
 export const listMessagingServicesForSchoolApi = async (req: Request, res: Response) => {
@@ -45,3 +52,20 @@ export const upsertSchoolMessagingConfigApi = async (req: Request, res: Response
   res.status(200).json(result);
 };
 
+export const toggleSchoolMessagingConfigApi = async (req: Request, res: Response) => {
+  const payload = toggleSchema.parse(req.body);
+  const schoolId = resolveSchoolId(req, payload.schoolId);
+  const result = await setSchoolMessagingConfigStatus({
+    schoolId,
+    channel: payload.channel,
+    isEnabled: payload.isEnabled,
+  });
+  res.status(200).json({
+    id: result.id,
+    schoolId: result.schoolId,
+    channel: result.channel,
+    isEnabled: result.isEnabled,
+    serviceId: result.serviceId,
+    serviceCode: result.service.code,
+  });
+};

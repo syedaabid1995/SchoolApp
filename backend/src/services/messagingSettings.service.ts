@@ -160,6 +160,42 @@ export const upsertSchoolMessagingConfig = async (params: {
   };
 };
 
+export const setSchoolMessagingConfigStatus = async (params: {
+  schoolId: string;
+  channel: NotificationChannel;
+  isEnabled: boolean;
+}) => {
+  const existing = await prisma.schoolMessagingConfig.findUnique({
+    where: { schoolId_channel: { schoolId: params.schoolId, channel: params.channel } },
+  });
+  if (!existing) {
+    throw new HttpError(404, 'Messaging config not found for this channel');
+  }
+
+  return prisma.schoolMessagingConfig.update({
+    where: { schoolId_channel: { schoolId: params.schoolId, channel: params.channel } },
+    data: { isEnabled: params.isEnabled },
+    include: { service: true },
+  });
+};
+
+export const hasActiveMessagingGateway = async (params: {
+  schoolId?: string | null;
+  channels?: NotificationChannel[];
+}) => {
+  if (!params.schoolId) return false;
+  const channels: NotificationChannel[] = params.channels?.length ? params.channels : ['SMS', 'WHATSAPP'];
+  const count = await prisma.schoolMessagingConfig.count({
+    where: {
+      schoolId: params.schoolId,
+      channel: { in: channels },
+      isEnabled: true,
+      service: { status: 'ACTIVE' },
+    },
+  });
+  return count > 0;
+};
+
 export const resolveSchoolMessagingProvider = async (params: {
   schoolId?: string | null;
   channel: NotificationChannel;
@@ -178,4 +214,3 @@ export const resolveSchoolMessagingProvider = async (params: {
     credentials: (config.credentials as Record<string, string>) ?? {},
   };
 };
-
