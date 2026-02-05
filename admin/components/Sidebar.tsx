@@ -86,6 +86,7 @@ export const Sidebar = ({
     { href: '/dashboard/audit', label: 'Logs' },
     { href: '/dashboard/themes', label: 'Themes' },
     { href: '/dashboard/settings', label: 'Settings' },
+    { href: '/dashboard/settings/sms', label: 'SMS Settings' },
   ];
 
   useEffect(() => {
@@ -355,6 +356,8 @@ export const Sidebar = ({
               {renderLink({ href: '/dashboard/audit', label: 'Audit Logs' })}
               <div className="border-t border-white/10 my-2"></div>
               {renderLink({ href: '/dashboard/settings/access', label: 'Access Control' })}
+              <div className="border-t border-white/10 my-2"></div>
+              {renderLink({ href: '/dashboard/settings/sms', label: 'SMS Settings' })}
             </>
           ) : null}
 

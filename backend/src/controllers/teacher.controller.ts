@@ -9,6 +9,7 @@ import { buildQueryFingerprint, cacheKeys } from '../services/cache/cache.keys';
 import { rememberCache, setCacheHeader } from '../services/cache/cache.service';
 import { cacheTTL } from '../services/cache/cache.ttl';
 import { invalidateTeacherCache } from '../services/cache/cache.invalidation';
+import { sendAccountCreatedWhatsapp } from '../services/accountOnboardingWhatsapp.service';
 
 const createSchema = z.object({
   email: z.string().email(),
@@ -104,7 +105,16 @@ export const createTeacherApi = async (req: Request, res: Response) => {
 
   await invalidateTeacherCache(schoolId, teacher.profile.id);
 
-  res.status(201).json(teacher);
+  const whatsapp = await sendAccountCreatedWhatsapp({
+    role: 'TEACHER',
+    schoolId,
+    email: teacher.user.email,
+    mobile: teacher.profile.phone,
+    tempPassword: teacher.tempPassword,
+    fullName: `${teacher.profile.firstName} ${teacher.profile.lastName}`.trim(),
+  });
+
+  res.status(201).json({ ...teacher, whatsappSentTo: whatsapp.sentTo });
 };
 
 export const listTeachersApi = async (req: Request, res: Response) => {

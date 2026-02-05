@@ -7,6 +7,7 @@ import { resolveSchoolId } from '../utils/tenant';
 import { hashPassword } from '../utils/password';
 import { logAudit } from '../utils/audit';
 import { invalidateStudentCache } from '../services/cache/cache.invalidation';
+import { sendAccountCreatedWhatsapp } from '../services/accountOnboardingWhatsapp.service';
 
 const createSchema = z.object({
   firstName: z.string().min(1),
@@ -149,7 +150,21 @@ export const createParent = async (req: Request, res: Response) => {
   }
   await invalidateStudentCache(schoolId);
 
-  res.status(201).json({ ...result.parent, tempPassword: result.tempPassword, sendVia: payload.sendVia ?? null });
+  const whatsapp = await sendAccountCreatedWhatsapp({
+    role: 'PARENT',
+    schoolId,
+    email: result.parent.email ?? `${result.parent.phone ?? 'parent'}@parent.local`,
+    mobile: result.parent.phone,
+    tempPassword: result.tempPassword,
+    fullName: `${result.parent.firstName} ${result.parent.lastName}`.trim(),
+  });
+
+  res.status(201).json({
+    ...result.parent,
+    tempPassword: result.tempPassword,
+    sendVia: payload.sendVia ?? null,
+    whatsappSentTo: whatsapp.sentTo,
+  });
 };
 
 export const listParents = async (req: Request, res: Response) => {

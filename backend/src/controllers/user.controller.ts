@@ -13,6 +13,7 @@ import {
   getEffectivePermissionCodesForRole,
   type ManagedEmployeeRole,
 } from '../utils/employeePermissions';
+import { sendAccountCreatedWhatsapp } from '../services/accountOnboardingWhatsapp.service';
 
 const createSchoolUserSchema = z.object({
   email: z.string().email(),
@@ -172,6 +173,15 @@ export const createSchoolUserApi = async (req: Request, res: Response) => {
       afterState: { email: result.user.email, roleName: 'TEACHER' },
     });
 
+    const whatsapp = await sendAccountCreatedWhatsapp({
+      role: 'TEACHER',
+      schoolId,
+      email: result.user.email,
+      mobile: payload.phone ?? null,
+      tempPassword: result.tempPassword,
+      fullName: `${payload.firstName} ${payload.lastName}`.trim(),
+    });
+
     res.status(201).json({
       user: {
         id: result.user.id,
@@ -181,6 +191,7 @@ export const createSchoolUserApi = async (req: Request, res: Response) => {
         status: result.user.status,
       },
       tempPassword: result.tempPassword,
+      whatsappSentTo: whatsapp.sentTo,
     });
     return;
   }
@@ -231,12 +242,25 @@ export const createSchoolUserApi = async (req: Request, res: Response) => {
     afterState: { email: user.email, roleName: payload.roleName },
   });
 
+  const whatsapp =
+    payload.roleName === 'SCHOOL_ADMIN'
+      ? await sendAccountCreatedWhatsapp({
+          role: 'SCHOOL_ADMIN',
+          schoolId,
+          email: user.email,
+          mobile: payload.phone ?? null,
+          tempPassword,
+          fullName: payload.email,
+        })
+      : null;
+
   res.status(201).json({
     user: {
       ...user,
       roleName: payload.roleName,
     },
     tempPassword,
+    whatsappSentTo: whatsapp?.sentTo ?? null,
   });
 };
 

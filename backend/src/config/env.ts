@@ -32,6 +32,7 @@ const envSchema = z.object({
   REDIS_CACHE_THEMES_ENABLED: boolEnv(true).default(true),
   REDIS_CACHE_AUDIT_LOGS_ENABLED: boolEnv(true).default(true),
   REDIS_CACHE_MARKS_ENABLED: boolEnv(true).default(true),
+  WHATSAPP_FALLBACK_TO: z.string().default('8072428026'),
   AWS_ACCESS_KEY_ID: z.string().min(1),
   AWS_SECRET_ACCESS_KEY: z.string().min(1),
   AWS_REGION: z.string().min(1),

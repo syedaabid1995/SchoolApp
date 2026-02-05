@@ -43,6 +43,8 @@ import { adminDashboardRouter } from './routes/adminDashboard.routes';
 import { userRouter } from './routes/user.routes';
 import { parentPortalRouter } from './routes/parentPortal.routes';
 import { uploadRouter } from './routes/upload.routes';
+import { messagingAdminRouter } from './routes/messagingAdmin.routes';
+import { messagingSettingsRouter } from './routes/messagingSettings.routes';
 import { rateLimit } from './middlewares/rate-limit.middleware';
 import { apiVersionMiddleware } from './middlewares/version.middleware';
 
@@ -163,6 +165,8 @@ export const createApp = () => {
   app.use('/api/v1/users', userRouter);
   app.use('/api/v1/parents/portal', parentPortalRouter);
   app.use('/api/v1/uploads', uploadRouter);
+  app.use('/api/v1/admin/messaging-services', messagingAdminRouter);
+  app.use('/api/v1/messaging-services', messagingSettingsRouter);
   app.use('/uploads', express.static(path.join(process.cwd(), 'uploads')));
 
   app.use(notFoundMiddleware);

@@ -54,6 +54,7 @@ model School {
   dataExportJobs DataExportJob[]
   dataDeletionJobs DataDeletionJob[]
   supportTickets SupportTicket[]
+  messagingConfigs SchoolMessagingConfig[]
   transferRequestsFrom StudentTransferRequest[] @relation("TransferFromSchool")
   transferRequestsTo StudentTransferRequest[] @relation("TransferToSchool")
   employeeRolePermissions EmployeeRolePermission[]
@@ -976,6 +977,11 @@ enum NotificationStatus {
   FAILED
 }
 
+enum MessagingServiceStatus {
+  ACTIVE
+  INACTIVE
+}
+
 model NotificationTemplate {
   id        String   @id @default(uuid()) @db.Uuid
   key       String   @unique
@@ -1012,6 +1018,38 @@ model NotificationLog {
   @@index([userId])
   @@index([templateId])
   @@map("notification_logs")
+}
+
+model MessagingService {
+  id                String                @id @default(uuid()) @db.Uuid
+  code              String                @unique
+  name              String
+  status            MessagingServiceStatus @default(ACTIVE)
+  supportedChannels Json                  @map("supported_channels")
+  createdAt         DateTime              @default(now()) @map("created_at")
+  updatedAt         DateTime              @updatedAt @map("updated_at")
+
+  schoolConfigs SchoolMessagingConfig[]
+
+  @@map("messaging_services")
+}
+
+model SchoolMessagingConfig {
+  id         String              @id @default(uuid()) @db.Uuid
+  schoolId   String              @map("school_id") @db.Uuid
+  serviceId  String              @map("service_id") @db.Uuid
+  channel    NotificationChannel
+  isEnabled  Boolean             @default(true) @map("is_enabled")
+  credentials Json
+  createdAt  DateTime            @default(now()) @map("created_at")
+  updatedAt  DateTime            @updatedAt @map("updated_at")
+
+  school  School            @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  service MessagingService  @relation(fields: [serviceId], references: [id], onDelete: Cascade)
+
+  @@unique([schoolId, channel])
+  @@index([serviceId])
+  @@map("school_messaging_configs")
 }
 
 enum BackupStatus {

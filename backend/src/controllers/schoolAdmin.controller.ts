@@ -15,6 +15,7 @@ import { buildQueryFingerprint, cacheKeys } from '../services/cache/cache.keys';
 import { rememberCache, setCacheHeader } from '../services/cache/cache.service';
 import { cacheTTL } from '../services/cache/cache.ttl';
 import { invalidateSchoolCache, invalidateSubscriptionCache } from '../services/cache/cache.invalidation';
+import { sendAccountCreatedWhatsapp } from '../services/accountOnboardingWhatsapp.service';
 
 const createSchema = z.object({
   name: z.string().min(1),
@@ -62,6 +63,7 @@ export const createSchoolApi = async (req: Request, res: Response) => {
   });
   await invalidateSchoolCache(result.school.id);
   await invalidateSubscriptionCache(result.school.id);
+  let whatsappSentTo: string | null = null;
   if (result.adminUser) {
     await logAudit(req, {
       schoolId: result.school.id,
@@ -70,8 +72,17 @@ export const createSchoolApi = async (req: Request, res: Response) => {
       action: 'SCHOOL_ADMIN_CREATED',
       afterState: { email: result.adminUser.email, status: result.adminUser.status },
     });
+    const whatsapp = await sendAccountCreatedWhatsapp({
+      role: 'SCHOOL_ADMIN',
+      schoolId: result.school.id,
+      email: result.adminUser.email,
+      mobile: null,
+      tempPassword: result.tempPassword,
+      fullName: result.adminUser.email,
+    });
+    whatsappSentTo = whatsapp.sentTo;
   }
-  res.status(201).json(result);
+  res.status(201).json({ ...result, whatsappSentTo });
 };
 
 export const listSchoolsApi = async (req: Request, res: Response) => {
@@ -144,7 +155,15 @@ export const createSchoolAdminApi = async (req: Request, res: Response) => {
     action: 'SCHOOL_ADMIN_CREATED',
     afterState: { email: result.adminUser.email, status: result.adminUser.status },
   });
-  res.status(201).json(result);
+  const whatsapp = await sendAccountCreatedWhatsapp({
+    role: 'SCHOOL_ADMIN',
+    schoolId: req.params.id,
+    email: result.adminUser.email,
+    mobile: null,
+    tempPassword: result.tempPassword,
+    fullName: result.adminUser.email,
+  });
+  res.status(201).json({ ...result, whatsappSentTo: whatsapp.sentTo });
 };
 
 export const setSchoolAdminStatusApi = async (req: Request, res: Response) => {
