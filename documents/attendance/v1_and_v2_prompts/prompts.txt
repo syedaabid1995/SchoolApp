@@ -5,7 +5,9 @@ You are working inside an existing multi-school School SaaS platform.
 ARCHITECTURAL CONSTRAINTS:
 - Do NOT refactor existing implemented modules (currently: auth, users/roles, schools, subscriptions, messaging, cache, academic masters if already present).
 - For modules not yet implemented (attendance/leave/payroll), you may design and add them, but:
-keep additive changes, do not break current routes/contracts,follow tenant isolation and role guard patterns.
+  - keep additive changes
+  - do not break current routes/contracts
+  - follow tenant isolation and role guard patterns
 - All work must be additive and backward-compatible.
 - Tenant isolation by schoolId is mandatory.
 
@@ -17,7 +19,6 @@ For any new feature, screen, or API, you MUST include:
 4. Test checklist (API, role access, tenant isolation)
 
 Your task is to EXTEND the system safely, not redesign it.
-txt
 
 PROMPT V02 - LMS MODULE PROMPT
 
@@ -31,7 +32,6 @@ Context:
 
 Constraints:
 - Do NOT introduce new academic hierarchies.
-- Do NOT modify existing attendance APIs or DB schemas.
 - LMS must reuse Subject, Teacher, Student mappings.
 
 Features:
