@@ -41,6 +41,9 @@ model School {
   faceProfiles  FaceProfile[]
   attendancePeriods AttendancePeriod[]
   attendanceSessions AttendanceSession[]
+  studentAttendanceSessions StudentAttendanceSession[]
+  teacherSelfAttendances TeacherSelfAttendance[]
+  teacherLeaveRequests TeacherLeaveRequest[]
   exams Exam[]
   themes Theme[]
   featureFlagOverrides FeatureFlagOverride[]
@@ -112,6 +115,11 @@ model User {
   supportTickets SupportTicket[]
   transferRequestsCreated StudentTransferRequest[] @relation("TransferRequestedBy")
   transferRequestsDecided StudentTransferRequest[] @relation("TransferDecidedBy")
+  studentAttendanceSessionsCreated StudentAttendanceSession[] @relation("StudentAttendanceSessionCreatedBy")
+  studentAttendanceSessionsLocked StudentAttendanceSession[] @relation("StudentAttendanceSessionLockedBy")
+  teacherSelfAttendancesCreated TeacherSelfAttendance[] @relation("TeacherSelfAttendanceCreatedBy")
+  teacherSelfAttendancesOverridden TeacherSelfAttendance[] @relation("TeacherSelfAttendanceOverriddenBy")
+  teacherLeaveRequestsReviewed TeacherLeaveRequest[] @relation("TeacherLeaveRequestReviewedBy")
 
   @@index([schoolId])
   @@unique([schoolId, email])
@@ -237,6 +245,7 @@ model Class {
   exams Exam[]
   examPapers ExamPaper[]
   teacherAssignments TeacherClassAssignment[]
+  studentAttendanceSessions StudentAttendanceSession[]
 
   @@index([schoolId])
   @@index([academicYearId])
@@ -254,6 +263,7 @@ model Section {
   class Class @relation(fields: [classId], references: [id], onDelete: Cascade)
   students Student[]
   exams Exam[]
+  studentAttendanceSessions StudentAttendanceSession[]
 
   @@index([classId])
   @@unique([classId, name])
@@ -339,6 +349,7 @@ model Student {
   transferRequests StudentTransferRequest[]
   faceProfile  FaceProfile?
   attendanceRecords AttendanceRecord[]
+  studentAttendanceRecords StudentAttendanceRecord[]
   marks Mark[]
   photos StudentPhoto[]
 
@@ -424,6 +435,8 @@ model TeacherProfile {
   bankDetails TeacherBankDetails?
   classAssignments TeacherClassAssignment[]
   subjectAssignments TeacherSubjectAssignment[]
+  teacherSelfAttendances TeacherSelfAttendance[]
+  teacherLeaveRequests TeacherLeaveRequest[]
 
   @@index([schoolId])
   @@unique([schoolId, employeeNo])
@@ -637,6 +650,122 @@ enum AttendanceApprovalStatus {
   PENDING
   APPROVED
   REJECTED
+}
+
+enum StudentAttendanceStatus {
+  PRESENT
+  ABSENT
+  LATE
+  HALF_DAY
+}
+
+enum StudentAttendanceSessionStatus {
+  DRAFT
+  LOCKED
+}
+
+enum TeacherSelfAttendanceStatus {
+  PRESENT
+  LEAVE
+}
+
+enum LeaveRequestStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+model StudentAttendanceSession {
+  id          String   @id @default(uuid()) @db.Uuid
+  schoolId    String   @map("school_id") @db.Uuid
+  classId     String   @map("class_id") @db.Uuid
+  sectionId   String?  @map("section_id") @db.Uuid
+  date        DateTime
+  status      StudentAttendanceSessionStatus @default(DRAFT)
+  createdById String   @map("created_by_id") @db.Uuid
+  lockedAt    DateTime? @map("locked_at")
+  lockedById  String?  @map("locked_by_id") @db.Uuid
+  lockReason  String?  @map("lock_reason")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  school    School @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  class     Class @relation(fields: [classId], references: [id], onDelete: Cascade)
+  section   Section? @relation(fields: [sectionId], references: [id], onDelete: SetNull)
+  createdBy User @relation("StudentAttendanceSessionCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+  lockedBy  User? @relation("StudentAttendanceSessionLockedBy", fields: [lockedById], references: [id], onDelete: SetNull)
+  records   StudentAttendanceRecord[]
+
+  @@unique([schoolId, classId, sectionId, date])
+  @@index([schoolId, date])
+  @@index([classId, sectionId, date])
+  @@map("student_attendance_sessions")
+}
+
+model StudentAttendanceRecord {
+  id        String   @id @default(uuid()) @db.Uuid
+  sessionId String   @map("session_id") @db.Uuid
+  studentId String   @map("student_id") @db.Uuid
+  status    StudentAttendanceStatus
+  remarks   String?
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  session StudentAttendanceSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  student Student @relation(fields: [studentId], references: [id], onDelete: Cascade)
+
+  @@unique([sessionId, studentId])
+  @@index([studentId, createdAt])
+  @@map("student_attendance_records")
+}
+
+model TeacherLeaveRequest {
+  id           String   @id @default(uuid()) @db.Uuid
+  schoolId     String   @map("school_id") @db.Uuid
+  teacherId    String   @map("teacher_id") @db.Uuid
+  fromDate     DateTime @map("from_date")
+  toDate       DateTime @map("to_date")
+  reason       String
+  status       LeaveRequestStatus @default(PENDING)
+  reviewedById String?  @map("reviewed_by_id") @db.Uuid
+  reviewedAt   DateTime? @map("reviewed_at")
+  reviewReason String?  @map("review_reason")
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  school      School @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  teacher     TeacherProfile @relation(fields: [teacherId], references: [id], onDelete: Cascade)
+  reviewedBy  User? @relation("TeacherLeaveRequestReviewedBy", fields: [reviewedById], references: [id], onDelete: SetNull)
+  attendances TeacherSelfAttendance[]
+
+  @@index([schoolId, status, createdAt])
+  @@index([teacherId, status, fromDate])
+  @@map("teacher_leave_requests")
+}
+
+model TeacherSelfAttendance {
+  id             String   @id @default(uuid()) @db.Uuid
+  schoolId       String   @map("school_id") @db.Uuid
+  teacherId      String   @map("teacher_id") @db.Uuid
+  date           DateTime
+  status         TeacherSelfAttendanceStatus
+  leaveRequestId String?  @map("leave_request_id") @db.Uuid
+  overrideReason String?  @map("override_reason")
+  createdById    String   @map("created_by_id") @db.Uuid
+  overriddenById String?  @map("overridden_by_id") @db.Uuid
+  createdAt      DateTime @default(now()) @map("created_at")
+  updatedAt      DateTime @updatedAt @map("updated_at")
+
+  school       School @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  teacher      TeacherProfile @relation(fields: [teacherId], references: [id], onDelete: Cascade)
+  leaveRequest TeacherLeaveRequest? @relation(fields: [leaveRequestId], references: [id], onDelete: SetNull)
+  createdBy    User @relation("TeacherSelfAttendanceCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+  overriddenBy User? @relation("TeacherSelfAttendanceOverriddenBy", fields: [overriddenById], references: [id], onDelete: SetNull)
+
+  @@unique([schoolId, teacherId, date])
+  @@index([schoolId, date])
+  @@index([teacherId, date])
+  @@map("teacher_self_attendances")
 }
 
 model AttendancePeriod {

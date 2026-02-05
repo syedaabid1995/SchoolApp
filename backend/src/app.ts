@@ -42,6 +42,7 @@ import { attendanceSummaryRouter } from './routes/attendanceSummary.routes';
 import { adminDashboardRouter } from './routes/adminDashboard.routes';
 import { userRouter } from './routes/user.routes';
 import { parentPortalRouter } from './routes/parentPortal.routes';
+import { leaveRouter } from './routes/leave.routes';
 import { uploadRouter } from './routes/upload.routes';
 import { messagingAdminRouter } from './routes/messagingAdmin.routes';
 import { messagingSettingsRouter } from './routes/messagingSettings.routes';
@@ -139,6 +140,7 @@ export const createApp = () => {
   app.use('/api/v1/faces', faceRouter);
   app.use('/api/v1/recognition', recognitionRouter);
   app.use('/api/v1/attendance', attendanceRouter);
+  app.use('/api/v1/leave', leaveRouter);
   app.use('/api/v1/attendance/evidence', evidenceRouter);
   app.use('/api/v1/exams', examRouter);
   app.use('/api/v1/reports', reportRouter);
