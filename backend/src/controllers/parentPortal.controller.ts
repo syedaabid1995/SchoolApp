@@ -228,7 +228,7 @@ export const getParentAttendance = async (req: Request, res: Response) => {
   const end = new Date(start);
   end.setMonth(start.getMonth() + 1);
 
-  const records = await prisma.attendanceRecord.findMany({
+  const records = await prisma.studentAttendanceRecord.findMany({
     where: {
       studentId: child.id,
       session: { date: { gte: start, lt: end } },
@@ -236,17 +236,39 @@ export const getParentAttendance = async (req: Request, res: Response) => {
     include: { session: { select: { date: true } } },
   });
 
-  const byDate = new Map<string, string>();
+  const statusRank: Record<string, number> = {
+    Absent: 4,
+    Late: 3,
+    'Half Day': 2,
+    Present: 1,
+  };
+  const normalizeStatus = (status: string) => {
+    if (status === 'ABSENT') return 'Absent';
+    if (status === 'LATE') return 'Late';
+    if (status === 'HALF_DAY') return 'Half Day';
+    return 'Present';
+  };
+
+  const byDate = new Map<string, { status: string; remark?: string | null }>();
   records.forEach((record) => {
-    const key = record.session.date.toISOString().slice(0, 10);
+    const sessionDate = record.session.date;
+    const key = `${sessionDate.getUTCFullYear()}-${String(sessionDate.getUTCMonth() + 1).padStart(2, '0')}-${String(
+      sessionDate.getUTCDate(),
+    ).padStart(2, '0')}`;
+    const nextStatus = normalizeStatus(record.status);
     const existing = byDate.get(key);
-    if (!existing || existing === 'Absent') {
-      const status = record.status === 'ABSENT' ? 'Absent' : 'Present';
-      byDate.set(key, status);
+    const nextRank = statusRank[nextStatus] ?? 0;
+    const existingRank = existing ? statusRank[existing.status] ?? 0 : 0;
+    if (!existing || nextRank > existingRank || (nextRank === existingRank && !existing.remark && record.remarks)) {
+      byDate.set(key, { status: nextStatus, remark: record.remarks ?? null });
     }
   });
 
-  const calendar = Array.from(byDate.entries()).map(([date, status]) => ({ date, status }));
+  const calendar = Array.from(byDate.entries()).map(([date, entry]) => ({
+    date,
+    status: entry.status,
+    remark: entry.remark ?? null,
+  }));
   const presentDays = calendar.filter((entry) => entry.status === 'Present').length;
   const absentDays = calendar.filter((entry) => entry.status === 'Absent').length;
 

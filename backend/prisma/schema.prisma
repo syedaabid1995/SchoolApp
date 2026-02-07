@@ -913,6 +913,7 @@ model Exam {
   type       ExamType
   status     ExamStatus @default(DRAFT)
   scheduledAt DateTime? @map("scheduled_at")
+  resultPublishAt DateTime? @map("result_publish_at")
   createdAt  DateTime  @default(now()) @map("created_at")
   updatedAt  DateTime  @updatedAt @map("updated_at")
 
@@ -939,6 +940,7 @@ model ExamPaper {
   maxMarks   Float    @map("max_marks")
   passMarks  Float    @default(0) @map("pass_marks")
   weightage  Float    @default(1) @map("weightage")
+  scheduledAt DateTime? @map("scheduled_at")
   createdAt  DateTime @default(now()) @map("created_at")
   updatedAt  DateTime @updatedAt @map("updated_at")
 

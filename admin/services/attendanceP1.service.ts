@@ -9,6 +9,8 @@ export type StudentAttendanceSession = {
   date: string;
   status: 'DRAFT' | 'LOCKED';
   lockReason: string | null;
+  lockedAt?: string | null;
+  lockedById?: string | null;
   records: Array<{
     id: string;
     studentId: string;

@@ -10,6 +10,7 @@ const subjectMappingSchema = z.object({
   subjectId: z.string().uuid(),
   maxMarks: z.number().positive(),
   passMarks: z.number().min(0),
+  scheduledAt: z.coerce.date(),
 });
 
 const createSchema = z.object({
@@ -23,6 +24,7 @@ const createSchema = z.object({
   type: z.enum(['MIDTERM', 'FINAL', 'QUIZ', 'ASSIGNMENT']),
   status: z.enum(['DRAFT', 'PUBLISHED', 'CLOSED']).optional(),
   scheduledAt: z.coerce.date().optional(),
+  resultPublishAt: z.coerce.date().optional(),
   schoolId: z.string().uuid().optional(),
 });
 
@@ -34,6 +36,7 @@ const updateSchema = z.object({
   type: z.enum(['MIDTERM', 'FINAL', 'QUIZ', 'ASSIGNMENT']).optional(),
   status: z.enum(['DRAFT', 'PUBLISHED', 'CLOSED']).optional(),
   scheduledAt: z.coerce.date().optional().nullable(),
+  resultPublishAt: z.coerce.date().optional().nullable(),
   schoolId: z.string().uuid().optional(),
 });
 
@@ -44,6 +47,12 @@ export const createExam = async (req: Request, res: Response) => {
   const subjectIds = payload.subjectMappings?.map((item) => item.subjectId) ?? payload.subjectIds ?? [];
   if (!subjectIds.length) {
     throw new HttpError(400, 'At least one subject is required');
+  }
+  if (!payload.subjectMappings?.length) {
+    throw new HttpError(400, 'Subject exam date is required for each subject');
+  }
+  if (payload.subjectMappings.length !== subjectIds.length) {
+    throw new HttpError(400, 'Subject exam date is required for every selected subject');
   }
 
   const subjects = await prisma.subject.findMany({
@@ -116,6 +125,7 @@ export const createExam = async (req: Request, res: Response) => {
         type: payload.type,
         status: payload.status ?? 'DRAFT',
         scheduledAt: payload.scheduledAt ?? null,
+        resultPublishAt: payload.resultPublishAt ?? null,
       },
     });
 
@@ -133,6 +143,7 @@ export const createExam = async (req: Request, res: Response) => {
           maxMarks: mapping?.maxMarks ?? 100,
           passMarks: mapping?.passMarks ?? 35,
           weightage: 1,
+          scheduledAt: mapping?.scheduledAt ?? null,
         };
       }),
     });
@@ -153,6 +164,7 @@ export const createExam = async (req: Request, res: Response) => {
       classId: exam.classId,
       sectionId: exam.sectionId,
       scheduledAt: exam.scheduledAt,
+      resultPublishAt: exam.resultPublishAt,
       subjects: subjectIds.length,
     },
   });
@@ -223,6 +235,7 @@ export const updateExam = async (req: Request, res: Response) => {
       type: payload.type ?? undefined,
       status: payload.status ?? undefined,
       scheduledAt: payload.scheduledAt === undefined ? undefined : payload.scheduledAt,
+      resultPublishAt: payload.resultPublishAt === undefined ? undefined : payload.resultPublishAt,
     },
   });
 
@@ -239,6 +252,7 @@ export const updateExam = async (req: Request, res: Response) => {
       classId: existing.classId,
       sectionId: existing.sectionId,
       scheduledAt: existing.scheduledAt,
+      resultPublishAt: existing.resultPublishAt,
     } : null,
     afterState: {
       name: exam.name,
@@ -248,6 +262,7 @@ export const updateExam = async (req: Request, res: Response) => {
       classId: exam.classId,
       sectionId: exam.sectionId,
       scheduledAt: exam.scheduledAt,
+      resultPublishAt: exam.resultPublishAt,
     },
   });
 
@@ -284,6 +299,7 @@ export const deleteExam = async (req: Request, res: Response) => {
       classId: existing.classId,
       sectionId: existing.sectionId,
       scheduledAt: existing.scheduledAt,
+      resultPublishAt: existing.resultPublishAt,
     } : null,
   });
 

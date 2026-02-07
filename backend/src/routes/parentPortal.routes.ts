@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { authMiddleware } from '../middlewares/auth.middleware';
-import { requireRole } from '../middlewares/rbac.middleware';
+import { requireParentProfile } from '../middlewares/parent.middleware';
 import {
   listParentChildren,
   getParentProfile,
@@ -16,7 +16,7 @@ import {
 export const parentPortalRouter = Router();
 
 parentPortalRouter.use(authMiddleware);
-parentPortalRouter.use(requireRole('PARENT'));
+parentPortalRouter.use(requireParentProfile);
 
 parentPortalRouter.get('/children', listParentChildren);
 parentPortalRouter.get('/profile', getParentProfile);

@@ -39,6 +39,11 @@ export default function StudentAttendanceMarkPage() {
   const [sectionId, setSectionId] = useState('');
   const [date, setDate] = useState(new Date().toISOString().slice(0, 10));
   const [sessionId, setSessionId] = useState('');
+  const [sessionMeta, setSessionMeta] = useState<{
+    status?: 'DRAFT' | 'LOCKED';
+    lockedAt?: string | null;
+    lockedById?: string | null;
+  }>({});
   const [rows, setRows] = useState<Row[]>([]);
   const [message, setMessage] = useState('');
   const [loading, setLoading] = useState(false);
@@ -68,6 +73,7 @@ export default function StudentAttendanceMarkPage() {
         date,
       });
       setSessionId(result.id);
+      setSessionMeta({ status: result.status, lockedAt: result.lockedAt ?? null, lockedById: result.lockedById ?? null });
       setRows(
         filteredStudents.map((student: { id: string; fullName?: string; firstName: string; lastName: string; admissionNo: string }) => ({
           studentId: student.id,
@@ -90,10 +96,11 @@ export default function StudentAttendanceMarkPage() {
     setLoading(true);
     setMessage('');
     try {
-      await updateStudentAttendanceSession(sessionId, {
+      const updated = await updateStudentAttendanceSession(sessionId, {
         records: rows.map((row) => ({ studentId: row.studentId, status: row.status, remarks: row.remarks || undefined })),
         submit,
       });
+      setSessionMeta({ status: updated.status, lockedAt: updated.lockedAt ?? null, lockedById: updated.lockedById ?? null });
       setMessage(submit ? 'Attendance submitted and locked.' : 'Draft saved successfully.');
     } catch (err: any) {
       setMessage(err?.response?.data?.error?.message ?? 'Failed to save attendance');
@@ -166,6 +173,18 @@ export default function StudentAttendanceMarkPage() {
 
       {sessionId ? (
         <div className="rounded-2xl border bg-white shadow-sm">
+          {sessionMeta.status === 'LOCKED' ? (
+            <div className="flex flex-wrap items-center justify-between gap-2 border-b bg-amber-50 px-4 py-3 text-sm text-amber-900">
+              <div className="flex items-center gap-2">
+                <span className="inline-flex h-2 w-2 rounded-full bg-amber-500" />
+                <span>Attendance is locked.</span>
+              </div>
+              <div className="text-xs text-amber-800">
+                {sessionMeta.lockedAt ? `Locked at ${new Date(sessionMeta.lockedAt).toLocaleString()}` : null}
+                {sessionMeta.lockedById ? ` • Locked by ${sessionMeta.lockedById}` : null}
+              </div>
+            </div>
+          ) : null}
           <div className="grid grid-cols-12 border-b bg-slate-50 px-4 py-3 text-xs font-semibold uppercase tracking-wide text-slate-600">
             <div className="col-span-2">Admission No</div>
             <div className="col-span-3">Name</div>
