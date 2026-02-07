@@ -12,6 +12,7 @@ import {
   MANAGED_EMPLOYEE_ROLES,
   getEffectivePermissionCodesForRole,
   getEffectivePermissionCodesForUser,
+  getPlanPermissionCodesForSchool,
   type ManagedEmployeeRole,
 } from '../utils/employeePermissions';
 import { sendAccountCreatedWhatsapp } from '../services/accountOnboardingWhatsapp.service';
@@ -324,9 +325,18 @@ export const listEmployeePermissionsApi = async (req: Request, res: Response) =>
   const roleName = managedRoleSchema.parse((req.query.roleName as string | undefined) ?? 'TEACHER');
   const schoolId = resolveSchoolId(req, req.query.schoolId as string | undefined);
   const userId = req.query.userId as string | undefined;
+  const planCodes = new Set(await getPlanPermissionCodesForSchool(schoolId));
   const enabledCodes = userId
     ? await getEffectivePermissionCodesForUser(schoolId, userId, roleName)
     : await getEffectivePermissionCodesForRole(schoolId, roleName);
+  const allowedPermissions = planCodes.size
+    ? EMPLOYEE_PERMISSION_CATALOG.filter((permission) => planCodes.has(permission.code))
+    : [];
+
+  const subscription = await prisma.subscription.findUnique({
+    where: { schoolId },
+    select: { planName: true },
+  });
 
   const users = await prisma.user.findMany({
     where: {
@@ -349,6 +359,7 @@ export const listEmployeePermissionsApi = async (req: Request, res: Response) =>
 
   res.status(200).json({
     roleName,
+    planName: subscription?.planName ?? null,
     employees: users.map((user) => ({
       id: user.teacherProfile?.id ?? user.id,
       userId: user.id,
@@ -359,7 +370,7 @@ export const listEmployeePermissionsApi = async (req: Request, res: Response) =>
         ? `${user.teacherProfile.firstName} ${user.teacherProfile.lastName}`.trim()
         : user.email,
     })),
-    permissions: EMPLOYEE_PERMISSION_CATALOG.map((permission) => ({
+    permissions: allowedPermissions.map((permission) => ({
       ...permission,
       enabled: enabledCodes.includes(permission.code),
     })),
@@ -370,7 +381,8 @@ export const updateEmployeePermissionsApi = async (req: Request, res: Response) 
   const payload = updateEmployeePermissionsSchema.parse(req.body);
   const schoolId = resolveSchoolId(req, payload.schoolId);
   const validCodes = new Set(EMPLOYEE_PERMISSION_CATALOG.map((permission) => permission.code));
-  const enabledCodes = payload.enabledCodes.filter((code) => validCodes.has(code));
+  const planCodes = new Set(await getPlanPermissionCodesForSchool(schoolId));
+  const enabledCodes = payload.enabledCodes.filter((code) => validCodes.has(code) && planCodes.has(code));
 
   if (payload.userId) {
     const targetUser = await prisma.user.findFirst({

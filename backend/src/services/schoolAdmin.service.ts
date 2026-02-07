@@ -341,10 +341,11 @@ export const listSchools = async (params: {
   limit: number;
   status?: 'ACTIVE' | 'SUSPENDED';
   query?: string;
+  includeDeleted?: boolean;
 }) => {
   const skip = (params.page - 1) * params.limit;
   const where: Prisma.SchoolWhereInput = {
-    deletedAt: null,
+    ...(params.includeDeleted ? {} : { deletedAt: null }),
     ...(params.status ? { status: params.status } : {}),
     ...(params.query
       ? {
@@ -438,6 +439,17 @@ export const softDeleteSchool = async (id: string) => {
     data: {
       deletedAt: new Date(),
       status: 'SUSPENDED',
+    },
+  });
+};
+
+export const restoreSchool = async (id: string) => {
+  return prisma.school.update({
+    where: { id },
+    data: {
+      deletedAt: null,
+      status: 'ACTIVE',
+      statusReason: null,
     },
   });
 };

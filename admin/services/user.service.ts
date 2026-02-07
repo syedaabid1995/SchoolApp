@@ -63,6 +63,7 @@ export type EmployeePermissionItem = {
 
 export type EmployeePermissionPayload = {
   roleName: EmployeeManagedRole | 'SCHOOL_ADMIN';
+  planName?: string | null;
   employees: Array<{
     id: string;
     userId?: string;

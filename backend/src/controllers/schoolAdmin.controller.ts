@@ -9,6 +9,7 @@ import {
   updateSchool,
   setSchoolStatus,
   softDeleteSchool,
+  restoreSchool,
 } from '../services/schoolAdmin.service';
 import { logAudit } from '../utils/audit';
 import { buildQueryFingerprint, cacheKeys } from '../services/cache/cache.keys';
@@ -43,6 +44,10 @@ const listSchema = z.object({
   limit: z.coerce.number().int().min(1).max(100).default(20),
   status: z.enum(['ACTIVE', 'SUSPENDED']).optional(),
   query: z.string().min(1).optional(),
+  includeDeleted: z
+    .union([z.literal('true'), z.literal('false'), z.boolean()])
+    .optional()
+    .transform((value) => (typeof value === 'string' ? value === 'true' : Boolean(value))),
 });
 
 const updateSchema = z.object({
@@ -120,6 +125,7 @@ export const listSchoolsApi = async (req: Request, res: Response) => {
     limit: payload.limit,
     status: payload.status,
     query: payload.query,
+    includeDeleted: payload.includeDeleted ?? false,
   };
   const queryFingerprint = buildQueryFingerprint(payload);
   const { value: result, status } = await rememberCache(
@@ -167,6 +173,13 @@ export const suspendSchoolApi = async (req: Request, res: Response) => {
 
 export const deleteSchoolApi = async (req: Request, res: Response) => {
   const school = await softDeleteSchool(req.params.id);
+  await invalidateSchoolCache(school.id);
+  await invalidateSubscriptionCache(school.id);
+  res.status(200).json(school);
+};
+
+export const restoreSchoolApi = async (req: Request, res: Response) => {
+  const school = await restoreSchool(req.params.id);
   await invalidateSchoolCache(school.id);
   await invalidateSubscriptionCache(school.id);
   res.status(200).json(school);

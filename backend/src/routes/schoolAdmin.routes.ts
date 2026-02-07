@@ -9,6 +9,7 @@ import {
   activateSchoolApi,
   suspendSchoolApi,
   deleteSchoolApi,
+  restoreSchoolApi,
   createSchoolAdminApi,
   setSchoolAdminStatusApi,
 } from '../controllers/schoolAdmin.controller';
@@ -27,3 +28,4 @@ schoolAdminRouter.post('/:id/activate', activateSchoolApi);
 schoolAdminRouter.post('/:id/suspend', suspendSchoolApi);
 schoolAdminRouter.post('/:id/admins', createSchoolAdminApi);
 schoolAdminRouter.delete('/:id', deleteSchoolApi);
+schoolAdminRouter.post('/:id/restore', restoreSchoolApi);

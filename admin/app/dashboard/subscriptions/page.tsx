@@ -385,6 +385,23 @@ export default function SubscriptionsPage() {
                           } catch (error: any) {
                             const message =
                               error?.response?.data?.error?.message || error?.message || 'Failed to delete plan';
+                            if (String(message).toLowerCase().includes('plan is in use')) {
+                              try {
+                                const result = await listPlanSchools(plan.id);
+                                if (result.items.length > 0) {
+                                  setPlanBlocker({
+                                    open: true,
+                                    planId: plan.id,
+                                    planName: plan.name,
+                                    schools: result.items,
+                                    mode: 'delete',
+                                  });
+                                  return;
+                                }
+                              } catch {
+                                // fall through to error toast
+                              }
+                            }
                             notify.error('Delete failed', message);
                           } finally {
                             setPlanLoading(false);

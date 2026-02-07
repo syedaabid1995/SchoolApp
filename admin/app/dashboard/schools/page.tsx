@@ -9,6 +9,7 @@ import {
   activateSchool,
   suspendSchool,
   deleteSchool,
+  restoreSchool,
 } from '../../../services/school.service';
 import { listSubscriptionPlans, upsertSubscription } from '../../../services/subscription.service';
 import { useNotify } from '../../../components/NotificationProvider';
@@ -34,6 +35,7 @@ export default function SchoolsPage() {
   const [formError, setFormError] = useState('');
   const [expiryDates, setExpiryDates] = useState<Record<string, string>>({});
   const [debouncedQuery, setDebouncedQuery] = useState('');
+  const [showDeleted, setShowDeleted] = useState(false);
 
   useEffect(() => {
     const timer = setTimeout(() => setDebouncedQuery(query.trim()), 350);
@@ -41,15 +43,15 @@ export default function SchoolsPage() {
   }, [query]);
 
   const { data, isLoading } = useQuery({
-    queryKey: ['schools', debouncedQuery],
-    queryFn: () => listSchools({ query: debouncedQuery }),
+    queryKey: ['schools', debouncedQuery, showDeleted],
+    queryFn: () => listSchools({ query: debouncedQuery, includeDeleted: showDeleted }),
     refetchOnWindowFocus: false,
     refetchOnMount: false,
     staleTime: 60_000,
   });
   const { data: totalData } = useQuery({
-    queryKey: ['schools-total'],
-    queryFn: () => listSchools({ page: 1, limit: 1 }),
+    queryKey: ['schools-total', showDeleted],
+    queryFn: () => listSchools({ page: 1, limit: 1, includeDeleted: showDeleted }),
     refetchOnWindowFocus: false,
     refetchOnMount: false,
     staleTime: 60_000,
@@ -89,14 +91,22 @@ export default function SchoolsPage() {
   });
 
   const actionMutation = useMutation({
-    mutationFn: async (payload: { id: string; action: 'activate' | 'suspend' | 'delete' }) => {
+    mutationFn: async (payload: { id: string; action: 'activate' | 'suspend' | 'delete' | 'restore' }) => {
       if (payload.action === 'activate') return activateSchool(payload.id);
       if (payload.action === 'suspend') return suspendSchool(payload.id);
+      if (payload.action === 'restore') return restoreSchool(payload.id);
       return deleteSchool(payload.id);
     },
     onSuccess: (data, variables) => {
       queryClient.invalidateQueries({ queryKey: ['schools'] });
-      const actionText = variables.action === 'activate' ? 'activated' : variables.action === 'suspend' ? 'suspended' : 'deleted';
+      const actionText =
+        variables.action === 'activate'
+          ? 'activated'
+          : variables.action === 'suspend'
+            ? 'suspended'
+            : variables.action === 'restore'
+              ? 'restored'
+              : 'deleted';
       notify.success(`School ${actionText}!`, `School has been ${actionText} successfully`);
     },
     onError: (error: any) => {
@@ -365,12 +375,23 @@ export default function SchoolsPage() {
                 <p className="text-sm text-gray-500">{rows.length} schools registered</p>
               </div>
             </div>
-            <input
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              placeholder="Search schools..."
-              className="rounded-xl border border-gray-300 px-4 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-200"
-            />
+            <div className="flex flex-wrap items-center gap-3">
+              <input
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                placeholder="Search schools..."
+                className="rounded-xl border border-gray-300 px-4 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-200"
+              />
+              <label className="inline-flex items-center gap-2 rounded-lg border border-gray-300 px-3 py-2 text-xs font-semibold text-gray-600">
+                <input
+                  type="checkbox"
+                  className="h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-200"
+                  checked={showDeleted}
+                  onChange={(e) => setShowDeleted(e.target.checked)}
+                />
+                Show deleted
+              </label>
+            </div>
           </div>
           <div className="overflow-hidden rounded-xl border border-gray-200">
             <table className="w-full">
@@ -379,6 +400,7 @@ export default function SchoolsPage() {
                   <th className="px-6 py-4 text-left text-xs font-semibold uppercase tracking-wider text-gray-600">Name</th>
                   <th className="px-6 py-4 text-left text-xs font-semibold uppercase tracking-wider text-gray-600">Code</th>
                   <th className="px-6 py-4 text-left text-xs font-semibold uppercase tracking-wider text-gray-600">Status</th>
+                  <th className="px-6 py-4 text-left text-xs font-semibold uppercase tracking-wider text-gray-600">Deleted At</th>
                   <th className="px-6 py-4 text-left text-xs font-semibold uppercase tracking-wider text-gray-600">Plan</th>
                   <th className="px-6 py-4 text-left text-xs font-semibold uppercase tracking-wider text-gray-600">Test Expiry</th>
                   <th className="px-6 py-4 text-right text-xs font-semibold uppercase tracking-wider text-gray-600">Actions</th>
@@ -387,7 +409,7 @@ export default function SchoolsPage() {
               <tbody className="divide-y divide-gray-200 bg-white">
                 {isLoading ? (
                   <tr>
-                    <td colSpan={6} className="px-6 py-12 text-center text-gray-500">
+                    <td colSpan={7} className="px-6 py-12 text-center text-gray-500">
                       <div className="flex flex-col items-center">
                         <svg className="h-8 w-8 animate-spin text-gray-400" fill="none" viewBox="0 0 24 24">
                           <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
@@ -399,7 +421,7 @@ export default function SchoolsPage() {
                   </tr>
                 ) : rows.length === 0 ? (
                   <tr>
-                    <td colSpan={6} className="px-6 py-12 text-center">
+                    <td colSpan={7} className="px-6 py-12 text-center">
                       <div className="flex flex-col items-center text-gray-400">
                         <svg className="h-12 w-12" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
@@ -418,6 +440,11 @@ export default function SchoolsPage() {
                             {school.name.charAt(0).toUpperCase()}
                           </div>
                           <div className="ml-3 text-sm font-medium text-gray-900">{school.name}</div>
+                          {school.deletedAt ? (
+                            <span className="ml-2 rounded-full bg-rose-100 px-2 py-0.5 text-[10px] font-semibold text-rose-700">
+                              DELETED
+                            </span>
+                          ) : null}
                         </div>
                       </td>
                       <td className="px-6 py-4 text-sm text-gray-600">{school.code}</td>
@@ -428,6 +455,7 @@ export default function SchoolsPage() {
                           className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 ${
                             school.status === 'ACTIVE' ? 'bg-emerald-500 focus:ring-emerald-500' : 'bg-rose-500 focus:ring-rose-500'
                           }`}
+                          disabled={Boolean(school.deletedAt)}
                           onClick={() =>
                             actionMutation.mutate({
                               id: school.id,
@@ -442,6 +470,9 @@ export default function SchoolsPage() {
                           />
                         </button>
                       </td>
+                      <td className="px-6 py-4 text-sm text-gray-600">
+                        {school.deletedAt ? new Date(school.deletedAt).toLocaleDateString() : '—'}
+                      </td>
                       <td className="px-6 py-4">
                         <select
                           value={plans?.find((plan) => plan.name === school.subscriptionPlan)?.id ?? ''}
@@ -449,6 +480,7 @@ export default function SchoolsPage() {
                             planUpdateMutation.mutate({ schoolId: school.id, planId: e.target.value })
                           }
                           className="rounded-lg border border-gray-300 px-3 py-1.5 text-xs focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-200"
+                          disabled={Boolean(school.deletedAt)}
                         >
                           <option value="">Select plan</option>
                           {activePlans.map((plan) => (
@@ -467,10 +499,11 @@ export default function SchoolsPage() {
                               setExpiryDates((prev) => ({ ...prev, [school.id]: e.target.value }))
                             }
                             className="rounded-lg border border-gray-300 px-2 py-1 text-xs focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-200"
+                            disabled={Boolean(school.deletedAt)}
                           />
                           <button
                             className="rounded-lg bg-indigo-600 px-3 py-1 text-xs font-medium text-white hover:bg-indigo-700 disabled:opacity-50"
-                            disabled={!expiryDates[school.id]}
+                            disabled={!expiryDates[school.id] || Boolean(school.deletedAt)}
                             onClick={() =>
                               testExpiryMutation.mutate({
                                 schoolId: school.id,
@@ -490,17 +523,31 @@ export default function SchoolsPage() {
                           >
                             Admins
                           </Link>
-                          <button
-                            className="rounded-lg border border-rose-300 bg-rose-50 px-3 py-1.5 text-xs font-medium text-rose-700 hover:bg-rose-100"
-                            onClick={() =>
-                              actionMutation.mutate({
-                                id: school.id,
-                                action: 'delete',
-                              })
-                            }
-                          >
-                            Delete
-                          </button>
+                          {school.deletedAt ? (
+                            <button
+                              className="rounded-lg border border-emerald-300 bg-emerald-50 px-3 py-1.5 text-xs font-medium text-emerald-700 hover:bg-emerald-100"
+                              onClick={() =>
+                                actionMutation.mutate({
+                                  id: school.id,
+                                  action: 'restore',
+                                })
+                              }
+                            >
+                              Restore
+                            </button>
+                          ) : (
+                            <button
+                              className="rounded-lg border border-rose-300 bg-rose-50 px-3 py-1.5 text-xs font-medium text-rose-700 hover:bg-rose-100"
+                              onClick={() =>
+                                actionMutation.mutate({
+                                  id: school.id,
+                                  action: 'delete',
+                                })
+                              }
+                            >
+                              Delete
+                            </button>
+                          )}
                         </div>
                       </td>
                     </tr>

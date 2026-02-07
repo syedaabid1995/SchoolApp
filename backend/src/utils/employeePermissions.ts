@@ -62,7 +62,7 @@ export const getDefaultPermissionCodes = (roleName: string | null | undefined) =
   return DEFAULT_PERMISSION_BY_ROLE[role] ?? [];
 };
 
-const getPlanPermissionCodesForSchool = async (schoolId: string) => {
+export const getPlanPermissionCodesForSchool = async (schoolId: string) => {
   const subscription = await prisma.subscription.findUnique({
     where: { schoolId },
     select: { planId: true },

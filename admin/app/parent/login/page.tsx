@@ -34,7 +34,13 @@ export default function ParentLoginPage() {
           'Failed to send OTP';
         throw new Error(message);
       }
-      setMessage('OTP sent. Please check your phone.');
+      const data = await res.json().catch(() => null);
+      const otpValue = (data as any)?.otp || (data as any)?.data?.otp;
+      if (otpValue) {
+        setMessage(`OTP sent. Please check your phone. This is your code ${otpValue}`);
+      } else {
+        setMessage((data as any)?.message || 'OTP sent. Please check your phone.');
+      }
     } catch (err: any) {
       const message = err?.message || 'Failed to send OTP';
       const lower = message.toLowerCase();

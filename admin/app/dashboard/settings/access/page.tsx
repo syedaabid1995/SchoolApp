@@ -153,6 +153,11 @@ export default function AccessControlPage() {
           <p className="text-slate-600 text-lg">
             Manage role-based permissions and control access to different parts of the system.
           </p>
+          {data?.planName ? (
+            <p className="mt-3 inline-flex items-center rounded-full border border-blue-100 bg-blue-50 px-3 py-1 text-xs font-medium text-blue-700">
+              Your current plan: {data.planName}
+            </p>
+          ) : null}
         </div>
       </section>
 
