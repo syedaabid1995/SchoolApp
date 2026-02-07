@@ -45,6 +45,7 @@ model School {
   teacherSelfAttendances TeacherSelfAttendance[]
   teacherLeaveRequests TeacherLeaveRequest[]
   exams Exam[]
+  examTypes ExamTypeConfig[]
   themes Theme[]
   featureFlagOverrides FeatureFlagOverride[]
   configOverrides TenantConfigOverride[]
@@ -910,7 +911,7 @@ model Exam {
   classId    String?   @map("class_id") @db.Uuid
   sectionId  String?   @map("section_id") @db.Uuid
   name       String
-  type       ExamType
+  type       String
   status     ExamStatus @default(DRAFT)
   scheduledAt DateTime? @map("scheduled_at")
   resultPublishAt DateTime? @map("result_publish_at")
@@ -930,6 +931,22 @@ model Exam {
   @@index([classId])
   @@index([sectionId])
   @@map("exams")
+}
+
+model ExamTypeConfig {
+  id        String   @id @default(uuid()) @db.Uuid
+  schoolId  String   @map("school_id") @db.Uuid
+  code      String
+  name      String
+  isActive  Boolean  @default(true) @map("is_active")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  school School @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+
+  @@unique([schoolId, code])
+  @@index([schoolId])
+  @@map("exam_types")
 }
 
 model ExamPaper {

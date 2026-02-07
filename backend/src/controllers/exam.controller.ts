@@ -6,6 +6,27 @@ import { resolveSchoolId } from '../utils/tenant';
 import { logAudit } from '../utils/audit';
 import { invalidateAdminDashboardCache, invalidateAttendanceCache } from '../services/cache/cache.invalidation';
 
+const defaultExamTypes = [
+  { code: 'MIDTERM', name: 'Mid Term' },
+  { code: 'QUIZ', name: 'Unit Test' },
+  { code: 'ASSIGNMENT', name: 'Monthly' },
+  { code: 'FINAL', name: 'Final' },
+];
+
+const ensureDefaultExamTypes = async (schoolId: string) => {
+  const count = await prisma.examTypeConfig.count({ where: { schoolId } });
+  if (count > 0) return;
+  await prisma.examTypeConfig.createMany({
+    data: defaultExamTypes.map((item) => ({
+      schoolId,
+      code: item.code,
+      name: item.name,
+      isActive: true,
+    })),
+    skipDuplicates: true,
+  });
+};
+
 const subjectMappingSchema = z.object({
   subjectId: z.string().uuid(),
   maxMarks: z.number().positive(),
@@ -21,7 +42,7 @@ const createSchema = z.object({
   name: z.string().min(1).optional(),
   subjectIds: z.array(z.string().uuid()).min(1).optional(),
   subjectMappings: z.array(subjectMappingSchema).min(1).optional(),
-  type: z.enum(['MIDTERM', 'FINAL', 'QUIZ', 'ASSIGNMENT']),
+  type: z.string().min(1),
   status: z.enum(['DRAFT', 'PUBLISHED', 'CLOSED']).optional(),
   scheduledAt: z.coerce.date().optional(),
   resultPublishAt: z.coerce.date().optional(),
@@ -33,7 +54,7 @@ const updateSchema = z.object({
   classId: z.string().uuid().optional().nullable(),
   sectionId: z.string().uuid().optional().nullable(),
   name: z.string().min(1).optional(),
-  type: z.enum(['MIDTERM', 'FINAL', 'QUIZ', 'ASSIGNMENT']).optional(),
+  type: z.string().min(1).optional(),
   status: z.enum(['DRAFT', 'PUBLISHED', 'CLOSED']).optional(),
   scheduledAt: z.coerce.date().optional().nullable(),
   resultPublishAt: z.coerce.date().optional().nullable(),
@@ -43,15 +64,25 @@ const updateSchema = z.object({
 export const createExam = async (req: Request, res: Response) => {
   const payload = createSchema.parse(req.body);
   const schoolId = resolveSchoolId(req, payload.schoolId);
+  await ensureDefaultExamTypes(schoolId);
+
+  const examTypeCode = payload.type.trim().toUpperCase();
+  const examType = await prisma.examTypeConfig.findFirst({
+    where: { schoolId, code: examTypeCode, isActive: true },
+  });
+  if (!examType) {
+    throw new HttpError(400, 'Exam type is not active or not configured');
+  }
 
   const subjectIds = payload.subjectMappings?.map((item) => item.subjectId) ?? payload.subjectIds ?? [];
   if (!subjectIds.length) {
     throw new HttpError(400, 'At least one subject is required');
   }
   if (!payload.subjectMappings?.length) {
-    throw new HttpError(400, 'Subject exam date is required for each subject');
-  }
-  if (payload.subjectMappings.length !== subjectIds.length) {
+    if (!payload.scheduledAt) {
+      throw new HttpError(400, 'Subject exam date is required for each subject');
+    }
+  } else if (payload.subjectMappings.length !== subjectIds.length) {
     throw new HttpError(400, 'Subject exam date is required for every selected subject');
   }
 
@@ -122,7 +153,7 @@ export const createExam = async (req: Request, res: Response) => {
         classId,
         sectionId: payload.sectionId ?? null,
         name: examName,
-        type: payload.type,
+        type: examTypeCode,
         status: payload.status ?? 'DRAFT',
         scheduledAt: payload.scheduledAt ?? null,
         resultPublishAt: payload.resultPublishAt ?? null,
@@ -130,7 +161,12 @@ export const createExam = async (req: Request, res: Response) => {
     });
 
     const mappingBySubject = new Map(
-      (payload.subjectMappings ?? []).map((mapping) => [mapping.subjectId, mapping]),
+      (payload.subjectMappings ?? subjectIds.map((subjectId) => ({
+        subjectId,
+        maxMarks: 100,
+        passMarks: 35,
+        scheduledAt: payload.scheduledAt as Date,
+      }))).map((mapping) => [mapping.subjectId, mapping]),
     );
 
     await tx.examPaper.createMany({
@@ -225,6 +261,19 @@ export const updateExam = async (req: Request, res: Response) => {
     throw new HttpError(404, 'Exam not found');
   }
 
+  let nextType = payload.type;
+  if (payload.type) {
+    await ensureDefaultExamTypes(schoolId);
+    const examTypeCode = payload.type.trim().toUpperCase();
+    const examType = await prisma.examTypeConfig.findFirst({
+      where: { schoolId, code: examTypeCode, isActive: true },
+    });
+    if (!examType) {
+      throw new HttpError(400, 'Exam type is not active or not configured');
+    }
+    nextType = examTypeCode;
+  }
+
   const exam = await prisma.exam.update({
     where: { id },
     data: {
@@ -232,7 +281,7 @@ export const updateExam = async (req: Request, res: Response) => {
       classId: payload.classId === undefined ? undefined : payload.classId,
       sectionId: payload.sectionId === undefined ? undefined : payload.sectionId,
       name: payload.name ?? undefined,
-      type: payload.type ?? undefined,
+      type: nextType ?? undefined,
       status: payload.status ?? undefined,
       scheduledAt: payload.scheduledAt === undefined ? undefined : payload.scheduledAt,
       resultPublishAt: payload.resultPublishAt === undefined ? undefined : payload.resultPublishAt,

@@ -1,9 +1,9 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { listAcademicYears, listClasses, listSections, listSubjects } from '../../../../services/academic.service';
+import { listAcademicYears, listClasses, listExamTypes, listSections, listSubjects } from '../../../../services/academic.service';
 import { listSchools } from '../../../../services/school.service';
 import { getSession } from '../../../../services/auth.service';
 import { createExam, listExams } from '../../../../services/report.service';
@@ -33,7 +33,7 @@ export default function ExamsPage() {
   const [schoolId, setSchoolId] = useState('');
   const [examBasics, setExamBasics] = useState({
     name: '',
-    type: 'MIDTERM',
+    type: '',
     academicYearId: '',
     classId: '',
     sectionId: '',
@@ -82,11 +82,22 @@ export default function ExamsPage() {
     queryFn: () => listSubjects({ schoolId: effectiveSchoolId }),
     enabled: Boolean(effectiveSchoolId),
   });
+  const { data: examTypes } = useQuery({
+    queryKey: ['exam-types', effectiveSchoolId],
+    queryFn: () => listExamTypes({ schoolId: effectiveSchoolId, activeOnly: true }),
+    enabled: Boolean(effectiveSchoolId),
+  });
   const { data: exams } = useQuery({
     queryKey: ['exams', effectiveSchoolId],
     queryFn: () => listExams(),
     enabled: Boolean(effectiveSchoolId),
   });
+
+  useEffect(() => {
+    if (!examBasics.type && examTypes?.length) {
+      setExamBasics((prev) => ({ ...prev, type: examTypes[0].code }));
+    }
+  }, [examBasics.type, examTypes]);
 
   const classLookup = useMemo(() => {
     const map = new Map<string, string>();
@@ -136,7 +147,7 @@ export default function ExamsPage() {
       setStep(1);
       setExamBasics({
         name: '',
-        type: 'MIDTERM',
+        type: '',
         academicYearId: '',
         classId: '',
         sectionId: '',
@@ -175,7 +186,8 @@ export default function ExamsPage() {
 
   const handleContinueFromBasics = () => {
     let error = '';
-    if (!examBasics.academicYearId) error = 'Select academic year.';
+    if (!examBasics.type) error = 'Select exam type.';
+    else if (!examBasics.academicYearId) error = 'Select academic year.';
     else if (!examBasics.classId) error = 'Select class.';
     else if (!examBasics.examDate) error = 'Select exam date.';
     setStepError(error);
@@ -431,10 +443,15 @@ export default function ExamsPage() {
                   onChange={(e) => setExamBasics({ ...examBasics, type: e.target.value })}
                   className="w-full rounded-lg border border-slate/20 px-3 py-2 text-sm"
                 >
-                  <option value="MIDTERM">Mid Term</option>
-                  <option value="QUIZ">Unit Test</option>
-                  <option value="ASSIGNMENT">Monthly</option>
-                  <option value="FINAL">Final</option>
+                  {!examTypes?.length ? (
+                    <option value="">No exam types configured</option>
+                  ) : (
+                    examTypes.map((type: { id: string; code: string; name: string }) => (
+                      <option key={type.id} value={type.code}>
+                        {type.name}
+                      </option>
+                    ))
+                  )}
                 </select>
               </div>
               <div>

@@ -16,6 +16,9 @@ import {
   listSubjects,
   createSubject,
   deleteSubject,
+  listExamTypes,
+  createExamType,
+  updateExamType,
 } from '../../../services/academic.service';
 import { listSchools } from '../../../services/school.service';
 import { getSession } from '../../../services/auth.service';
@@ -28,10 +31,12 @@ export default function AcademicsPage() {
   const [sectionForm, setSectionForm] = useState({ name: '', classId: '' });
   const [subjectForm, setSubjectForm] = useState({ name: '', classId: '', academicYearId: '' });
   const [subjectFilters, setSubjectFilters] = useState({ query: '', classId: '', academicYearId: '' });
+  const [examTypeForm, setExamTypeForm] = useState({ name: '', code: '', isActive: true });
   const [yearError, setYearError] = useState('');
   const [classError, setClassError] = useState('');
   const [sectionError, setSectionError] = useState('');
   const [subjectError, setSubjectError] = useState('');
+  const [examTypeError, setExamTypeError] = useState('');
 
   const [schoolId, setSchoolId] = useState('');
   const { data: session } = useQuery({ queryKey: ['session'], queryFn: getSession });
@@ -62,6 +67,11 @@ export default function AcademicsPage() {
   const { data: subjects } = useQuery({
     queryKey: ['subjects', effectiveSchoolId],
     queryFn: () => listSubjects({ schoolId: effectiveSchoolId }),
+    enabled: Boolean(effectiveSchoolId),
+  });
+  const { data: examTypes } = useQuery({
+    queryKey: ['exam-types', effectiveSchoolId],
+    queryFn: () => listExamTypes({ schoolId: effectiveSchoolId }),
     enabled: Boolean(effectiveSchoolId),
   });
 
@@ -186,6 +196,23 @@ export default function AcademicsPage() {
     onSettled: () => queryClient.invalidateQueries({ queryKey: ['subjects'] }),
   });
 
+  const createExamTypeMutation = useMutation({
+    mutationFn: createExamType,
+    onSuccess: () => {
+      setExamTypeForm({ name: '', code: '', isActive: true });
+      setExamTypeError('');
+      queryClient.invalidateQueries({ queryKey: ['exam-types'] });
+    },
+  });
+
+  const updateExamTypeMutation = useMutation({
+    mutationFn: ({ id, payload }: { id: string; payload: { name?: string; isActive?: boolean; schoolId?: string } }) =>
+      updateExamType(id, payload),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['exam-types'] });
+    },
+  });
+
   const filteredSubjects = subjects?.filter(
     (subject: { id: string; name: string; classId?: string | null; academicYear?: { id: string; name: string } | null }) => {
       const query = subjectFilters.query.trim().toLowerCase();
@@ -207,6 +234,7 @@ export default function AcademicsPage() {
     classes: classes?.length || 0,
     sections: sections?.length || 0,
     subjects: subjects?.length || 0,
+    examTypes: examTypes?.length || 0,
   };
 
   return (
@@ -551,6 +579,104 @@ export default function AcademicsPage() {
               </tbody>
             </table>
           </div>
+      </section>
+
+      <section className="mt-8 rounded-2xl border border-slate/10 bg-white p-6">
+        <h2 className="text-lg font-semibold">Exam Types</h2>
+        <div className="mt-4 grid gap-3 md:grid-cols-3">
+          <input
+            value={examTypeForm.name}
+            onChange={(e) => setExamTypeForm({ ...examTypeForm, name: e.target.value })}
+            placeholder="Exam type name"
+            className="rounded-lg border border-slate/20 px-3 py-2 text-sm"
+          />
+          <input
+            value={examTypeForm.code}
+            onChange={(e) => setExamTypeForm({ ...examTypeForm, code: e.target.value.toUpperCase() })}
+            placeholder="Code (e.g., MIDTERM)"
+            className="rounded-lg border border-slate/20 px-3 py-2 text-sm uppercase"
+          />
+          <label className="flex items-center gap-2 text-sm text-slate">
+            <input
+              type="checkbox"
+              checked={examTypeForm.isActive}
+              onChange={(e) => setExamTypeForm({ ...examTypeForm, isActive: e.target.checked })}
+            />
+            Active
+          </label>
+        </div>
+        <button
+          className="mt-4 rounded-lg bg-ink px-4 py-2 text-sm font-semibold text-white"
+          onClick={() => {
+            let error = requireSchool();
+            if (!error && !examTypeForm.name.trim()) error = 'Exam type name is required.';
+            else if (!error && !examTypeForm.code.trim()) error = 'Exam type code is required.';
+            setExamTypeError(error);
+            if (error) return;
+            createExamTypeMutation.mutate({
+              name: examTypeForm.name,
+              code: examTypeForm.code,
+              isActive: examTypeForm.isActive,
+              schoolId: effectiveSchoolId,
+            });
+          }}
+          disabled={createExamTypeMutation.isPending}
+        >
+          Add Exam Type
+        </button>
+        {examTypeError ? <p className="mt-3 text-sm font-semibold text-rose-600">{examTypeError}</p> : null}
+
+        <div className="mt-6 overflow-hidden rounded-xl border border-gray-200">
+          <table className="w-full">
+            <thead className="bg-gray-50">
+              <tr>
+                <th className="px-6 py-4 text-left text-xs font-medium uppercase tracking-wider text-gray-500">Name</th>
+                <th className="px-6 py-4 text-left text-xs font-medium uppercase tracking-wider text-gray-500">Code</th>
+                <th className="px-6 py-4 text-left text-xs font-medium uppercase tracking-wider text-gray-500">Status</th>
+                <th className="px-6 py-4 text-right text-xs font-medium uppercase tracking-wider text-gray-500">Actions</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-200 bg-white">
+              {(examTypes ?? []).map((type: { id: string; name: string; code: string; isActive: boolean }) => (
+                <tr key={type.id} className="hover:bg-gray-50">
+                  <td className="px-6 py-4 text-sm font-medium text-gray-900">{type.name}</td>
+                  <td className="px-6 py-4 text-sm text-gray-500">{type.code}</td>
+                  <td className="px-6 py-4 text-sm">
+                    <span className={`inline-flex rounded-full px-2 py-1 text-xs font-semibold ${type.isActive ? 'bg-emerald-100 text-emerald-700' : 'bg-gray-100 text-gray-600'}`}>
+                      {type.isActive ? 'Active' : 'Inactive'}
+                    </span>
+                  </td>
+                  <td className="px-6 py-4 text-right text-sm font-medium">
+                    <button
+                      className="rounded-lg border border-slate/200 px-3 py-1 text-xs font-medium"
+                      onClick={() =>
+                        updateExamTypeMutation.mutate({
+                          id: type.id,
+                          payload: { isActive: !type.isActive, schoolId: effectiveSchoolId },
+                        })
+                      }
+                    >
+                      {type.isActive ? 'Disable' : 'Enable'}
+                    </button>
+                  </td>
+                </tr>
+              ))}
+              {!examTypes?.length && (
+                <tr>
+                  <td colSpan={4} className="px-6 py-12 text-center">
+                    <div className="flex flex-col items-center">
+                      <svg className="h-12 w-12 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                      </svg>
+                      <h3 className="mt-2 text-sm font-medium text-gray-900">No exam types found</h3>
+                      <p className="mt-1 text-sm text-gray-500">Add your first exam type for this school.</p>
+                    </div>
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
       </section>
 
       <section className="rounded-2xl border border-slate/10 bg-white p-6">

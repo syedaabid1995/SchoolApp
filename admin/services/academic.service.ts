@@ -73,3 +73,24 @@ export const deleteSubject = async (id: string) => {
   const { data } = await api.delete(`/academics/subjects/${id}`);
   return data;
 };
+
+export const listExamTypes = async (params?: { schoolId?: string; activeOnly?: boolean }) => {
+  const sanitized = params && (params as any).queryKey ? undefined : params;
+  const { data } = await api.get('/academics/exam-types', { params: sanitized });
+  return data;
+};
+
+export const createExamType = async (payload: {
+  code: string;
+  name: string;
+  isActive?: boolean;
+  schoolId?: string;
+}) => {
+  const { data } = await api.post('/academics/exam-types', payload);
+  return data;
+};
+
+export const updateExamType = async (id: string, payload: { name?: string; isActive?: boolean; schoolId?: string }) => {
+  const { data } = await api.patch(`/academics/exam-types/${id}`, payload);
+  return data;
+};
