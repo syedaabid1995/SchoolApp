@@ -38,6 +38,13 @@ body {
   backdrop-filter: blur(10px);
 }
 
+.theme-loading .theme-navbar,
+.theme-loading .theme-header,
+.theme-loading .theme-footer {
+  opacity: 0;
+  pointer-events: none;
+}
+
 .bg-ink {
   background-color: var(--theme-button-bg) !important;
   color: var(--theme-button-text) !important;
