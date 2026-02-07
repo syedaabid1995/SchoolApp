@@ -54,6 +54,7 @@ export const Sidebar = ({
     <Link
       key={item.href}
       href={item.href}
+      prefetch={false}
       className={`rounded-lg px-3 py-2 text-sm font-medium transition-all duration-200 flex-shrink-0 block ${
         isActive(item.href)
           ? 'bg-white/20 text-white shadow-sm'
@@ -167,6 +168,7 @@ export const Sidebar = ({
                           <Link
                             key={item.href}
                             href={item.href}
+                            prefetch={false}
                             className={`rounded-lg px-3 py-2 text-sm transition-all duration-200 ${
                               isExactActive(item.href)
                                 ? 'bg-white/20 text-white'
@@ -208,6 +210,7 @@ export const Sidebar = ({
                           <Link
                             key={item.href}
                             href={item.href}
+                            prefetch={false}
                             className={`rounded-lg px-3 py-2 text-sm transition-all duration-200 ${
                               isExactActive(item.href)
                                 ? 'bg-white/20 text-white'
@@ -265,6 +268,7 @@ export const Sidebar = ({
                           <Link
                             key={item.href}
                             href={item.href}
+                            prefetch={false}
                             className={`rounded-lg px-3 py-2 text-sm transition-all duration-200 ${
                               isExactActive(item.href)
                                 ? 'bg-white/20 text-white'
@@ -306,6 +310,7 @@ export const Sidebar = ({
                           <Link
                             key={item.href}
                             href={item.href}
+                            prefetch={false}
                             className={`rounded-lg px-3 py-2 text-sm transition-all duration-200 ${
                               isExactActive(item.href)
                                 ? 'bg-white/20 text-white'
@@ -347,6 +352,7 @@ export const Sidebar = ({
                           <Link
                             key={item.href}
                             href={item.href}
+                            prefetch={false}
                             className={`rounded-lg px-3 py-2 text-sm transition-all duration-200 ${
                               isExactActive(item.href)
                                 ? 'bg-white/20 text-white'

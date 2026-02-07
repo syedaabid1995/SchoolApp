@@ -33,6 +33,9 @@ export const Header = ({
   const { data: notificationData } = useQuery({
     queryKey: ['notification-summary'],
     queryFn: listNotificationSummary,
+    enabled: showNotifications,
+    refetchOnWindowFocus: false,
+    staleTime: 30_000,
   });
 
   useEffect(() => {
@@ -107,7 +110,7 @@ export const Header = ({
                       </div>
                     );
                     return item.href ? (
-                      <Link key={item.id} href={item.href} className="block hover:opacity-90">
+                      <Link key={item.id} href={item.href} prefetch={false} className="block hover:opacity-90">
                         {content}
                       </Link>
                     ) : (
