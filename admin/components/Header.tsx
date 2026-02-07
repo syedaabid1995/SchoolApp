@@ -72,9 +72,6 @@ export const Header = ({
           </h2>
           <div className="flex items-center gap-2">
             <p className="text-sm text-white/80 transition-colors duration-200">{resolveConsoleTitle(role)}</p>
-            <span className="rounded-full bg-white/15 px-2 py-0.5 text-xs font-semibold text-white/95">
-              {roleLabel} • {permissionCodes.length} access
-            </span>
           </div>
         </div>
       </div>

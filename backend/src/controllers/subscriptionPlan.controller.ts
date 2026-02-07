@@ -7,6 +7,7 @@ import { cacheKeys } from '../services/cache/cache.keys';
 import { rememberCache, setCacheHeader } from '../services/cache/cache.service';
 import { cacheTTL } from '../services/cache/cache.ttl';
 import { invalidateSchoolCache, invalidateSubscriptionCache } from '../services/cache/cache.invalidation';
+import { EMPLOYEE_PERMISSION_CATALOG } from '../utils/employeePermissions';
 
 const createSchema = z.object({
   name: z.string().min(1),
@@ -24,6 +25,10 @@ const updateSchema = z.object({
   features: z.array(z.string().min(1)).optional(),
   studentLimit: z.number().int().min(1).optional(),
   teacherLimit: z.number().int().min(1).optional(),
+});
+
+const planPermissionSchema = z.object({
+  enabledCodes: z.array(z.string()).default([]),
 });
 
 export const listSubscriptionPlansApi = async (_req: Request, res: Response) => {
@@ -149,4 +154,58 @@ export const listPlanSchoolsApi = async (req: Request, res: Response) => {
       subscriptionPlan: item.planName,
     }));
   res.status(200).json({ items: schools });
+};
+
+export const listPlanPermissionsApi = async (req: Request, res: Response) => {
+  const { id } = req.params;
+  const plan = await prisma.subscriptionPlanDef.findUnique({
+    where: { id },
+    select: { id: true, name: true },
+  });
+  if (!plan) {
+    throw new HttpError(404, 'Plan not found');
+  }
+
+  const entries = await prisma.subscriptionPlanPermission.findMany({
+    where: { planId: id },
+    select: { permissionCode: true, enabled: true },
+  });
+  const enabledMap = new Map(entries.map((entry) => [entry.permissionCode, entry.enabled]));
+
+  res.status(200).json({
+    planId: plan.id,
+    planName: plan.name,
+    permissions: EMPLOYEE_PERMISSION_CATALOG.map((permission) => ({
+      ...permission,
+      enabled: enabledMap.get(permission.code) ?? false,
+    })),
+  });
+};
+
+export const updatePlanPermissionsApi = async (req: Request, res: Response) => {
+  const { id } = req.params;
+  const payload = planPermissionSchema.parse(req.body);
+  const plan = await prisma.subscriptionPlanDef.findUnique({ where: { id }, select: { id: true } });
+  if (!plan) {
+    throw new HttpError(404, 'Plan not found');
+  }
+
+  const validCodes = new Set(EMPLOYEE_PERMISSION_CATALOG.map((permission) => permission.code));
+  const enabledCodes = payload.enabledCodes.filter((code) => validCodes.has(code));
+
+  await prisma.$transaction(async (tx) => {
+    await tx.subscriptionPlanPermission.deleteMany({
+      where: { planId: id },
+    });
+
+    await tx.subscriptionPlanPermission.createMany({
+      data: EMPLOYEE_PERMISSION_CATALOG.map((permission) => ({
+        planId: id,
+        permissionCode: permission.code,
+        enabled: enabledCodes.includes(permission.code),
+      })),
+    });
+  });
+
+  res.status(200).json({ success: true });
 };

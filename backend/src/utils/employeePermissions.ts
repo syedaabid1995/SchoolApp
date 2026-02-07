@@ -61,6 +61,28 @@ export const getDefaultPermissionCodes = (roleName: string | null | undefined) =
   return DEFAULT_PERMISSION_BY_ROLE[role] ?? [];
 };
 
+const getPlanPermissionCodesForSchool = async (schoolId: string) => {
+  const subscription = await prisma.subscription.findUnique({
+    where: { schoolId },
+    select: { planId: true },
+  });
+
+  if (!subscription?.planId) {
+    return [];
+  }
+
+  const permissions = await prisma.subscriptionPlanPermission.findMany({
+    where: { planId: subscription.planId },
+    select: { permissionCode: true, enabled: true },
+  });
+
+  if (!permissions.length) {
+    return [];
+  }
+
+  return permissions.filter((entry) => entry.enabled).map((entry) => entry.permissionCode);
+};
+
 export const getEffectivePermissionCodesForRole = async (schoolId: string, roleName: string | null | undefined) => {
   const defaults = new Set(getDefaultPermissionCodes(roleName));
   const role = (roleName ?? '').toUpperCase() as ManagedEmployeeRole;
@@ -73,17 +95,22 @@ export const getEffectivePermissionCodesForRole = async (schoolId: string, roleN
     select: { permissionCode: true, enabled: true },
   });
 
-  if (!overrides.length) {
-    return Array.from(defaults);
+  const overrideMap = new Map(overrides.map((entry) => [entry.permissionCode, entry.enabled]));
+  const baseCodes = overrides.length
+    ? EMPLOYEE_PERMISSION_CATALOG.filter((entry) => {
+        if (overrideMap.has(entry.code)) {
+          return Boolean(overrideMap.get(entry.code));
+        }
+        return defaults.has(entry.code);
+      }).map((entry) => entry.code)
+    : Array.from(defaults);
+
+  const planCodes = new Set(await getPlanPermissionCodesForSchool(schoolId));
+  if (planCodes.size === 0) {
+    return [];
   }
 
-  const overrideMap = new Map(overrides.map((entry) => [entry.permissionCode, entry.enabled]));
-  return EMPLOYEE_PERMISSION_CATALOG.filter((entry) => {
-    if (overrideMap.has(entry.code)) {
-      return Boolean(overrideMap.get(entry.code));
-    }
-    return defaults.has(entry.code);
-  }).map((entry) => entry.code);
+  return baseCodes.filter((code) => planCodes.has(code));
 };
 
 export const getEffectivePermissionCodesForUser = async (
@@ -102,10 +129,17 @@ export const getEffectivePermissionCodesForUser = async (
   }
 
   const overrideMap = new Map(overrides.map((entry) => [entry.permissionCode, entry.enabled]));
-  return EMPLOYEE_PERMISSION_CATALOG.filter((entry) => {
+  const withOverrides = EMPLOYEE_PERMISSION_CATALOG.filter((entry) => {
     if (overrideMap.has(entry.code)) {
       return Boolean(overrideMap.get(entry.code));
     }
     return roleEffective.has(entry.code);
   }).map((entry) => entry.code);
+
+  const planCodes = new Set(await getPlanPermissionCodesForSchool(schoolId));
+  if (planCodes.size === 0) {
+    return [];
+  }
+
+  return withOverrides.filter((code) => planCodes.has(code));
 };

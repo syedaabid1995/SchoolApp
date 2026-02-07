@@ -1402,8 +1402,24 @@ model SubscriptionPlanDef {
   updatedAt    DateTime @updatedAt @map("updated_at")
 
   subscriptions Subscription[]
+  permissions SubscriptionPlanPermission[]
 
   @@map("subscription_plans")
+}
+
+model SubscriptionPlanPermission {
+  id             String   @id @default(uuid()) @db.Uuid
+  planId         String   @map("plan_id") @db.Uuid
+  permissionCode String   @map("permission_code")
+  enabled        Boolean  @default(true)
+  createdAt      DateTime @default(now()) @map("created_at")
+  updatedAt      DateTime @updatedAt @map("updated_at")
+
+  plan SubscriptionPlanDef @relation(fields: [planId], references: [id], onDelete: Cascade)
+
+  @@unique([planId, permissionCode])
+  @@index([planId])
+  @@map("subscription_plan_permissions")
 }
 
 model UsageCounter {

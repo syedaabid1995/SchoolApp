@@ -3,6 +3,7 @@ import jwt, { type JwtPayload } from 'jsonwebtoken';
 import { env } from '../config/env';
 import { HttpError } from './error.middleware';
 import { prisma } from '../config/db';
+import { getEffectivePermissionCodesForUser } from '../utils/employeePermissions';
 
 export type AuthContext = {
   userId: string;
@@ -125,5 +126,37 @@ export const authMiddleware = async (req: Request, _res: Response, next: NextFun
     role,
   };
 
+  if (schoolId && role && ['SCHOOL_ADMIN', 'TEACHER', 'ACCOUNTANT', 'LIBRARIAN', 'STAFF'].includes(role)) {
+    const permissionCode = resolvePermissionForPath(req.originalUrl);
+    if (permissionCode) {
+      const permissionCodes = await getEffectivePermissionCodesForUser(schoolId, decoded.sub, role);
+      if (!permissionCodes.includes(permissionCode)) {
+        next(new HttpError(403, 'Access blocked by subscription plan'));
+        return;
+      }
+    }
+  }
+
   next();
+};
+
+const resolvePermissionForPath = (path: string) => {
+  const targets: Array<{ prefix: string; code: string }> = [
+    { prefix: '/api/v1/teachers', code: 'teachers.list' },
+    { prefix: '/api/v1/teacher-assignments', code: 'teachers.list' },
+    { prefix: '/api/v1/students', code: 'students.list' },
+    { prefix: '/api/v1/attendance', code: 'attendance.view' },
+    { prefix: '/api/v1/attendance-summary', code: 'attendance.view' },
+    { prefix: '/api/v1/attendance-approval', code: 'attendance.view' },
+    { prefix: '/api/v1/leave', code: 'attendance.view' },
+    { prefix: '/api/v1/academics', code: 'academics.setup' },
+    { prefix: '/api/v1/exams', code: 'academics.exams' },
+    { prefix: '/api/v1/reports', code: 'academics.marks' },
+    { prefix: '/api/v1/audit-logs', code: 'audit.view' },
+    { prefix: '/api/v1/tickets', code: 'support.view' },
+    { prefix: '/api/v1/subscriptions', code: 'plans.view' },
+  ];
+
+  const match = targets.find((entry) => path.startsWith(entry.prefix));
+  return match?.code ?? null;
 };

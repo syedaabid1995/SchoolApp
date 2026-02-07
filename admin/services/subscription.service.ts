@@ -12,6 +12,14 @@ export type SubscriptionPlan = {
   updatedAt: string;
 };
 
+export type PlanPermissionItem = {
+  code: string;
+  label: string;
+  path: string;
+  group: string;
+  enabled: boolean;
+};
+
 export type SubscriptionMetrics = {
   plan: {
     name: string;
@@ -102,6 +110,20 @@ export const listPlanSchools = async (planId: string) => {
   const { data } = await api.get<{ items: { id: string; name: string; code: string; status: string; subscriptionPlan: string }[] }>(
     `/admin/subscription-plans/${planId}/schools`,
   );
+  return data;
+};
+
+export const getPlanPermissions = async (planId: string) => {
+  const { data } = await api.get<{ planId: string; planName: string; permissions: PlanPermissionItem[] }>(
+    `/admin/subscription-plans/${planId}/permissions`,
+  );
+  return data;
+};
+
+export const updatePlanPermissions = async (planId: string, enabledCodes: string[]) => {
+  const { data } = await api.put<{ success: boolean }>(`/admin/subscription-plans/${planId}/permissions`, {
+    enabledCodes,
+  });
   return data;
 };
 
