@@ -30,9 +30,9 @@ export default function ParentExamsPage() {
     staleTime: 60_000,
   });
   const { data: academicYears } = useQuery({
-    queryKey: ['parent-academic-years', activeChild?.schoolId],
-    queryFn: () => listAcademicYears({ schoolId: activeChild?.schoolId }),
-    enabled: Boolean(activeChild?.schoolId),
+    queryKey: ['parent-academic-years', activeChild?.schoolId ?? undefined],
+    queryFn: () => listAcademicYears({ schoolId: activeChild?.schoolId ?? undefined }),
+    enabled: Boolean(activeChild?.schoolId ?? undefined),
     refetchOnWindowFocus: false,
     refetchOnMount: false,
     staleTime: 5 * 60_000,

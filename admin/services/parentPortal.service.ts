@@ -3,6 +3,7 @@ import { api } from '../lib/api';
 export type ParentChild = {
   id: string;
   name: string;
+  schoolId?: string | null;
   classLabel: string;
   rollNo?: string | null;
 };
