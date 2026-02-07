@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { authMiddleware } from '../middlewares/auth.middleware';
-import { requireRole } from '../middlewares/rbac.middleware';
+import { requirePermission, requireRole } from '../middlewares/rbac.middleware';
 import {
   createAttendancePeriod,
   listAttendancePeriods,
@@ -24,6 +24,11 @@ import {
   markTeacherSelfAttendanceApi,
   updateAttendanceSessionApi,
 } from '../controllers/attendanceP1.controller';
+import {
+  cancelAttendanceSubstitutionApi,
+  createAttendanceSubstitutionApi,
+  listAttendanceSubstitutionsApi,
+} from '../controllers/attendanceSubstitution.controller';
 import { idempotencyMiddleware } from '../middlewares/idempotency.middleware';
 
 export const attendanceRouter = Router();
@@ -37,6 +42,9 @@ attendanceRouter.post('/sessions/:id/lock', requireRole('SCHOOL_ADMIN'), lockAtt
 attendanceRouter.get('/summary', requireRole('SCHOOL_ADMIN', 'TEACHER'), attendanceSummaryApi);
 attendanceRouter.post('/teacher/self', requireRole('SCHOOL_ADMIN', 'TEACHER'), markTeacherSelfAttendanceApi);
 attendanceRouter.get('/teacher/self', requireRole('SCHOOL_ADMIN', 'TEACHER'), listTeacherSelfAttendanceApi);
+attendanceRouter.post('/substitutions', requirePermission('attendance.substitute.manage'), createAttendanceSubstitutionApi);
+attendanceRouter.get('/substitutions', requirePermission('attendance.substitute.manage'), listAttendanceSubstitutionsApi);
+attendanceRouter.patch('/substitutions/:id/cancel', requirePermission('attendance.substitute.manage'), cancelAttendanceSubstitutionApi);
 
 // Legacy attendance endpoints retained for backward compatibility
 attendanceRouter.post('/periods', createAttendancePeriod);

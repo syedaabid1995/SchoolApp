@@ -44,6 +44,7 @@ model School {
   studentAttendanceSessions StudentAttendanceSession[]
   teacherSelfAttendances TeacherSelfAttendance[]
   teacherLeaveRequests TeacherLeaveRequest[]
+  teacherAttendanceSubstitutions TeacherAttendanceSubstitution[]
   exams Exam[]
   examTypes ExamTypeConfig[]
   themes Theme[]
@@ -121,6 +122,8 @@ model User {
   teacherSelfAttendancesCreated TeacherSelfAttendance[] @relation("TeacherSelfAttendanceCreatedBy")
   teacherSelfAttendancesOverridden TeacherSelfAttendance[] @relation("TeacherSelfAttendanceOverriddenBy")
   teacherLeaveRequestsReviewed TeacherLeaveRequest[] @relation("TeacherLeaveRequestReviewedBy")
+  teacherAttendanceSubstitutionsCreated TeacherAttendanceSubstitution[] @relation("TeacherAttendanceSubstitutionCreatedBy")
+  teacherAttendanceSubstitutionsCanceled TeacherAttendanceSubstitution[] @relation("TeacherAttendanceSubstitutionCanceledBy")
 
   @@index([schoolId])
   @@unique([schoolId, email])
@@ -208,6 +211,7 @@ model AcademicYear {
   exams  Exam[]
   classes Class[]
   subjects Subject[]
+  teacherAttendanceSubstitutions TeacherAttendanceSubstitution[]
 
   @@index([schoolId])
   @@map("academic_years")
@@ -247,6 +251,7 @@ model Class {
   examPapers ExamPaper[]
   teacherAssignments TeacherClassAssignment[]
   studentAttendanceSessions StudentAttendanceSession[]
+  teacherAttendanceSubstitutions TeacherAttendanceSubstitution[]
 
   @@index([schoolId])
   @@index([academicYearId])
@@ -265,6 +270,8 @@ model Section {
   students Student[]
   exams Exam[]
   studentAttendanceSessions StudentAttendanceSession[]
+  teacherAssignments TeacherClassAssignment[]
+  teacherAttendanceSubstitutions TeacherAttendanceSubstitution[]
 
   @@index([classId])
   @@unique([classId, name])
@@ -438,6 +445,8 @@ model TeacherProfile {
   subjectAssignments TeacherSubjectAssignment[]
   teacherSelfAttendances TeacherSelfAttendance[]
   teacherLeaveRequests TeacherLeaveRequest[]
+  attendanceSubstitutionsAsOriginal TeacherAttendanceSubstitution[] @relation("TeacherAttendanceSubstitutionOriginal")
+  attendanceSubstitutionsAsSubstitute TeacherAttendanceSubstitution[] @relation("TeacherAttendanceSubstitutionSubstitute")
 
   @@index([schoolId])
   @@unique([schoolId, employeeNo])
@@ -486,14 +495,17 @@ model TeacherClassAssignment {
   id        String   @id @default(uuid()) @db.Uuid
   teacherId String   @map("teacher_id") @db.Uuid
   classId   String   @map("class_id") @db.Uuid
+  sectionId String?  @map("section_id") @db.Uuid
   createdAt DateTime @default(now()) @map("created_at")
 
   teacher TeacherProfile @relation(fields: [teacherId], references: [id], onDelete: Cascade)
   class   Class          @relation(fields: [classId], references: [id], onDelete: Cascade)
+  section Section?       @relation(fields: [sectionId], references: [id], onDelete: SetNull)
 
   @@index([teacherId])
   @@index([classId])
-  @@unique([teacherId, classId])
+  @@index([sectionId])
+  @@unique([teacherId, classId, sectionId])
   @@map("teacher_class_assignments")
 }
 
@@ -769,6 +781,38 @@ model TeacherSelfAttendance {
   @@index([schoolId, date])
   @@index([teacherId, date])
   @@map("teacher_self_attendances")
+}
+
+model TeacherAttendanceSubstitution {
+  id                  String   @id @default(uuid()) @db.Uuid
+  schoolId            String   @map("school_id") @db.Uuid
+  academicYearId      String   @map("academic_year_id") @db.Uuid
+  classId             String   @map("class_id") @db.Uuid
+  sectionId           String?  @map("section_id") @db.Uuid
+  date                DateTime
+  originalTeacherId   String?  @map("original_teacher_id") @db.Uuid
+  substituteTeacherId String   @map("substitute_teacher_id") @db.Uuid
+  reason              String?
+  createdById         String   @map("created_by_id") @db.Uuid
+  canceledAt          DateTime? @map("canceled_at")
+  canceledById        String?  @map("canceled_by_id") @db.Uuid
+  createdAt           DateTime @default(now()) @map("created_at")
+  updatedAt           DateTime @updatedAt @map("updated_at")
+
+  school           School       @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  academicYear     AcademicYear @relation(fields: [academicYearId], references: [id], onDelete: Cascade)
+  class            Class        @relation(fields: [classId], references: [id], onDelete: Cascade)
+  section          Section?     @relation(fields: [sectionId], references: [id], onDelete: SetNull)
+  originalTeacher  TeacherProfile? @relation("TeacherAttendanceSubstitutionOriginal", fields: [originalTeacherId], references: [id], onDelete: SetNull)
+  substituteTeacher TeacherProfile  @relation("TeacherAttendanceSubstitutionSubstitute", fields: [substituteTeacherId], references: [id], onDelete: Cascade)
+  createdBy        User         @relation("TeacherAttendanceSubstitutionCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+  canceledBy       User?        @relation("TeacherAttendanceSubstitutionCanceledBy", fields: [canceledById], references: [id], onDelete: SetNull)
+
+  @@unique([schoolId, academicYearId, classId, sectionId, date])
+  @@index([schoolId, date])
+  @@index([schoolId, classId, sectionId, date])
+  @@index([substituteTeacherId, date])
+  @@map("teacher_attendance_substitutions")
 }
 
 model AttendancePeriod {

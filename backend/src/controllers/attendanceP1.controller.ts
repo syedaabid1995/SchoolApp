@@ -89,6 +89,7 @@ export const createAttendanceSessionApi = async (req: Request, res: Response) =>
       userId: auth.userId,
       classId: payload.classId,
       sectionId: payload.sectionId,
+      date: payload.date,
     });
   }
 

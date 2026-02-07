@@ -160,7 +160,7 @@ export const listTeachers = async (params: {
       include: {
         user: { select: { email: true, status: true } },
         bankDetails: true,
-        classAssignments: { include: { class: true } },
+        classAssignments: { include: { class: true, section: true } },
         subjectAssignments: { include: { subject: true } },
       },
       orderBy: { createdAt: 'desc' },
@@ -185,7 +185,7 @@ export const getTeacher = async (teacherId: string, schoolId: string) => {
     include: {
       user: { select: { email: true, status: true } },
       bankDetails: true,
-      classAssignments: { include: { class: true } },
+      classAssignments: { include: { class: true, section: true } },
       subjectAssignments: { include: { subject: true } },
     },
   });

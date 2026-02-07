@@ -5,12 +5,27 @@ import Link from 'next/link';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { listTeachers, updateTeacher, setTeacherStatus, deleteTeacher } from '../../../services/teacher.service';
 import { listSchools } from '../../../services/school.service';
+import { listAcademicYears, listClasses, listSections } from '../../../services/academic.service';
+import {
+  createAttendanceSubstitution,
+  listAttendanceSubstitutions,
+  cancelAttendanceSubstitution,
+} from '../../../services/attendanceSubstitution.service';
 import { getSession } from '../../../services/auth.service';
 
 export default function TeachersPage() {
   const queryClient = useQueryClient();
   const [filters, setFilters] = useState({ query: '', status: '' });
   const [schoolId, setSchoolId] = useState('');
+  const [substitutionForm, setSubstitutionForm] = useState({
+    date: new Date().toISOString().slice(0, 10),
+    academicYearId: '',
+    classId: '',
+    sectionId: '',
+    originalTeacherId: '',
+    substituteTeacherId: '',
+    reason: '',
+  });
   const { data: session } = useQuery({ queryKey: ['session'], queryFn: getSession });
   const isSuperAdmin = session?.role === 'SUPER_ADMIN';
   const effectiveSchoolId = isSuperAdmin ? schoolId : session?.schoolId ?? undefined;
@@ -21,11 +36,47 @@ export default function TeachersPage() {
     enabled: isSuperAdmin,
   });
 
+  const { data: academicYears } = useQuery({
+    queryKey: ['academic-years', effectiveSchoolId],
+    queryFn: () => listAcademicYears({ schoolId: effectiveSchoolId }),
+    enabled: Boolean(effectiveSchoolId),
+  });
+
+  const { data: classes } = useQuery({
+    queryKey: ['classes', effectiveSchoolId],
+    queryFn: () => listClasses({ schoolId: effectiveSchoolId }),
+    enabled: Boolean(effectiveSchoolId),
+  });
+
+  const { data: sections } = useQuery({
+    queryKey: ['sections', effectiveSchoolId],
+    queryFn: () => listSections({ schoolId: effectiveSchoolId }),
+    enabled: Boolean(effectiveSchoolId),
+  });
+
   const { data } = useQuery({
     queryKey: ['teachers', effectiveSchoolId],
     queryFn: () => listTeachers({ limit: 50, schoolId: effectiveSchoolId }),
     enabled: Boolean(effectiveSchoolId),
   });
+
+  const { data: substitutions } = useQuery({
+    queryKey: ['attendance-substitutions', effectiveSchoolId, substitutionForm.date],
+    queryFn: () =>
+      listAttendanceSubstitutions({
+        schoolId: effectiveSchoolId,
+        date: substitutionForm.date,
+      }),
+    enabled: Boolean(effectiveSchoolId && substitutionForm.date),
+  });
+
+  const availableClasses = (classes ?? []).filter((item: any) =>
+    substitutionForm.academicYearId ? item.academicYearId === substitutionForm.academicYearId : true,
+  );
+
+  const availableSections = (sections ?? []).filter((item: any) => item.classId === substitutionForm.classId);
+
+  const sectionRequired = Boolean(substitutionForm.classId) && availableSections.length > 0;
 
   const updateMutation = useMutation({
     mutationFn: ({ id, payload }: { id: string; payload: { isActive: boolean } }) => updateTeacher(id, payload),
@@ -58,6 +109,26 @@ export default function TeachersPage() {
     onSettled: () => {
       queryClient.invalidateQueries({ queryKey: ['teachers'] });
     },
+  });
+
+  const createSubstitutionMutation = useMutation({
+    mutationFn: createAttendanceSubstitution,
+    onSuccess: () => {
+      setSubstitutionForm((prev) => ({
+        ...prev,
+        classId: '',
+        sectionId: '',
+        originalTeacherId: '',
+        substituteTeacherId: '',
+        reason: '',
+      }));
+      queryClient.invalidateQueries({ queryKey: ['attendance-substitutions'] });
+    },
+  });
+
+  const cancelSubstitutionMutation = useMutation({
+    mutationFn: ({ id, reason }: { id: string; reason?: string }) => cancelAttendanceSubstitution(id, { reason }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['attendance-substitutions'] }),
   });
 
   const filteredTeachers = data?.items.filter((teacher) => {
@@ -163,6 +234,7 @@ export default function TeachersPage() {
           </div>
         </div>
 
+   
         {/* Filters and Search */}
         <div className="mb-8 rounded-2xl bg-white p-6 shadow-lg ring-1 ring-gray-200">
           <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
@@ -265,7 +337,9 @@ export default function TeachersPage() {
                   <p className="text-xs font-medium text-gray-500 uppercase tracking-wide">Classes</p>
                   <p className="text-sm text-gray-700">
                     {teacher.classAssignments.length > 0
-                      ? teacher.classAssignments.map((a) => a.class.name).join(', ')
+                      ? teacher.classAssignments
+                          .map((a) => `${a.class.name}${a.section?.name ? ` · ${a.section.name}` : ''}`)
+                          .join(', ')
                       : 'No assignments'
                     }
                   </p>

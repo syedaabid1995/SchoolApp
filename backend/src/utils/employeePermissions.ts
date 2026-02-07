@@ -28,6 +28,12 @@ export const EMPLOYEE_PERMISSION_CATALOG: EmployeePermissionItem[] = [
     group: 'Students',
   },
   { code: 'attendance.view', label: 'Attendance', path: '/dashboard/attendance', group: 'Attendance' },
+  {
+    code: 'attendance.substitute.manage',
+    label: 'Attendance Substitutions',
+    path: '/dashboard/teachers',
+    group: 'Attendance',
+  },
   { code: 'support.view', label: 'Support', path: '/dashboard/support', group: 'Support' },
   { code: 'audit.view', label: 'Audit Logs', path: '/dashboard/audit', group: 'Audit' },
 ];

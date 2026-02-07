@@ -1,4 +1,4 @@
-import type { LeaveRequestStatus, RoleName, StudentAttendanceStatus, TeacherSelfAttendanceStatus } from '@prisma/client';
+import type { LeaveRequestStatus, RoleName, StudentAttendanceStatus, TeacherSelfAttendanceStatus, Prisma } from '@prisma/client';
 import { prisma } from '../config/db';
 import { HttpError } from '../middlewares/error.middleware';
 import { createAuditLog } from './auditLog.service';
@@ -42,18 +42,9 @@ export const ensureTeacherAssignedToClassSection = async (params: {
   userId: string;
   classId: string;
   sectionId?: string;
+  date?: Date | string;
 }) => {
   const teacher = await getTeacherProfile(params.schoolId, params.userId);
-
-  const assigned = await prisma.teacherClassAssignment.findFirst({
-    where: {
-      teacherId: teacher.id,
-      classId: params.classId,
-      class: { schoolId: params.schoolId },
-    },
-    select: { id: true },
-  });
-  if (!assigned) throw new HttpError(403, 'Teacher is not assigned to this class');
 
   if (params.sectionId) {
     const section = await prisma.section.findFirst({
@@ -66,6 +57,224 @@ export const ensureTeacherAssignedToClassSection = async (params: {
     });
     if (!section) throw new HttpError(404, 'Section not found for class');
   }
+
+  if (params.date) {
+    const substitution = await prisma.teacherAttendanceSubstitution.findFirst({
+      where: {
+        schoolId: params.schoolId,
+        classId: params.classId,
+        sectionId: params.sectionId ?? null,
+        date: normalizeDate(params.date),
+        substituteTeacherId: teacher.id,
+        canceledAt: null,
+      },
+      select: { id: true },
+    });
+    if (substitution) return;
+  }
+
+  let assigned = await prisma.teacherClassAssignment.findFirst({
+    where: {
+      teacherId: teacher.id,
+      classId: params.classId,
+      sectionId: params.sectionId ?? null,
+      class: { schoolId: params.schoolId },
+    },
+    select: { id: true },
+  });
+
+  if (!assigned && params.sectionId) {
+    const legacy = await prisma.teacherClassAssignment.findFirst({
+      where: {
+        teacherId: teacher.id,
+        classId: params.classId,
+        sectionId: null,
+        class: { schoolId: params.schoolId },
+      },
+      select: { id: true },
+    });
+    if (legacy) assigned = legacy;
+  }
+
+  if (!assigned) throw new HttpError(403, 'Teacher is not assigned to this class');
+};
+
+export const createTeacherAttendanceSubstitution = async (params: {
+  schoolId: string;
+  actorId: string;
+  actorRole: string;
+  classId: string;
+  sectionId?: string;
+  date: Date | string;
+  substituteTeacherId: string;
+  originalTeacherId?: string;
+  reason?: string | null;
+}) => {
+  const classInfo = await prisma.class.findFirst({
+    where: { id: params.classId, schoolId: params.schoolId },
+    select: { id: true, academicYearId: true },
+  });
+  if (!classInfo) throw new HttpError(404, 'Class not found');
+  if (!classInfo.academicYearId) throw new HttpError(400, 'Academic year is required for class');
+
+  if (params.sectionId) {
+    const section = await prisma.section.findFirst({
+      where: {
+        id: params.sectionId,
+        classId: params.classId,
+        class: { schoolId: params.schoolId },
+      },
+      select: { id: true },
+    });
+    if (!section) throw new HttpError(404, 'Section not found for class');
+  }
+
+  const substitute = await prisma.teacherProfile.findFirst({
+    where: { id: params.substituteTeacherId, schoolId: params.schoolId, isActive: true },
+    select: { id: true },
+  });
+  if (!substitute) throw new HttpError(404, 'Substitute teacher not found or inactive');
+
+  if (params.originalTeacherId) {
+    const original = await prisma.teacherProfile.findFirst({
+      where: { id: params.originalTeacherId, schoolId: params.schoolId },
+      select: { id: true },
+    });
+    if (!original) throw new HttpError(404, 'Original teacher not found');
+  }
+
+  const date = normalizeDate(params.date);
+  const existing = await prisma.teacherAttendanceSubstitution.findFirst({
+    where: {
+      schoolId: params.schoolId,
+      academicYearId: classInfo.academicYearId,
+      classId: params.classId,
+      sectionId: params.sectionId ?? null,
+      date,
+      canceledAt: null,
+    },
+    select: { id: true },
+  });
+  if (existing) {
+    throw new HttpError(409, 'Temporary reassignment already exists for this class and date');
+  }
+
+  const created = await prisma.teacherAttendanceSubstitution.create({
+    data: {
+      schoolId: params.schoolId,
+      academicYearId: classInfo.academicYearId,
+      classId: params.classId,
+      sectionId: params.sectionId ?? null,
+      date,
+      originalTeacherId: params.originalTeacherId ?? null,
+      substituteTeacherId: params.substituteTeacherId,
+      reason: params.reason?.trim() || null,
+      createdById: params.actorId,
+    },
+  });
+
+  await createAuditLog({
+    schoolId: params.schoolId,
+    actorId: params.actorId,
+    actorRole: params.actorRole,
+    entityType: 'TeacherAttendanceSubstitution',
+    entityId: created.id,
+    action: 'CREATE',
+    afterState: {
+      classId: created.classId,
+      sectionId: created.sectionId,
+      academicYearId: created.academicYearId,
+      date: created.date.toISOString(),
+      substituteTeacherId: created.substituteTeacherId,
+      originalTeacherId: created.originalTeacherId,
+      reason: created.reason,
+    },
+  });
+
+  return created;
+};
+
+export const listTeacherAttendanceSubstitutions = async (params: {
+  schoolId: string;
+  classId?: string;
+  sectionId?: string;
+  substituteTeacherId?: string;
+  originalTeacherId?: string;
+  date?: Date | string;
+  fromDate?: Date | string;
+  toDate?: Date | string;
+}) => {
+  const dateFilter =
+    params.date || params.fromDate || params.toDate
+      ? {
+          date: {
+            ...(params.date ? { equals: normalizeDate(params.date) } : {}),
+            ...(params.fromDate ? { gte: normalizeDate(params.fromDate) } : {}),
+            ...(params.toDate ? { lte: endOfDay(normalizeDate(params.toDate)) } : {}),
+          },
+        }
+      : {};
+
+  return prisma.teacherAttendanceSubstitution.findMany({
+    where: {
+      schoolId: params.schoolId,
+      ...(params.classId ? { classId: params.classId } : {}),
+      ...(params.sectionId ? { sectionId: params.sectionId } : {}),
+      ...(params.substituteTeacherId ? { substituteTeacherId: params.substituteTeacherId } : {}),
+      ...(params.originalTeacherId ? { originalTeacherId: params.originalTeacherId } : {}),
+      ...dateFilter,
+    },
+    orderBy: [{ date: 'desc' }, { createdAt: 'desc' }],
+    include: {
+      class: { select: { id: true, name: true } },
+      section: { select: { id: true, name: true } },
+      originalTeacher: { select: { id: true, firstName: true, lastName: true } },
+      substituteTeacher: { select: { id: true, firstName: true, lastName: true } },
+      createdBy: { select: { id: true, email: true } },
+      canceledBy: { select: { id: true, email: true } },
+    },
+  });
+};
+
+export const cancelTeacherAttendanceSubstitution = async (params: {
+  schoolId: string;
+  actorId: string;
+  actorRole: string;
+  substitutionId: string;
+  reason?: string | null;
+}) => {
+  const substitution = await prisma.teacherAttendanceSubstitution.findFirst({
+    where: { id: params.substitutionId, schoolId: params.schoolId },
+  });
+  if (!substitution) throw new HttpError(404, 'Substitution not found');
+
+  if (substitution.canceledAt) {
+    return substitution;
+  }
+
+  const canceled = await prisma.teacherAttendanceSubstitution.update({
+    where: { id: substitution.id },
+    data: {
+      canceledAt: new Date(),
+      canceledById: params.actorId,
+    },
+  });
+
+  await createAuditLog({
+    schoolId: params.schoolId,
+    actorId: params.actorId,
+    actorRole: params.actorRole,
+    entityType: 'TeacherAttendanceSubstitution',
+    entityId: canceled.id,
+    action: 'CANCEL',
+    beforeState: { canceledAt: substitution.canceledAt, reason: substitution.reason },
+    afterState: {
+      canceledAt: canceled.canceledAt?.toISOString(),
+      reason: params.reason ?? null,
+    },
+  });
+
+  return canceled;
 };
 
 export const createStudentAttendanceSession = async (params: {
@@ -153,6 +362,7 @@ export const updateStudentAttendanceSession = async (params: {
       userId: params.actorId,
       classId: session.classId,
       sectionId: session.sectionId ?? undefined,
+      date: session.date,
     });
   }
 
@@ -314,11 +524,7 @@ export const getAttendanceSummary = async (params: {
   actorRole?: string;
 }) => {
   const date = params.date ? normalizeDate(params.date) : undefined;
-  const where: {
-    schoolId: string;
-    date?: Date;
-    classId?: { in: string[] };
-  } = {
+  const where: Prisma.StudentAttendanceSessionWhereInput = {
     schoolId: params.schoolId,
     ...(date ? { date } : {}),
   };
@@ -327,9 +533,30 @@ export const getAttendanceSummary = async (params: {
     const teacher = await getTeacherProfile(params.schoolId, params.actorId);
     const assignments = await prisma.teacherClassAssignment.findMany({
       where: { teacherId: teacher.id },
-      select: { classId: true },
+      select: { classId: true, sectionId: true },
     });
-    where.classId = { in: assignments.map((row) => row.classId) };
+
+    if (assignments.length === 0) {
+      return {
+        totals: { sessions: 0, records: 0, present: 0, absent: 0, late: 0, halfDay: 0 },
+        sessions: [],
+      };
+    }
+
+    const pairs = assignments.map((row) => ({
+      classId: row.classId,
+      sectionId: row.sectionId ?? null,
+    }));
+
+    const hasSectionScoped = pairs.some((pair) => pair.sectionId);
+    if (!hasSectionScoped) {
+      where.classId = { in: pairs.map((pair) => pair.classId) };
+    } else {
+      where.OR = pairs.map((pair) => ({
+        classId: pair.classId,
+        sectionId: pair.sectionId,
+      }));
+    }
   }
 
   const sessions = await prisma.studentAttendanceSession.findMany({

@@ -26,6 +26,7 @@ const teacherItems = [
 
 const employeeItems = [
   { href: '/dashboard/teachers/add', label: 'Add User' },
+  { href: '/dashboard/teachers/assign', label: 'Assign Classes' },
   { href: '/dashboard/teachers', label: 'List Users' },
 ];
 
