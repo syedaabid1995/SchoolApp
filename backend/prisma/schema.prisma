@@ -41,7 +41,12 @@ model School {
   faceProfiles  FaceProfile[]
   attendancePeriods AttendancePeriod[]
   attendanceSessions AttendanceSession[]
+  studentAttendanceSessions StudentAttendanceSession[]
+  teacherSelfAttendances TeacherSelfAttendance[]
+  teacherLeaveRequests TeacherLeaveRequest[]
+  teacherAttendanceSubstitutions TeacherAttendanceSubstitution[]
   exams Exam[]
+  examTypes ExamTypeConfig[]
   themes Theme[]
   featureFlagOverrides FeatureFlagOverride[]
   configOverrides TenantConfigOverride[]
@@ -54,9 +59,11 @@ model School {
   dataExportJobs DataExportJob[]
   dataDeletionJobs DataDeletionJob[]
   supportTickets SupportTicket[]
+  messagingConfigs SchoolMessagingConfig[]
   transferRequestsFrom StudentTransferRequest[] @relation("TransferFromSchool")
   transferRequestsTo StudentTransferRequest[] @relation("TransferToSchool")
   employeeRolePermissions EmployeeRolePermission[]
+  employeeUserPermissions EmployeeUserPermission[]
 
   @@map("schools")
 }
@@ -91,6 +98,7 @@ model User {
   roles  UserRole[]
   parentProfiles ParentProfile[]
   teacherProfile TeacherProfile?
+  bankDetails UserBankDetails?
   importJobs     ImportJob[]
   faceProfilesCreated FaceProfile[] @relation("FaceProfileCreatedBy")
   faceProfilesApproved FaceProfile[] @relation("FaceProfileApprovedBy")
@@ -110,6 +118,14 @@ model User {
   supportTickets SupportTicket[]
   transferRequestsCreated StudentTransferRequest[] @relation("TransferRequestedBy")
   transferRequestsDecided StudentTransferRequest[] @relation("TransferDecidedBy")
+  studentAttendanceSessionsCreated StudentAttendanceSession[] @relation("StudentAttendanceSessionCreatedBy")
+  studentAttendanceSessionsLocked StudentAttendanceSession[] @relation("StudentAttendanceSessionLockedBy")
+  teacherSelfAttendancesCreated TeacherSelfAttendance[] @relation("TeacherSelfAttendanceCreatedBy")
+  teacherSelfAttendancesOverridden TeacherSelfAttendance[] @relation("TeacherSelfAttendanceOverriddenBy")
+  teacherLeaveRequestsReviewed TeacherLeaveRequest[] @relation("TeacherLeaveRequestReviewedBy")
+  teacherAttendanceSubstitutionsCreated TeacherAttendanceSubstitution[] @relation("TeacherAttendanceSubstitutionCreatedBy")
+  teacherAttendanceSubstitutionsCanceled TeacherAttendanceSubstitution[] @relation("TeacherAttendanceSubstitutionCanceledBy")
+  employeeUserPermissions EmployeeUserPermission[]
 
   @@index([schoolId])
   @@unique([schoolId, email])
@@ -182,6 +198,23 @@ model EmployeeRolePermission {
   @@map("employee_role_permissions")
 }
 
+model EmployeeUserPermission {
+  id             String   @id @default(uuid()) @db.Uuid
+  schoolId       String   @map("school_id") @db.Uuid
+  userId         String   @map("user_id") @db.Uuid
+  permissionCode String   @map("permission_code")
+  enabled        Boolean  @default(true)
+  createdAt      DateTime @default(now()) @map("created_at")
+  updatedAt      DateTime @updatedAt @map("updated_at")
+
+  school School @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([schoolId, userId, permissionCode])
+  @@index([schoolId, userId])
+  @@map("employee_user_permissions")
+}
+
 model AcademicYear {
   id        String   @id @default(uuid()) @db.Uuid
   schoolId  String   @map("school_id") @db.Uuid
@@ -197,6 +230,7 @@ model AcademicYear {
   exams  Exam[]
   classes Class[]
   subjects Subject[]
+  teacherAttendanceSubstitutions TeacherAttendanceSubstitution[]
 
   @@index([schoolId])
   @@map("academic_years")
@@ -235,6 +269,8 @@ model Class {
   exams Exam[]
   examPapers ExamPaper[]
   teacherAssignments TeacherClassAssignment[]
+  studentAttendanceSessions StudentAttendanceSession[]
+  teacherAttendanceSubstitutions TeacherAttendanceSubstitution[]
 
   @@index([schoolId])
   @@index([academicYearId])
@@ -252,6 +288,9 @@ model Section {
   class Class @relation(fields: [classId], references: [id], onDelete: Cascade)
   students Student[]
   exams Exam[]
+  studentAttendanceSessions StudentAttendanceSession[]
+  teacherAssignments TeacherClassAssignment[]
+  teacherAttendanceSubstitutions TeacherAttendanceSubstitution[]
 
   @@index([classId])
   @@unique([classId, name])
@@ -337,6 +376,7 @@ model Student {
   transferRequests StudentTransferRequest[]
   faceProfile  FaceProfile?
   attendanceRecords AttendanceRecord[]
+  studentAttendanceRecords StudentAttendanceRecord[]
   marks Mark[]
   photos StudentPhoto[]
 
@@ -422,10 +462,14 @@ model TeacherProfile {
   bankDetails TeacherBankDetails?
   classAssignments TeacherClassAssignment[]
   subjectAssignments TeacherSubjectAssignment[]
+  teacherSelfAttendances TeacherSelfAttendance[]
+  teacherLeaveRequests TeacherLeaveRequest[]
+  attendanceSubstitutionsAsOriginal TeacherAttendanceSubstitution[] @relation("TeacherAttendanceSubstitutionOriginal")
+  attendanceSubstitutionsAsSubstitute TeacherAttendanceSubstitution[] @relation("TeacherAttendanceSubstitutionSubstitute")
 
   @@index([schoolId])
   @@unique([schoolId, employeeNo])
-  @@map("teacher_profiles")
+  @@map("employee_profiles")
 }
 
 model TeacherBankDetails {
@@ -447,18 +491,40 @@ model TeacherBankDetails {
   @@map("teacher_bank_details")
 }
 
+model UserBankDetails {
+  id                String   @id @default(uuid()) @db.Uuid
+  userId            String   @unique @map("user_id") @db.Uuid
+  accountHolderName String?  @map("account_holder_name")
+  accountNumber     String?  @map("account_number")
+  ifscCode          String?  @map("ifsc_code")
+  accountType       String?  @map("account_type")
+  bankName          String?  @map("bank_name")
+  branchName        String?  @map("branch_name")
+  panNumber         String?  @map("pan_number")
+  createdAt         DateTime @default(now()) @map("created_at")
+  updatedAt         DateTime @updatedAt @map("updated_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("user_bank_details")
+}
+
 model TeacherClassAssignment {
   id        String   @id @default(uuid()) @db.Uuid
   teacherId String   @map("teacher_id") @db.Uuid
   classId   String   @map("class_id") @db.Uuid
+  sectionId String?  @map("section_id") @db.Uuid
   createdAt DateTime @default(now()) @map("created_at")
 
   teacher TeacherProfile @relation(fields: [teacherId], references: [id], onDelete: Cascade)
   class   Class          @relation(fields: [classId], references: [id], onDelete: Cascade)
+  section Section?       @relation(fields: [sectionId], references: [id], onDelete: SetNull)
 
   @@index([teacherId])
   @@index([classId])
-  @@unique([teacherId, classId])
+  @@index([sectionId])
+  @@unique([teacherId, classId, sectionId])
   @@map("teacher_class_assignments")
 }
 
@@ -618,6 +684,156 @@ enum AttendanceApprovalStatus {
   REJECTED
 }
 
+enum StudentAttendanceStatus {
+  PRESENT
+  ABSENT
+  LATE
+  HALF_DAY
+}
+
+enum StudentAttendanceSessionStatus {
+  DRAFT
+  LOCKED
+}
+
+enum TeacherSelfAttendanceStatus {
+  PRESENT
+  LEAVE
+}
+
+enum LeaveRequestStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+model StudentAttendanceSession {
+  id          String   @id @default(uuid()) @db.Uuid
+  schoolId    String   @map("school_id") @db.Uuid
+  classId     String   @map("class_id") @db.Uuid
+  sectionId   String?  @map("section_id") @db.Uuid
+  date        DateTime
+  status      StudentAttendanceSessionStatus @default(DRAFT)
+  createdById String   @map("created_by_id") @db.Uuid
+  lockedAt    DateTime? @map("locked_at")
+  lockedById  String?  @map("locked_by_id") @db.Uuid
+  lockReason  String?  @map("lock_reason")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  school    School @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  class     Class @relation(fields: [classId], references: [id], onDelete: Cascade)
+  section   Section? @relation(fields: [sectionId], references: [id], onDelete: SetNull)
+  createdBy User @relation("StudentAttendanceSessionCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+  lockedBy  User? @relation("StudentAttendanceSessionLockedBy", fields: [lockedById], references: [id], onDelete: SetNull)
+  records   StudentAttendanceRecord[]
+
+  @@unique([schoolId, classId, sectionId, date])
+  @@index([schoolId, date])
+  @@index([classId, sectionId, date])
+  @@index([schoolId, classId, date, status])
+  @@map("student_attendance_sessions")
+}
+
+model StudentAttendanceRecord {
+  id        String   @id @default(uuid()) @db.Uuid
+  sessionId String   @map("session_id") @db.Uuid
+  studentId String   @map("student_id") @db.Uuid
+  status    StudentAttendanceStatus
+  remarks   String?
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  session StudentAttendanceSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  student Student @relation(fields: [studentId], references: [id], onDelete: Cascade)
+
+  @@unique([sessionId, studentId])
+  @@index([studentId, createdAt])
+  @@index([sessionId, status])
+  @@map("student_attendance_records")
+}
+
+model TeacherLeaveRequest {
+  id           String   @id @default(uuid()) @db.Uuid
+  schoolId     String   @map("school_id") @db.Uuid
+  teacherId    String   @map("teacher_id") @db.Uuid
+  fromDate     DateTime @map("from_date")
+  toDate       DateTime @map("to_date")
+  reason       String
+  status       LeaveRequestStatus @default(PENDING)
+  reviewedById String?  @map("reviewed_by_id") @db.Uuid
+  reviewedAt   DateTime? @map("reviewed_at")
+  reviewReason String?  @map("review_reason")
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  school      School @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  teacher     TeacherProfile @relation(fields: [teacherId], references: [id], onDelete: Cascade)
+  reviewedBy  User? @relation("TeacherLeaveRequestReviewedBy", fields: [reviewedById], references: [id], onDelete: SetNull)
+  attendances TeacherSelfAttendance[]
+
+  @@index([schoolId, status, createdAt])
+  @@index([teacherId, status, fromDate])
+  @@map("teacher_leave_requests")
+}
+
+model TeacherSelfAttendance {
+  id             String   @id @default(uuid()) @db.Uuid
+  schoolId       String   @map("school_id") @db.Uuid
+  teacherId      String   @map("teacher_id") @db.Uuid
+  date           DateTime
+  status         TeacherSelfAttendanceStatus
+  leaveRequestId String?  @map("leave_request_id") @db.Uuid
+  overrideReason String?  @map("override_reason")
+  createdById    String   @map("created_by_id") @db.Uuid
+  overriddenById String?  @map("overridden_by_id") @db.Uuid
+  createdAt      DateTime @default(now()) @map("created_at")
+  updatedAt      DateTime @updatedAt @map("updated_at")
+
+  school       School @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  teacher      TeacherProfile @relation(fields: [teacherId], references: [id], onDelete: Cascade)
+  leaveRequest TeacherLeaveRequest? @relation(fields: [leaveRequestId], references: [id], onDelete: SetNull)
+  createdBy    User @relation("TeacherSelfAttendanceCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+  overriddenBy User? @relation("TeacherSelfAttendanceOverriddenBy", fields: [overriddenById], references: [id], onDelete: SetNull)
+
+  @@unique([schoolId, teacherId, date])
+  @@index([schoolId, date])
+  @@index([teacherId, date])
+  @@map("teacher_self_attendances")
+}
+
+model TeacherAttendanceSubstitution {
+  id                  String   @id @default(uuid()) @db.Uuid
+  schoolId            String   @map("school_id") @db.Uuid
+  academicYearId      String   @map("academic_year_id") @db.Uuid
+  classId             String   @map("class_id") @db.Uuid
+  sectionId           String?  @map("section_id") @db.Uuid
+  date                DateTime
+  originalTeacherId   String?  @map("original_teacher_id") @db.Uuid
+  substituteTeacherId String   @map("substitute_teacher_id") @db.Uuid
+  reason              String?
+  createdById         String   @map("created_by_id") @db.Uuid
+  canceledAt          DateTime? @map("canceled_at")
+  canceledById        String?  @map("canceled_by_id") @db.Uuid
+  createdAt           DateTime @default(now()) @map("created_at")
+  updatedAt           DateTime @updatedAt @map("updated_at")
+
+  school           School       @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  academicYear     AcademicYear @relation(fields: [academicYearId], references: [id], onDelete: Cascade)
+  class            Class        @relation(fields: [classId], references: [id], onDelete: Cascade)
+  section          Section?     @relation(fields: [sectionId], references: [id], onDelete: SetNull)
+  originalTeacher  TeacherProfile? @relation("TeacherAttendanceSubstitutionOriginal", fields: [originalTeacherId], references: [id], onDelete: SetNull)
+  substituteTeacher TeacherProfile  @relation("TeacherAttendanceSubstitutionSubstitute", fields: [substituteTeacherId], references: [id], onDelete: Cascade)
+  createdBy        User         @relation("TeacherAttendanceSubstitutionCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+  canceledBy       User?        @relation("TeacherAttendanceSubstitutionCanceledBy", fields: [canceledById], references: [id], onDelete: SetNull)
+
+  @@unique([schoolId, academicYearId, classId, sectionId, date])
+  @@index([schoolId, date])
+  @@index([schoolId, classId, sectionId, date])
+  @@index([substituteTeacherId, date])
+  @@map("teacher_attendance_substitutions")
+}
+
 model AttendancePeriod {
   id        String   @id @default(uuid()) @db.Uuid
   schoolId  String   @map("school_id") @db.Uuid
@@ -758,9 +974,10 @@ model Exam {
   classId    String?   @map("class_id") @db.Uuid
   sectionId  String?   @map("section_id") @db.Uuid
   name       String
-  type       ExamType
+  type       String
   status     ExamStatus @default(DRAFT)
   scheduledAt DateTime? @map("scheduled_at")
+  resultPublishAt DateTime? @map("result_publish_at")
   createdAt  DateTime  @default(now()) @map("created_at")
   updatedAt  DateTime  @updatedAt @map("updated_at")
 
@@ -779,6 +996,22 @@ model Exam {
   @@map("exams")
 }
 
+model ExamTypeConfig {
+  id        String   @id @default(uuid()) @db.Uuid
+  schoolId  String   @map("school_id") @db.Uuid
+  code      String
+  name      String
+  isActive  Boolean  @default(true) @map("is_active")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  school School @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+
+  @@unique([schoolId, code])
+  @@index([schoolId])
+  @@map("exam_types")
+}
+
 model ExamPaper {
   id         String   @id @default(uuid()) @db.Uuid
   examId     String   @map("exam_id") @db.Uuid
@@ -787,6 +1020,7 @@ model ExamPaper {
   maxMarks   Float    @map("max_marks")
   passMarks  Float    @default(0) @map("pass_marks")
   weightage  Float    @default(1) @map("weightage")
+  scheduledAt DateTime? @map("scheduled_at")
   createdAt  DateTime @default(now()) @map("created_at")
   updatedAt  DateTime @updatedAt @map("updated_at")
 
@@ -976,6 +1210,11 @@ enum NotificationStatus {
   FAILED
 }
 
+enum MessagingServiceStatus {
+  ACTIVE
+  INACTIVE
+}
+
 model NotificationTemplate {
   id        String   @id @default(uuid()) @db.Uuid
   key       String   @unique
@@ -1012,6 +1251,38 @@ model NotificationLog {
   @@index([userId])
   @@index([templateId])
   @@map("notification_logs")
+}
+
+model MessagingService {
+  id                String                @id @default(uuid()) @db.Uuid
+  code              String                @unique
+  name              String
+  status            MessagingServiceStatus @default(ACTIVE)
+  supportedChannels Json                  @map("supported_channels")
+  createdAt         DateTime              @default(now()) @map("created_at")
+  updatedAt         DateTime              @updatedAt @map("updated_at")
+
+  schoolConfigs SchoolMessagingConfig[]
+
+  @@map("messaging_services")
+}
+
+model SchoolMessagingConfig {
+  id         String              @id @default(uuid()) @db.Uuid
+  schoolId   String              @map("school_id") @db.Uuid
+  serviceId  String              @map("service_id") @db.Uuid
+  channel    NotificationChannel
+  isEnabled  Boolean             @default(true) @map("is_enabled")
+  credentials Json
+  createdAt  DateTime            @default(now()) @map("created_at")
+  updatedAt  DateTime            @updatedAt @map("updated_at")
+
+  school  School            @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  service MessagingService  @relation(fields: [serviceId], references: [id], onDelete: Cascade)
+
+  @@unique([schoolId, channel])
+  @@index([serviceId])
+  @@map("school_messaging_configs")
 }
 
 enum BackupStatus {
@@ -1131,8 +1402,24 @@ model SubscriptionPlanDef {
   updatedAt    DateTime @updatedAt @map("updated_at")
 
   subscriptions Subscription[]
+  permissions SubscriptionPlanPermission[]
 
   @@map("subscription_plans")
+}
+
+model SubscriptionPlanPermission {
+  id             String   @id @default(uuid()) @db.Uuid
+  planId         String   @map("plan_id") @db.Uuid
+  permissionCode String   @map("permission_code")
+  enabled        Boolean  @default(true)
+  createdAt      DateTime @default(now()) @map("created_at")
+  updatedAt      DateTime @updatedAt @map("updated_at")
+
+  plan SubscriptionPlanDef @relation(fields: [planId], references: [id], onDelete: Cascade)
+
+  @@unique([planId, permissionCode])
+  @@index([planId])
+  @@map("subscription_plan_permissions")
 }
 
 model UsageCounter {

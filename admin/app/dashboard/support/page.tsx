@@ -9,7 +9,13 @@ export default function SupportPage() {
   const [form, setForm] = useState({ subject: '', description: '', priority: 'MEDIUM' });
   const [formError, setFormError] = useState('');
 
-  const { data: tickets } = useQuery({ queryKey: ['tickets'], queryFn: listTickets });
+  const { data: tickets } = useQuery({
+    queryKey: ['tickets'],
+    queryFn: listTickets,
+    refetchOnWindowFocus: false,
+    refetchOnMount: false,
+    staleTime: 60_000,
+  });
 
   const createMutation = useMutation({
     mutationFn: createTicket,
@@ -32,38 +38,26 @@ export default function SupportPage() {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50/30 to-cyan-50/40">
-      {/* Hero Section */}
-      <div className="relative overflow-hidden bg-gradient-to-r from-blue-600 via-cyan-600 to-teal-700 px-6 py-16 text-white">
-        <div className="absolute inset-0 bg-black/10"></div>
-        <div className="relative mx-auto max-w-6xl">
-          <div className="flex items-center justify-between">
-            <div>
-              <div className="mb-4 inline-flex items-center rounded-full bg-white/20 px-4 py-2 text-sm font-medium backdrop-blur-sm">
-                <svg className="mr-2 h-4 w-4" fill="currentColor" viewBox="0 0 20 20">
-                  <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
-                </svg>
-                Support Center
-              </div>
-              <h1 className="mb-4 text-4xl font-bold tracking-tight sm:text-5xl">
-                Help & Support
-              </h1>
-              <p className="max-w-2xl text-lg text-blue-100">
-                Get assistance with technical issues, track support tickets, and access help resources.
-              </p>
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50/30 to-purple-50/40 p-6">
+      <div className="mx-auto max-w-7xl space-y-6">
+        {/* Header */}
+        <div className="relative overflow-hidden rounded-3xl bg-gradient-to-r from-blue-600 via-cyan-600 to-teal-700 p-8 text-white shadow-2xl">
+          <div className="absolute inset-0 bg-black/10"></div>
+          <div className="relative">
+            <div className="mb-4 inline-flex items-center rounded-full bg-white/20 px-4 py-2 text-sm font-medium backdrop-blur-sm">
+              <svg className="mr-2 h-4 w-4" fill="currentColor" viewBox="0 0 20 20">
+                <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
+              </svg>
+              Support Center
             </div>
+            <h1 className="text-4xl font-bold tracking-tight">Help & Support</h1>
+            <p className="mt-2 text-blue-100">Get assistance with technical issues, track support tickets, and access help resources.</p>
           </div>
+          <div className="absolute -top-10 -right-10 h-40 w-40 rounded-full bg-white/10 animate-pulse"></div>
+          <div className="absolute -bottom-8 -left-8 h-32 w-32 rounded-full bg-white/10 animate-bounce"></div>
         </div>
-        
-        {/* Animated background elements */}
-        <div className="absolute -top-10 -left-10 h-40 w-40 rounded-full bg-white/10 animate-pulse"></div>
-        <div className="absolute -bottom-10 -right-10 h-32 w-32 rounded-full bg-white/10 animate-bounce"></div>
-        <div className="absolute top-1/2 left-1/3 h-6 w-6 rounded-full bg-white/20 animate-ping"></div>
-      </div>
-
-      <div className="mx-auto max-w-7xl px-6 py-12">
         {/* Stats Cards */}
-        <div className="mb-8 grid gap-6 md:grid-cols-4">
+        <div className="grid gap-6 md:grid-cols-4">
           <div className="rounded-2xl bg-gradient-to-br from-blue-500 to-blue-600 p-6 text-white shadow-lg">
             <div className="flex items-center justify-between">
               <div>
@@ -122,7 +116,7 @@ export default function SupportPage() {
         </div>
 
         {/* Create Ticket Section */}
-        <section className="mb-8 rounded-2xl bg-white p-6 shadow-lg ring-1 ring-gray-200">
+        <section className="rounded-2xl bg-white p-6 shadow-lg ring-1 ring-gray-200">
           <h2 className="mb-6 text-xl font-semibold text-gray-900">Create Support Ticket</h2>
           <div className="grid gap-4 md:grid-cols-3">
             <div>

@@ -93,6 +93,16 @@ export default function MarksUploadPage() {
   const examAcademicYearId = selectedExam?.academicYearId ?? '';
 
   useEffect(() => {
+    if (!loaded) return;
+    setLoaded(false);
+    setMarksRows([]);
+    setStatus('DRAFT');
+    setBulkOpen(false);
+    setBulkFileName('');
+    setFormError('');
+  }, [filters.examId, filters.classId, filters.sectionId, filters.subjectId, filters.component]);
+
+  useEffect(() => {
     if (!selectedExam) return;
     setFilters((prev) => ({
       ...prev,
@@ -228,7 +238,8 @@ export default function MarksUploadPage() {
       const payload = marksRows
         .filter((row) => row.marks.trim() !== '' && !row.absent)
         .map((row) => ({ studentId: row.studentId, score: Number(row.marks) }));
-      if (!payload.length) {
+      const hasAbsent = marksRows.some((row) => row.absent);
+      if (!payload.length && !hasAbsent) {
         const message = 'Enter at least one mark before saving.';
         setFormError(message);
         notify.error('Validation error', message);
@@ -503,17 +514,19 @@ export default function MarksUploadPage() {
                 }`}>
                   {status}
                 </span>
-                <button
-                  className="rounded-xl border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 shadow-sm hover:bg-gray-50"
-                  onClick={() => setBulkOpen(true)}
-                >
-                  <div className="flex items-center">
-                    <svg className="mr-2 h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M9 19l3 3m0 0l3-3m-3 3V10" />
-                    </svg>
-                    Upload Excel
-                  </div>
-                </button>
+                {status !== 'LOCKED' ? (
+                  <button
+                    className="rounded-xl border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 shadow-sm hover:bg-gray-50"
+                    onClick={() => setBulkOpen(true)}
+                  >
+                    <div className="flex items-center">
+                      <svg className="mr-2 h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M9 19l3 3m0 0l3-3m-3 3V10" />
+                      </svg>
+                      Upload Excel
+                    </div>
+                  </button>
+                ) : null}
               </div>
             </div>
 
@@ -604,31 +617,33 @@ export default function MarksUploadPage() {
                   </div>
                 </div>
               </div>
-              <div className="flex gap-3">
-                <button
-                  className="rounded-xl border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 shadow-sm hover:bg-gray-50 disabled:opacity-50"
-                  onClick={() => saveMarks('DRAFT')}
-                  disabled={saving}
-                >
-                  {saving && status === 'DRAFT' ? 'Saving...' : 'Save Draft'}
-                </button>
-                <button
-                  className="rounded-xl border border-green-300 bg-green-50 px-4 py-2 text-sm font-medium text-green-700 hover:bg-green-100 disabled:opacity-50"
-                  onClick={submitWithConfirm}
-                  disabled={saving}
-                >
-                  Submit Marks
-                </button>
-                {canLock && (
+              {status !== 'LOCKED' ? (
+                <div className="flex gap-3">
                   <button
-                    className="rounded-xl bg-gradient-to-r from-green-600 to-emerald-600 px-4 py-2 text-sm font-semibold text-white shadow-lg hover:from-green-700 hover:to-emerald-700 disabled:opacity-50"
-                    onClick={() => saveMarks('LOCKED')}
+                    className="rounded-xl border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 shadow-sm hover:bg-gray-50 disabled:opacity-50"
+                    onClick={() => saveMarks('DRAFT')}
                     disabled={saving}
                   >
-                    Lock Marks
+                    {saving && status === 'DRAFT' ? 'Saving...' : 'Save Draft'}
                   </button>
-                )}
-              </div>
+                  <button
+                    className="rounded-xl border border-green-300 bg-green-50 px-4 py-2 text-sm font-medium text-green-700 hover:bg-green-100 disabled:opacity-50"
+                    onClick={submitWithConfirm}
+                    disabled={saving}
+                  >
+                    Submit Marks
+                  </button>
+                  {canLock && (
+                    <button
+                      className="rounded-xl bg-gradient-to-r from-green-600 to-emerald-600 px-4 py-2 text-sm font-semibold text-white shadow-lg hover:from-green-700 hover:to-emerald-700 disabled:opacity-50"
+                      onClick={() => saveMarks('LOCKED')}
+                      disabled={saving}
+                    >
+                      Lock Marks
+                    </button>
+                  )}
+                </div>
+              ) : null}
             </div>
           </section>
         )}

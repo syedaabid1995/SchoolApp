@@ -1,0 +1,180 @@
+PROMPT V01 - MASTER GUARANTEE PROMPT (USE FIRST)
+
+You are working inside an existing multi-school School SaaS platform.
+
+ARCHITECTURAL CONSTRAINTS:
+- Do NOT refactor existing implemented modules (currently: auth, users/roles, schools, subscriptions, messaging, cache, academic masters if already present).
+- For modules not yet implemented (attendance/leave/payroll), you may design and add them, but:
+  - keep additive changes
+  - do not break current routes/contracts
+  - follow tenant isolation and role guard patterns
+- All work must be additive and backward-compatible.
+- Tenant isolation by schoolId is mandatory.
+
+MANDATORY OUTPUT REQUIREMENTS:
+For any new feature, screen, or API, you MUST include:
+1. Migration plan + rollback plan (if DB changes exist)
+2. Permission matrix impact (role × action)
+3. Cache impact + audit log impact
+4. Test checklist (API, role access, tenant isolation)
+
+Your task is to EXTEND the system safely, not redesign it.
+
+PROMPT V02 - LMS MODULE PROMPT
+
+You are adding an LMS module to an existing school SaaS system.
+
+Context:
+- Attendance, leave, payroll, and academic master data already exist.
+- Students are mapped to AcademicYear → Class → Section.
+- Teachers are mapped to Classes and Subjects.
+- Attendance remains the source of truth for presence.
+
+Constraints:
+- Do NOT introduce new academic hierarchies.
+- LMS must reuse Subject, Teacher, Student mappings.
+
+Features:
+- Subject-wise content (video, PDF, links)
+- Assignment creation by teacher
+- Assignment submission by student
+- Due dates and submission status
+
+Output MUST include:
+- UI routes and screens (additive only)
+- API endpoints (new only)
+- Conceptual data model
+- Migration + rollback plan
+- Permission matrix impact
+- Cache + audit log impact
+- Test checklist (API, role, tenant)
+txt
+
+PROMPT V03 - EXAMS & ASSESSMENTS PROMPT
+
+You are adding an Exams & Assessments module.
+
+Context:
+- AcademicYears, Classes, Sections, Subjects already exist.
+- Attendance sessions already exist.
+- Exams must map to existing Subjects and Classes.
+
+Constraints:
+- Do NOT create or duplicate Subject entities.
+- Do NOT change student-class relationships.
+- Marks upload must respect attendance presence.
+
+Features:
+- Exam creation and scheduling
+- Subject mapping
+- Marks upload (manual + Excel)
+- Result publishing (read-only)
+
+Output MUST include:
+- UI flow and routes
+- API endpoints (additive)
+- Data relationships
+- Migration + rollback plan
+- Permission matrix impact
+- Cache + audit log impact
+- Test checklist
+txt
+
+PROMPT V04 - NOTIFICATIONS & MESSAGING PROMPT
+
+You are adding a notification and messaging layer.
+
+Context:
+- Role-based users exist (Admin, Teacher, Parent, Student).
+- Attendance, leave, payroll generate events.
+
+Constraints:
+- Messaging must not affect core attendance or payroll logic.
+- Notifications must be configurable and event-driven.
+
+Features:
+- Attendance pending reminders
+- Leave approval notifications
+- Payslip ready notifications
+- Optional announcements
+
+Output MUST include:
+- Notification matrix
+- UI screens
+- Event triggers
+- Cache + audit impact
+- Permission matrix
+- Test checklist
+txt
+
+PROMPT V05 - ANALYTICS PROMPT
+
+You are adding analytics dashboards.
+
+Context:
+- Attendance and payroll data already exist.
+- Reports are already available.
+
+Constraints:
+- Analytics must be read-only.
+- No recalculation or mutation of core data.
+
+Features:
+- Attendance trends
+- Teacher punctuality
+- Payroll summaries
+
+Output MUST include:
+- Dashboard pages
+- Filters
+- Read-only guarantees
+- Cache impact
+- Permission matrix
+- Test checklist
+txt
+
+PROMPT V06 - PARENT / STUDENT PORTAL PROMPT
+
+You are adding a parent/student portal.
+
+Context:
+- Parents may be linked to multiple students.
+- Attendance is view-only for parents/students.
+
+Constraints:
+- No write access to attendance.
+- No change to teacher/admin workflows.
+
+Features:
+- Attendance view
+- Exam results view
+- Notifications (read-only)
+
+Output MUST include:
+- Routes and screens
+- Permission matrix
+- Cache + audit impact
+- Test checklist
+txt
+
+PROMPT V07 - ARCHITECTURE CONSTRAINTS DOC CONTENT (for /docs/architecture-constraints.md)
+
+This system is a multi-school (tenant-isolated) School SaaS.
+
+NON-NEGOTIABLE CONSTRAINTS:
+
+1. Do NOT change existing architecture, routes, or core domain boundaries.
+2. Do NOT refactor attendance, leave, payroll, or academic master data.
+3. All features must be ADDITIVE and backward-compatible.
+4. AcademicYear, Class, Section, Subject, Student, Teacher, School are canonical entities.
+5. Attendance and payroll data are immutable once locked.
+6. Tenant isolation by schoolId is mandatory at all layers.
+
+FOR EVERY NEW FEATURE OR API, YOU MUST PROVIDE:
+- Migration plan + rollback plan (if DB change exists)
+- Permission matrix impact (role × action)
+- Cache impact + audit log impact
+- Test checklist (API, role, tenant isolation)
+
+If any requirement conflicts with existing architecture, ADAPT the feature.
+Do NOT redesign the system.

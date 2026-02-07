@@ -13,6 +13,7 @@ export type EmployeePermissionItem = {
 export const EMPLOYEE_PERMISSION_CATALOG: EmployeePermissionItem[] = [
   { code: 'dashboard.overview', label: 'Overview', path: '/dashboard', group: 'Overview' },
   { code: 'plans.view', label: 'Plans', path: '/dashboard/plans', group: 'Plans' },
+  { code: 'settings.access', label: 'Access Control', path: '/dashboard/settings/access', group: 'Utilities' },
   { code: 'teachers.list', label: 'Employees - List', path: '/dashboard/teachers', group: 'Employees' },
   { code: 'teachers.add', label: 'Employees - Add', path: '/dashboard/teachers/add', group: 'Employees' },
   { code: 'academics.setup', label: 'Academic Setup', path: '/dashboard/academics', group: 'Academics' },
@@ -28,6 +29,12 @@ export const EMPLOYEE_PERMISSION_CATALOG: EmployeePermissionItem[] = [
     group: 'Students',
   },
   { code: 'attendance.view', label: 'Attendance', path: '/dashboard/attendance', group: 'Attendance' },
+  {
+    code: 'attendance.substitute.manage',
+    label: 'Attendance Substitutions',
+    path: '/dashboard/teachers/assign',
+    group: 'Attendance',
+  },
   { code: 'support.view', label: 'Support', path: '/dashboard/support', group: 'Support' },
   { code: 'audit.view', label: 'Audit Logs', path: '/dashboard/audit', group: 'Audit' },
 ];
@@ -55,6 +62,28 @@ export const getDefaultPermissionCodes = (roleName: string | null | undefined) =
   return DEFAULT_PERMISSION_BY_ROLE[role] ?? [];
 };
 
+export const getPlanPermissionCodesForSchool = async (schoolId: string) => {
+  const subscription = await prisma.subscription.findUnique({
+    where: { schoolId },
+    select: { planId: true },
+  });
+
+  if (!subscription?.planId) {
+    return [];
+  }
+
+  const permissions = await prisma.subscriptionPlanPermission.findMany({
+    where: { planId: subscription.planId },
+    select: { permissionCode: true, enabled: true },
+  });
+
+  if (!permissions.length) {
+    return [];
+  }
+
+  return permissions.filter((entry) => entry.enabled).map((entry) => entry.permissionCode);
+};
+
 export const getEffectivePermissionCodesForRole = async (schoolId: string, roleName: string | null | undefined) => {
   const defaults = new Set(getDefaultPermissionCodes(roleName));
   const role = (roleName ?? '').toUpperCase() as ManagedEmployeeRole;
@@ -67,15 +96,51 @@ export const getEffectivePermissionCodesForRole = async (schoolId: string, roleN
     select: { permissionCode: true, enabled: true },
   });
 
+  const overrideMap = new Map(overrides.map((entry) => [entry.permissionCode, entry.enabled]));
+  const baseCodes = overrides.length
+    ? EMPLOYEE_PERMISSION_CATALOG.filter((entry) => {
+        if (overrideMap.has(entry.code)) {
+          return Boolean(overrideMap.get(entry.code));
+        }
+        return defaults.has(entry.code);
+      }).map((entry) => entry.code)
+    : Array.from(defaults);
+
+  const planCodes = new Set(await getPlanPermissionCodesForSchool(schoolId));
+  if (planCodes.size === 0) {
+    return [];
+  }
+
+  return baseCodes.filter((code) => planCodes.has(code));
+};
+
+export const getEffectivePermissionCodesForUser = async (
+  schoolId: string,
+  userId: string,
+  roleName: string | null | undefined
+) => {
+  const roleEffective = new Set(await getEffectivePermissionCodesForRole(schoolId, roleName));
+  const overrides = await prisma.employeeUserPermission.findMany({
+    where: { schoolId, userId },
+    select: { permissionCode: true, enabled: true },
+  });
+
   if (!overrides.length) {
-    return Array.from(defaults);
+    return Array.from(roleEffective);
   }
 
   const overrideMap = new Map(overrides.map((entry) => [entry.permissionCode, entry.enabled]));
-  return EMPLOYEE_PERMISSION_CATALOG.filter((entry) => {
+  const withOverrides = EMPLOYEE_PERMISSION_CATALOG.filter((entry) => {
     if (overrideMap.has(entry.code)) {
       return Boolean(overrideMap.get(entry.code));
     }
-    return defaults.has(entry.code);
+    return roleEffective.has(entry.code);
   }).map((entry) => entry.code);
+
+  const planCodes = new Set(await getPlanPermissionCodesForSchool(schoolId));
+  if (planCodes.size === 0) {
+    return [];
+  }
+
+  return withOverrides.filter((code) => planCodes.has(code));
 };

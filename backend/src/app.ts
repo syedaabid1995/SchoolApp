@@ -42,7 +42,10 @@ import { attendanceSummaryRouter } from './routes/attendanceSummary.routes';
 import { adminDashboardRouter } from './routes/adminDashboard.routes';
 import { userRouter } from './routes/user.routes';
 import { parentPortalRouter } from './routes/parentPortal.routes';
+import { leaveRouter } from './routes/leave.routes';
 import { uploadRouter } from './routes/upload.routes';
+import { messagingAdminRouter } from './routes/messagingAdmin.routes';
+import { messagingSettingsRouter } from './routes/messagingSettings.routes';
 import { rateLimit } from './middlewares/rate-limit.middleware';
 import { apiVersionMiddleware } from './middlewares/version.middleware';
 
@@ -138,6 +141,7 @@ export const createApp = () => {
   app.use('/api/v1/faces', faceRouter);
   app.use('/api/v1/recognition', recognitionRouter);
   app.use('/api/v1/attendance', attendanceRouter);
+  app.use('/api/v1/leave', leaveRouter);
   app.use('/api/v1/attendance/evidence', evidenceRouter);
   app.use('/api/v1/exams', examRouter);
   app.use('/api/v1/reports', reportRouter);
@@ -164,6 +168,8 @@ export const createApp = () => {
   app.use('/api/v1/users', userRouter);
   app.use('/api/v1/parents/portal', parentPortalRouter);
   app.use('/api/v1/uploads', uploadRouter);
+  app.use('/api/v1/admin/messaging-services', messagingAdminRouter);
+  app.use('/api/v1/messaging-services', messagingSettingsRouter);
   app.use('/uploads', express.static(path.join(process.cwd(), 'uploads')));
 
   app.use(notFoundMiddleware);

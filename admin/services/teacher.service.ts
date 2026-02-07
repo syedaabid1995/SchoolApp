@@ -22,7 +22,7 @@ export type TeacherProfile = {
   createdAt: string;
   updatedAt: string;
   user: { email: string; status: string };
-  classAssignments: Array<{ id: string; class: { id: string; name: string } }>;
+  classAssignments: Array<{ id: string; class: { id: string; name: string }; section?: { id: string; name: string } | null }>;
   subjectAssignments: Array<{ id: string; subject: { id: string; name: string } }>;
 };
 
@@ -103,12 +103,12 @@ export const setTeacherStatus = async (teacherId: string, isActive: boolean) => 
   return data;
 };
 
-export const assignClass = async (payload: { teacherId: string; classId: string }) => {
+export const assignClass = async (payload: { teacherId: string; classId: string; sectionId?: string }) => {
   const { data } = await api.post('/teacher-assignments/classes/assign', payload);
   return data;
 };
 
-export const unassignClass = async (payload: { teacherId: string; classId: string }) => {
+export const unassignClass = async (payload: { teacherId: string; classId: string; sectionId?: string }) => {
   const { data } = await api.post('/teacher-assignments/classes/unassign', payload);
   return data;
 };

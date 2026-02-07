@@ -1,0 +1,131 @@
+name: Architecture Guard (V01 / V07)
+
+on:
+  pull_request:
+    types: [opened, edited, synchronize]
+
+jobs:
+  architecture-guard:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Validate PR governance compliance
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const body = context.payload.pull_request.body || "";
+            const fail = (msg) => core.setFailed(`❌ ${msg}`);
+
+            // -------------------------------
+            // REQUIRED SECTIONS
+            // -------------------------------
+            const requiredSections = [
+              "## Scope Declaration",
+              "## Architecture Compliance",
+              "## Migration + Rollback",
+              "## Permission Matrix Impact",
+              "## Cache Impact",
+              "## Audit Impact",
+              "## Test Checklist",
+              "## Governance Confirmation"
+            ];
+
+            const missingSections = requiredSections.filter(
+              section => !body.includes(section)
+            );
+
+            if (missingSections.length > 0) {
+              fail(
+                `Missing mandatory sections:\n- ${missingSections.join("\n- ")}`
+              );
+              return;
+            }
+
+            // -------------------------------
+            // SCOPE MUST NOT BE EMPTY
+            // -------------------------------
+            const scopeRegex = /## Scope Declaration[\s\S]*?Out of Scope([\s\S]*?)(##|$)/;
+            const scopeMatch = body.match(scopeRegex);
+
+            if (!scopeMatch || scopeMatch[1].trim().length < 5) {
+              fail("Scope Declaration must clearly list in-scope and out-of-scope items.");
+              return;
+            }
+
+            // -------------------------------
+            // GOVERNANCE CHECKBOXES
+            // -------------------------------
+            const requiredChecks = [
+              "I have read `docs/architecture-constraints.md`",
+              "This PR complies with **V01 Master Guarantee**",
+              "This PR complies with **V07 Architecture Constraints**"
+            ];
+
+            const unchecked = requiredChecks.filter(
+              check => !body.includes(`- [x] ${check}`)
+            );
+
+            if (unchecked.length > 0) {
+              fail(
+                `Governance confirmations not completed:\n- ${unchecked.join("\n- ")}`
+              );
+              return;
+            }
+
+            // -------------------------------
+            // MIGRATION YES -> PLAN REQUIRED
+            // -------------------------------
+            const migrationYes = body.includes("Does this PR introduce DB or schema changes?") &&
+                                 body.includes("- [x] Yes");
+
+            if (migrationYes) {
+              const migrationPlan = /### Migration Plan([\s\S]*?)### Rollback Plan/;
+              const rollbackPlan = /### Rollback Plan([\s\S]*?)(##|$)/;
+
+              const hasMigrationPlan = migrationPlan.test(body) &&
+                                       body.match(migrationPlan)[1].trim().length > 10;
+              const hasRollbackPlan = rollbackPlan.test(body) &&
+                                      body.match(rollbackPlan)[1].trim().length > 10;
+
+              if (!hasMigrationPlan || !hasRollbackPlan) {
+                fail("Migration marked YES but Migration Plan or Rollback Plan is missing or empty.");
+                return;
+              }
+
+              if (!body.includes("Rollback Owner")) {
+                fail("Rollback owner must be specified for DB-affecting changes.");
+                return;
+              }
+            }
+
+            // -------------------------------
+            // TENANT ISOLATION CHECK
+            // -------------------------------
+            if (!body.includes("All queries and mutations are scoped by `schoolId`")) {
+              fail("Tenant isolation confirmation is missing or unchecked.");
+              return;
+            }
+
+            // -------------------------------
+            // FORBIDDEN KEYWORDS (SOFT GUARD)
+            // -------------------------------
+            const forbidden = [
+              "DROP TABLE",
+              "TRUNCATE TABLE",
+              "DELETE FROM .*school",
+              "ALTER TABLE .* DROP"
+            ];
+
+            const foundForbidden = forbidden.find(pattern =>
+              new RegExp(pattern, "i").test(body)
+            );
+
+            if (foundForbidden) {
+              fail(`Potential destructive operation detected: "${foundForbidden}". Destructive changes are forbidden.`);
+              return;
+            }
+
+            // -------------------------------
+            // PASS
+            // -------------------------------
+            core.info("✅ Architecture Guard passed.");

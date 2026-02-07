@@ -14,7 +14,13 @@ export default function AuditPage() {
     page: 1,
   });
 
-  const { data: session } = useQuery({ queryKey: ['session'], queryFn: getSession });
+  const { data: session } = useQuery({
+    queryKey: ['session'],
+    queryFn: getSession,
+    refetchOnWindowFocus: false,
+    refetchOnMount: false,
+    staleTime: 5 * 60_000,
+  });
 
   const roleOptions = useMemo(() => {
     if (session?.role === 'TEACHER') {
@@ -58,6 +64,9 @@ export default function AuditPage() {
         action: filters.action || undefined,
         page: filters.page,
       }),
+    refetchOnWindowFocus: false,
+    refetchOnMount: false,
+    staleTime: 60_000,
   });
 
   const stats = {
@@ -72,38 +81,26 @@ export default function AuditPage() {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-gray-50/30 to-zinc-50/40">
-      {/* Hero Section */}
-      <div className="relative overflow-hidden bg-gradient-to-r from-gray-800 via-slate-800 to-zinc-900 px-6 py-16 text-white">
-        <div className="absolute inset-0 bg-black/10"></div>
-        <div className="relative mx-auto max-w-6xl">
-          <div className="flex items-center justify-between">
-            <div>
-              <div className="mb-4 inline-flex items-center rounded-full bg-white/20 px-4 py-2 text-sm font-medium backdrop-blur-sm">
-                <svg className="mr-2 h-4 w-4" fill="currentColor" viewBox="0 0 20 20">
-                  <path fillRule="evenodd" d="M3 4a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm0 4a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm0 4a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm0 4a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1z" clipRule="evenodd" />
-                </svg>
-                System Monitoring
-              </div>
-              <h1 className="mb-4 text-4xl font-bold tracking-tight sm:text-5xl">
-                Audit Logs
-              </h1>
-              <p className="max-w-2xl text-lg text-gray-300">
-                Monitor system activities, track user actions, and maintain comprehensive audit trails for compliance.
-              </p>
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50/30 to-purple-50/40 p-6">
+      <div className="mx-auto max-w-7xl space-y-6">
+        {/* Header */}
+        <div className="relative overflow-hidden rounded-3xl bg-gradient-to-r from-gray-700 via-slate-700 to-zinc-800 p-8 text-white shadow-2xl">
+          <div className="absolute inset-0 bg-black/10"></div>
+          <div className="relative">
+            <div className="mb-4 inline-flex items-center rounded-full bg-white/20 px-4 py-2 text-sm font-medium backdrop-blur-sm">
+              <svg className="mr-2 h-4 w-4" fill="currentColor" viewBox="0 0 20 20">
+                <path fillRule="evenodd" d="M3 4a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm0 4a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm0 4a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm0 4a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1z" clipRule="evenodd" />
+              </svg>
+              System Monitoring
             </div>
+            <h1 className="text-4xl font-bold tracking-tight">Audit Logs</h1>
+            <p className="mt-2 text-gray-200">Monitor system activities, track user actions, and maintain comprehensive audit trails for compliance.</p>
           </div>
+          <div className="absolute -top-10 -right-10 h-40 w-40 rounded-full bg-white/10 animate-pulse"></div>
+          <div className="absolute -bottom-8 -left-8 h-32 w-32 rounded-full bg-white/10 animate-bounce"></div>
         </div>
-        
-        {/* Animated background elements */}
-        <div className="absolute -top-10 -left-10 h-40 w-40 rounded-full bg-white/10 animate-pulse"></div>
-        <div className="absolute -bottom-10 -right-10 h-32 w-32 rounded-full bg-white/10 animate-bounce"></div>
-        <div className="absolute top-1/2 left-1/3 h-6 w-6 rounded-full bg-white/20 animate-ping"></div>
-      </div>
-
-      <div className="mx-auto max-w-7xl px-6 py-12">
         {/* Stats Cards */}
-        <div className="mb-8 grid gap-6 md:grid-cols-4">
+        <div className="grid gap-6 md:grid-cols-4">
           <div className="rounded-2xl bg-gradient-to-br from-blue-500 to-blue-600 p-6 text-white shadow-lg">
             <div className="flex items-center justify-between">
               <div>
@@ -162,7 +159,7 @@ export default function AuditPage() {
         </div>
 
         {/* Filters Section */}
-        <section className="mb-8 rounded-2xl bg-white p-6 shadow-lg ring-1 ring-gray-200">
+        <section className="rounded-2xl bg-white p-6 shadow-lg ring-1 ring-gray-200">
           <h2 className="mb-6 text-xl font-semibold text-gray-900">Filter Audit Logs</h2>
           <div className="grid gap-4 md:grid-cols-3">
             <div>

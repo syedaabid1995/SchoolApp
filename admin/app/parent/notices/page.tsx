@@ -13,8 +13,9 @@ export default function ParentNoticesPage() {
     queryKey: ['parent-notices', activeChild?.id],
     queryFn: () => listParentNotices(activeChild?.id),
     enabled: Boolean(activeChild?.id),
-    refetchOnWindowFocus: true,
-    refetchOnMount: 'always',
+    refetchOnWindowFocus: false,
+    refetchOnMount: false,
+    staleTime: 5 * 60_000,
   });
 
   return (

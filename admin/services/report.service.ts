@@ -13,11 +13,13 @@ export const getExam = async (id: string) => {
 export const createExam = async (payload: {
   name?: string;
   type: string;
-  subjectIds: string[];
+  subjectIds?: string[];
+  subjectMappings?: Array<{ subjectId: string; maxMarks: number; passMarks: number; scheduledAt: string }>;
   academicYearId?: string;
   classId?: string;
   sectionId?: string;
   scheduledAt?: string;
+  resultPublishAt?: string;
   status?: 'DRAFT' | 'PUBLISHED' | 'CLOSED';
 }) => {
   const { data } = await api.post('/exams', payload);

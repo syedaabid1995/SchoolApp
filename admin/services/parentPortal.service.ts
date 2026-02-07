@@ -45,6 +45,11 @@ export const listParentExams = async (childId?: string, academicYearId?: string)
   return data?.items ?? data ?? [];
 };
 
+export const listParentResults = async (childId?: string) => {
+  const { data } = await api.get('/parents/portal/results', { params: { childId } });
+  return data;
+};
+
 export const listParentSubjects = async (childId?: string) => {
   const { data } = await api.get('/parents/portal/subjects', { params: { childId } });
   return data?.items ?? data ?? [];

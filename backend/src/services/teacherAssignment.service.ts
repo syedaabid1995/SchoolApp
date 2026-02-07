@@ -38,6 +38,7 @@ export const assignTeacherToClass = async (params: {
   schoolId: string;
   teacherId: string;
   classId: string;
+  sectionId?: string;
   actorId: string;
   actorRole: string;
 }) => {
@@ -51,8 +52,16 @@ export const assignTeacherToClass = async (params: {
   });
   if (!cls) throw new HttpError(404, 'Class not found');
 
+  if (params.sectionId) {
+    const section = await prisma.section.findFirst({
+      where: { id: params.sectionId, classId: params.classId, class: { schoolId: params.schoolId } },
+      select: { id: true },
+    });
+    if (!section) throw new HttpError(404, 'Section not found for class');
+  }
+
   const assignment = await prisma.teacherClassAssignment.create({
-    data: { teacherId: teacher.id, classId: cls.id },
+    data: { teacherId: teacher.id, classId: cls.id, sectionId: params.sectionId ?? null },
   });
 
   await createAuditLog({
@@ -62,7 +71,7 @@ export const assignTeacherToClass = async (params: {
     entityType: 'TeacherClassAssignment',
     entityId: assignment.id,
     action: 'CREATE',
-    afterState: { teacherId: teacher.id, classId: cls.id },
+    afterState: { teacherId: teacher.id, classId: cls.id, sectionId: params.sectionId ?? null },
   });
 
   return assignment;
@@ -72,6 +81,7 @@ export const unassignTeacherFromClass = async (params: {
   schoolId: string;
   teacherId: string;
   classId: string;
+  sectionId?: string;
   actorId: string;
   actorRole: string;
 }) => {
@@ -80,6 +90,7 @@ export const unassignTeacherFromClass = async (params: {
       teacherId: params.teacherId,
       class: { schoolId: params.schoolId },
       classId: params.classId,
+      sectionId: params.sectionId ?? null,
     },
   });
 
@@ -94,7 +105,7 @@ export const unassignTeacherFromClass = async (params: {
     entityType: 'TeacherClassAssignment',
     entityId: assignment.id,
     action: 'DELETE',
-    beforeState: { teacherId: assignment.teacherId, classId: assignment.classId },
+    beforeState: { teacherId: assignment.teacherId, classId: assignment.classId, sectionId: assignment.sectionId },
   });
 
   return { deleted: true };

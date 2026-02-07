@@ -167,21 +167,35 @@ export const getParentDashboard = async (req: Request, res: Response) => {
 
 export const listParentExams = async (req: Request, res: Response) => {
   const auth = requireAuth(req);
-  const { childId } = req.query;
+  const { childId, academicYearId } = req.query;
   const { child } = await requireChildAccess(auth.userId, typeof childId === 'string' ? childId : undefined);
+  const yearId = typeof academicYearId === 'string' && academicYearId.trim() ? academicYearId.trim() : null;
 
   const exams = await prisma.exam.findMany({
     where: {
       schoolId: child.schoolId,
-      classId: child.classId ?? undefined,
-      sectionId: child.sectionId ?? undefined,
+      academicYearId: yearId ?? child.academicYearId,
       status: { in: ['PUBLISHED', 'CLOSED'] },
+      AND: [
+        {
+          OR: [
+            { classId: child.classId ?? undefined },
+            { classId: null },
+          ],
+        },
+        {
+          OR: [
+            { sectionId: child.sectionId ?? undefined },
+            { sectionId: null },
+          ],
+        },
+      ],
     },
     orderBy: { createdAt: 'desc' },
   });
 
   const marks = await prisma.mark.findMany({
-    where: { studentId: child.id },
+    where: { studentId: child.id, status: 'LOCKED' },
     include: { examPaper: { select: { examId: true } } },
   });
   const marksByExam = new Set(marks.map((mark) => mark.examPaper.examId));
@@ -192,6 +206,9 @@ export const listParentExams = async (req: Request, res: Response) => {
       name: exam.name,
       status: exam.status,
       resultStatus: marksByExam.has(exam.id) ? 'Published' : 'Pending',
+      scheduledAt: exam.scheduledAt,
+      academicYearId: exam.academicYearId,
+      type: exam.type,
     })),
   );
 };
@@ -218,6 +235,104 @@ export const listParentSubjects = async (req: Request, res: Response) => {
   res.status(200).json(subjects.map((subject) => ({ id: subject.id, name: subject.name })));
 };
 
+export const getParentResults = async (req: Request, res: Response) => {
+  const auth = requireAuth(req);
+  const { childId } = req.query;
+  const { child } = await requireChildAccess(auth.userId, typeof childId === 'string' ? childId : undefined);
+
+  const examTypeRows = await prisma.examTypeConfig.findMany({
+    where: { schoolId: child.schoolId },
+    select: { code: true, name: true, isActive: true },
+  });
+  const examTypeMap = new Map(examTypeRows.map((row) => [row.code, row]));
+
+  const marks = await prisma.mark.findMany({
+    where: { studentId: child.id, status: 'LOCKED' },
+    include: {
+      examPaper: {
+        include: {
+          subject: { select: { id: true, name: true } },
+          exam: true,
+        },
+      },
+    },
+    orderBy: { createdAt: 'desc' },
+  });
+
+  const grouped = new Map<string, {
+    examId: string;
+    examName: string;
+    examType: string;
+    examTypeCode: string;
+    examTypeActive: boolean | null;
+    examDate: string | null;
+    resultPublishAt: string | null;
+    academicYearId: string;
+    classId: string | null;
+    sectionId: string | null;
+    subjects: Array<{
+      subjectId: string;
+      subjectName: string;
+      marks: number;
+      maxMarks: number;
+      passMarks: number;
+      grade?: string | null;
+      scheduledAt: string | null;
+    }>;
+    totalMarks: number;
+    totalMaxMarks: number;
+  }>();
+
+  marks.forEach((mark) => {
+    const exam = mark.examPaper.exam;
+    if (!exam) return;
+    const existing = grouped.get(exam.id);
+    const examTypeInfo = examTypeMap.get(exam.type);
+    const subjectRow = {
+      subjectId: mark.examPaper.subjectId,
+      subjectName: mark.examPaper.subject?.name ?? 'Subject',
+      marks: mark.marks,
+      maxMarks: mark.examPaper.maxMarks,
+      passMarks: mark.examPaper.passMarks,
+      grade: mark.grade ?? null,
+      scheduledAt: mark.examPaper.scheduledAt ? mark.examPaper.scheduledAt.toISOString() : null,
+    };
+
+    if (!existing) {
+      grouped.set(exam.id, {
+        examId: exam.id,
+        examName: exam.name,
+        examType: examTypeInfo?.name ?? exam.type,
+        examTypeCode: exam.type,
+        examTypeActive: examTypeInfo?.isActive ?? null,
+        examDate: exam.scheduledAt ? exam.scheduledAt.toISOString() : null,
+        resultPublishAt: exam.resultPublishAt ? exam.resultPublishAt.toISOString() : null,
+        academicYearId: exam.academicYearId,
+        classId: exam.classId ?? null,
+        sectionId: exam.sectionId ?? null,
+        subjects: [subjectRow],
+        totalMarks: mark.marks,
+        totalMaxMarks: mark.examPaper.maxMarks,
+      });
+      return;
+    }
+
+    existing.subjects.push(subjectRow);
+    existing.totalMarks += mark.marks;
+    existing.totalMaxMarks += mark.examPaper.maxMarks;
+  });
+
+  const items = Array.from(grouped.values()).map((entry) => ({
+    ...entry,
+    percentage: entry.totalMaxMarks ? Math.round((entry.totalMarks / entry.totalMaxMarks) * 100) : null,
+  }));
+
+  res.status(200).json({
+    child,
+    items,
+  });
+};
+
 export const getParentAttendance = async (req: Request, res: Response) => {
   const auth = requireAuth(req);
   const { childId, month } = req.query;
@@ -228,7 +343,7 @@ export const getParentAttendance = async (req: Request, res: Response) => {
   const end = new Date(start);
   end.setMonth(start.getMonth() + 1);
 
-  const records = await prisma.attendanceRecord.findMany({
+  const records = await prisma.studentAttendanceRecord.findMany({
     where: {
       studentId: child.id,
       session: { date: { gte: start, lt: end } },
@@ -236,17 +351,39 @@ export const getParentAttendance = async (req: Request, res: Response) => {
     include: { session: { select: { date: true } } },
   });
 
-  const byDate = new Map<string, string>();
+  const statusRank: Record<string, number> = {
+    Absent: 4,
+    Late: 3,
+    'Half Day': 2,
+    Present: 1,
+  };
+  const normalizeStatus = (status: string) => {
+    if (status === 'ABSENT') return 'Absent';
+    if (status === 'LATE') return 'Late';
+    if (status === 'HALF_DAY') return 'Half Day';
+    return 'Present';
+  };
+
+  const byDate = new Map<string, { status: string; remark?: string | null }>();
   records.forEach((record) => {
-    const key = record.session.date.toISOString().slice(0, 10);
+    const sessionDate = record.session.date;
+    const key = `${sessionDate.getUTCFullYear()}-${String(sessionDate.getUTCMonth() + 1).padStart(2, '0')}-${String(
+      sessionDate.getUTCDate(),
+    ).padStart(2, '0')}`;
+    const nextStatus = normalizeStatus(record.status);
     const existing = byDate.get(key);
-    if (!existing || existing === 'Absent') {
-      const status = record.status === 'ABSENT' ? 'Absent' : 'Present';
-      byDate.set(key, status);
+    const nextRank = statusRank[nextStatus] ?? 0;
+    const existingRank = existing ? statusRank[existing.status] ?? 0 : 0;
+    if (!existing || nextRank > existingRank || (nextRank === existingRank && !existing.remark && record.remarks)) {
+      byDate.set(key, { status: nextStatus, remark: record.remarks ?? null });
     }
   });
 
-  const calendar = Array.from(byDate.entries()).map(([date, status]) => ({ date, status }));
+  const calendar = Array.from(byDate.entries()).map(([date, entry]) => ({
+    date,
+    status: entry.status,
+    remark: entry.remark ?? null,
+  }));
   const presentDays = calendar.filter((entry) => entry.status === 'Present').length;
   const absentDays = calendar.filter((entry) => entry.status === 'Absent').length;
 

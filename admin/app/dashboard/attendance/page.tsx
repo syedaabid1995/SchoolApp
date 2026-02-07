@@ -83,6 +83,13 @@ export default function AttendancePage() {
     return approvalMatch && statusMatch;
   });
 
+  const selectedSchoolName = isSuperAdmin
+    ? schools?.items.find((school) => school.id === schoolId)?.name ?? 'All Schools'
+    : session?.schoolName ?? 'My School';
+
+  const dateLabel =
+    range.from && range.to ? `${range.from} to ${range.to}` : range.from || range.to || 'Today';
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-indigo-50/30 to-blue-50/40">
       <div className="relative overflow-hidden bg-gradient-to-r from-indigo-600 via-blue-600 to-sky-700 px-6 py-16 text-white">
@@ -98,7 +105,7 @@ export default function AttendancePage() {
               </div>
               <h1 className="mb-4 text-4xl font-bold tracking-tight sm:text-5xl">Daily Attendance</h1>
               <p className="max-w-2xl text-lg text-blue-100">
-                Review daily attendance, approve sessions, and inspect audits.
+                {`Review attendance for ${selectedSchoolName} (${dateLabel}), approve sessions, and inspect audits.`}
               </p>
             </div>
             <div className="hidden sm:flex items-center gap-3 rounded-2xl bg-white/10 px-5 py-4 backdrop-blur-sm">

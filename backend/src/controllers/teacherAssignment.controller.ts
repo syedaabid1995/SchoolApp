@@ -20,6 +20,7 @@ const activateSchema = z.object({
 const classSchema = z.object({
   teacherId: z.string().uuid(),
   classId: z.string().uuid(),
+  sectionId: z.string().uuid().optional(),
   schoolId: z.string().uuid().optional(),
 });
 
@@ -69,10 +70,18 @@ export const assignClass = async (req: Request, res: Response) => {
   if (!auth) throw new HttpError(401, 'Unauthorized');
   const actorRole = await resolveActorRole(auth.userId);
 
+  const sectionCount = await prisma.section.count({
+    where: { classId: payload.classId, class: { schoolId } },
+  });
+  if (sectionCount > 0 && !payload.sectionId) {
+    throw new HttpError(400, 'sectionId is required for classes with sections');
+  }
+
   const assignment = await assignTeacherToClass({
     schoolId,
     teacherId: payload.teacherId,
     classId: payload.classId,
+    sectionId: payload.sectionId,
     actorId: auth.userId,
     actorRole,
   });
@@ -89,10 +98,18 @@ export const unassignClass = async (req: Request, res: Response) => {
   if (!auth) throw new HttpError(401, 'Unauthorized');
   const actorRole = await resolveActorRole(auth.userId);
 
+  const sectionCount = await prisma.section.count({
+    where: { classId: payload.classId, class: { schoolId } },
+  });
+  if (sectionCount > 0 && !payload.sectionId) {
+    throw new HttpError(400, 'sectionId is required for classes with sections');
+  }
+
   const result = await unassignTeacherFromClass({
     schoolId,
     teacherId: payload.teacherId,
     classId: payload.classId,
+    sectionId: payload.sectionId,
     actorId: auth.userId,
     actorRole,
   });

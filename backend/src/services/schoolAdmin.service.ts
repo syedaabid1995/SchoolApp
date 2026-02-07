@@ -11,6 +11,15 @@ export type SchoolCreateInput = {
   subscriptionPlan: 'STARTER' | 'STANDARD' | 'PREMIUM';
   status?: 'ACTIVE' | 'SUSPENDED';
   adminEmail?: string;
+  adminBankDetails?: {
+    accountHolderName?: string | null;
+    accountNumber?: string | null;
+    ifscCode?: string | null;
+    accountType?: string | null;
+    bankName?: string | null;
+    branchName?: string | null;
+    panNumber?: string | null;
+  };
 };
 
 export type SchoolUpdateInput = {
@@ -21,7 +30,29 @@ export type SchoolUpdateInput = {
   activeUsersCount?: number;
 };
 
-export const createSchoolAdmin = async (schoolId: string, adminEmail: string) => {
+type BankDetailsInput = {
+  accountHolderName?: string | null;
+  accountNumber?: string | null;
+  ifscCode?: string | null;
+  accountType?: string | null;
+  bankName?: string | null;
+  branchName?: string | null;
+  panNumber?: string | null;
+};
+
+const hasBankDetails = (details?: BankDetailsInput) =>
+  Boolean(
+    details &&
+      (details.accountHolderName ||
+        details.accountNumber ||
+        details.ifscCode ||
+        details.accountType ||
+        details.bankName ||
+        details.branchName ||
+        details.panNumber),
+  );
+
+export const createSchoolAdmin = async (schoolId: string, adminEmail: string, bankDetails?: BankDetailsInput) => {
   return prisma.$transaction(async (tx) => {
     const school = await tx.school.findFirst({
       where: { id: schoolId, deletedAt: null },
@@ -69,6 +100,21 @@ export const createSchoolAdmin = async (schoolId: string, adminEmail: string) =>
     await tx.userRole.create({
       data: { userId: adminUser.id, roleId: role.id },
     });
+
+    if (hasBankDetails(bankDetails)) {
+      await tx.userBankDetails.create({
+        data: {
+          userId: adminUser.id,
+          accountHolderName: bankDetails?.accountHolderName ?? null,
+          accountNumber: bankDetails?.accountNumber ?? null,
+          ifscCode: bankDetails?.ifscCode ?? null,
+          accountType: bankDetails?.accountType ?? null,
+          bankName: bankDetails?.bankName ?? null,
+          branchName: bankDetails?.branchName ?? null,
+          panNumber: bankDetails?.panNumber ?? null,
+        },
+      });
+    }
 
     return { adminUser, tempPassword };
   });
@@ -166,15 +212,16 @@ export const setSchoolAdminStatus = async (
 };
 
 export const createSchool = async (payload: SchoolCreateInput) => {
-  return prisma.$transaction(async (tx) => {
-    const school = await tx.school.create({
-      data: {
-        name: payload.name,
-        code: payload.code,
-        subscriptionPlan: payload.subscriptionPlan,
-        status: payload.status ?? 'ACTIVE',
-      },
-    });
+  try {
+    return await prisma.$transaction(async (tx) => {
+      const school = await tx.school.create({
+        data: {
+          name: payload.name,
+          code: payload.code,
+          subscriptionPlan: payload.subscriptionPlan,
+          status: payload.status ?? 'ACTIVE',
+        },
+      });
 
     const plan = await tx.subscriptionPlanDef.findUnique({
       where: { name: payload.subscriptionPlan },
@@ -259,8 +306,34 @@ export const createSchool = async (payload: SchoolCreateInput) => {
       data: { userId: adminUser.id, roleId: role.id },
     });
 
-    return { school, adminUser, tempPassword };
-  });
+    if (hasBankDetails(payload.adminBankDetails)) {
+      await tx.userBankDetails.create({
+        data: {
+          userId: adminUser.id,
+          accountHolderName: payload.adminBankDetails?.accountHolderName ?? null,
+          accountNumber: payload.adminBankDetails?.accountNumber ?? null,
+          ifscCode: payload.adminBankDetails?.ifscCode ?? null,
+          accountType: payload.adminBankDetails?.accountType ?? null,
+          bankName: payload.adminBankDetails?.bankName ?? null,
+          branchName: payload.adminBankDetails?.branchName ?? null,
+          panNumber: payload.adminBankDetails?.panNumber ?? null,
+        },
+      });
+    }
+
+      return { school, adminUser, tempPassword };
+    });
+  } catch (error) {
+    if (
+      error instanceof Prisma.PrismaClientKnownRequestError &&
+      error.code === 'P2002' &&
+      Array.isArray(error.meta?.target) &&
+      error.meta?.target.includes('code')
+    ) {
+      throw new HttpError(409, 'School code already exists');
+    }
+    throw error;
+  }
 };
 
 export const listSchools = async (params: {
@@ -268,10 +341,11 @@ export const listSchools = async (params: {
   limit: number;
   status?: 'ACTIVE' | 'SUSPENDED';
   query?: string;
+  includeDeleted?: boolean;
 }) => {
   const skip = (params.page - 1) * params.limit;
   const where: Prisma.SchoolWhereInput = {
-    deletedAt: null,
+    ...(params.includeDeleted ? {} : { deletedAt: null }),
     ...(params.status ? { status: params.status } : {}),
     ...(params.query
       ? {
@@ -365,6 +439,17 @@ export const softDeleteSchool = async (id: string) => {
     data: {
       deletedAt: new Date(),
       status: 'SUSPENDED',
+    },
+  });
+};
+
+export const restoreSchool = async (id: string) => {
+  return prisma.school.update({
+    where: { id },
+    data: {
+      deletedAt: null,
+      status: 'ACTIVE',
+      statusReason: null,
     },
   });
 };

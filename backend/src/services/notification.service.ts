@@ -19,8 +19,8 @@ const renderTemplate = (body: string, data: Record<string, unknown>) => {
 
 export const sendNotification = async (payload: NotificationPayload) => {
   let templateId: string | undefined;
-  let subject: string | undefined;
-  let body: string | undefined;
+  let subject = payload.data.subject ? String(payload.data.subject) : undefined;
+  let body = payload.data.body ? String(payload.data.body) : undefined;
 
   if (payload.templateKey) {
     const template = await prisma.notificationTemplate.findUnique({
@@ -29,7 +29,7 @@ export const sendNotification = async (payload: NotificationPayload) => {
 
     if (template) {
       templateId = template.id;
-      subject = template.subject ?? undefined;
+      subject = template.subject ?? subject;
       body = renderTemplate(template.body, payload.data);
     }
   }
@@ -50,6 +50,7 @@ export const sendNotification = async (payload: NotificationPayload) => {
       logId: log.id,
       to: payload.data.to ? String(payload.data.to) : '',
       channel: payload.channel,
+      schoolId: payload.schoolId ?? null,
       payload: { to: payload.data.to ? String(payload.data.to) : '', subject, body },
     });
   }

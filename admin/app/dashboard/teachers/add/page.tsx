@@ -2,7 +2,6 @@
 
 import { useMemo, useState } from 'react';
 import { useMutation, useQuery } from '@tanstack/react-query';
-import { createTeacher } from '../../../../services/teacher.service';
 import { createSchoolUser } from '../../../../services/user.service';
 import { listSchools } from '../../../../services/school.service';
 import { getSession } from '../../../../services/auth.service';
@@ -58,7 +57,12 @@ export default function AddTeacherPage() {
     branchName: '',
     panNumber: '',
   });
-  const [createdTeacher, setCreatedTeacher] = useState<{ email: string; tempPassword: string } | null>(null);
+  const [createdTeacher, setCreatedTeacher] = useState<{
+    email: string;
+    tempPassword: string;
+    manualShareRequired?: boolean;
+    manualShareUrl?: string | null;
+  } | null>(null);
   const [schoolId, setSchoolId] = useState('');
   const [stepError, setStepError] = useState('');
   const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -73,30 +77,10 @@ export default function AddTeacherPage() {
     enabled: isSuperAdmin,
   });
 
-  const isTeacherRole = form.roleName === 'TEACHER';
+  const isBankingRole = true;
 
   const createMutation = useMutation({
     mutationFn: async () => {
-      if (isTeacherRole) {
-        return createTeacher({
-          email: form.email,
-          firstName: form.firstName,
-          lastName: form.lastName,
-          employeeNo: form.employeeNo || null,
-          phone: form.phone || null,
-          address: form.address || null,
-          bankDetails: {
-            accountHolderName: form.accountHolderName || null,
-            accountNumber: form.accountNumber || null,
-            ifscCode: form.ifscCode || null,
-            accountType: form.accountType || null,
-            bankName: form.bankName === 'Others' ? form.customBankName : form.bankName || null,
-            branchName: form.branchName || null,
-            panNumber: form.panNumber || null,
-          },
-          schoolId: effectiveSchoolId,
-        });
-      }
       return createSchoolUser({
         email: form.email,
         roleName: form.roleName,
@@ -105,12 +89,28 @@ export default function AddTeacherPage() {
         employeeNo: form.employeeNo || null,
         phone: form.phone || null,
         address: form.address || null,
+        bankDetails: isBankingRole
+          ? {
+              accountHolderName: form.accountHolderName || null,
+              accountNumber: form.accountNumber || null,
+              ifscCode: form.ifscCode || null,
+              accountType: form.accountType || null,
+              bankName: form.bankName === 'Others' ? form.customBankName : form.bankName || null,
+              branchName: form.branchName || null,
+              panNumber: form.panNumber || null,
+            }
+          : undefined,
         schoolId: effectiveSchoolId,
       });
     },
     onSuccess: (result) => {
       if (result?.user?.email && result?.tempPassword) {
-        setCreatedTeacher({ email: result.user.email, tempPassword: result.tempPassword });
+        setCreatedTeacher({
+          email: result.user.email,
+          tempPassword: result.tempPassword,
+          manualShareRequired: result.manualShareRequired,
+          manualShareUrl: result.manualShareUrl,
+        });
         notify.success('Teacher created successfully!', `Account created for ${result.user.email}`);
       } else {
         setCreatedTeacher(null);
@@ -182,7 +182,7 @@ export default function AddTeacherPage() {
       else if (!/^[0-9]{10}$/.test(form.phone.trim())) error = 'Enter a valid 10-digit phone number.';
       else if (!form.address.trim()) error = 'Address is required.';
     }
-    if (step === 3 && isTeacherRole) {
+    if (step === 3 && isBankingRole) {
       if (form.accountNumber && !form.ifscCode.trim()) error = 'IFSC code is required when account number is provided.';
       else if (form.ifscCode && !form.accountNumber.trim()) error = 'Account number is required when IFSC code is provided.';
       else if (form.ifscCode && !/^[A-Z]{4}0[A-Z0-9]{6}$/.test(form.ifscCode.trim())) error = 'Enter a valid IFSC code (AAAA0BBBBBB format).';
@@ -210,12 +210,12 @@ export default function AddTeacherPage() {
     else if (!form.phone.trim()) error = 'Phone is required.';
     else if (!/^[0-9]{10}$/.test(form.phone.trim())) error = 'Enter a valid 10-digit phone number.';
     else if (!form.address.trim()) error = 'Address is required.';
-    else if (isTeacherRole && form.accountNumber && !form.ifscCode.trim()) error = 'IFSC code is required when account number is provided.';
-    else if (isTeacherRole && form.ifscCode && !form.accountNumber.trim()) error = 'Account number is required when IFSC code is provided.';
-    else if (isTeacherRole && form.ifscCode && !/^[A-Z]{4}0[A-Z0-9]{6}$/.test(form.ifscCode.trim())) error = 'Enter a valid IFSC code (AAAA0BBBBBB format).';
-    else if (isTeacherRole && form.accountNumber && (form.accountNumber.length < 9 || form.accountNumber.length > 18)) error = 'Account number must be 9-18 digits.';
-    else if (isTeacherRole && form.panNumber && !/^[A-Z]{5}[0-9]{4}[A-Z]{1}$/.test(form.panNumber.trim())) error = 'Enter a valid PAN number (ABCDE1234F).';
-    else if (isTeacherRole && form.bankName === 'Others' && !form.customBankName.trim()) error = 'Enter bank name when Others is selected.';
+    else if (isBankingRole && form.accountNumber && !form.ifscCode.trim()) error = 'IFSC code is required when account number is provided.';
+    else if (isBankingRole && form.ifscCode && !form.accountNumber.trim()) error = 'Account number is required when IFSC code is provided.';
+    else if (isBankingRole && form.ifscCode && !/^[A-Z]{4}0[A-Z0-9]{6}$/.test(form.ifscCode.trim())) error = 'Enter a valid IFSC code (AAAA0BBBBBB format).';
+    else if (isBankingRole && form.accountNumber && (form.accountNumber.length < 9 || form.accountNumber.length > 18)) error = 'Account number must be 9-18 digits.';
+    else if (isBankingRole && form.panNumber && !/^[A-Z]{5}[0-9]{4}[A-Z]{1}$/.test(form.panNumber.trim())) error = 'Enter a valid PAN number (ABCDE1234F).';
+    else if (isBankingRole && form.bankName === 'Others' && !form.customBankName.trim()) error = 'Enter bank name when Others is selected.';
     else if (isSuperAdmin && !effectiveSchoolId) error = 'Select a school before creating.';
     setStepError(error);
     if (error) notify.error('Validation error', error);
@@ -344,7 +344,6 @@ export default function AddTeacherPage() {
                     className="w-full rounded-xl border border-gray-300 px-4 py-3 text-sm focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-200"
                   />
                 </div>
-                {isTeacherRole ? (
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">Employee Number</label>
                   <input
@@ -354,7 +353,6 @@ export default function AddTeacherPage() {
                     className="w-full rounded-xl border border-gray-300 px-4 py-3 text-sm focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-200"
                   />
                 </div>
-                ) : null}
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">First Name *</label>
                   <input
@@ -416,11 +414,11 @@ export default function AddTeacherPage() {
             <div className="space-y-6">
               <div className="text-center">
                 <h2 className="text-2xl font-bold text-gray-900">Banking Details</h2>
-                <p className="mt-2 text-gray-600">Optional salary account information</p>
+                <p className="mt-2 text-gray-600">Optional account information</p>
               </div>
-              {!isTeacherRole ? (
+              {!isBankingRole ? (
                 <div className="rounded-xl border border-slate/200 bg-slate-50 p-6 text-center text-sm text-slate">
-                  Banking details are only captured for Teacher category.
+                  Banking details are captured for Teacher and School Admin categories.
                 </div>
               ) : (
               <div className="grid gap-6 md:grid-cols-2">
@@ -644,6 +642,16 @@ export default function AddTeacherPage() {
                 <p className="text-sm text-gray-600 mb-2">Login credentials:</p>
                 <p className="font-mono text-sm"><span className="font-semibold">Email:</span> {createdTeacher.email}</p>
                 <p className="font-mono text-sm"><span className="font-semibold">Password:</span> {createdTeacher.tempPassword}</p>
+                {createdTeacher.manualShareUrl ? (
+                  <a
+                    href={createdTeacher.manualShareUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="mt-3 inline-flex items-center gap-1 rounded-lg border border-emerald-300 px-2 py-1 text-xs font-semibold text-emerald-800"
+                  >
+                    Share via WhatsApp
+                  </a>
+                ) : null}
               </div>
             </div>
           </div>

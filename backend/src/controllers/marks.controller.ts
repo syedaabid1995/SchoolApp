@@ -28,8 +28,7 @@ const uploadMarksSchema = z.object({
         studentId: z.string().uuid(),
         marks: z.number().min(0),
       }),
-    )
-    .min(1),
+    ),
   status: z.enum(['DRAFT', 'SUBMITTED', 'LOCKED']).optional(),
   schoolId: z.string().uuid().optional(),
 });
@@ -117,6 +116,21 @@ export const uploadMarks = async (req: Request, res: Response) => {
 
   if (!paper) {
     throw new HttpError(404, 'Exam paper not found');
+  }
+  if (payload.entries.length === 0) {
+    await logAudit(req, {
+      schoolId,
+      entityType: 'MARKS',
+      entityId: payload.examPaperId,
+      action: 'UPLOAD',
+      afterState: {
+        examPaperId: payload.examPaperId,
+        status,
+        entries: 0,
+      },
+    });
+    res.status(200).json({ results: [] });
+    return;
   }
 
   const results = await prisma.$transaction(async (tx) => {

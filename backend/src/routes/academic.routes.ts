@@ -34,6 +34,7 @@ import {
   updateSubject,
   deleteSubject,
 } from '../controllers/subject.controller';
+import { createExamType, listExamTypes, updateExamType } from '../controllers/exam-type.controller';
 import { authMiddleware } from '../middlewares/auth.middleware';
 
 export const academicRouter = Router();
@@ -69,3 +70,7 @@ academicRouter.get('/subjects', listSubjects);
 academicRouter.get('/subjects/:id', getSubject);
 academicRouter.patch('/subjects/:id', updateSubject);
 academicRouter.delete('/subjects/:id', deleteSubject);
+
+academicRouter.get('/exam-types', listExamTypes);
+academicRouter.post('/exam-types', createExamType);
+academicRouter.patch('/exam-types/:id', updateExamType);

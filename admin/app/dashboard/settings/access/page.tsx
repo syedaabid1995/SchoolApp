@@ -61,17 +61,27 @@ export default function AccessControlPage() {
   const notify = useNotify();
   const queryClient = useQueryClient();
   const [selectedRole, setSelectedRole] = useState<ManagedRole>('TEACHER');
+  const [selectedEmployeeId, setSelectedEmployeeId] = useState('');
   const [editedCodes, setEditedCodes] = useState<string[]>([]);
 
-  const { data: session } = useQuery({ queryKey: ['session'], queryFn: getSession });
+  const { data: session } = useQuery({
+    queryKey: ['session'],
+    queryFn: getSession,
+    refetchOnWindowFocus: false,
+    refetchOnMount: false,
+    staleTime: 5 * 60_000,
+  });
   const schoolId = session?.schoolId ?? undefined;
 
   const canManage = session?.role === 'SCHOOL_ADMIN';
 
   const { data, isLoading } = useQuery({
-    queryKey: ['employee-permissions', selectedRole, schoolId],
-    queryFn: () => getEmployeePermissions(selectedRole, schoolId),
+    queryKey: ['employee-permissions', selectedRole, schoolId, selectedEmployeeId],
+    queryFn: () => getEmployeePermissions(selectedRole, schoolId, selectedEmployeeId || undefined),
     enabled: Boolean(canManage && schoolId),
+    refetchOnWindowFocus: false,
+    refetchOnMount: false,
+    staleTime: 60_000,
   });
 
   const groupedPermissions = useMemo(() => {
@@ -94,6 +104,7 @@ export default function AccessControlPage() {
         roleName: selectedRole,
         enabledCodes: editedCodes,
         schoolId,
+        userId: selectedEmployeeId || undefined,
       }),
     onSuccess: async () => {
       notify.success('Permissions updated');
@@ -142,13 +153,18 @@ export default function AccessControlPage() {
           <p className="text-slate-600 text-lg">
             Manage role-based permissions and control access to different parts of the system.
           </p>
+          {data?.planName ? (
+            <p className="mt-3 inline-flex items-center rounded-full border border-blue-100 bg-blue-50 px-3 py-1 text-xs font-medium text-blue-700">
+              Your current plan: {data.planName}
+            </p>
+          ) : null}
         </div>
       </section>
 
       {/* Role Selection & Controls */}
       <section className="rounded-2xl border border-slate/10 bg-white p-6 shadow-sm hover:shadow-md transition-shadow">
         <div className="grid gap-6 md:grid-cols-3">
-          <div className="md:col-span-2">
+          <div className="space-y-6 md:col-span-2">
             <label className="flex flex-col gap-3">
               <span className="font-semibold text-slate-700 flex items-center gap-2">
                 <UsersIcon />
@@ -157,10 +173,13 @@ export default function AccessControlPage() {
               <div className="relative">
                 <select
                   value={selectedRole}
-                  onChange={(event) => setSelectedRole(event.target.value as ManagedRole)}
+                  onChange={(event) => {
+                    setSelectedRole(event.target.value as ManagedRole);
+                    setSelectedEmployeeId('');
+                  }}
                   className="w-full rounded-xl border border-slate-200 px-4 py-3 text-sm font-medium bg-white hover:border-blue-300 focus:border-blue-500 focus:ring-2 focus:ring-blue-100 transition-colors appearance-none cursor-pointer"
                 >
-                  {(['SCHOOL_ADMIN', ...EMPLOYEE_MANAGED_ROLES] as ManagedRole[]).map((role) => (
+                  {(EMPLOYEE_MANAGED_ROLES as ManagedRole[]).map((role) => (
                     <option key={role} value={role}>
                       {roleLabels[role]}
                     </option>
@@ -176,6 +195,41 @@ export default function AccessControlPage() {
                 <div className="w-2 h-2 rounded-full bg-current opacity-60"></div>
                 {roleLabels[selectedRole]}
               </div>
+            </label>
+
+            <label className="flex flex-col gap-3">
+              <span className="font-semibold text-slate-700 flex items-center gap-2">
+                <UsersIcon />
+                Select Employee (optional)
+              </span>
+              <div className="relative">
+                <select
+                  value={selectedEmployeeId}
+                  onChange={(event) => setSelectedEmployeeId(event.target.value)}
+                  className="w-full rounded-xl border border-slate-200 px-4 py-3 text-sm font-medium bg-white hover:border-blue-300 focus:border-blue-500 focus:ring-2 focus:ring-blue-100 transition-colors appearance-none cursor-pointer"
+                >
+                  <option value="">All {roleLabels[selectedRole]} (role default)</option>
+                  {(data?.employees ?? []).map((employee) => (
+                    <option key={employee.id} value={employee.id}>
+                      {employee.displayName} · {employee.email}
+                    </option>
+                  ))}
+                </select>
+                <div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none">
+                  <svg className="w-4 h-4 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                  </svg>
+                </div>
+              </div>
+              {selectedEmployeeId ? (
+                <div className="inline-flex items-center gap-2 rounded-full border border-blue-200 bg-blue-50 px-3 py-1 text-xs font-medium text-blue-700 w-fit">
+                  Override active for selected employee
+                </div>
+              ) : (
+                <div className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-medium text-slate-600 w-fit">
+                  Role default permissions (applies to all)
+                </div>
+              )}
             </label>
           </div>
           <div className="flex items-end justify-end">
@@ -353,9 +407,9 @@ export default function AccessControlPage() {
                           type="button"
                           onClick={() => toggleCode(permission.code)}
                           className={`relative h-6 w-11 rounded-full p-1 transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-offset-2 ${
-                            enabled 
-                              ? 'bg-green-500 focus:ring-green-500' 
-                              : 'bg-slate-300 focus:ring-slate-500'
+                            enabled
+                              ? 'bg-green-500 focus:ring-green-500'
+                              : 'bg-gray-500 focus:ring-gray-500'
                           }`}
                         >
                           <span

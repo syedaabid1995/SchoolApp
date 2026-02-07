@@ -5,6 +5,7 @@ export type School = {
   name: string;
   code: string;
   status: 'ACTIVE' | 'SUSPENDED';
+  deletedAt?: string | null;
   subscriptionPlan: string;
   adminEmail?: string | null;
   adminEmails?: string[];
@@ -50,9 +51,13 @@ export type CreateSchoolResponse = {
   school: School;
   adminUser?: SchoolAdminUser;
   tempPassword?: string;
+  whatsappSentTo?: string | null;
+  manualShareRequired?: boolean;
+  manualShareText?: string | null;
+  manualShareUrl?: string | null;
 };
 
-export const listSchools = async (params?: { page?: number; limit?: number; status?: string; query?: string }) => {
+export const listSchools = async (params?: { page?: number; limit?: number; status?: string; query?: string; includeDeleted?: boolean }) => {
   const normalized = params
     ? {
         ...params,
@@ -100,8 +105,20 @@ export const deleteSchool = async (id: string) => {
   return data;
 };
 
+export const restoreSchool = async (id: string) => {
+  const { data } = await api.post<School>(`/admin/schools/${id}/restore`);
+  return data;
+};
+
 export const createSchoolAdmin = async (schoolId: string, adminEmail: string) => {
-  const { data } = await api.post<{ adminUser: SchoolAdminUser; tempPassword: string }>(
+  const { data } = await api.post<{
+    adminUser: SchoolAdminUser;
+    tempPassword: string;
+    whatsappSentTo?: string | null;
+    manualShareRequired?: boolean;
+    manualShareText?: string | null;
+    manualShareUrl?: string | null;
+  }>(
     `/admin/schools/${schoolId}/admins`,
     { adminEmail },
   );

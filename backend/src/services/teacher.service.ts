@@ -1,6 +1,7 @@
 import crypto from 'crypto';
 import { Prisma } from '@prisma/client';
 import { prisma } from '../config/db';
+import { HttpError } from '../middlewares/error.middleware';
 import { hashPassword } from '../utils/password';
 import { incrementUsage, enforceLimits } from './subscription.service';
 
@@ -56,65 +57,78 @@ export const createTeacher = async (payload: TeacherCreateInput) => {
   const passwordHash = await hashPassword(tempPassword);
   const mustChangePassword = !payload.password;
 
-  const teacher = await prisma.$transaction(async (tx) => {
-    const user = await tx.user.create({
-      data: {
-        schoolId: payload.schoolId,
-        email: payload.email,
-        passwordHash,
-        status: 'ACTIVE',
-        mustChangePassword,
-        roles: {
-          create: [{ roleId: teacherRole.id }],
-        },
-      },
-    });
-
-    const profile = await tx.teacherProfile.create({
-      data: {
-        schoolId: payload.schoolId,
-        userId: user.id,
-        firstName: payload.firstName,
-        lastName: payload.lastName,
-        employeeNo: payload.employeeNo ?? null,
-        phone: payload.phone ?? null,
-        address: payload.address ?? null,
-        isActive: true,
-      },
-    });
-
-    if (payload.bankDetails) {
-      const details = payload.bankDetails;
-      const hasAny =
-        details.accountHolderName ||
-        details.accountNumber ||
-        details.ifscCode ||
-        details.accountType ||
-        details.bankName ||
-        details.branchName ||
-        details.panNumber;
-      if (hasAny) {
-        await tx.teacherBankDetails.create({
-          data: {
-            teacherId: profile.id,
-            accountHolderName: details.accountHolderName ?? null,
-            accountNumber: details.accountNumber ?? null,
-            ifscCode: details.ifscCode ?? null,
-            accountType: details.accountType ?? null,
-            bankName: details.bankName ?? null,
-            branchName: details.branchName ?? null,
-            panNumber: details.panNumber ?? null,
+  try {
+    const teacher = await prisma.$transaction(async (tx) => {
+      const user = await tx.user.create({
+        data: {
+          schoolId: payload.schoolId,
+          email: payload.email,
+          passwordHash,
+          status: 'ACTIVE',
+          mustChangePassword,
+          roles: {
+            create: [{ roleId: teacherRole.id }],
           },
-        });
+        },
+      });
+
+      const profile = await tx.teacherProfile.create({
+        data: {
+          schoolId: payload.schoolId,
+          userId: user.id,
+          firstName: payload.firstName,
+          lastName: payload.lastName,
+          employeeNo: payload.employeeNo ?? null,
+          phone: payload.phone ?? null,
+          address: payload.address ?? null,
+          isActive: true,
+        },
+      });
+
+      if (payload.bankDetails) {
+        const details = payload.bankDetails;
+        const hasAny =
+          details.accountHolderName ||
+          details.accountNumber ||
+          details.ifscCode ||
+          details.accountType ||
+          details.bankName ||
+          details.branchName ||
+          details.panNumber;
+        if (hasAny) {
+          await tx.teacherBankDetails.create({
+            data: {
+              teacherId: profile.id,
+              accountHolderName: details.accountHolderName ?? null,
+              accountNumber: details.accountNumber ?? null,
+              ifscCode: details.ifscCode ?? null,
+              accountType: details.accountType ?? null,
+              bankName: details.bankName ?? null,
+              branchName: details.branchName ?? null,
+              panNumber: details.panNumber ?? null,
+            },
+          });
+        }
+      }
+
+      return { user, profile };
+    });
+
+    await incrementUsage(payload.schoolId, 'teachers', 1);
+
+    return { ...teacher, tempPassword: mustChangePassword ? tempPassword : null };
+  } catch (error) {
+    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002' && Array.isArray(error.meta?.target)) {
+      const target = error.meta.target as string[];
+      if (target.includes('school_id') && target.includes('email')) {
+        throw new HttpError(409, 'Teacher email already exists in this school');
+      }
+      if (target.includes('school_id') && target.includes('employee_no')) {
+        throw new HttpError(409, 'Employee number already exists in this school');
       }
     }
-
-    return { user, profile };
-  });
-
-  await incrementUsage(payload.schoolId, 'teachers', 1);
-
-  return { ...teacher, tempPassword: mustChangePassword ? tempPassword : null };
+    throw error;
+  }
 };
 
 export const listTeachers = async (params: {
@@ -146,7 +160,7 @@ export const listTeachers = async (params: {
       include: {
         user: { select: { email: true, status: true } },
         bankDetails: true,
-        classAssignments: { include: { class: true } },
+        classAssignments: { include: { class: true, section: true } },
         subjectAssignments: { include: { subject: true } },
       },
       orderBy: { createdAt: 'desc' },
@@ -167,11 +181,11 @@ export const listTeachers = async (params: {
 
 export const getTeacher = async (teacherId: string, schoolId: string) => {
   return prisma.teacherProfile.findFirst({
-    where: { id: teacherId, schoolId },
+    where: { schoolId, OR: [{ id: teacherId }, { userId: teacherId }] },
     include: {
       user: { select: { email: true, status: true } },
       bankDetails: true,
-      classAssignments: { include: { class: true } },
+      classAssignments: { include: { class: true, section: true } },
       subjectAssignments: { include: { subject: true } },
     },
   });
@@ -179,12 +193,12 @@ export const getTeacher = async (teacherId: string, schoolId: string) => {
 
 export const updateTeacher = async (teacherId: string, schoolId: string, payload: TeacherUpdateInput) => {
   const existing = await prisma.teacherProfile.findFirst({
-    where: { id: teacherId, schoolId },
+    where: { schoolId, OR: [{ id: teacherId }, { userId: teacherId }] },
     include: { user: true },
   });
 
   if (!existing) {
-    throw new Error('Teacher not found');
+    throw new Error('Employee not found');
   }
 
   const updated = await prisma.$transaction(async (tx) => {

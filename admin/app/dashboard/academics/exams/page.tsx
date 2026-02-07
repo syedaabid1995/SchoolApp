@@ -1,9 +1,9 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { listAcademicYears, listClasses, listSections, listSubjects } from '../../../../services/academic.service';
+import { listAcademicYears, listClasses, listExamTypes, listSections, listSubjects } from '../../../../services/academic.service';
 import { listSchools } from '../../../../services/school.service';
 import { getSession } from '../../../../services/auth.service';
 import { createExam, listExams } from '../../../../services/report.service';
@@ -21,9 +21,10 @@ type SubjectSelection = {
   include: boolean;
   maxMarks: string;
   passMarks: string;
+  scheduledAt: string;
 };
 
-const defaultMarks = { maxMarks: '100', passMarks: '35' };
+const defaultMarks = { maxMarks: '100', passMarks: '35', scheduledAt: '' };
 
 export default function ExamsPage() {
   const queryClient = useQueryClient();
@@ -32,10 +33,11 @@ export default function ExamsPage() {
   const [schoolId, setSchoolId] = useState('');
   const [examBasics, setExamBasics] = useState({
     name: '',
-    type: 'MIDTERM',
+    type: '',
     academicYearId: '',
     classId: '',
     sectionId: '',
+    examDate: '',
     resultPublishDate: '',
     examMode: 'MARKS',
   });
@@ -80,11 +82,22 @@ export default function ExamsPage() {
     queryFn: () => listSubjects({ schoolId: effectiveSchoolId }),
     enabled: Boolean(effectiveSchoolId),
   });
+  const { data: examTypes } = useQuery({
+    queryKey: ['exam-types', effectiveSchoolId],
+    queryFn: () => listExamTypes({ schoolId: effectiveSchoolId, activeOnly: true }),
+    enabled: Boolean(effectiveSchoolId),
+  });
   const { data: exams } = useQuery({
     queryKey: ['exams', effectiveSchoolId],
     queryFn: () => listExams(),
     enabled: Boolean(effectiveSchoolId),
   });
+
+  useEffect(() => {
+    if (!examBasics.type && examTypes?.length) {
+      setExamBasics((prev) => ({ ...prev, type: examTypes[0].code }));
+    }
+  }, [examBasics.type, examTypes]);
 
   const classLookup = useMemo(() => {
     const map = new Map<string, string>();
@@ -117,21 +130,28 @@ export default function ExamsPage() {
       createExam({
         name: examBasics.name.trim() || undefined,
         type: examBasics.type,
-        subjectIds: selectedSubjectIds,
+        subjectMappings: selectedSubjectIds.map((subjectId) => ({
+          subjectId,
+          maxMarks: Number(subjectMap[subjectId]?.maxMarks ?? defaultMarks.maxMarks),
+          passMarks: Number(subjectMap[subjectId]?.passMarks ?? defaultMarks.passMarks),
+          scheduledAt: subjectMap[subjectId]?.scheduledAt || examBasics.examDate,
+        })),
         academicYearId: examBasics.academicYearId,
         classId: examBasics.classId,
         sectionId: examBasics.sectionId || undefined,
-        scheduledAt: examBasics.resultPublishDate || undefined,
+        scheduledAt: examBasics.examDate || undefined,
+        resultPublishAt: examBasics.resultPublishDate || undefined,
         status: payload.status,
       }),
     onSuccess: (data, variables) => {
       setStep(1);
       setExamBasics({
         name: '',
-        type: 'MIDTERM',
+        type: '',
         academicYearId: '',
         classId: '',
         sectionId: '',
+        examDate: '',
         resultPublishDate: '',
         examMode: 'MARKS',
       });
@@ -159,15 +179,17 @@ export default function ExamsPage() {
     const next: Record<string, SubjectSelection> = {};
     filteredSubjects.forEach((subject) => {
       const existing = subjectMap[subject.id];
-      next[subject.id] = existing ?? { include: true, ...defaultMarks };
+      next[subject.id] = existing ?? { include: true, ...defaultMarks, scheduledAt: examBasics.examDate };
     });
     setSubjectMap(next);
   };
 
   const handleContinueFromBasics = () => {
     let error = '';
-    if (!examBasics.academicYearId) error = 'Select academic year.';
+    if (!examBasics.type) error = 'Select exam type.';
+    else if (!examBasics.academicYearId) error = 'Select academic year.';
     else if (!examBasics.classId) error = 'Select class.';
+    else if (!examBasics.examDate) error = 'Select exam date.';
     setStepError(error);
     if (error) {
       notify.error('Validation error', error);
@@ -185,6 +207,7 @@ export default function ExamsPage() {
         include: !prev[id]?.include,
         maxMarks: prev[id]?.maxMarks ?? defaultMarks.maxMarks,
         passMarks: prev[id]?.passMarks ?? defaultMarks.passMarks,
+        scheduledAt: prev[id]?.scheduledAt ?? examBasics.examDate,
       },
     }));
   };
@@ -196,6 +219,7 @@ export default function ExamsPage() {
         include: prev[id]?.include ?? true,
         maxMarks: field === 'maxMarks' ? value : prev[id]?.maxMarks ?? defaultMarks.maxMarks,
         passMarks: field === 'passMarks' ? value : prev[id]?.passMarks ?? defaultMarks.passMarks,
+        scheduledAt: prev[id]?.scheduledAt ?? examBasics.examDate,
       },
     }));
   };
@@ -203,7 +227,7 @@ export default function ExamsPage() {
   const resetSubjectMarks = (id: string) => {
     setSubjectMap((prev) => ({
       ...prev,
-      [id]: { include: prev[id]?.include ?? true, ...defaultMarks },
+      [id]: { include: prev[id]?.include ?? true, ...defaultMarks, scheduledAt: examBasics.examDate },
     }));
   };
 
@@ -346,9 +370,9 @@ export default function ExamsPage() {
           </div>
         )}
 
-        {/* Enhanced Stepper */}
-        <div className="mb-8 rounded-2xl bg-white p-6 shadow-lg ring-1 ring-gray-200">
-          <div className="flex items-center justify-center">
+        {/* Create Exam Form */}
+        <section className="mb-8 rounded-2xl bg-white p-6 shadow-lg ring-1 ring-gray-200">
+          <div className="mb-6 flex items-center justify-center">
             <div className="flex items-center space-x-8">
               {[
                 { id: 1, label: 'Exam Details', icon: 'M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z' },
@@ -394,84 +418,115 @@ export default function ExamsPage() {
               ))}
             </div>
           </div>
-        </div>
-
-        {/* Create Exam Form */}
-        <section className="mb-8 rounded-2xl bg-white p-6 shadow-lg ring-1 ring-gray-200">
           <h2 className="mb-6 text-xl font-semibold text-gray-900">Create New Exam</h2>
 
         {step === 1 ? (
           <div className="mt-4 space-y-4">
-            <div className="grid gap-3 md:grid-cols-2">
-              <input
-                value={examBasics.name}
-                onChange={(e) => setExamBasics({ ...examBasics, name: e.target.value })}
-                placeholder="Exam name"
-                className="rounded-lg border border-slate/20 px-3 py-2 text-sm"
-              />
-              <select
-                value={examBasics.type}
-                onChange={(e) => setExamBasics({ ...examBasics, type: e.target.value })}
-                className="rounded-lg border border-slate/20 px-3 py-2 text-sm"
-              >
-                <option value="MIDTERM">Mid Term</option>
-                <option value="QUIZ">Unit Test</option>
-                <option value="ASSIGNMENT">Monthly</option>
-                <option value="FINAL">Final</option>
-              </select>
-              <select
-                value={examBasics.academicYearId}
-                onChange={(e) => setExamBasics({ ...examBasics, academicYearId: e.target.value })}
-                className="rounded-lg border border-slate/20 px-3 py-2 text-sm"
-              >
-                <option value="">Select academic year</option>
-                {years?.map((year: { id: string; name: string }) => (
-                  <option key={year.id} value={year.id}>
-                    {year.name}
-                  </option>
-                ))}
-              </select>
-              <select
-                value={examBasics.classId}
-                onChange={(e) => setExamBasics({ ...examBasics, classId: e.target.value, sectionId: '' })}
-                className="rounded-lg border border-slate/20 px-3 py-2 text-sm"
-              >
-                <option value="">Select class</option>
-                {classes?.map((cls: { id: string; name: string }) => (
-                  <option key={cls.id} value={cls.id}>
-                    {cls.name}
-                  </option>
-                ))}
-              </select>
-              <select
-                value={examBasics.sectionId}
-                onChange={(e) => setExamBasics({ ...examBasics, sectionId: e.target.value })}
-                className="rounded-lg border border-slate/20 px-3 py-2 text-sm"
-              >
-                <option value="">All sections (optional)</option>
-                {sections
-                  ?.filter((section: { classId: string }) => section.classId === examBasics.classId)
-                  .map((section: { id: string; name: string }) => (
-                    <option key={section.id} value={section.id}>
-                      {section.name}
+            <div className="grid gap-4 md:grid-cols-2">
+              <div>
+                <label className="mb-1 block text-sm font-medium text-gray-700">Exam Name</label>
+                <input
+                  value={examBasics.name}
+                  onChange={(e) => setExamBasics({ ...examBasics, name: e.target.value })}
+                  placeholder="Exam name"
+                  className="w-full rounded-lg border border-slate/20 px-3 py-2 text-sm"
+                />
+              </div>
+              <div>
+                <label className="mb-1 block text-sm font-medium text-gray-700">Exam Type</label>
+                <select
+                  value={examBasics.type}
+                  onChange={(e) => setExamBasics({ ...examBasics, type: e.target.value })}
+                  className="w-full rounded-lg border border-slate/20 px-3 py-2 text-sm"
+                >
+                  {!examTypes?.length ? (
+                    <option value="">No exam types configured</option>
+                  ) : (
+                    examTypes.map((type: { id: string; code: string; name: string }) => (
+                      <option key={type.id} value={type.code}>
+                        {type.name}
+                      </option>
+                    ))
+                  )}
+                </select>
+              </div>
+              <div>
+                <label className="mb-1 block text-sm font-medium text-gray-700">Academic Year</label>
+                <select
+                  value={examBasics.academicYearId}
+                  onChange={(e) => setExamBasics({ ...examBasics, academicYearId: e.target.value })}
+                  className="w-full rounded-lg border border-slate/20 px-3 py-2 text-sm"
+                >
+                  <option value="">Select academic year</option>
+                  {years?.map((year: { id: string; name: string }) => (
+                    <option key={year.id} value={year.id}>
+                      {year.name}
                     </option>
                   ))}
-              </select>
-              <select
-                value={examBasics.examMode}
-                onChange={(e) => setExamBasics({ ...examBasics, examMode: e.target.value })}
-                className="rounded-lg border border-slate/20 px-3 py-2 text-sm"
-              >
-                <option value="MARKS">Marks</option>
-                <option value="GRADES">Grades</option>
-                <option value="MARKS_GRADES">Marks + Grades</option>
-              </select>
-              <input
-                type="date"
-                value={examBasics.resultPublishDate}
-                onChange={(e) => setExamBasics({ ...examBasics, resultPublishDate: e.target.value })}
-                className="rounded-lg border border-slate/20 px-3 py-2 text-sm"
-              />
+                </select>
+              </div>
+              <div>
+                <label className="mb-1 block text-sm font-medium text-gray-700">Class</label>
+                <select
+                  value={examBasics.classId}
+                  onChange={(e) => setExamBasics({ ...examBasics, classId: e.target.value, sectionId: '' })}
+                  className="w-full rounded-lg border border-slate/20 px-3 py-2 text-sm"
+                >
+                  <option value="">Select class</option>
+                  {classes?.map((cls: { id: string; name: string }) => (
+                    <option key={cls.id} value={cls.id}>
+                      {cls.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="mb-1 block text-sm font-medium text-gray-700">Section</label>
+                <select
+                  value={examBasics.sectionId}
+                  onChange={(e) => setExamBasics({ ...examBasics, sectionId: e.target.value })}
+                  className="w-full rounded-lg border border-slate/20 px-3 py-2 text-sm"
+                >
+                  <option value="">All sections (optional)</option>
+                  {sections
+                    ?.filter((section: { classId: string }) => section.classId === examBasics.classId)
+                    .map((section: { id: string; name: string }) => (
+                      <option key={section.id} value={section.id}>
+                        {section.name}
+                      </option>
+                    ))}
+                </select>
+              </div>
+              <div>
+                <label className="mb-1 block text-sm font-medium text-gray-700">Exam Mode</label>
+                <select
+                  value={examBasics.examMode}
+                  onChange={(e) => setExamBasics({ ...examBasics, examMode: e.target.value })}
+                  className="w-full rounded-lg border border-slate/20 px-3 py-2 text-sm"
+                >
+                  <option value="MARKS">Marks</option>
+                  <option value="GRADES">Grades</option>
+                  <option value="MARKS_GRADES">Marks + Grades</option>
+                </select>
+              </div>
+              <div>
+                <label className="mb-1 block text-sm font-medium text-gray-700">Exam Date</label>
+                <input
+                  type="date"
+                  value={examBasics.examDate}
+                  onChange={(e) => setExamBasics({ ...examBasics, examDate: e.target.value })}
+                  className="w-full rounded-lg border border-slate/20 px-3 py-2 text-sm"
+                />
+              </div>
+              <div>
+                <label className="mb-1 block text-sm font-medium text-gray-700">Result Publish Date</label>
+                <input
+                  type="date"
+                  value={examBasics.resultPublishDate}
+                  onChange={(e) => setExamBasics({ ...examBasics, resultPublishDate: e.target.value })}
+                  className="w-full rounded-lg border border-slate/20 px-3 py-2 text-sm"
+                />
+              </div>
             </div>
             <div className="flex gap-2">
               <button
@@ -506,6 +561,7 @@ export default function ExamsPage() {
                     <th>Include</th>
                     <th>Max Marks</th>
                     <th>Pass Marks</th>
+                    <th>Exam Date</th>
                     <th>Actions</th>
                   </tr>
                 </thead>
@@ -539,6 +595,25 @@ export default function ExamsPage() {
                           />
                         </td>
                         <td>
+                          <input
+                            type="date"
+                            className="w-36 rounded-md border border-slate/20 px-2 py-1 text-sm"
+                            value={selection.scheduledAt}
+                            onChange={(e) =>
+                              setSubjectMap((prev) => ({
+                                ...prev,
+                                [subject.id]: {
+                                  include: selection.include,
+                                  maxMarks: selection.maxMarks,
+                                  passMarks: selection.passMarks,
+                                  scheduledAt: e.target.value,
+                                },
+                              }))
+                            }
+                            disabled={!selection.include}
+                          />
+                        </td>
+                        <td>
                           <button
                             type="button"
                             className="text-xs font-semibold text-ink"
@@ -552,7 +627,7 @@ export default function ExamsPage() {
                   })}
                   {!filteredSubjects.length ? (
                     <tr>
-                      <td colSpan={5} className="py-6 text-center text-slate">
+                      <td colSpan={6} className="py-6 text-center text-slate">
                         No subjects found for this class and academic year.
                       </td>
                     </tr>
@@ -569,6 +644,13 @@ export default function ExamsPage() {
                 onClick={() => {
                   if (!selectedSubjectIds.length) {
                     const message = 'Select at least one subject.';
+                    setStepError(message);
+                    notify.error('Validation error', message);
+                    return;
+                  }
+                  const missingDates = selectedSubjectIds.filter((id) => !subjectMap[id]?.scheduledAt);
+                  if (missingDates.length) {
+                    const message = 'Set exam date for every selected subject.';
                     setStepError(message);
                     notify.error('Validation error', message);
                     return;

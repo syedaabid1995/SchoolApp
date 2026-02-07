@@ -13,8 +13,9 @@ export default function ParentSubjectsPage() {
     queryKey: ['parent-subjects', activeChild?.id],
     queryFn: () => listParentSubjects(activeChild?.id),
     enabled: Boolean(activeChild?.id),
-    refetchOnWindowFocus: true,
-    refetchOnMount: 'always',
+    refetchOnWindowFocus: false,
+    refetchOnMount: false,
+    staleTime: 5 * 60_000,
   });
 
   return (

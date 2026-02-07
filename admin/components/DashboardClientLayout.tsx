@@ -2,9 +2,7 @@
 import { useEffect, useState } from 'react';
 import { Sidebar } from './Sidebar';
 import { Header } from './Header';
-import { useQuery } from '@tanstack/react-query';
 import { getSession } from '../services/auth.service';
-import { NotificationProvider } from './NotificationProvider';
 import { usePathname, useRouter } from 'next/navigation';
 import { EMPLOYEE_MANAGED_ROLES, getRequiredPermissionForPath } from '../config/employee-permissions';
 
@@ -18,7 +16,16 @@ export default function DashboardClientLayout({
   email: string | null;
 }) {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
-  const { data: session } = useQuery({ queryKey: ['session'], queryFn: getSession });
+  const [session, setSession] = useState<{
+    role: string | null;
+    schoolId: string | null;
+    email: string | null;
+    subscriptionRestricted?: boolean;
+    mustChangePassword?: boolean;
+    displayName?: string | null;
+    schoolName?: string | null;
+    permissionCodes?: string[];
+  } | null>(null);
   const pathname = usePathname();
   const router = useRouter();
   const isSubscriptionRestricted = Boolean(session?.subscriptionRestricted);
@@ -42,6 +49,18 @@ export default function DashboardClientLayout({
     !isSuperAdmin || superAdminAllowedPaths.some((allowedPath) => pathname === allowedPath || pathname.startsWith(`${allowedPath}/`));
 
   useEffect(() => {
+    let mounted = true;
+    const loadSession = async () => {
+      const data = await getSession();
+      if (mounted) setSession(data);
+    };
+    void loadSession();
+    return () => {
+      mounted = false;
+    };
+  }, []);
+
+  useEffect(() => {
     if (isSubscriptionRestricted && pathname !== '/dashboard/plans') {
       router.replace('/dashboard/plans');
     }
@@ -55,44 +74,40 @@ export default function DashboardClientLayout({
 
   if (isSubscriptionRestricted) {
     return (
-      <NotificationProvider>
-        <main className="min-h-screen bg-sand p-4 sm:p-6">
-          <div className="mx-auto max-w-7xl animate-fade-in">{children}</div>
-        </main>
-      </NotificationProvider>
+      <main className="min-h-screen bg-sand p-4 sm:p-6">
+        <div className="mx-auto max-w-7xl animate-fade-in">{children}</div>
+      </main>
     );
   }
 
   if (isManagedEmployeeRole && !canAccessRoute) {
     return (
-      <NotificationProvider>
-        <div className="flex h-screen bg-sand">
-          <Sidebar
+      <div className="flex h-screen bg-sand">
+        <Sidebar
+          role={role}
+          isOpen={isSidebarOpen}
+          onClose={() => setIsSidebarOpen(false)}
+          schoolName={session?.schoolName ?? undefined}
+          permissionCodes={permissionCodes}
+        />
+        <div className="flex flex-1 flex-col h-screen">
+          <Header
             role={role}
-            isOpen={isSidebarOpen}
-            onClose={() => setIsSidebarOpen(false)}
-            schoolName={session?.schoolName ?? undefined}
+            email={email}
+            displayName={session && 'displayName' in session ? session.displayName ?? null : null}
             permissionCodes={permissionCodes}
+            onMenuToggle={() => setIsSidebarOpen(!isSidebarOpen)}
           />
-          <div className="flex flex-1 flex-col h-screen">
-            <Header
-              role={role}
-              email={email}
-              displayName={session && 'displayName' in session ? session.displayName ?? null : null}
-              permissionCodes={permissionCodes}
-              onMenuToggle={() => setIsSidebarOpen(!isSidebarOpen)}
-            />
-            <main className="flex-1 overflow-y-auto p-4 transition-all duration-200 sm:p-6">
-              <section className="mx-auto max-w-3xl rounded-2xl border border-slate/10 bg-white p-8 text-center">
-                <h1 className="text-2xl font-semibold text-ink">Permission Not Available</h1>
-                <p className="mt-2 text-sm text-slate">
-                  The requested page is not available for your role. Contact your school admin.
-                </p>
-              </section>
-            </main>
-          </div>
+          <main className="flex-1 overflow-y-auto p-4 transition-all duration-200 sm:p-6">
+            <section className="mx-auto max-w-3xl rounded-2xl border border-slate/10 bg-white p-8 text-center">
+              <h1 className="text-2xl font-semibold text-ink">Permission Not Available</h1>
+              <p className="mt-2 text-sm text-slate">
+                The requested page is not available for your role. Contact your school admin.
+              </p>
+            </section>
+          </main>
         </div>
-      </NotificationProvider>
+      </div>
     );
   }
 
@@ -101,35 +116,33 @@ export default function DashboardClientLayout({
   }
   
   return (
-    <NotificationProvider>
-      <div className="flex h-screen bg-sand">
-        <Sidebar 
+    <div className="flex h-screen bg-sand">
+      <Sidebar 
+        role={role} 
+        isOpen={isSidebarOpen} 
+        onClose={() => setIsSidebarOpen(false)}
+        schoolName={session?.schoolName ?? undefined}
+        permissionCodes={permissionCodes}
+      />
+      <div className="flex flex-1 flex-col h-screen">
+        <Header 
           role={role} 
-          isOpen={isSidebarOpen} 
-          onClose={() => setIsSidebarOpen(false)}
-          schoolName={session?.schoolName ?? undefined}
+          email={email} 
+          displayName={session && 'displayName' in session ? session.displayName ?? null : null}
           permissionCodes={permissionCodes}
+          onMenuToggle={() => setIsSidebarOpen(!isSidebarOpen)} 
         />
-        <div className="flex flex-1 flex-col h-screen">
-          <Header 
-            role={role} 
-            email={email} 
-            displayName={session && 'displayName' in session ? session.displayName ?? null : null}
-            permissionCodes={permissionCodes}
-            onMenuToggle={() => setIsSidebarOpen(!isSidebarOpen)} 
-          />
-          <main className="flex-1 overflow-y-auto p-4 transition-all duration-200 sm:p-6">
-            <div className="mx-auto max-w-7xl animate-fade-in">
-              {children}
-            </div>
-          </main>
-          <footer className="theme-footer border-t border-white/10 px-4 py-3 text-xs text-white/80 transition-all duration-200 sm:px-6 backdrop-blur-md flex-shrink-0">
-            <div className="mx-auto max-w-7xl">
-              TechStage IT • School Management Console
-            </div>
-          </footer>
-        </div>
+        <main className="flex-1 overflow-y-auto p-4 transition-all duration-200 sm:p-6">
+          <div className="mx-auto max-w-7xl animate-fade-in">
+            {children}
+          </div>
+        </main>
+        <footer className="theme-footer border-t border-white/10 px-4 py-3 text-xs text-white/80 transition-all duration-200 sm:px-6 backdrop-blur-md flex-shrink-0">
+          <div className="mx-auto max-w-7xl">
+            TechStage IT • School Management Console
+          </div>
+        </footer>
       </div>
-    </NotificationProvider>
+    </div>
   );
 }

@@ -36,14 +36,16 @@ export default function ParentPortalLayout({ children }: { children: React.React
   const { data: childrenData } = useQuery({
     queryKey: ['parent-children'],
     queryFn: listParentChildren,
-    refetchOnWindowFocus: true,
-    refetchOnMount: 'always',
+    refetchOnWindowFocus: false,
+    refetchOnMount: false,
+    staleTime: 5 * 60_000,
   });
   const { data: profile } = useQuery({
     queryKey: ['parent-profile'],
     queryFn: getParentProfile,
-    refetchOnWindowFocus: true,
-    refetchOnMount: 'always',
+    refetchOnWindowFocus: false,
+    refetchOnMount: false,
+    staleTime: 5 * 60_000,
   });
   const [activeChildId, setActiveChildId] = useState<string>('');
   const [sidebarOpen, setSidebarOpen] = useState(false);

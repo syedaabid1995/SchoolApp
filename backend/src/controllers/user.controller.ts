@@ -11,17 +11,33 @@ import {
   EMPLOYEE_PERMISSION_CATALOG,
   MANAGED_EMPLOYEE_ROLES,
   getEffectivePermissionCodesForRole,
+  getEffectivePermissionCodesForUser,
+  getPlanPermissionCodesForSchool,
   type ManagedEmployeeRole,
 } from '../utils/employeePermissions';
+import { sendAccountCreatedWhatsapp } from '../services/accountOnboardingWhatsapp.service';
+
+const bankDetailsSchema = z
+  .object({
+    accountHolderName: z.string().min(1).optional().nullable(),
+    accountNumber: z.string().min(1).optional().nullable(),
+    ifscCode: z.string().min(1).optional().nullable(),
+    accountType: z.string().min(1).optional().nullable(),
+    bankName: z.string().min(1).optional().nullable(),
+    branchName: z.string().min(1).optional().nullable(),
+    panNumber: z.string().min(1).optional().nullable(),
+  })
+  .optional();
 
 const createSchoolUserSchema = z.object({
   email: z.string().email(),
   roleName: z.enum(['SCHOOL_ADMIN', 'TEACHER', 'ACCOUNTANT', 'LIBRARIAN', 'STAFF']),
-  firstName: z.string().min(1).optional(),
-  lastName: z.string().min(1).optional(),
+  firstName: z.string().min(1),
+  lastName: z.string().min(1),
   employeeNo: z.string().min(1).optional().nullable(),
   phone: z.string().min(1).optional().nullable(),
   address: z.string().min(1).optional().nullable(),
+  bankDetails: bankDetailsSchema,
   schoolId: z.string().uuid().optional(),
 });
 
@@ -31,6 +47,7 @@ const updateEmployeePermissionsSchema = z.object({
   roleName: managedRoleSchema,
   enabledCodes: z.array(z.string()).default([]),
   schoolId: z.string().uuid().optional(),
+  userId: z.string().uuid().optional(),
 });
 
 export const getMe = async (req: Request, res: Response) => {
@@ -64,7 +81,7 @@ export const getMe = async (req: Request, res: Response) => {
   const displayName = teacherName || parentName || user.email;
   const permissionCodes =
     user.schoolId && role
-      ? await getEffectivePermissionCodesForRole(user.schoolId, role)
+      ? await getEffectivePermissionCodesForUser(user.schoolId, user.id, role)
       : [];
 
   res.status(200).json({
@@ -150,10 +167,6 @@ export const createSchoolUserApi = async (req: Request, res: Response) => {
   const schoolId = resolveSchoolId(req, payload.schoolId);
 
   if (payload.roleName === 'TEACHER') {
-    if (!payload.firstName || !payload.lastName) {
-      throw new HttpError(400, 'First name and last name are required for teachers');
-    }
-
     const result = await createTeacher({
       schoolId,
       email: payload.email,
@@ -172,6 +185,15 @@ export const createSchoolUserApi = async (req: Request, res: Response) => {
       afterState: { email: result.user.email, roleName: 'TEACHER' },
     });
 
+    const whatsapp = await sendAccountCreatedWhatsapp({
+      role: 'TEACHER',
+      schoolId,
+      email: result.user.email,
+      mobile: payload.phone ?? null,
+      tempPassword: result.tempPassword,
+      fullName: `${payload.firstName} ${payload.lastName}`.trim(),
+    });
+
     res.status(201).json({
       user: {
         id: result.user.id,
@@ -180,7 +202,12 @@ export const createSchoolUserApi = async (req: Request, res: Response) => {
         roleName: 'TEACHER',
         status: result.user.status,
       },
+      mappedSchoolId: schoolId,
       tempPassword: result.tempPassword,
+      whatsappSentTo: whatsapp.sentTo,
+      manualShareRequired: whatsapp.manualShareRequired,
+      manualShareText: whatsapp.manualShareText,
+      manualShareUrl: whatsapp.manualShareUrl,
     });
     return;
   }
@@ -231,19 +258,85 @@ export const createSchoolUserApi = async (req: Request, res: Response) => {
     afterState: { email: user.email, roleName: payload.roleName },
   });
 
+  const whatsapp =
+    payload.roleName === 'SCHOOL_ADMIN'
+      ? await sendAccountCreatedWhatsapp({
+          role: 'SCHOOL_ADMIN',
+          schoolId,
+          email: user.email,
+          mobile: payload.phone ?? null,
+          tempPassword,
+          fullName: payload.email,
+        })
+      : null;
+
+  const profile = await prisma.teacherProfile.create({
+    data: {
+      schoolId,
+      userId: user.id,
+      firstName: payload.firstName,
+      lastName: payload.lastName,
+      employeeNo: payload.employeeNo ?? null,
+      phone: payload.phone ?? null,
+      address: payload.address ?? null,
+      isActive: true,
+    },
+  });
+
+  if (
+    payload.bankDetails &&
+    (payload.bankDetails.accountHolderName ||
+      payload.bankDetails.accountNumber ||
+      payload.bankDetails.ifscCode ||
+      payload.bankDetails.accountType ||
+      payload.bankDetails.bankName ||
+      payload.bankDetails.branchName ||
+      payload.bankDetails.panNumber)
+  ) {
+    await prisma.teacherBankDetails.create({
+      data: {
+        teacherId: profile.id,
+        accountHolderName: payload.bankDetails.accountHolderName ?? null,
+        accountNumber: payload.bankDetails.accountNumber ?? null,
+        ifscCode: payload.bankDetails.ifscCode ?? null,
+        accountType: payload.bankDetails.accountType ?? null,
+        bankName: payload.bankDetails.bankName ?? null,
+        branchName: payload.bankDetails.branchName ?? null,
+        panNumber: payload.bankDetails.panNumber ?? null,
+      },
+    });
+  }
+
   res.status(201).json({
     user: {
       ...user,
       roleName: payload.roleName,
     },
+    mappedSchoolId: schoolId,
     tempPassword,
+    whatsappSentTo: whatsapp?.sentTo ?? null,
+    manualShareRequired: whatsapp?.manualShareRequired ?? false,
+    manualShareText: whatsapp?.manualShareText ?? null,
+    manualShareUrl: whatsapp?.manualShareUrl ?? null,
   });
 };
 
 export const listEmployeePermissionsApi = async (req: Request, res: Response) => {
   const roleName = managedRoleSchema.parse((req.query.roleName as string | undefined) ?? 'TEACHER');
   const schoolId = resolveSchoolId(req, req.query.schoolId as string | undefined);
-  const enabledCodes = await getEffectivePermissionCodesForRole(schoolId, roleName);
+  const userId = req.query.userId as string | undefined;
+  const planCodes = new Set(await getPlanPermissionCodesForSchool(schoolId));
+  const enabledCodes = userId
+    ? await getEffectivePermissionCodesForUser(schoolId, userId, roleName)
+    : await getEffectivePermissionCodesForRole(schoolId, roleName);
+  const allowedPermissions = planCodes.size
+    ? EMPLOYEE_PERMISSION_CATALOG.filter((permission) => planCodes.has(permission.code))
+    : [];
+
+  const subscription = await prisma.subscription.findUnique({
+    where: { schoolId },
+    select: { planName: true },
+  });
 
   const users = await prisma.user.findMany({
     where: {
@@ -258,7 +351,7 @@ export const listEmployeePermissionsApi = async (req: Request, res: Response) =>
       status: true,
       createdAt: true,
       teacherProfile: {
-        select: { firstName: true, lastName: true },
+        select: { id: true, firstName: true, lastName: true },
       },
     },
     orderBy: { createdAt: 'desc' },
@@ -266,8 +359,10 @@ export const listEmployeePermissionsApi = async (req: Request, res: Response) =>
 
   res.status(200).json({
     roleName,
+    planName: subscription?.planName ?? null,
     employees: users.map((user) => ({
-      id: user.id,
+      id: user.teacherProfile?.id ?? user.id,
+      userId: user.id,
       email: user.email,
       status: user.status,
       createdAt: user.createdAt,
@@ -275,7 +370,7 @@ export const listEmployeePermissionsApi = async (req: Request, res: Response) =>
         ? `${user.teacherProfile.firstName} ${user.teacherProfile.lastName}`.trim()
         : user.email,
     })),
-    permissions: EMPLOYEE_PERMISSION_CATALOG.map((permission) => ({
+    permissions: allowedPermissions.map((permission) => ({
       ...permission,
       enabled: enabledCodes.includes(permission.code),
     })),
@@ -286,7 +381,49 @@ export const updateEmployeePermissionsApi = async (req: Request, res: Response) 
   const payload = updateEmployeePermissionsSchema.parse(req.body);
   const schoolId = resolveSchoolId(req, payload.schoolId);
   const validCodes = new Set(EMPLOYEE_PERMISSION_CATALOG.map((permission) => permission.code));
-  const enabledCodes = payload.enabledCodes.filter((code) => validCodes.has(code));
+  const planCodes = new Set(await getPlanPermissionCodesForSchool(schoolId));
+  const enabledCodes = payload.enabledCodes.filter((code) => validCodes.has(code) && planCodes.has(code));
+
+  if (payload.userId) {
+    const targetUser = await prisma.user.findFirst({
+      where: {
+        id: payload.userId,
+        schoolId,
+        roles: { some: { role: { name: payload.roleName } } },
+      },
+      select: { id: true },
+    });
+
+    if (!targetUser) {
+      throw new HttpError(404, 'Employee not found for selected role');
+    }
+
+    await prisma.$transaction(async (tx) => {
+      await tx.employeeUserPermission.deleteMany({
+        where: { schoolId, userId: payload.userId },
+      });
+
+      await tx.employeeUserPermission.createMany({
+        data: EMPLOYEE_PERMISSION_CATALOG.map((permission) => ({
+          schoolId,
+          userId: payload.userId!,
+          permissionCode: permission.code,
+          enabled: enabledCodes.includes(permission.code),
+        })),
+      });
+    });
+
+    await logAudit(req, {
+      schoolId,
+      entityType: 'USER',
+      entityId: payload.userId,
+      action: 'UPDATE',
+      afterState: { roleName: payload.roleName, enabledCodes },
+    });
+
+    res.status(200).json({ success: true });
+    return;
+  }
 
   await prisma.$transaction(async (tx) => {
     await tx.employeeRolePermission.deleteMany({
