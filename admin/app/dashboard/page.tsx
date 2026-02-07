@@ -1,5 +1,6 @@
 'use client';
 
+import { useEffect, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import Link from 'next/link';
 import { 
@@ -18,30 +19,53 @@ export default function DashboardPage() {
   const { data: session } = useQuery({ queryKey: ['session'], queryFn: getSession });
   const isSchoolAdmin = session?.role === 'SCHOOL_ADMIN';
   const schoolId = session?.schoolId ?? undefined;
+  const [loadHeavy, setLoadHeavy] = useState(false);
   const { data, isLoading, isError } = useQuery({
     queryKey: ['admin-dashboard'],
     queryFn: getAdminDashboardMetrics,
+    refetchOnWindowFocus: false,
+    staleTime: 30_000,
   });
 
   const { data: weeklyData } = useQuery({
     queryKey: ['weekly-analytics'],
     queryFn: getWeeklyAnalytics,
+    enabled: loadHeavy,
+    refetchOnWindowFocus: false,
+    staleTime: 60_000,
   });
 
   const { data: performanceData } = useQuery({
     queryKey: ['performance-metrics'],
     queryFn: getPerformanceMetrics,
+    enabled: loadHeavy,
+    refetchOnWindowFocus: false,
+    staleTime: 60_000,
   });
 
   const { data: auditData } = useQuery({
     queryKey: ['recent-audit-logs'],
     queryFn: () => listAuditLogs({ limit: 5 }),
+    enabled: loadHeavy,
+    refetchOnWindowFocus: false,
+    staleTime: 60_000,
   });
   const { data: subscription } = useQuery({
     queryKey: ['subscription', schoolId],
     queryFn: () => getSubscription(schoolId),
     enabled: Boolean(schoolId) && isSchoolAdmin,
+    refetchOnWindowFocus: false,
+    staleTime: 60_000,
   });
+  useEffect(() => {
+    const idle = (window as any).requestIdleCallback;
+    if (typeof idle === 'function') {
+      const handle = idle(() => setLoadHeavy(true), { timeout: 2000 });
+      return () => (window as any).cancelIdleCallback?.(handle);
+    }
+    const timeout = window.setTimeout(() => setLoadHeavy(true), 600);
+    return () => window.clearTimeout(timeout);
+  }, []);
   const defaultSeries = [0, 0, 0, 0, 0, 0, 0];
   const weeklyDays = Array.isArray(weeklyData)
     ? weeklyData.map((item) =>
@@ -203,7 +227,7 @@ export default function DashboardPage() {
         <section className="rounded-2xl border border-slate/10 bg-white p-6">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <h2 className="text-xl font-semibold text-gray-900">Current Plan</h2>
-            <Link href="/dashboard/plans" className="text-sm font-semibold text-blue-600 hover:underline">
+            <Link href="/dashboard/plans" prefetch={false} className="text-sm font-semibold text-blue-600 hover:underline">
               Manage Plans
             </Link>
           </div>
@@ -231,6 +255,7 @@ export default function DashboardPage() {
             <Link
               key={action.title}
               href={action.href}
+              prefetch={false}
               className="group flex items-center p-6 bg-white rounded-2xl border border-slate/10 hover:border-blue-200 hover:shadow-md transition-all duration-300"
             >
               <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-blue-50 text-blue-600 text-xl group-hover:bg-blue-100 transition-colors">

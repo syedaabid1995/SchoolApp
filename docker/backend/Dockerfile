@@ -6,7 +6,7 @@ WORKDIR /app
 ENV PORT=3000
 
 RUN apt-get update -y \
-  && apt-get install -y --no-install-recommends openssl ca-certificates \
+  && apt-get install -y --no-install-recommends openssl ca-certificates redis-server \
   && rm -rf /var/lib/apt/lists/*
 
 COPY package.json package-lock.json* ./
@@ -27,4 +27,4 @@ EXPOSE 3000
 HEALTHCHECK --interval=30s --timeout=3s --start-period=10s --retries=3 \
   CMD node -e "require('http').get('http://127.0.0.1:3000/health', (res) => process.exit(res.statusCode === 200 ? 0 : 1)).on('error', () => process.exit(1))"
 
-CMD ["npx", "tsx", "src/server.ts"]
+CMD ["sh", "-c", "redis-server --daemonize yes && npx tsx src/server.ts"]
