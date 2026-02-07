@@ -31,7 +31,7 @@ export const EMPLOYEE_PERMISSION_CATALOG: EmployeePermissionItem[] = [
   {
     code: 'attendance.substitute.manage',
     label: 'Attendance Substitutions',
-    path: '/dashboard/teachers',
+    path: '/dashboard/teachers/assign',
     group: 'Attendance',
   },
   { code: 'support.view', label: 'Support', path: '/dashboard/support', group: 'Support' },
@@ -83,5 +83,29 @@ export const getEffectivePermissionCodesForRole = async (schoolId: string, roleN
       return Boolean(overrideMap.get(entry.code));
     }
     return defaults.has(entry.code);
+  }).map((entry) => entry.code);
+};
+
+export const getEffectivePermissionCodesForUser = async (
+  schoolId: string,
+  userId: string,
+  roleName: string | null | undefined
+) => {
+  const roleEffective = new Set(await getEffectivePermissionCodesForRole(schoolId, roleName));
+  const overrides = await prisma.employeeUserPermission.findMany({
+    where: { schoolId, userId },
+    select: { permissionCode: true, enabled: true },
+  });
+
+  if (!overrides.length) {
+    return Array.from(roleEffective);
+  }
+
+  const overrideMap = new Map(overrides.map((entry) => [entry.permissionCode, entry.enabled]));
+  return EMPLOYEE_PERMISSION_CATALOG.filter((entry) => {
+    if (overrideMap.has(entry.code)) {
+      return Boolean(overrideMap.get(entry.code));
+    }
+    return roleEffective.has(entry.code);
   }).map((entry) => entry.code);
 };

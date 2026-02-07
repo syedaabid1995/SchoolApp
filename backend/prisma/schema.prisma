@@ -63,6 +63,7 @@ model School {
   transferRequestsFrom StudentTransferRequest[] @relation("TransferFromSchool")
   transferRequestsTo StudentTransferRequest[] @relation("TransferToSchool")
   employeeRolePermissions EmployeeRolePermission[]
+  employeeUserPermissions EmployeeUserPermission[]
 
   @@map("schools")
 }
@@ -124,6 +125,7 @@ model User {
   teacherLeaveRequestsReviewed TeacherLeaveRequest[] @relation("TeacherLeaveRequestReviewedBy")
   teacherAttendanceSubstitutionsCreated TeacherAttendanceSubstitution[] @relation("TeacherAttendanceSubstitutionCreatedBy")
   teacherAttendanceSubstitutionsCanceled TeacherAttendanceSubstitution[] @relation("TeacherAttendanceSubstitutionCanceledBy")
+  employeeUserPermissions EmployeeUserPermission[]
 
   @@index([schoolId])
   @@unique([schoolId, email])
@@ -194,6 +196,23 @@ model EmployeeRolePermission {
   @@unique([schoolId, roleName, permissionCode])
   @@index([schoolId, roleName])
   @@map("employee_role_permissions")
+}
+
+model EmployeeUserPermission {
+  id             String   @id @default(uuid()) @db.Uuid
+  schoolId       String   @map("school_id") @db.Uuid
+  userId         String   @map("user_id") @db.Uuid
+  permissionCode String   @map("permission_code")
+  enabled        Boolean  @default(true)
+  createdAt      DateTime @default(now()) @map("created_at")
+  updatedAt      DateTime @updatedAt @map("updated_at")
+
+  school School @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([schoolId, userId, permissionCode])
+  @@index([schoolId, userId])
+  @@map("employee_user_permissions")
 }
 
 model AcademicYear {

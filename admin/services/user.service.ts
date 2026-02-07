@@ -73,9 +73,13 @@ export type EmployeePermissionPayload = {
   permissions: EmployeePermissionItem[];
 };
 
-export const getEmployeePermissions = async (roleName: EmployeeManagedRole | 'SCHOOL_ADMIN', schoolId?: string) => {
+export const getEmployeePermissions = async (
+  roleName: EmployeeManagedRole | 'SCHOOL_ADMIN',
+  schoolId?: string,
+  userId?: string
+) => {
   const { data } = await api.get<EmployeePermissionPayload>('/users/employee-permissions', {
-    params: { roleName, ...(schoolId ? { schoolId } : {}) },
+    params: { roleName, ...(schoolId ? { schoolId } : {}), ...(userId ? { userId } : {}) },
   });
   return data;
 };
@@ -84,6 +88,7 @@ export const updateEmployeePermissions = async (payload: {
   roleName: EmployeeManagedRole | 'SCHOOL_ADMIN';
   enabledCodes: string[];
   schoolId?: string;
+  userId?: string;
 }) => {
   const { data } = await api.put<{ success: boolean }>('/users/employee-permissions', payload);
   return data;

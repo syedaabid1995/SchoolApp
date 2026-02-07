@@ -13,6 +13,7 @@ export const EMPLOYEE_PERMISSION_CATALOG: PermissionCatalogItem[] = [
   { code: 'plans.view', label: 'Plans', path: '/dashboard/plans', group: 'Plans' },
   { code: 'teachers.list', label: 'Employees - List', path: '/dashboard/teachers', group: 'Employees' },
   { code: 'teachers.add', label: 'Employees - Add', path: '/dashboard/teachers/add', group: 'Employees' },
+  { code: 'attendance.substitute.manage', label: 'Attendance Substitutions', path: '/dashboard/teachers/assign', group: 'Attendance' },
   { code: 'academics.setup', label: 'Academic Setup', path: '/dashboard/academics', group: 'Academics' },
   { code: 'academics.exams', label: 'Exams', path: '/dashboard/academics/exams', group: 'Academics' },
   { code: 'academics.marks', label: 'Upload Marks', path: '/dashboard/academics/marks', group: 'Academics' },

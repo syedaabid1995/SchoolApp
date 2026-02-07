@@ -11,6 +11,7 @@ import {
   EMPLOYEE_PERMISSION_CATALOG,
   MANAGED_EMPLOYEE_ROLES,
   getEffectivePermissionCodesForRole,
+  getEffectivePermissionCodesForUser,
   type ManagedEmployeeRole,
 } from '../utils/employeePermissions';
 import { sendAccountCreatedWhatsapp } from '../services/accountOnboardingWhatsapp.service';
@@ -45,6 +46,7 @@ const updateEmployeePermissionsSchema = z.object({
   roleName: managedRoleSchema,
   enabledCodes: z.array(z.string()).default([]),
   schoolId: z.string().uuid().optional(),
+  userId: z.string().uuid().optional(),
 });
 
 export const getMe = async (req: Request, res: Response) => {
@@ -78,7 +80,7 @@ export const getMe = async (req: Request, res: Response) => {
   const displayName = teacherName || parentName || user.email;
   const permissionCodes =
     user.schoolId && role
-      ? await getEffectivePermissionCodesForRole(user.schoolId, role)
+      ? await getEffectivePermissionCodesForUser(user.schoolId, user.id, role)
       : [];
 
   res.status(200).json({
@@ -313,7 +315,10 @@ export const createSchoolUserApi = async (req: Request, res: Response) => {
 export const listEmployeePermissionsApi = async (req: Request, res: Response) => {
   const roleName = managedRoleSchema.parse((req.query.roleName as string | undefined) ?? 'TEACHER');
   const schoolId = resolveSchoolId(req, req.query.schoolId as string | undefined);
-  const enabledCodes = await getEffectivePermissionCodesForRole(schoolId, roleName);
+  const userId = req.query.userId as string | undefined;
+  const enabledCodes = userId
+    ? await getEffectivePermissionCodesForUser(schoolId, userId, roleName)
+    : await getEffectivePermissionCodesForRole(schoolId, roleName);
 
   const users = await prisma.user.findMany({
     where: {
@@ -357,6 +362,47 @@ export const updateEmployeePermissionsApi = async (req: Request, res: Response) 
   const schoolId = resolveSchoolId(req, payload.schoolId);
   const validCodes = new Set(EMPLOYEE_PERMISSION_CATALOG.map((permission) => permission.code));
   const enabledCodes = payload.enabledCodes.filter((code) => validCodes.has(code));
+
+  if (payload.userId) {
+    const targetUser = await prisma.user.findFirst({
+      where: {
+        id: payload.userId,
+        schoolId,
+        roles: { some: { role: { name: payload.roleName } } },
+      },
+      select: { id: true },
+    });
+
+    if (!targetUser) {
+      throw new HttpError(404, 'Employee not found for selected role');
+    }
+
+    await prisma.$transaction(async (tx) => {
+      await tx.employeeUserPermission.deleteMany({
+        where: { schoolId, userId: payload.userId },
+      });
+
+      await tx.employeeUserPermission.createMany({
+        data: EMPLOYEE_PERMISSION_CATALOG.map((permission) => ({
+          schoolId,
+          userId: payload.userId!,
+          permissionCode: permission.code,
+          enabled: enabledCodes.includes(permission.code),
+        })),
+      });
+    });
+
+    await logAudit(req, {
+      schoolId,
+      entityType: 'USER',
+      entityId: payload.userId,
+      action: 'UPDATE',
+      afterState: { roleName: payload.roleName, enabledCodes },
+    });
+
+    res.status(200).json({ success: true });
+    return;
+  }
 
   await prisma.$transaction(async (tx) => {
     await tx.employeeRolePermission.deleteMany({
