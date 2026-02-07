@@ -469,7 +469,7 @@ model TeacherProfile {
 
   @@index([schoolId])
   @@unique([schoolId, employeeNo])
-  @@map("teacher_profiles")
+  @@map("employee_profiles")
 }
 
 model TeacherBankDetails {

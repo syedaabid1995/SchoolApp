@@ -31,8 +31,8 @@ const bankDetailsSchema = z
 const createSchoolUserSchema = z.object({
   email: z.string().email(),
   roleName: z.enum(['SCHOOL_ADMIN', 'TEACHER', 'ACCOUNTANT', 'LIBRARIAN', 'STAFF']),
-  firstName: z.string().min(1).optional(),
-  lastName: z.string().min(1).optional(),
+  firstName: z.string().min(1),
+  lastName: z.string().min(1),
   employeeNo: z.string().min(1).optional().nullable(),
   phone: z.string().min(1).optional().nullable(),
   address: z.string().min(1).optional().nullable(),
@@ -166,10 +166,6 @@ export const createSchoolUserApi = async (req: Request, res: Response) => {
   const schoolId = resolveSchoolId(req, payload.schoolId);
 
   if (payload.roleName === 'TEACHER') {
-    if (!payload.firstName || !payload.lastName) {
-      throw new HttpError(400, 'First name and last name are required for teachers');
-    }
-
     const result = await createTeacher({
       schoolId,
       email: payload.email,
@@ -273,8 +269,20 @@ export const createSchoolUserApi = async (req: Request, res: Response) => {
         })
       : null;
 
+  const profile = await prisma.teacherProfile.create({
+    data: {
+      schoolId,
+      userId: user.id,
+      firstName: payload.firstName,
+      lastName: payload.lastName,
+      employeeNo: payload.employeeNo ?? null,
+      phone: payload.phone ?? null,
+      address: payload.address ?? null,
+      isActive: true,
+    },
+  });
+
   if (
-    payload.roleName === 'SCHOOL_ADMIN' &&
     payload.bankDetails &&
     (payload.bankDetails.accountHolderName ||
       payload.bankDetails.accountNumber ||
@@ -284,9 +292,9 @@ export const createSchoolUserApi = async (req: Request, res: Response) => {
       payload.bankDetails.branchName ||
       payload.bankDetails.panNumber)
   ) {
-    await prisma.userBankDetails.create({
+    await prisma.teacherBankDetails.create({
       data: {
-        userId: user.id,
+        teacherId: profile.id,
         accountHolderName: payload.bankDetails.accountHolderName ?? null,
         accountNumber: payload.bankDetails.accountNumber ?? null,
         ifscCode: payload.bankDetails.ifscCode ?? null,
@@ -333,7 +341,7 @@ export const listEmployeePermissionsApi = async (req: Request, res: Response) =>
       status: true,
       createdAt: true,
       teacherProfile: {
-        select: { firstName: true, lastName: true },
+        select: { id: true, firstName: true, lastName: true },
       },
     },
     orderBy: { createdAt: 'desc' },
@@ -342,7 +350,8 @@ export const listEmployeePermissionsApi = async (req: Request, res: Response) =>
   res.status(200).json({
     roleName,
     employees: users.map((user) => ({
-      id: user.id,
+      id: user.teacherProfile?.id ?? user.id,
+      userId: user.id,
       email: user.email,
       status: user.status,
       createdAt: user.createdAt,

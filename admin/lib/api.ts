@@ -30,10 +30,14 @@ api.interceptors.response.use(
       const isAdminRoute = typeof originalRequest?.url === 'string' && originalRequest.url.startsWith('/admin');
       const lower = String(message ?? '').toLowerCase();
       const isPaymentRestricted = lower.includes('payment') || lower.includes('overdue') || lower.includes('subscription');
+      const isPlanPermission = lower.includes('plan permissions');
       if (!isAdminRoute && isPaymentRestricted) {
         if (window.location.pathname !== '/dashboard/plans') {
           window.location.href = '/dashboard/plans';
         }
+        return Promise.reject(error);
+      }
+      if (!isAdminRoute && isPlanPermission) {
         return Promise.reject(error);
       }
       if (!isAdminRoute && (lower.includes('suspended') || lower.includes('inactive'))) {

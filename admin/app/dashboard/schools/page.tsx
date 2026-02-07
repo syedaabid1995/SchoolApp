@@ -24,6 +24,7 @@ export default function SchoolsPage() {
     subscriptionPlan: 'STANDARD',
     adminEmail: '',
   });
+  const [isCodeAuto, setIsCodeAuto] = useState(true);
   const [createdAdmin, setCreatedAdmin] = useState<{
     email: string;
     tempPassword: string;
@@ -42,6 +43,13 @@ export default function SchoolsPage() {
   const { data, isLoading } = useQuery({
     queryKey: ['schools', debouncedQuery],
     queryFn: () => listSchools({ query: debouncedQuery }),
+    refetchOnWindowFocus: false,
+    refetchOnMount: false,
+    staleTime: 60_000,
+  });
+  const { data: totalData } = useQuery({
+    queryKey: ['schools-total'],
+    queryFn: () => listSchools({ page: 1, limit: 1 }),
     refetchOnWindowFocus: false,
     refetchOnMount: false,
     staleTime: 60_000,
@@ -156,12 +164,31 @@ export default function SchoolsPage() {
   });
 
   const rows = useMemo(() => data?.items ?? [], [data]);
+  const totalSchools = totalData?.total ?? data?.total ?? 0;
   const isBusy =
     isLoading ||
     createMutation.isPending ||
     actionMutation.isPending ||
     planUpdateMutation.isPending ||
     testExpiryMutation.isPending;
+
+  const buildSchoolCode = (name: string, nextIndex: number) => {
+    const prefix = name
+      .toUpperCase()
+      .replace(/[^A-Z0-9]/g, '')
+      .slice(0, 3);
+    if (!prefix) return '';
+    const suffix = String(nextIndex).padStart(5, '0');
+    return `${prefix}_${suffix}`;
+  };
+
+  useEffect(() => {
+    if (!isCodeAuto) return;
+    const nextIndex = totalSchools + 1;
+    const generated = buildSchoolCode(form.name, nextIndex);
+    if (!generated) return;
+    setForm((prev) => ({ ...prev, code: generated }));
+  }, [form.name, totalSchools, isCodeAuto]);
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50/30 to-purple-50/40 p-6">
@@ -200,13 +227,19 @@ export default function SchoolsPage() {
           <div className="grid gap-4 md:grid-cols-4">
             <input
               value={form.name}
-              onChange={(e) => setForm({ ...form, name: e.target.value })}
+              onChange={(e) => {
+                setForm({ ...form, name: e.target.value.toUpperCase() });
+                if (!isCodeAuto && !form.code) setIsCodeAuto(true);
+              }}
               placeholder="School name"
               className="rounded-xl border border-gray-300 px-4 py-3 text-sm focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-200"
             />
             <input
               value={form.code}
-              onChange={(e) => setForm({ ...form, code: e.target.value })}
+              onChange={(e) => {
+                setIsCodeAuto(false);
+                setForm({ ...form, code: e.target.value.toUpperCase() });
+              }}
               placeholder="School code"
               className="rounded-xl border border-gray-300 px-4 py-3 text-sm focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-200"
             />

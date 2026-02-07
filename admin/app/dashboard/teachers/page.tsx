@@ -12,10 +12,12 @@ import {
   cancelAttendanceSubstitution,
 } from '../../../services/attendanceSubstitution.service';
 import { getSession } from '../../../services/auth.service';
+import { getEmployeePermissions } from '../../../services/user.service';
 
 export default function TeachersPage() {
   const queryClient = useQueryClient();
   const [filters, setFilters] = useState({ query: '', status: '' });
+  const [roleFilter, setRoleFilter] = useState<'TEACHER' | 'SCHOOL_ADMIN' | 'ACCOUNTANT' | 'LIBRARIAN' | 'STAFF'>('TEACHER');
   const [schoolId, setSchoolId] = useState('');
   const [substitutionForm, setSubstitutionForm] = useState({
     date: new Date().toISOString().slice(0, 10),
@@ -57,7 +59,13 @@ export default function TeachersPage() {
   const { data } = useQuery({
     queryKey: ['teachers', effectiveSchoolId],
     queryFn: () => listTeachers({ limit: 50, schoolId: effectiveSchoolId }),
-    enabled: Boolean(effectiveSchoolId),
+    enabled: Boolean(effectiveSchoolId && roleFilter === 'TEACHER'),
+  });
+
+  const { data: employeeList } = useQuery({
+    queryKey: ['employees', effectiveSchoolId, roleFilter],
+    queryFn: () => getEmployeePermissions(roleFilter, effectiveSchoolId),
+    enabled: Boolean(effectiveSchoolId && roleFilter !== 'TEACHER'),
   });
 
   const { data: substitutions } = useQuery({
@@ -142,11 +150,28 @@ export default function TeachersPage() {
     return matchesQuery && matchesStatus;
   }) || [];
 
-  const stats = {
-    total: data?.items.length || 0,
-    active: data?.items.filter(t => t.isActive).length || 0,
-    inactive: data?.items.filter(t => !t.isActive).length || 0,
-  };
+  const filteredEmployees = (employeeList?.employees ?? []).filter((employee) => {
+    const query = filters.query.trim().toLowerCase();
+    const name = employee.displayName.toLowerCase();
+    const email = employee.email.toLowerCase();
+    const matchesQuery = !query || name.includes(query) || email.includes(query);
+    const isActive = employee.status === 'ACTIVE';
+    const matchesStatus =
+      !filters.status || (filters.status === 'ACTIVE' ? isActive : !isActive);
+    return matchesQuery && matchesStatus;
+  });
+
+  const stats = roleFilter === 'TEACHER'
+    ? {
+        total: data?.items.length || 0,
+        active: data?.items.filter(t => t.isActive).length || 0,
+        inactive: data?.items.filter(t => !t.isActive).length || 0,
+      }
+    : {
+        total: employeeList?.employees.length || 0,
+        active: employeeList?.employees.filter(e => e.status === 'ACTIVE').length || 0,
+        inactive: employeeList?.employees.filter(e => e.status !== 'ACTIVE').length || 0,
+      };
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-purple-50/30 to-pink-50/40">
@@ -160,13 +185,13 @@ export default function TeachersPage() {
                 <svg className="mr-2 h-4 w-4" fill="currentColor" viewBox="0 0 20 20">
                   <path d="M13 6a3 3 0 11-6 0 3 3 0 016 0zM18 8a2 2 0 11-4 0 2 2 0 014 0zM14 15a4 4 0 00-8 0v3h8v-3z" />
                 </svg>
-                Faculty Management
+                Employee Management
               </div>
               <h1 className="mb-4 text-4xl font-bold tracking-tight sm:text-5xl">
-                Teachers Directory
+                Employees Directory
               </h1>
               <p className="max-w-2xl text-lg text-purple-100">
-                Manage your teaching staff, track assignments, and maintain comprehensive faculty records.
+                Manage your staff, track assignments, and maintain comprehensive employee records.
               </p>
             </div>
             
@@ -177,7 +202,7 @@ export default function TeachersPage() {
               <svg className="mr-2 h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
               </svg>
-              Add Teacher
+              Add Employee
             </Link>
           </div>
         </div>
@@ -189,12 +214,31 @@ export default function TeachersPage() {
       </div>
 
       <div className="mx-auto max-w-7xl px-6 py-12">
+        <div className="mb-6 flex flex-wrap items-center gap-4 rounded-2xl bg-white/80 p-4 shadow-sm">
+          <div className="flex items-center gap-3">
+            <label className="text-sm font-medium text-gray-600">Employee Type</label>
+            <select
+              value={roleFilter}
+              onChange={(e) => setRoleFilter(e.target.value as typeof roleFilter)}
+              className="rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm font-medium text-gray-700 shadow-sm focus:outline-none focus:ring-2 focus:ring-purple-500"
+            >
+              <option value="TEACHER">Teacher</option>
+              <option value="SCHOOL_ADMIN">School Admin</option>
+              <option value="ACCOUNTANT">Accountant</option>
+              <option value="LIBRARIAN">Librarian</option>
+              <option value="STAFF">Other Staff</option>
+            </select>
+          </div>
+          <div className="ml-auto text-xs text-gray-500">
+            Showing {roleFilter === 'TEACHER' ? 'teacher' : 'employee'} records for the selected role.
+          </div>
+        </div>
         {/* Stats Cards */}
         <div className="mb-8 grid gap-6 md:grid-cols-3">
           <div className="rounded-2xl bg-gradient-to-br from-blue-500 to-blue-600 p-6 text-white shadow-lg">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-blue-100">Total Teachers</p>
+                <p className="text-blue-100">Total {roleFilter === 'TEACHER' ? 'Teachers' : 'Employees'}</p>
                 <p className="text-3xl font-bold">{stats.total}</p>
               </div>
               <div className="rounded-full bg-white/20 p-3">
@@ -284,137 +328,175 @@ export default function TeachersPage() {
               <svg className="mr-2 h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
               </svg>
-              Add Teacher
+              Add Employee
             </Link>
           </div>
         </div>
 
-        {/* Teachers Grid */}
+        {/* Employees Grid */}
         <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-          {filteredTeachers.map((teacher) => (
-            <div
-              key={teacher.id}
-              className="group relative overflow-hidden rounded-2xl bg-white p-6 shadow-lg ring-1 ring-gray-200 transition-all hover:shadow-xl hover:scale-105"
-            >
-              {/* Status Badge */}
-              <div className="absolute top-4 right-4">
-                <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ${
-                  teacher.isActive
-                    ? 'bg-emerald-100 text-emerald-800'
-                    : 'bg-gray-100 text-gray-800'
-                }`}>
-                  <span className={`mr-1.5 h-2 w-2 rounded-full ${
-                    teacher.isActive ? 'bg-emerald-400' : 'bg-gray-400'
-                  }`}></span>
-                  {teacher.isActive ? 'Active' : 'Inactive'}
-                </span>
-              </div>
+          {roleFilter === 'TEACHER'
+            ? filteredTeachers.map((teacher) => (
+                <div
+                  key={teacher.id}
+                  className="group relative overflow-hidden rounded-2xl bg-white p-6 shadow-lg ring-1 ring-gray-200 transition-all hover:shadow-xl hover:scale-105"
+                >
+                  {/* Status Badge */}
+                  <div className="absolute top-4 right-4">
+                    <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ${
+                      teacher.isActive
+                        ? 'bg-emerald-100 text-emerald-800'
+                        : 'bg-gray-100 text-gray-800'
+                    }`}>
+                      <span className={`mr-1.5 h-2 w-2 rounded-full ${
+                        teacher.isActive ? 'bg-emerald-400' : 'bg-gray-400'
+                      }`}></span>
+                      {teacher.isActive ? 'Active' : 'Inactive'}
+                    </span>
+                  </div>
 
-              {/* Teacher Info */}
-              <div className="mb-4">
-                <div className="mb-3 flex h-16 w-16 items-center justify-center rounded-full bg-gradient-to-br from-purple-500 to-pink-500 text-2xl font-bold text-white">
-                  {teacher.firstName.charAt(0)}{teacher.lastName.charAt(0)}
-                </div>
-                
-                <Link
-                  href={`/dashboard/teachers/${teacher.id}${isSuperAdmin && effectiveSchoolId ? `?schoolId=${effectiveSchoolId}` : ''}`}
-                  className="block"
-                >
-                  <h3 className="text-lg font-bold text-gray-900 group-hover:text-purple-600 transition-colors">
-                    {teacher.firstName} {teacher.lastName}
-                  </h3>
-                </Link>
-                
-                <p className="text-sm text-gray-600">{teacher.user.email}</p>
-                {teacher.employeeNo && (
-                  <p className="text-xs text-gray-500">ID: {teacher.employeeNo}</p>
-                )}
-              </div>
+                  {/* Teacher Info */}
+                  <div className="mb-4">
+                    <div className="mb-3 flex h-16 w-16 items-center justify-center rounded-full bg-gradient-to-br from-purple-500 to-pink-500 text-2xl font-bold text-white">
+                      {teacher.firstName.charAt(0)}{teacher.lastName.charAt(0)}
+                    </div>
+                    
+                    <Link
+                      href={`/dashboard/teachers/${teacher.id}${isSuperAdmin && effectiveSchoolId ? `?schoolId=${effectiveSchoolId}` : ''}`}
+                      className="block"
+                    >
+                      <h3 className="text-lg font-bold text-gray-900 group-hover:text-purple-600 transition-colors">
+                        {teacher.firstName} {teacher.lastName}
+                      </h3>
+                    </Link>
+                    
+                    <p className="text-sm text-gray-600">{teacher.user.email}</p>
+                    {teacher.employeeNo && (
+                      <p className="text-xs text-gray-500">ID: {teacher.employeeNo}</p>
+                    )}
+                  </div>
 
-              {/* Assignments */}
-              <div className="mb-4 space-y-2">
-                <div>
-                  <p className="text-xs font-medium text-gray-500 uppercase tracking-wide">Classes</p>
-                  <p className="text-sm text-gray-700">
-                    {teacher.classAssignments.length > 0
-                      ? teacher.classAssignments
-                          .map((a) => `${a.class.name}${a.section?.name ? ` · ${a.section.name}` : ''}`)
-                          .join(', ')
-                      : 'No assignments'
-                    }
-                  </p>
-                </div>
-                
-                <div>
-                  <p className="text-xs font-medium text-gray-500 uppercase tracking-wide">Subjects</p>
-                  <p className="text-sm text-gray-700">
-                    {teacher.subjectAssignments.length > 0
-                      ? teacher.subjectAssignments.map((a) => a.subject.name).join(', ')
-                      : 'No assignments'
-                    }
-                  </p>
-                </div>
-              </div>
+                  {/* Assignments */}
+                  <div className="mb-4 space-y-2">
+                    <div>
+                      <p className="text-xs font-medium text-gray-500 uppercase tracking-wide">Classes</p>
+                      <p className="text-sm text-gray-700">
+                        {teacher.classAssignments.length > 0
+                          ? teacher.classAssignments
+                              .map((a) => `${a.class.name}${a.section?.name ? ` · ${a.section.name}` : ''}`)
+                              .join(', ')
+                          : 'No assignments'
+                        }
+                      </p>
+                    </div>
+                    
+                    <div>
+                      <p className="text-xs font-medium text-gray-500 uppercase tracking-wide">Subjects</p>
+                      <p className="text-sm text-gray-700">
+                        {teacher.subjectAssignments.length > 0
+                          ? teacher.subjectAssignments.map((a) => a.subject.name).join(', ')
+                          : 'No assignments'
+                        }
+                      </p>
+                    </div>
+                  </div>
 
-              {/* Actions */}
-              <div className="flex gap-2">
-                <Link
-                  href={`/dashboard/id-cards?entity=employee&id=${teacher.id}`}
-                  className="rounded-lg bg-violet-100 px-3 py-2 text-xs font-semibold text-violet-800 transition-colors hover:bg-violet-200"
+                  {/* Actions */}
+                  <div className="flex gap-2">
+                    <Link
+                      href={`/dashboard/id-cards?entity=employee&id=${teacher.id}`}
+                      className="rounded-lg bg-violet-100 px-3 py-2 text-xs font-semibold text-violet-800 transition-colors hover:bg-violet-200"
+                    >
+                      ID Card
+                    </Link>
+                    <button
+                      onClick={() => statusMutation.mutate({ id: teacher.id, isActive: !teacher.isActive })}
+                      className={`flex-1 rounded-lg px-3 py-2 text-xs font-semibold transition-colors ${
+                        teacher.isActive
+                          ? 'bg-amber-100 text-amber-800 hover:bg-amber-200'
+                          : 'bg-emerald-100 text-emerald-800 hover:bg-emerald-200'
+                      }`}
+                    >
+                      {teacher.isActive ? 'Deactivate' : 'Activate'}
+                    </button>
+                    
+                    <button
+                      onClick={() => {
+                        if (!window.confirm(`Delete "${teacher.firstName} ${teacher.lastName}"?`)) return;
+                        deleteMutation.mutate(teacher.id);
+                      }}
+                      className="rounded-lg bg-red-100 px-3 py-2 text-xs font-semibold text-red-800 transition-colors hover:bg-red-200"
+                    >
+                      Delete
+                    </button>
+                  </div>
+                </div>
+              ))
+            : filteredEmployees.map((employee) => (
+                <div
+                  key={employee.id}
+                  className="group relative overflow-hidden rounded-2xl bg-white p-6 shadow-lg ring-1 ring-gray-200 transition-all hover:shadow-xl hover:scale-105"
                 >
-                  ID Card
-                </Link>
-                <button
-                  onClick={() => statusMutation.mutate({ id: teacher.id, isActive: !teacher.isActive })}
-                  className={`flex-1 rounded-lg px-3 py-2 text-xs font-semibold transition-colors ${
-                    teacher.isActive
-                      ? 'bg-amber-100 text-amber-800 hover:bg-amber-200'
-                      : 'bg-emerald-100 text-emerald-800 hover:bg-emerald-200'
-                  }`}
-                >
-                  {teacher.isActive ? 'Deactivate' : 'Activate'}
-                </button>
-                
-                <button
-                  onClick={() => {
-                    if (!window.confirm(`Delete "${teacher.firstName} ${teacher.lastName}"?`)) return;
-                    deleteMutation.mutate(teacher.id);
-                  }}
-                  className="rounded-lg bg-red-100 px-3 py-2 text-xs font-semibold text-red-800 transition-colors hover:bg-red-200"
-                >
-                  Delete
-                </button>
-              </div>
-            </div>
-          ))}
+                  <div className="absolute top-4 right-4">
+                    <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ${
+                      employee.status === 'ACTIVE'
+                        ? 'bg-emerald-100 text-emerald-800'
+                        : 'bg-gray-100 text-gray-800'
+                    }`}>
+                      <span className={`mr-1.5 h-2 w-2 rounded-full ${
+                        employee.status === 'ACTIVE' ? 'bg-emerald-400' : 'bg-gray-400'
+                      }`}></span>
+                      {employee.status === 'ACTIVE' ? 'Active' : 'Inactive'}
+                    </span>
+                  </div>
+
+                  <div className="mb-4">
+                    <div className="mb-3 flex h-16 w-16 items-center justify-center rounded-full bg-gradient-to-br from-purple-500 to-pink-500 text-2xl font-bold text-white">
+                      {employee.displayName.charAt(0).toUpperCase()}
+                    </div>
+                    <h3 className="text-lg font-bold text-gray-900">{employee.displayName}</h3>
+                    <p className="text-sm text-gray-600">{employee.email}</p>
+                  </div>
+
+                  <div className="flex gap-2">
+                    <Link
+                      href={`/dashboard/teachers/${employee.id}${isSuperAdmin && effectiveSchoolId ? `?schoolId=${effectiveSchoolId}` : ''}`}
+                      className="flex-1 rounded-lg border border-gray-200 px-3 py-2 text-center text-xs font-semibold text-gray-700 transition-colors hover:border-purple-300 hover:text-purple-600"
+                    >
+                      View Profile
+                    </Link>
+                  </div>
+                </div>
+              ))}
         </div>
 
         {/* Empty State */}
-        {filteredTeachers.length === 0 && (
+        {(roleFilter === 'TEACHER' ? filteredTeachers.length === 0 : filteredEmployees.length === 0) && (
           <div className="rounded-2xl bg-white p-12 text-center shadow-lg">
             <div className="mx-auto mb-4 h-16 w-16 rounded-full bg-gray-100 flex items-center justify-center">
               <svg className="h-8 w-8 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197m13.5-9a2.5 2.5 0 11-5 0 2.5 2.5 0 015 0z" />
               </svg>
             </div>
-            <h3 className="mb-2 text-lg font-semibold text-gray-900">No teachers found</h3>
+            <h3 className="mb-2 text-lg font-semibold text-gray-900">
+              {roleFilter === 'TEACHER' ? 'No teachers found' : 'No employees found'}
+            </h3>
             <p className="mb-6 text-gray-600">
-              {data?.items.length === 0
-                ? 'Get started by adding your first teacher to the system.'
-                : 'Try adjusting your search criteria or filters.'
-              }
+              {roleFilter === 'TEACHER'
+                ? (data?.items.length === 0
+                    ? 'Get started by adding your first teacher to the system.'
+                    : 'Try adjusting your search criteria or filters.')
+                : 'No employees found for the selected role.'}
             </p>
-            {data?.items.length === 0 && (
-              <Link
-                href="/dashboard/teachers/add"
-                className="inline-flex items-center rounded-xl bg-gradient-to-r from-purple-600 to-pink-600 px-6 py-3 font-semibold text-white shadow-lg transition-all hover:from-purple-700 hover:to-pink-700 hover:shadow-xl"
-              >
-                <svg className="mr-2 h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
-                </svg>
-                Add Your First Teacher
-              </Link>
-            )}
+            <Link
+              href="/dashboard/teachers/add"
+              className="inline-flex items-center rounded-xl bg-gradient-to-r from-purple-600 to-pink-600 px-6 py-3 font-semibold text-white shadow-lg transition-all hover:from-purple-700 hover:to-pink-700 hover:shadow-xl"
+            >
+              <svg className="mr-2 h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+              </svg>
+              Add Employee
+            </Link>
           </div>
         )}
       </div>

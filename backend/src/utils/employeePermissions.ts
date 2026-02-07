@@ -13,6 +13,7 @@ export type EmployeePermissionItem = {
 export const EMPLOYEE_PERMISSION_CATALOG: EmployeePermissionItem[] = [
   { code: 'dashboard.overview', label: 'Overview', path: '/dashboard', group: 'Overview' },
   { code: 'plans.view', label: 'Plans', path: '/dashboard/plans', group: 'Plans' },
+  { code: 'settings.access', label: 'Access Control', path: '/dashboard/settings/access', group: 'Utilities' },
   { code: 'teachers.list', label: 'Employees - List', path: '/dashboard/teachers', group: 'Employees' },
   { code: 'teachers.add', label: 'Employees - Add', path: '/dashboard/teachers/add', group: 'Employees' },
   { code: 'academics.setup', label: 'Academic Setup', path: '/dashboard/academics', group: 'Academics' },

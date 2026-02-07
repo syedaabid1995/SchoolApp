@@ -72,13 +72,14 @@ export const Sidebar = ({
   const getCodeForPath = (href: string) =>
     EMPLOYEE_PERMISSION_CATALOG.find((permission) => permission.path === href)?.code;
   const isAllowedNavItem = (href: string) => {
-    if (!isTeacher) return true;
+    if (!isTeacher && !isSchoolAdmin) return true;
     const code = getCodeForPath(href);
-    if (!code) return false;
+    if (!code) return isSchoolAdmin;
     return allowedCodes.has(code);
   };
   const visibleAcademicItems = academicItems.filter((item) => isAllowedNavItem(item.href));
   const visibleStudentItems = studentItems.filter((item) => isAllowedNavItem(item.href));
+  const visibleEmployeeItems = employeeItems.filter((item) => isAllowedNavItem(item.href));
   const superAdminItems = [
     { href: '/dashboard/analytics', label: 'Analytics' },
     { href: '/dashboard/schools', label: 'Schools' },
@@ -235,129 +236,149 @@ export const Sidebar = ({
 
           {isSchoolAdmin ? (
             <>
-              {renderLink({ href: '/dashboard', label: 'Overview' })}
-              <div className="border-t border-white/10 my-2"></div>
-              {renderLink({ href: '/dashboard/plans', label: 'Plans' })}
-              <div className="border-t border-white/10 my-2"></div>
+              {isAllowedNavItem('/dashboard') ? renderLink({ href: '/dashboard', label: 'Overview' }) : null}
+              {isAllowedNavItem('/dashboard') ? <div className="border-t border-white/10 my-2"></div> : null}
+              {isAllowedNavItem('/dashboard/plans') ? renderLink({ href: '/dashboard/plans', label: 'Plans' }) : null}
+              {isAllowedNavItem('/dashboard/plans') ? <div className="border-t border-white/10 my-2"></div> : null}
               {/* Teachers Section */}
-              <div className="flex-shrink-0">
-                <button
-                  onClick={() => setIsTeachersOpen(!isTeachersOpen)}
-                  className={`flex w-full items-center justify-between rounded-lg px-3 py-2 text-sm font-medium transition-all duration-200 ${
-                    isSectionActive(employeeItems)
-                      ? 'bg-white/20 text-white'
-                      : 'text-white/90 hover:bg-white/10 hover:text-white'
-                  }`}
-                >
-                  Employees
-                  <span className={`transform transition-all duration-300 ${isTeachersOpen ? 'rotate-90 text-white' : 'text-white/70'}`}>
-                    ▶
-                  </span>
-                </button>
-                <div className={`ml-4 overflow-hidden transition-all duration-300 ease-in-out ${
-                  isTeachersOpen ? 'max-h-32 opacity-100' : 'max-h-0 opacity-0'
-                }`}>
-                  <div className="mt-1 flex flex-col gap-1">
-                    {employeeItems.map((item) => (
-                      <Link
-                        key={item.href}
-                        href={item.href}
-                        className={`rounded-lg px-3 py-2 text-sm transition-all duration-200 ${
-                          isExactActive(item.href)
-                            ? 'bg-white/20 text-white'
-                            : 'text-white/80 hover:bg-white/10 hover:text-white hover:translate-x-1'
-                        }`}
-                        onClick={onClose}
-                      >
-                        {item.label}
-                      </Link>
-                    ))}
+              {visibleEmployeeItems.length > 0 ? (
+                <>
+                  <div className="flex-shrink-0">
+                    <button
+                      onClick={() => setIsTeachersOpen(!isTeachersOpen)}
+                      className={`flex w-full items-center justify-between rounded-lg px-3 py-2 text-sm font-medium transition-all duration-200 ${
+                        isSectionActive(visibleEmployeeItems)
+                          ? 'bg-white/20 text-white'
+                          : 'text-white/90 hover:bg-white/10 hover:text-white'
+                      }`}
+                    >
+                      Employees
+                      <span className={`transform transition-all duration-300 ${isTeachersOpen ? 'rotate-90 text-white' : 'text-white/70'}`}>
+                        ▶
+                      </span>
+                    </button>
+                    <div className={`ml-4 overflow-hidden transition-all duration-300 ease-in-out ${
+                      isTeachersOpen ? 'max-h-32 opacity-100' : 'max-h-0 opacity-0'
+                    }`}>
+                      <div className="mt-1 flex flex-col gap-1">
+                        {visibleEmployeeItems.map((item) => (
+                          <Link
+                            key={item.href}
+                            href={item.href}
+                            className={`rounded-lg px-3 py-2 text-sm transition-all duration-200 ${
+                              isExactActive(item.href)
+                                ? 'bg-white/20 text-white'
+                                : 'text-white/80 hover:bg-white/10 hover:text-white hover:translate-x-1'
+                            }`}
+                            onClick={onClose}
+                          >
+                            {item.label}
+                          </Link>
+                        ))}
+                      </div>
+                    </div>
                   </div>
-                </div>
-              </div>
-              <div className="border-t border-white/10 my-2"></div>
+                  <div className="border-t border-white/10 my-2"></div>
+                </>
+              ) : null}
               {/* Academic Section */}
-              <div className="flex-shrink-0">
-                <button
-                  onClick={() => setIsAcademicOpen(!isAcademicOpen)}
-                  className={`flex w-full items-center justify-between rounded-lg px-3 py-2 text-sm font-medium transition-all duration-200 ${
-                    isSectionActive(academicItems)
-                      ? 'bg-white/20 text-white'
-                      : 'text-white/90 hover:bg-white/10 hover:text-white'
-                  }`}
-                >
-                  Academic
-                  <span className={`transform transition-all duration-300 ${isAcademicOpen ? 'rotate-90 text-white' : 'text-white/70'}`}>
-                    ▶
-                  </span>
-                </button>
-                <div className={`ml-4 overflow-hidden transition-all duration-300 ease-in-out ${
-                  isAcademicOpen ? 'max-h-32 opacity-100' : 'max-h-0 opacity-0'
-                }`}>
-                  <div className="mt-1 flex flex-col gap-1">
-                    {academicItems.map((item) => (
-                      <Link
-                        key={item.href}
-                        href={item.href}
-                        className={`rounded-lg px-3 py-2 text-sm transition-all duration-200 ${
-                          isExactActive(item.href)
-                            ? 'bg-white/20 text-white'
-                            : 'text-white/80 hover:bg-white/10 hover:text-white hover:translate-x-1'
-                        }`}
-                        onClick={onClose}
-                      >
-                        {item.label}
-                      </Link>
-                    ))}
+              {visibleAcademicItems.length > 0 ? (
+                <>
+                  <div className="flex-shrink-0">
+                    <button
+                      onClick={() => setIsAcademicOpen(!isAcademicOpen)}
+                      className={`flex w-full items-center justify-between rounded-lg px-3 py-2 text-sm font-medium transition-all duration-200 ${
+                        isSectionActive(visibleAcademicItems)
+                          ? 'bg-white/20 text-white'
+                          : 'text-white/90 hover:bg-white/10 hover:text-white'
+                      }`}
+                    >
+                      Academic
+                      <span className={`transform transition-all duration-300 ${isAcademicOpen ? 'rotate-90 text-white' : 'text-white/70'}`}>
+                        ▶
+                      </span>
+                    </button>
+                    <div className={`ml-4 overflow-hidden transition-all duration-300 ease-in-out ${
+                      isAcademicOpen ? 'max-h-32 opacity-100' : 'max-h-0 opacity-0'
+                    }`}>
+                      <div className="mt-1 flex flex-col gap-1">
+                        {visibleAcademicItems.map((item) => (
+                          <Link
+                            key={item.href}
+                            href={item.href}
+                            className={`rounded-lg px-3 py-2 text-sm transition-all duration-200 ${
+                              isExactActive(item.href)
+                                ? 'bg-white/20 text-white'
+                                : 'text-white/80 hover:bg-white/10 hover:text-white hover:translate-x-1'
+                            }`}
+                            onClick={onClose}
+                          >
+                            {item.label}
+                          </Link>
+                        ))}
+                      </div>
+                    </div>
                   </div>
-                </div>
-              </div>
-              <div className="border-t border-white/10 my-2"></div>
+                  <div className="border-t border-white/10 my-2"></div>
+                </>
+              ) : null}
               {/* Students Section */}
-              <div className="flex-shrink-0">
-                <button
-                  onClick={() => setIsStudentsOpen(!isStudentsOpen)}
-                  className={`flex w-full items-center justify-between rounded-lg px-3 py-2 text-sm font-medium transition-all duration-200 ${
-                    isSectionActive(studentItems)
-                      ? 'bg-white/20 text-white'
-                      : 'text-white/90 hover:bg-white/10 hover:text-white'
-                  }`}
-                >
-                  Students
-                  <span className={`transform transition-all duration-300 ${isStudentsOpen ? 'rotate-90 text-white' : 'text-white/70'}`}>
-                    ▶
-                  </span>
-                </button>
-                <div className={`ml-4 overflow-hidden transition-all duration-300 ease-in-out ${
-                  isStudentsOpen ? 'max-h-32 opacity-100' : 'max-h-0 opacity-0'
-                }`}>
-                  <div className="mt-1 flex flex-col gap-1">
-                    {studentItems.map((item) => (
-                      <Link
-                        key={item.href}
-                        href={item.href}
-                        className={`rounded-lg px-3 py-2 text-sm transition-all duration-200 ${
-                          isExactActive(item.href)
-                            ? 'bg-white/20 text-white'
-                            : 'text-white/80 hover:bg-white/10 hover:text-white hover:translate-x-1'
-                        }`}
-                        onClick={onClose}
-                      >
-                        {item.label}
-                      </Link>
-                    ))}
+              {visibleStudentItems.length > 0 ? (
+                <>
+                  <div className="flex-shrink-0">
+                    <button
+                      onClick={() => setIsStudentsOpen(!isStudentsOpen)}
+                      className={`flex w-full items-center justify-between rounded-lg px-3 py-2 text-sm font-medium transition-all duration-200 ${
+                        isSectionActive(visibleStudentItems)
+                          ? 'bg-white/20 text-white'
+                          : 'text-white/90 hover:bg-white/10 hover:text-white'
+                      }`}
+                    >
+                      Students
+                      <span className={`transform transition-all duration-300 ${isStudentsOpen ? 'rotate-90 text-white' : 'text-white/70'}`}>
+                        ▶
+                      </span>
+                    </button>
+                    <div className={`ml-4 overflow-hidden transition-all duration-300 ease-in-out ${
+                      isStudentsOpen ? 'max-h-32 opacity-100' : 'max-h-0 opacity-0'
+                    }`}>
+                      <div className="mt-1 flex flex-col gap-1">
+                        {visibleStudentItems.map((item) => (
+                          <Link
+                            key={item.href}
+                            href={item.href}
+                            className={`rounded-lg px-3 py-2 text-sm transition-all duration-200 ${
+                              isExactActive(item.href)
+                                ? 'bg-white/20 text-white'
+                                : 'text-white/80 hover:bg-white/10 hover:text-white hover:translate-x-1'
+                            }`}
+                            onClick={onClose}
+                          >
+                            {item.label}
+                          </Link>
+                        ))}
+                      </div>
+                    </div>
                   </div>
-                </div>
-              </div>
-              <div className="border-t border-white/10 my-2"></div>
-              {renderLink({ href: '/dashboard/attendance', label: 'Attendance' })}
-              <div className="border-t border-white/10 my-2"></div>
-              {renderLink({ href: '/dashboard/support', label: 'Support' })}
-              <div className="border-t border-white/10 my-2"></div>
-              {renderLink({ href: '/dashboard/audit', label: 'Audit Logs' })}
-              <div className="border-t border-white/10 my-2"></div>
-              {renderLink({ href: '/dashboard/settings/access', label: 'Access Control' })}
-              <div className="border-t border-white/10 my-2"></div>
+                  <div className="border-t border-white/10 my-2"></div>
+                </>
+              ) : null}
+              {isAllowedNavItem('/dashboard/attendance')
+                ? renderLink({ href: '/dashboard/attendance', label: 'Attendance' })
+                : null}
+              {isAllowedNavItem('/dashboard/attendance') ? <div className="border-t border-white/10 my-2"></div> : null}
+              {isAllowedNavItem('/dashboard/support')
+                ? renderLink({ href: '/dashboard/support', label: 'Support' })
+                : null}
+              {isAllowedNavItem('/dashboard/support') ? <div className="border-t border-white/10 my-2"></div> : null}
+              {isAllowedNavItem('/dashboard/audit')
+                ? renderLink({ href: '/dashboard/audit', label: 'Audit Logs' })
+                : null}
+              {isAllowedNavItem('/dashboard/audit') ? <div className="border-t border-white/10 my-2"></div> : null}
+              {isAllowedNavItem('/dashboard/settings/access')
+                ? renderLink({ href: '/dashboard/settings/access', label: 'Access Control' })
+                : null}
+              {isAllowedNavItem('/dashboard/settings/access') ? <div className="border-t border-white/10 my-2"></div> : null}
               {renderLink({ href: '/dashboard/settings/sms', label: 'SMS Settings' })}
             </>
           ) : null}

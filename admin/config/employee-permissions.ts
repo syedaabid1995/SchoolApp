@@ -1,4 +1,4 @@
-export const EMPLOYEE_MANAGED_ROLES = ['TEACHER', 'ACCOUNTANT', 'LIBRARIAN', 'STAFF'] as const;
+export const EMPLOYEE_MANAGED_ROLES = ['SCHOOL_ADMIN', 'TEACHER', 'ACCOUNTANT', 'LIBRARIAN', 'STAFF'] as const;
 export type EmployeeManagedRole = (typeof EMPLOYEE_MANAGED_ROLES)[number];
 
 export type PermissionCatalogItem = {
@@ -11,6 +11,7 @@ export type PermissionCatalogItem = {
 export const EMPLOYEE_PERMISSION_CATALOG: PermissionCatalogItem[] = [
   { code: 'dashboard.overview', label: 'Overview', path: '/dashboard', group: 'Overview' },
   { code: 'plans.view', label: 'Plans', path: '/dashboard/plans', group: 'Plans' },
+  { code: 'settings.access', label: 'Access Control', path: '/dashboard/settings/access', group: 'Utilities' },
   { code: 'teachers.list', label: 'Employees - List', path: '/dashboard/teachers', group: 'Employees' },
   { code: 'teachers.add', label: 'Employees - Add', path: '/dashboard/teachers/add', group: 'Employees' },
   { code: 'attendance.substitute.manage', label: 'Attendance Substitutions', path: '/dashboard/teachers/assign', group: 'Attendance' },
@@ -48,6 +49,7 @@ export const getRequiredPermissionForPath = (pathname: string) => {
   if (pathname.startsWith('/dashboard/id-cards')) return 'idcards.view';
 
   if (pathname.startsWith('/dashboard/attendance')) return 'attendance.view';
+  if (pathname.startsWith('/dashboard/settings/access')) return 'settings.access';
   if (pathname.startsWith('/dashboard/support')) return 'support.view';
   if (pathname.startsWith('/dashboard/audit')) return 'audit.view';
 

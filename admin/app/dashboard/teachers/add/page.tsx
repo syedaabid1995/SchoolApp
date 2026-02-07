@@ -2,7 +2,6 @@
 
 import { useMemo, useState } from 'react';
 import { useMutation, useQuery } from '@tanstack/react-query';
-import { createTeacher } from '../../../../services/teacher.service';
 import { createSchoolUser } from '../../../../services/user.service';
 import { listSchools } from '../../../../services/school.service';
 import { getSession } from '../../../../services/auth.service';
@@ -78,31 +77,10 @@ export default function AddTeacherPage() {
     enabled: isSuperAdmin,
   });
 
-  const isTeacherRole = form.roleName === 'TEACHER';
-  const isBankingRole = form.roleName === 'TEACHER' || form.roleName === 'SCHOOL_ADMIN';
+  const isBankingRole = true;
 
   const createMutation = useMutation({
     mutationFn: async () => {
-      if (isTeacherRole) {
-        return createTeacher({
-          email: form.email,
-          firstName: form.firstName,
-          lastName: form.lastName,
-          employeeNo: form.employeeNo || null,
-          phone: form.phone || null,
-          address: form.address || null,
-          bankDetails: {
-            accountHolderName: form.accountHolderName || null,
-            accountNumber: form.accountNumber || null,
-            ifscCode: form.ifscCode || null,
-            accountType: form.accountType || null,
-            bankName: form.bankName === 'Others' ? form.customBankName : form.bankName || null,
-            branchName: form.branchName || null,
-            panNumber: form.panNumber || null,
-          },
-          schoolId: effectiveSchoolId,
-        });
-      }
       return createSchoolUser({
         email: form.email,
         roleName: form.roleName,
@@ -366,7 +344,6 @@ export default function AddTeacherPage() {
                     className="w-full rounded-xl border border-gray-300 px-4 py-3 text-sm focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-200"
                   />
                 </div>
-                {isTeacherRole ? (
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">Employee Number</label>
                   <input
@@ -376,7 +353,6 @@ export default function AddTeacherPage() {
                     className="w-full rounded-xl border border-gray-300 px-4 py-3 text-sm focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-200"
                   />
                 </div>
-                ) : null}
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">First Name *</label>
                   <input

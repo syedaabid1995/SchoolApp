@@ -181,7 +181,7 @@ export const listTeachers = async (params: {
 
 export const getTeacher = async (teacherId: string, schoolId: string) => {
   return prisma.teacherProfile.findFirst({
-    where: { id: teacherId, schoolId },
+    where: { schoolId, OR: [{ id: teacherId }, { userId: teacherId }] },
     include: {
       user: { select: { email: true, status: true } },
       bankDetails: true,
@@ -193,12 +193,12 @@ export const getTeacher = async (teacherId: string, schoolId: string) => {
 
 export const updateTeacher = async (teacherId: string, schoolId: string, payload: TeacherUpdateInput) => {
   const existing = await prisma.teacherProfile.findFirst({
-    where: { id: teacherId, schoolId },
+    where: { schoolId, OR: [{ id: teacherId }, { userId: teacherId }] },
     include: { user: true },
   });
 
   if (!existing) {
-    throw new Error('Teacher not found');
+    throw new Error('Employee not found');
   }
 
   const updated = await prisma.$transaction(async (tx) => {

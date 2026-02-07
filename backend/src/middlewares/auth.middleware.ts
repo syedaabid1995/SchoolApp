@@ -131,7 +131,7 @@ export const authMiddleware = async (req: Request, _res: Response, next: NextFun
     if (permissionCode) {
       const permissionCodes = await getEffectivePermissionCodesForUser(schoolId, decoded.sub, role);
       if (!permissionCodes.includes(permissionCode)) {
-        next(new HttpError(403, 'Access blocked by subscription plan'));
+        next(new HttpError(403, 'Access blocked by plan permissions'));
         return;
       }
     }
@@ -152,6 +152,7 @@ const resolvePermissionForPath = (path: string) => {
     { prefix: '/api/v1/academics', code: 'academics.setup' },
     { prefix: '/api/v1/exams', code: 'academics.exams' },
     { prefix: '/api/v1/reports', code: 'academics.marks' },
+    { prefix: '/api/v1/users/employee-permissions', code: 'settings.access' },
     { prefix: '/api/v1/audit-logs', code: 'audit.view' },
     { prefix: '/api/v1/tickets', code: 'support.view' },
     { prefix: '/api/v1/subscriptions', code: 'plans.view' },

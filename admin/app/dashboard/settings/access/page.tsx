@@ -174,7 +174,7 @@ export default function AccessControlPage() {
                   }}
                   className="w-full rounded-xl border border-slate-200 px-4 py-3 text-sm font-medium bg-white hover:border-blue-300 focus:border-blue-500 focus:ring-2 focus:ring-blue-100 transition-colors appearance-none cursor-pointer"
                 >
-                  {(['SCHOOL_ADMIN', ...EMPLOYEE_MANAGED_ROLES] as ManagedRole[]).map((role) => (
+                  {(EMPLOYEE_MANAGED_ROLES as ManagedRole[]).map((role) => (
                     <option key={role} value={role}>
                       {roleLabels[role]}
                     </option>
