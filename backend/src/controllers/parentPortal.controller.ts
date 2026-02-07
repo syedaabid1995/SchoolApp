@@ -195,7 +195,7 @@ export const listParentExams = async (req: Request, res: Response) => {
   });
 
   const marks = await prisma.mark.findMany({
-    where: { studentId: child.id },
+    where: { studentId: child.id, status: 'LOCKED' },
     include: { examPaper: { select: { examId: true } } },
   });
   const marksByExam = new Set(marks.map((mark) => mark.examPaper.examId));
@@ -247,7 +247,7 @@ export const getParentResults = async (req: Request, res: Response) => {
   const examTypeMap = new Map(examTypeRows.map((row) => [row.code, row]));
 
   const marks = await prisma.mark.findMany({
-    where: { studentId: child.id },
+    where: { studentId: child.id, status: 'LOCKED' },
     include: {
       examPaper: {
         include: {
