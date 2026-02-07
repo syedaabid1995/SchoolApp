@@ -35,6 +35,9 @@ export default function SubscriptionsPage() {
   const { data: plans } = useQuery({
     queryKey: ['subscription-plans'],
     queryFn: () => listSubscriptionPlans(),
+    refetchOnWindowFocus: false,
+    refetchOnMount: false,
+    staleTime: 60_000,
   });
 
   const planMutation = useMutation({

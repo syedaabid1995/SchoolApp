@@ -18,8 +18,20 @@ export default function SettingsPage() {
   const [flagError, setFlagError] = useState('');
   const [configError, setConfigError] = useState('');
 
-  const { data: flags } = useQuery({ queryKey: ['feature-flags'], queryFn: listFeatureFlags });
-  const { data: configs } = useQuery({ queryKey: ['config-entries'], queryFn: listConfigEntries });
+  const { data: flags } = useQuery({
+    queryKey: ['feature-flags'],
+    queryFn: listFeatureFlags,
+    refetchOnWindowFocus: false,
+    refetchOnMount: false,
+    staleTime: 5 * 60_000,
+  });
+  const { data: configs } = useQuery({
+    queryKey: ['config-entries'],
+    queryFn: listConfigEntries,
+    refetchOnWindowFocus: false,
+    refetchOnMount: false,
+    staleTime: 5 * 60_000,
+  });
 
   const createFlagMutation = useMutation({
     mutationFn: createFeatureFlag,

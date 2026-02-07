@@ -29,8 +29,9 @@ export default function ParentAttendancePage() {
     queryKey: ['parent-attendance', activeChild?.id, monthValue],
     queryFn: () => listParentAttendance(activeChild?.id, monthValue),
     enabled: Boolean(activeChild?.id),
-    refetchOnWindowFocus: true,
-    refetchOnMount: 'always',
+    refetchOnWindowFocus: false,
+    refetchOnMount: false,
+    staleTime: 60_000,
   });
 
   const monthStart = useMemo(() => new Date(monthCursor.getFullYear(), monthCursor.getMonth(), 1), [monthCursor]);

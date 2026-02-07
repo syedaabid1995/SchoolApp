@@ -25,6 +25,9 @@ export default function SchoolAdminsPage() {
     queryKey: ['school-admins', schoolId],
     queryFn: () => listSchoolAdmins(schoolId),
     enabled: Boolean(schoolId),
+    refetchOnWindowFocus: false,
+    refetchOnMount: false,
+    staleTime: 60_000,
   });
 
   const addAdminMutation = useMutation({

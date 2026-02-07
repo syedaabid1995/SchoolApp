@@ -42,10 +42,16 @@ export default function SchoolsPage() {
   const { data, isLoading } = useQuery({
     queryKey: ['schools', debouncedQuery],
     queryFn: () => listSchools({ query: debouncedQuery }),
+    refetchOnWindowFocus: false,
+    refetchOnMount: false,
+    staleTime: 60_000,
   });
   const { data: plans } = useQuery({
     queryKey: ['subscription-plans'],
     queryFn: () => listSubscriptionPlans(),
+    refetchOnWindowFocus: false,
+    refetchOnMount: false,
+    staleTime: 60_000,
   });
   const activePlans = plans?.filter((plan) => plan.status === 'ACTIVE') ?? [];
 

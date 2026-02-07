@@ -7,8 +7,9 @@ export default function ParentProfilePage() {
   const { data: profile } = useQuery({
     queryKey: ['parent-profile'],
     queryFn: getParentProfile,
-    refetchOnWindowFocus: true,
-    refetchOnMount: 'always',
+    refetchOnWindowFocus: false,
+    refetchOnMount: false,
+    staleTime: 5 * 60_000,
   });
 
   return (

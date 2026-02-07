@@ -9,7 +9,13 @@ import FullPageLoader from '../../../components/FullPageLoader';
 
 export default function AnalyticsPage() {
   const [schoolId, setSchoolId] = useState('');
-  const { data: session } = useQuery({ queryKey: ['session'], queryFn: getSession });
+  const { data: session } = useQuery({
+    queryKey: ['session'],
+    queryFn: getSession,
+    refetchOnWindowFocus: false,
+    refetchOnMount: false,
+    staleTime: 5 * 60_000,
+  });
   const isSuperAdmin = session?.role === 'SUPER_ADMIN';
   const effectiveSchoolId = isSuperAdmin ? schoolId : session?.schoolId ?? undefined;
 
@@ -17,12 +23,18 @@ export default function AnalyticsPage() {
     queryKey: ['schools', 'all'],
     queryFn: () => listSchools({ limit: 100 }),
     enabled: isSuperAdmin,
+    refetchOnWindowFocus: false,
+    refetchOnMount: false,
+    staleTime: 60_000,
   });
 
   const { data, isLoading } = useQuery({
     queryKey: ['analytics', effectiveSchoolId],
     queryFn: () => getAnalytics({ schoolId: effectiveSchoolId }),
     enabled: Boolean(effectiveSchoolId),
+    refetchOnWindowFocus: false,
+    refetchOnMount: false,
+    staleTime: 60_000,
   });
 
   if (isLoading) {

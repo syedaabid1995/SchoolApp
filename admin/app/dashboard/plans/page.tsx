@@ -12,19 +12,31 @@ export default function PlansPage() {
   const queryClient = useQueryClient();
   const notify = useNotify();
   const router = useRouter();
-  const { data: session } = useQuery({ queryKey: ['session'], queryFn: getSession });
+  const { data: session } = useQuery({
+    queryKey: ['session'],
+    queryFn: getSession,
+    refetchOnWindowFocus: false,
+    refetchOnMount: false,
+    staleTime: 5 * 60_000,
+  });
   const schoolId = session?.schoolId ?? undefined;
   const [billingCycle, setBillingCycle] = useState<'MONTHLY' | 'ANNUAL'>('MONTHLY');
 
   const { data: plans, isLoading: plansLoading } = useQuery({
     queryKey: ['active-plans'],
     queryFn: () => listActivePlans(),
+    refetchOnWindowFocus: false,
+    refetchOnMount: false,
+    staleTime: 60_000,
   });
 
   const { data: subscription, isLoading: subLoading } = useQuery({
     queryKey: ['subscription', schoolId],
     queryFn: () => getSubscription(schoolId),
     enabled: Boolean(schoolId),
+    refetchOnWindowFocus: false,
+    refetchOnMount: false,
+    staleTime: 60_000,
   });
 
   const currentPlanId = subscription?.planId ?? plans?.find((p) => p.name === subscription?.planName)?.id ?? null;

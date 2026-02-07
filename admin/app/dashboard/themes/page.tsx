@@ -21,7 +21,13 @@ export default function ThemesPage() {
   const [editingThemeId, setEditingThemeId] = useState<string | null>(null);
   const [formError, setFormError] = useState('');
 
-  const { data: session } = useQuery({ queryKey: ['session'], queryFn: getSession });
+  const { data: session } = useQuery({
+    queryKey: ['session'],
+    queryFn: getSession,
+    refetchOnWindowFocus: false,
+    refetchOnMount: false,
+    staleTime: 5 * 60_000,
+  });
   const isSuperAdmin = session?.role === 'SUPER_ADMIN';
   const effectiveSchoolId = isSuperAdmin ? schoolId : session?.schoolId ?? undefined;
 
@@ -29,12 +35,18 @@ export default function ThemesPage() {
     queryKey: ['schools', 'all'],
     queryFn: () => listSchools({ limit: 100 }),
     enabled: isSuperAdmin,
+    refetchOnWindowFocus: false,
+    refetchOnMount: false,
+    staleTime: 60_000,
   });
 
   const { data: themes } = useQuery({
     queryKey: ['themes', effectiveSchoolId],
     queryFn: () => listThemes({ schoolId: effectiveSchoolId }),
     enabled: Boolean(effectiveSchoolId),
+    refetchOnWindowFocus: false,
+    refetchOnMount: false,
+    staleTime: 60_000,
   });
 
   const tokens = useMemo(

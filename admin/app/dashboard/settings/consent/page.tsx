@@ -9,6 +9,9 @@ export default function ConsentPage() {
   const { data } = useQuery({
     queryKey: ['consents', parentId],
     queryFn: () => listConsents(parentId ? { parentId } : undefined),
+    refetchOnWindowFocus: false,
+    refetchOnMount: false,
+    staleTime: 60_000,
   });
 
   return (

@@ -14,7 +14,13 @@ export default function AuditPage() {
     page: 1,
   });
 
-  const { data: session } = useQuery({ queryKey: ['session'], queryFn: getSession });
+  const { data: session } = useQuery({
+    queryKey: ['session'],
+    queryFn: getSession,
+    refetchOnWindowFocus: false,
+    refetchOnMount: false,
+    staleTime: 5 * 60_000,
+  });
 
   const roleOptions = useMemo(() => {
     if (session?.role === 'TEACHER') {
@@ -58,6 +64,9 @@ export default function AuditPage() {
         action: filters.action || undefined,
         page: filters.page,
       }),
+    refetchOnWindowFocus: false,
+    refetchOnMount: false,
+    staleTime: 60_000,
   });
 
   const stats = {

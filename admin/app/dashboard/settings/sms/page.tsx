@@ -26,35 +26,56 @@ export default function SmsSettingsPage() {
   const [enabled, setEnabled] = useState(true);
   const [channel, setChannel] = useState<'WHATSAPP' | 'SMS'>('WHATSAPP');
 
-  const { data: session } = useQuery({ queryKey: ['session'], queryFn: getSession });
+  const { data: session } = useQuery({
+    queryKey: ['session'],
+    queryFn: getSession,
+    refetchOnWindowFocus: false,
+    refetchOnMount: false,
+    staleTime: 5 * 60_000,
+  });
   const isSuperAdmin = session?.role === 'SUPER_ADMIN';
 
   const { data: adminServices } = useQuery({
     queryKey: ['messaging-services-admin'],
     queryFn: listMessagingServicesAdmin,
     enabled: isSuperAdmin,
+    refetchOnWindowFocus: false,
+    refetchOnMount: false,
+    staleTime: 60_000,
   });
 
   const { data: schoolServices } = useQuery({
     queryKey: ['messaging-services-school', channel],
     queryFn: () => listMessagingServicesForSchool(channel),
     enabled: !isSuperAdmin,
+    refetchOnWindowFocus: false,
+    refetchOnMount: false,
+    staleTime: 60_000,
   });
 
   const { data: currentConfig } = useQuery({
     queryKey: ['messaging-config', channel],
     queryFn: () => getSchoolMessagingConfig(channel),
     enabled: !isSuperAdmin,
+    refetchOnWindowFocus: false,
+    refetchOnMount: false,
+    staleTime: 60_000,
   });
   const { data: currentSmsConfig } = useQuery({
     queryKey: ['messaging-config', 'SMS'],
     queryFn: () => getSchoolMessagingConfig('SMS'),
     enabled: !isSuperAdmin,
+    refetchOnWindowFocus: false,
+    refetchOnMount: false,
+    staleTime: 60_000,
   });
   const { data: currentWhatsappConfig } = useQuery({
     queryKey: ['messaging-config', 'WHATSAPP'],
     queryFn: () => getSchoolMessagingConfig('WHATSAPP'),
     enabled: !isSuperAdmin,
+    refetchOnWindowFocus: false,
+    refetchOnMount: false,
+    staleTime: 60_000,
   });
 
   const toggleMutation = useMutation({

@@ -63,7 +63,13 @@ export default function AccessControlPage() {
   const [selectedRole, setSelectedRole] = useState<ManagedRole>('TEACHER');
   const [editedCodes, setEditedCodes] = useState<string[]>([]);
 
-  const { data: session } = useQuery({ queryKey: ['session'], queryFn: getSession });
+  const { data: session } = useQuery({
+    queryKey: ['session'],
+    queryFn: getSession,
+    refetchOnWindowFocus: false,
+    refetchOnMount: false,
+    staleTime: 5 * 60_000,
+  });
   const schoolId = session?.schoolId ?? undefined;
 
   const canManage = session?.role === 'SCHOOL_ADMIN';
@@ -72,6 +78,9 @@ export default function AccessControlPage() {
     queryKey: ['employee-permissions', selectedRole, schoolId],
     queryFn: () => getEmployeePermissions(selectedRole, schoolId),
     enabled: Boolean(canManage && schoolId),
+    refetchOnWindowFocus: false,
+    refetchOnMount: false,
+    staleTime: 60_000,
   });
 
   const groupedPermissions = useMemo(() => {

@@ -6,6 +6,7 @@ import {
   getParentProfile,
   getParentDashboard,
   listParentExams,
+  getParentResults,
   listParentSubjects,
   getParentAttendance,
   listParentNotices,
@@ -22,6 +23,7 @@ parentPortalRouter.get('/children', listParentChildren);
 parentPortalRouter.get('/profile', getParentProfile);
 parentPortalRouter.get('/dashboard', getParentDashboard);
 parentPortalRouter.get('/exams', listParentExams);
+parentPortalRouter.get('/results', getParentResults);
 parentPortalRouter.get('/subjects', listParentSubjects);
 parentPortalRouter.get('/attendance', getParentAttendance);
 parentPortalRouter.get('/notices', listParentNotices);

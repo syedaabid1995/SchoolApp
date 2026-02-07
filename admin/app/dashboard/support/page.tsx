@@ -9,7 +9,13 @@ export default function SupportPage() {
   const [form, setForm] = useState({ subject: '', description: '', priority: 'MEDIUM' });
   const [formError, setFormError] = useState('');
 
-  const { data: tickets } = useQuery({ queryKey: ['tickets'], queryFn: listTickets });
+  const { data: tickets } = useQuery({
+    queryKey: ['tickets'],
+    queryFn: listTickets,
+    refetchOnWindowFocus: false,
+    refetchOnMount: false,
+    staleTime: 60_000,
+  });
 
   const createMutation = useMutation({
     mutationFn: createTicket,

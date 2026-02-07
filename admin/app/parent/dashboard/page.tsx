@@ -17,16 +17,18 @@ export default function ParentDashboardPage() {
     queryKey: ['parent-dashboard', activeChild?.id],
     queryFn: () => getParentDashboard(activeChild?.id),
     enabled: Boolean(activeChild?.id),
-    refetchOnWindowFocus: true,
-    refetchOnMount: 'always',
+    refetchOnWindowFocus: false,
+    refetchOnMount: false,
+    staleTime: 60_000,
   });
 
   const { data: attendance } = useQuery({
     queryKey: ['parent-attendance', activeChild?.id, month],
     queryFn: () => listParentAttendance(activeChild?.id, month || undefined),
     enabled: Boolean(activeChild?.id),
-    refetchOnWindowFocus: true,
-    refetchOnMount: 'always',
+    refetchOnWindowFocus: false,
+    refetchOnMount: false,
+    staleTime: 60_000,
   });
 
   if (!activeChild) {
