@@ -5,7 +5,7 @@ import { ThemeProvider } from '../components/ThemeProvider';
 import { NotificationProvider } from '../components/NotificationProvider';
 
 export const metadata = {
-  title: 'TechStage Admin',
+  title: 'Akademify',
   description: 'TechStage IT Admin Console',
 };
 

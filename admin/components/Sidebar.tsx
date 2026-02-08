@@ -116,7 +116,8 @@ export const Sidebar = ({
             // eslint-disable-next-line @next/next/no-img-element
             <img src={logoUrl} alt="School Logo" className="h-9 w-9 rounded-md object-cover transition-transform duration-200 hover:scale-105" />
           ) : (
-            <div className="h-9 w-9 rounded-md bg-white/10 transition-colors duration-200 hover:bg-white/20" />
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src="/icon.png" alt="SchoolApp" className="h-9 w-9 rounded-md object-cover transition-transform duration-200 hover:scale-105" />
           )}
           <p className="text-xs uppercase text-white/70 transition-colors duration-200">{schoolName?.toUpperCase() || 'NAVIGATION'}</p>
           {/* Mobile close button */}

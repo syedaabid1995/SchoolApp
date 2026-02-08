@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { login } from '../../services/auth.service';
 import FullPageLoader from '../../components/FullPageLoader';
@@ -10,15 +10,35 @@ export default function LoginPage() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [schoolId, setSchoolId] = useState('');
+  const [rememberMe, setRememberMe] = useState(false);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
+
+  useEffect(() => {
+    try {
+      const stored = localStorage.getItem('login.remember');
+      if (!stored) return;
+      const parsed = JSON.parse(stored) as { email?: string; password?: string; schoolId?: string };
+      if (parsed.email) setEmail(parsed.email);
+      if (parsed.password) setPassword(parsed.password);
+      if (parsed.schoolId) setSchoolId(parsed.schoolId);
+      setRememberMe(true);
+    } catch {
+      // ignore malformed storage
+    }
+  }, []);
 
   const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault();
     setError('');
     setLoading(true);
     try {
+      if (rememberMe) {
+        localStorage.setItem('login.remember', JSON.stringify({ email, password, schoolId }));
+      } else {
+        localStorage.removeItem('login.remember');
+      }
       const result = await login({ email, password, schoolId: schoolId || undefined });
       if (result?.mustChangePassword) {
         router.replace('/reset-password');
@@ -153,7 +173,7 @@ export default function LoginPage() {
 
             {/* School ID field */}
             <div className="space-y-2">
-              <label className="block text-sm font-semibold text-gray-700">School ID <span className="text-gray-400 font-normal">(optional)</span></label>
+              <label className="block text-sm font-semibold text-gray-700">School ID <span className="text-gray-400 font-normal">(required)</span></label>
               <div className="relative">
                 <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
                   <svg className="h-5 w-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -169,6 +189,17 @@ export default function LoginPage() {
                 />
               </div>
             </div>
+
+            {/* Remember me */}
+            <label className="flex items-center gap-2 text-sm text-gray-600">
+              <input
+                type="checkbox"
+                checked={rememberMe}
+                onChange={(e) => setRememberMe(e.target.checked)}
+                className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+              />
+              Remember me
+            </label>
 
             {/* Error message */}
             {error && (
