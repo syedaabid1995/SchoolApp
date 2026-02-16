@@ -17,6 +17,9 @@ import {
   listAttendanceSubstitutions,
   cancelAttendanceSubstitution,
 } from '../../../../services/attendanceSubstitution.service';
+import PageHeader from '../../../../components/PageHeader';
+import DashboardPageContainer from '../../../../components/DashboardPageContainer';
+import Button from '../../../../components/Button';
 
 export default function AssignTeacherPage() {
   const queryClient = useQueryClient();
@@ -144,16 +147,13 @@ export default function AssignTeacherPage() {
   });
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-purple-50/30 to-pink-50/40 px-6 py-10">
-      <div className="mx-auto max-w-6xl">
-        <div className="rounded-3xl bg-white/80 p-8 shadow-xl ring-1 ring-slate-200">
-          <div className="flex flex-col gap-2">
-            <p className="text-xs font-semibold uppercase tracking-[0.2em] text-purple-500">Employees</p>
-            <h1 className="text-3xl font-bold text-slate-800">Assign Teachers</h1>
-            <p className="text-sm text-slate-500">
-              Assign classes and subjects to teachers. This controls who can submit attendance and marks.
-            </p>
-          </div>
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-purple-50/30 to-pink-50/40">
+      <DashboardPageContainer maxWidthClassName="max-w-7xl">
+        <PageHeader
+          title="Assign Teachers"
+          subtitle="Assign classes and subjects to teachers. This controls who can submit attendance and marks."
+        />
+        <div className="mx-auto mt-8 max-w-6xl rounded-3xl bg-white/80 p-8 shadow-xl ring-1 ring-slate-200">
 
           <div className="mt-6 grid gap-4 md:grid-cols-3">
             {isSuperAdmin && (
@@ -232,8 +232,9 @@ export default function AssignTeacherPage() {
                     </option>
                   ))}
                 </select>
-                <button
-                  type="button"
+                <Button
+                  variant="primary"
+                  size="sm"
                   onClick={() => {
                     if (!teacherId || !classId) return;
                     if (sectionRequired && !sectionId) return;
@@ -241,10 +242,9 @@ export default function AssignTeacherPage() {
                     setClassId('');
                     setSectionId('');
                   }}
-                  className="rounded-xl bg-purple-600 px-4 py-2 text-sm font-semibold text-white shadow hover:bg-purple-700"
                 >
                   Assign
-                </button>
+                </Button>
               </div>
 
               <div className="mt-4 space-y-2">
@@ -299,17 +299,17 @@ export default function AssignTeacherPage() {
                     </option>
                   ))}
                 </select>
-                <button
-                  type="button"
+                <Button
+                  variant="primary"
+                  size="sm"
                   onClick={() => {
                     if (!teacherId || !subjectId) return;
                     assignSubjectMutation.mutate({ teacherId, subjectId });
                     setSubjectId('');
                   }}
-                  className="rounded-xl bg-emerald-600 px-4 py-2 text-sm font-semibold text-white shadow hover:bg-emerald-700"
                 >
                   Assign
-                </button>
+                </Button>
               </div>
 
               <div className="mt-4 space-y-2">
@@ -466,8 +466,9 @@ export default function AssignTeacherPage() {
                 placeholder="Reason (optional)"
                 className="flex-1 rounded-xl border border-slate-200 px-4 py-2 text-sm focus:border-purple-500 focus:outline-none focus:ring-2 focus:ring-purple-200"
               />
-              <button
-                type="button"
+              <Button
+                variant="primary"
+                size="sm"
                 onClick={() => {
                   if (!effectiveSchoolId || !substitutionForm.classId || !substitutionForm.substituteTeacherId || !substitutionForm.date) {
                     return;
@@ -485,10 +486,9 @@ export default function AssignTeacherPage() {
                     reason: substitutionForm.reason || undefined,
                   });
                 }}
-                className="rounded-xl bg-gradient-to-r from-purple-600 to-pink-600 px-6 py-2 text-sm font-semibold text-white shadow-lg transition-all hover:from-purple-700 hover:to-pink-700"
               >
                 Assign Substitute
-              </button>
+              </Button>
             </div>
 
             <div className="mt-6 rounded-xl border border-slate-200 bg-slate-50/60 p-4">
@@ -534,7 +534,7 @@ export default function AssignTeacherPage() {
             </div>
           </div>
         </div>
-      </div>
+      </DashboardPageContainer>
     </div>
   );
 }

@@ -1,8 +1,10 @@
 'use client';
 
 import Link from 'next/link';
+import PageHeader from '../../../components/PageHeader';
 import { useMemo, useState, useEffect } from 'react';
 import { useQuery } from '@tanstack/react-query';
+import Button from '../../../components/Button';
 import { listAuditLogs } from '../../../services/audit.service';
 import { getSession } from '../../../services/auth.service';
 
@@ -81,25 +83,12 @@ export default function AuditPage() {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50/30 to-purple-50/40 p-6">
-      <div className="mx-auto max-w-7xl space-y-6">
-        {/* Header */}
-        <div className="relative overflow-hidden rounded-3xl bg-gradient-to-r from-gray-700 via-slate-700 to-zinc-800 p-8 text-white shadow-2xl">
-          <div className="absolute inset-0 bg-black/10"></div>
-          <div className="relative">
-            <div className="mb-4 inline-flex items-center rounded-full bg-white/20 px-4 py-2 text-sm font-medium backdrop-blur-sm">
-              <svg className="mr-2 h-4 w-4" fill="currentColor" viewBox="0 0 20 20">
-                <path fillRule="evenodd" d="M3 4a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm0 4a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm0 4a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm0 4a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1z" clipRule="evenodd" />
-              </svg>
-              System Monitoring
-            </div>
-            <h1 className="text-4xl font-bold tracking-tight">Audit Logs</h1>
-            <p className="mt-2 text-gray-200">Monitor system activities, track user actions, and maintain comprehensive audit trails for compliance.</p>
-          </div>
-          <div className="absolute -top-10 -right-10 h-40 w-40 rounded-full bg-white/10 animate-pulse"></div>
-          <div className="absolute -bottom-8 -left-8 h-32 w-32 rounded-full bg-white/10 animate-bounce"></div>
-        </div>
-        {/* Stats Cards */}
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50/30 to-purple-50/40">
+      <div className="mx-auto max-w-7xl pr-6 pb-12">
+        <PageHeader
+          title="Audit Logs"
+          subtitle="Monitor system activities, track user actions, and maintain comprehensive audit trails for compliance."
+        />
         <div className="grid gap-6 md:grid-cols-4">
           <div className="rounded-2xl bg-gradient-to-br from-blue-500 to-blue-600 p-6 text-white shadow-lg">
             <div className="flex items-center justify-between">
@@ -332,20 +321,22 @@ export default function AuditPage() {
               Page {data?.page ?? filters.page} of {data?.pages ?? 1}
             </div>
             <div className="flex gap-2">
-              <button
-                className="rounded-xl border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+              <Button
+                variant="outline"
+                size="sm"
                 onClick={() => setFilters({ ...filters, page: Math.max(1, filters.page - 1) })}
                 disabled={filters.page <= 1}
               >
                 Previous
-              </button>
-              <button
-                className="rounded-xl border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
                 onClick={() => setFilters({ ...filters, page: (data?.page ?? 1) + 1 })}
                 disabled={(data?.page ?? 1) >= (data?.pages ?? 1)}
               >
                 Next
-              </button>
+              </Button>
             </div>
           </div>
         </section>

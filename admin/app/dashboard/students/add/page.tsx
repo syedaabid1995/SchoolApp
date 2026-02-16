@@ -10,6 +10,7 @@ import { getSession } from '../../../../services/auth.service';
 import { createParent, createStudent, linkParent, lookupParentByPhone, deleteStudent, uploadStudentPhoto, uploadStudentDocument, resolveUploadUrl, addStudentPhoto, updateStudent } from '../../../../services/student.service';
 import { useNotify } from '../../../../components/NotificationProvider';
 import FullPageLoader from '../../../../components/FullPageLoader';
+import PageHeader from '../../../../components/PageHeader';
 
 type Step = 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8;
 
@@ -413,45 +414,11 @@ export default function StudentOnboardingPage() {
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-emerald-50/30 to-green-50/40">
       {submitting ? <FullPageLoader label="Saving student..." /> : null}
       
-      {/* Hero Section */}
-      <div className="relative overflow-hidden bg-gradient-to-r from-emerald-600 via-green-600 to-teal-700 px-6 py-16 text-white">
-        <div className="absolute inset-0 bg-black/10"></div>
-        <div className="relative mx-auto max-w-6xl">
-          <div className="flex items-center justify-between">
-            <div>
-              <div className="mb-4 inline-flex items-center rounded-full bg-white/20 px-4 py-2 text-sm font-medium backdrop-blur-sm">
-                <svg className="mr-2 h-4 w-4" fill="currentColor" viewBox="0 0 20 20">
-                  <path d="M10 9a3 3 0 100-6 3 3 0 000 6zm-7 9a7 7 0 1114 0H3z" />
-                </svg>
-                Student Enrollment
-              </div>
-              <h1 className="mb-4 text-4xl font-bold tracking-tight sm:text-5xl">
-                Add New Student
-              </h1>
-              <p className="max-w-2xl text-lg text-emerald-100">
-                Complete step-by-step enrollment process for accurate academic mapping and comprehensive student records.
-              </p>
-            </div>
-            
-            <button
-              onClick={() => setBulkOpen(true)}
-              className="hidden sm:flex items-center rounded-xl bg-white/20 px-6 py-3 font-semibold text-white backdrop-blur-sm transition-all hover:bg-white/30 hover:scale-105"
-            >
-              <svg className="mr-2 h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M9 19l3 3m0 0l3-3m-3 3V10" />
-              </svg>
-              Bulk Upload
-            </button>
-          </div>
-        </div>
-        
-        {/* Animated background elements */}
-        <div className="absolute -top-10 -left-10 h-40 w-40 rounded-full bg-white/10 animate-pulse"></div>
-        <div className="absolute -bottom-10 -right-10 h-32 w-32 rounded-full bg-white/10 animate-bounce"></div>
-        <div className="absolute top-1/2 left-1/3 h-6 w-6 rounded-full bg-white/20 animate-ping"></div>
-      </div>
-
-      <div className="mx-auto max-w-4xl px-6 py-12">
+      <div className="w-full pr-6 pb-12">
+        <PageHeader
+          title="Add New Student"
+          subtitle="Complete step-by-step enrollment process for accurate academic mapping and comprehensive student records."
+        />
         {/* Enhanced Stepper */}
         <div className="mb-8 rounded-2xl bg-white p-6 shadow-lg ring-1 ring-gray-200">
           <div className="flex items-center justify-between overflow-x-auto pb-2">

@@ -7,6 +7,9 @@ import { listSchools } from '../../../../services/school.service';
 import { getSession } from '../../../../services/auth.service';
 import { useNotify } from '../../../../components/NotificationProvider';
 import FullPageLoader from '../../../../components/FullPageLoader';
+import PageHeader from '../../../../components/PageHeader';
+import DashboardPageContainer from '../../../../components/DashboardPageContainer';
+import Button from '../../../../components/Button';
 
 const toTitleCase = (str: string) => {
   return str.replace(/\w\S*/g, (txt) => 
@@ -231,31 +234,11 @@ export default function AddTeacherPage() {
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50/30 to-indigo-50/40">
       {createMutation.isPending ? <FullPageLoader label="Saving employee..." /> : null}
       
-      {/* Hero Section */}
-      <div className="relative overflow-hidden bg-gradient-to-r from-emerald-600 via-teal-600 to-cyan-700 px-6 py-16 text-white">
-        <div className="absolute inset-0 bg-black/10"></div>
-        <div className="relative mx-auto max-w-4xl text-center">
-          <div className="mb-4 inline-flex items-center rounded-full bg-white/20 px-4 py-2 text-sm font-medium backdrop-blur-sm">
-            <svg className="mr-2 h-4 w-4" fill="currentColor" viewBox="0 0 20 20">
-              <path d="M13 6a3 3 0 11-6 0 3 3 0 016 0zM18 8a2 2 0 11-4 0 2 2 0 014 0zM14 15a4 4 0 00-8 0v3h8v-3z" />
-            </svg>
-            Employee Management
-          </div>
-          <h1 className="mb-4 text-4xl font-bold tracking-tight sm:text-5xl">
-            Add New Employee
-          </h1>
-          <p className="mx-auto max-w-2xl text-lg text-emerald-100">
-            Create employee profiles and assign the right user category for your school operations.
-          </p>
-        </div>
-        
-        {/* Animated background elements */}
-        <div className="absolute -top-10 -left-10 h-40 w-40 rounded-full bg-white/10 animate-pulse"></div>
-        <div className="absolute -bottom-10 -right-10 h-32 w-32 rounded-full bg-white/10 animate-bounce"></div>
-        <div className="absolute top-1/2 right-1/4 h-6 w-6 rounded-full bg-white/20 animate-ping"></div>
-      </div>
-
-      <div className="mx-auto max-w-4xl px-6 py-12">
+      <DashboardPageContainer maxWidthClassName="">
+        <PageHeader
+          title="Add New Employee"
+          subtitle="Create employee profiles and assign the right user category for your school operations."
+        />
         {/* Progress Stepper */}
         <div className="mb-12">
           <div className="flex items-center justify-between">
@@ -575,56 +558,45 @@ export default function AddTeacherPage() {
           {/* Action Buttons */}
           <div className="mt-8 flex items-center justify-between">
             {step > 1 ? (
-              <button
+              <Button
+                variant="outline"
                 onClick={prevStep}
-                className="flex items-center rounded-xl border border-gray-300 px-6 py-3 text-sm font-semibold text-gray-700 hover:bg-gray-50 transition-colors"
+                icon={
+                  <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+                  </svg>
+                }
               >
-                <svg className="mr-2 h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
-                </svg>
                 Previous
-              </button>
+              </Button>
             ) : (
               <div></div>
             )}
             
-            <button
+            <Button
+              variant="primary"
               onClick={() => {
                 if (step < 5) return nextStep();
                 if (!validateBeforeCreate()) return;
                 createMutation.mutate();
               }}
               disabled={createMutation.isPending || !effectiveSchoolId}
-              className={`flex items-center rounded-xl px-8 py-3 text-sm font-semibold text-white transition-all ${
-                step < 5
-                  ? 'bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-600 hover:to-teal-700 shadow-lg hover:shadow-xl'
-                  : 'bg-gradient-to-r from-green-500 to-emerald-600 hover:from-green-600 hover:to-emerald-700 shadow-lg hover:shadow-xl'
-              }`}
-            >
-              {step < 5 ? (
-                <>
-                  Continue
-                  <svg className="ml-2 h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              loading={step === 5 && createMutation.isPending}
+              icon={
+                step < 5 ? (
+                  <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
                   </svg>
-                </>
-              ) : createMutation.isPending ? (
-                <>
-                  <svg className="mr-2 h-4 w-4 animate-spin" fill="none" viewBox="0 0 24 24">
-                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                    <path className="opacity-75" fill="currentColor" d="m4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                  </svg>
-                  Creating...
-                </>
-              ) : (
-                <>
-                  Create Employee
-                  <svg className="ml-2 h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                ) : (
+                  <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
                   </svg>
-                </>
-              )}
-            </button>
+                )
+              }
+              iconPosition="right"
+            >
+              {step < 5 ? 'Continue' : 'Create Employee'}
+            </Button>
           </div>
         </div>
 
@@ -656,7 +628,7 @@ export default function AddTeacherPage() {
             </div>
           </div>
         )}
-      </div>
+      </DashboardPageContainer>
     </div>
   );
 }

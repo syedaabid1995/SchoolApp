@@ -9,6 +9,7 @@ import { listStudents, getStudent, resolveUploadUrl } from '../../../services/st
 import { listTeachers, getTeacher } from '../../../services/teacher.service';
 import IdCardPreview from '../../../id_cards/IdCardPreview';
 import type { IdCardRecord, IdCardTemplate } from '../../../id_cards/types';
+import PageHeader from '../../../components/PageHeader';
 
 async function listTemplates() {
   const res = await fetch('/api/id-cards/templates');
@@ -100,7 +101,13 @@ export default function IdCardsPage() {
   const photoUrl = resolveUploadUrl(selectedRecord?.photoUrl ?? null);
 
   return (
-    <div className="space-y-6">
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-violet-50/30 to-purple-50/40">
+      <div className="mx-auto max-w-7xl pr-6 pb-12">
+        <PageHeader
+          title="ID Cards"
+          subtitle="Generate and print professional ID cards for students and employees with customizable templates."
+        />
+        <div className="space-y-6">
       <section className="rounded-2xl border border-slate/10 bg-white p-6">
         <div className="flex flex-wrap items-end gap-3">
           <div>
@@ -202,6 +209,8 @@ export default function IdCardsPage() {
           </div>
         )}
       </section>
+        </div>
+      </div>
     </div>
   );
 }

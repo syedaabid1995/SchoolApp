@@ -8,6 +8,8 @@ import { listExams, getExam, listMarks, uploadMarks } from '../../../../services
 import { getSession } from '../../../../services/auth.service';
 import { listStudents, Student } from '../../../../services/student.service';
 import { useNotify } from '../../../../components/NotificationProvider';
+import PageHeader from '../../../../components/PageHeader';
+import Button from '../../../../components/Button';
 
 type ExamPaper = {
   id: string;
@@ -272,56 +274,11 @@ export default function MarksUploadPage() {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-green-50/30 to-emerald-50/40">
-      {/* Hero Section */}
-      <div className="relative overflow-hidden bg-gradient-to-r from-green-600 via-emerald-600 to-teal-700 px-6 py-16 text-white">
-        <div className="absolute inset-0 bg-black/10"></div>
-        <div className="relative mx-auto max-w-6xl">
-          <div className="flex items-center justify-between">
-            <div>
-              <div className="mb-4 inline-flex items-center rounded-full bg-white/20 px-4 py-2 text-sm font-medium backdrop-blur-sm">
-                <svg className="mr-2 h-4 w-4" fill="currentColor" viewBox="0 0 20 20">
-                  <path d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
-                </svg>
-                Marks Management
-              </div>
-              <h1 className="mb-4 text-4xl font-bold tracking-tight sm:text-5xl">
-                Upload Marks
-              </h1>
-              <p className="max-w-2xl text-lg text-green-100">
-                Enter and manage student marks for exams with comprehensive grading and assessment tools.
-              </p>
-            </div>
-            
-            <div className="hidden sm:flex gap-3">
-              <Link
-                href="/dashboard/academics"
-                className="flex items-center rounded-xl bg-white/20 px-6 py-3 font-semibold text-white backdrop-blur-sm transition-all hover:bg-white/30 hover:scale-105"
-              >
-                <svg className="mr-2 h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.394 2.08a1 1 0 00-.788 0l-7 3a1 1 0 000 1.84L5.25 8.051a.999.999 0 01.356-.257l4-1.714a1 1 0 11.788 1.838L7.667 9.088l1.94.831a1 1 0 00.787 0l7-3a1 1 0 000-1.838l-7-3z" />
-                </svg>
-                Academics
-              </Link>
-              <Link
-                href="/dashboard/academics/exams"
-                className="flex items-center rounded-xl bg-white/20 px-6 py-3 font-semibold text-white backdrop-blur-sm transition-all hover:bg-white/30 hover:scale-105"
-              >
-                <svg className="mr-2 h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                </svg>
-                Exams
-              </Link>
-            </div>
-          </div>
-        </div>
-        
-        {/* Animated background elements */}
-        <div className="absolute -top-10 -left-10 h-40 w-40 rounded-full bg-white/10 animate-pulse"></div>
-        <div className="absolute -bottom-10 -right-10 h-32 w-32 rounded-full bg-white/10 animate-bounce"></div>
-        <div className="absolute top-1/2 left-1/3 h-6 w-6 rounded-full bg-white/20 animate-ping"></div>
-      </div>
-
-      <div className="mx-auto max-w-7xl px-6 py-12">
+      <div className="mx-auto max-w-7xl pr-6 pb-12">
+        <PageHeader
+          title="Upload Marks"
+          subtitle="Enter and manage student marks for exams with comprehensive grading and assessment tools."
+        />
         {/* Stats Cards */}
         {loaded && (
           <div className="mb-8 grid gap-6 md:grid-cols-4">
@@ -482,17 +439,17 @@ export default function MarksUploadPage() {
             </div>
           </div>
           <div className="mt-6">
-            <button
-              className="rounded-xl bg-gradient-to-r from-green-600 to-emerald-600 px-6 py-3 text-sm font-semibold text-white shadow-lg transition-all hover:from-green-700 hover:to-emerald-700 hover:shadow-xl"
+            <Button
+              variant="primary"
               onClick={loadStudents}
-            >
-              <div className="flex items-center">
-                <svg className="mr-2 h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              icon={
+                <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
                 </svg>
-                Load Students
-              </div>
-            </button>
+              }
+            >
+              Load Students
+            </Button>
           </div>
         </section>
 

@@ -9,6 +9,8 @@ import { getSession } from '../../../../services/auth.service';
 import { createExam, listExams } from '../../../../services/report.service';
 import { useNotify } from '../../../../components/NotificationProvider';
 import FullPageLoader from '../../../../components/FullPageLoader';
+import PageHeader from '../../../../components/PageHeader';
+import Button from '../../../../components/Button';
 
 type SubjectRow = {
   id: string;
@@ -242,56 +244,11 @@ export default function ExamsPage() {
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-orange-50/30 to-red-50/40">
       {createExamMutation.isPending && <FullPageLoader label="Saving exam..." />}
       
-      {/* Hero Section */}
-      <div className="relative overflow-hidden bg-gradient-to-r from-orange-600 via-red-600 to-pink-700 px-6 py-16 text-white">
-        <div className="absolute inset-0 bg-black/10"></div>
-        <div className="relative mx-auto max-w-6xl">
-          <div className="flex items-center justify-between">
-            <div>
-              <div className="mb-4 inline-flex items-center rounded-full bg-white/20 px-4 py-2 text-sm font-medium backdrop-blur-sm">
-                <svg className="mr-2 h-4 w-4" fill="currentColor" viewBox="0 0 20 20">
-                  <path d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                </svg>
-                Examination Management
-              </div>
-              <h1 className="mb-4 text-4xl font-bold tracking-tight sm:text-5xl">
-                Exams & Assessments
-              </h1>
-              <p className="max-w-2xl text-lg text-orange-100">
-                Create comprehensive exams, map subjects, and configure assessment structures for your academic programs.
-              </p>
-            </div>
-            
-            <div className="hidden sm:flex gap-3">
-              <Link
-                href="/dashboard/academics"
-                className="flex items-center rounded-xl bg-white/20 px-6 py-3 font-semibold text-white backdrop-blur-sm transition-all hover:bg-white/30 hover:scale-105"
-              >
-                <svg className="mr-2 h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.394 2.08a1 1 0 00-.788 0l-7 3a1 1 0 000 1.84L5.25 8.051a.999.999 0 01.356-.257l4-1.714a1 1 0 11.788 1.838L7.667 9.088l1.94.831a1 1 0 00.787 0l7-3a1 1 0 000-1.838l-7-3z" />
-                </svg>
-                Academics
-              </Link>
-              <Link
-                href="/dashboard/academics/marks"
-                className="flex items-center rounded-xl bg-white/20 px-6 py-3 font-semibold text-white backdrop-blur-sm transition-all hover:bg-white/30 hover:scale-105"
-              >
-                <svg className="mr-2 h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
-                </svg>
-                Marks
-              </Link>
-            </div>
-          </div>
-        </div>
-        
-        {/* Animated background elements */}
-        <div className="absolute -top-10 -left-10 h-40 w-40 rounded-full bg-white/10 animate-pulse"></div>
-        <div className="absolute -bottom-10 -right-10 h-32 w-32 rounded-full bg-white/10 animate-bounce"></div>
-        <div className="absolute top-1/2 left-1/3 h-6 w-6 rounded-full bg-white/20 animate-ping"></div>
-      </div>
-
-      <div className="mx-auto max-w-7xl px-6 py-12">
+      <div className="mx-auto max-w-7xl pr-6 pb-12">
+        <PageHeader
+          title="Exams & Assessments"
+          subtitle="Create comprehensive exams, map subjects, and configure assessment structures for your academic programs."
+        />
         {/* Stats Cards */}
         <div className="mb-8 grid gap-6 md:grid-cols-4">
           <div className="rounded-2xl bg-gradient-to-br from-blue-500 to-blue-600 p-6 text-white shadow-lg">
@@ -529,18 +486,20 @@ export default function ExamsPage() {
               </div>
             </div>
             <div className="flex gap-2">
-              <button
-                className="rounded-lg bg-ink px-4 py-2 text-sm font-semibold text-white"
+              <Button
+                variant="primary"
+                size="sm"
                 onClick={handleContinueFromBasics}
               >
                 Save & Continue
-              </button>
-              <button
-                className="rounded-lg border border-slate/20 px-4 py-2 text-sm"
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
                 onClick={() => setStep(1)}
               >
                 Cancel
-              </button>
+              </Button>
             </div>
           </div>
         ) : null}
@@ -636,11 +595,12 @@ export default function ExamsPage() {
               </table>
             </div>
             <div className="flex gap-2">
-              <button className="rounded-lg border border-slate/20 px-4 py-2 text-sm" onClick={() => setStep(1)}>
+              <Button variant="outline" size="sm" onClick={() => setStep(1)}>
                 Back
-              </button>
-              <button
-                className="rounded-lg bg-ink px-4 py-2 text-sm font-semibold text-white"
+              </Button>
+              <Button
+                variant="primary"
+                size="sm"
                 onClick={() => {
                   if (!selectedSubjectIds.length) {
                     const message = 'Select at least one subject.';
@@ -661,7 +621,7 @@ export default function ExamsPage() {
                 }}
               >
                 Save & Continue
-              </button>
+              </Button>
             </div>
           </div>
         ) : null}
@@ -722,27 +682,29 @@ export default function ExamsPage() {
               ) : null}
             </div>
             <div className="flex gap-2">
-              <button className="rounded-lg border border-slate/20 px-4 py-2 text-sm" onClick={() => setStep(2)}>
+              <Button variant="outline" size="sm" onClick={() => setStep(2)}>
                 Back
-              </button>
-              <button
-                className="rounded-lg border border-slate/20 px-4 py-2 text-sm"
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
                 onClick={() => {
                   createExamMutation.mutate({ status: 'DRAFT' });
                 }}
                 disabled={createExamMutation.isPending}
               >
                 Save Exam
-              </button>
-              <button
-                className="rounded-lg bg-ink px-4 py-2 text-sm font-semibold text-white"
+              </Button>
+              <Button
+                variant="primary"
+                size="sm"
                 onClick={() => {
                   createExamMutation.mutate({ status: 'PUBLISHED' });
                 }}
                 disabled={createExamMutation.isPending}
               >
                 Publish Exam
-              </button>
+              </Button>
             </div>
           </div>
         ) : null}

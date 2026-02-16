@@ -1,6 +1,8 @@
 'use client';
 
 import { useState } from 'react';
+import PageHeader from '../../../components/PageHeader';
+import Button from '../../../components/Button';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   getAttendanceSummary,
@@ -92,41 +94,11 @@ export default function AttendancePage() {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-indigo-50/30 to-blue-50/40">
-      <div className="relative overflow-hidden bg-gradient-to-r from-indigo-600 via-blue-600 to-sky-700 px-6 py-16 text-white">
-        <div className="absolute inset-0 bg-black/10"></div>
-        <div className="relative mx-auto max-w-6xl">
-          <div className="flex items-center justify-between gap-6">
-            <div>
-              <div className="mb-4 inline-flex items-center rounded-full bg-white/20 px-4 py-2 text-sm font-medium backdrop-blur-sm">
-                <svg className="mr-2 h-4 w-4" fill="currentColor" viewBox="0 0 20 20">
-                  <path d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-                </svg>
-                Attendance Review
-              </div>
-              <h1 className="mb-4 text-4xl font-bold tracking-tight sm:text-5xl">Daily Attendance</h1>
-              <p className="max-w-2xl text-lg text-blue-100">
-                {`Review attendance for ${selectedSchoolName} (${dateLabel}), approve sessions, and inspect audits.`}
-              </p>
-            </div>
-            <div className="hidden sm:flex items-center gap-3 rounded-2xl bg-white/10 px-5 py-4 backdrop-blur-sm">
-              <div className="text-right">
-                <p className="text-xs uppercase text-blue-100">Pending Approvals</p>
-                <p className="text-2xl font-semibold">{summary?.approvals.pending ?? 0}</p>
-              </div>
-              <div className="h-10 w-px bg-white/30" />
-              <div className="text-right">
-                <p className="text-xs uppercase text-blue-100">Total Records</p>
-                <p className="text-2xl font-semibold">{summary?.totals.total ?? 0}</p>
-              </div>
-            </div>
-          </div>
-        </div>
-        <div className="absolute -top-10 -left-10 h-40 w-40 rounded-full bg-white/10 animate-pulse"></div>
-        <div className="absolute -bottom-10 -right-10 h-32 w-32 rounded-full bg-white/10 animate-bounce"></div>
-        <div className="absolute top-1/2 left-1/3 h-6 w-6 rounded-full bg-white/20 animate-ping"></div>
-      </div>
-
-      <div className="mx-auto max-w-7xl px-6 py-12 space-y-8">
+      <div className="mx-auto max-w-7xl pr-6 pb-12">
+        <PageHeader
+          title="Daily Attendance"
+          subtitle={`Review attendance for ${selectedSchoolName} (${dateLabel}), approve sessions, and inspect audits.`}
+        />
         <section className="rounded-2xl bg-white p-6 shadow-lg ring-1 ring-gray-200">
           <div className="flex flex-wrap items-center gap-4">
             {isSuperAdmin ? (
@@ -176,12 +148,13 @@ export default function AttendancePage() {
               <option value="OPEN">Open</option>
               <option value="CLOSED">Closed</option>
             </select>
-            <button
+            <Button
+              variant="outline"
+              size="sm"
               onClick={() => setFilters({ approval: '', status: '' })}
-              className="rounded-xl border border-gray-300 px-4 py-3 text-sm font-semibold hover:bg-gray-50"
             >
               Clear filters
-            </button>
+            </Button>
           </div>
           <div className="mt-6 grid gap-6 md:grid-cols-4">
             <div className="rounded-2xl bg-gradient-to-br from-blue-500 to-blue-600 p-5 text-white shadow-lg">
@@ -247,19 +220,22 @@ export default function AttendancePage() {
                       <td>{session._count?.records ?? 0}</td>
                       <td className="text-right">
                         <div className="flex justify-end gap-2">
-                          <button
-                            className="rounded-lg border border-slate/20 px-3 py-1 text-xs"
+                          <Button
+                            variant="primary"
+                            size="sm"
                             onClick={() => approveMutation.mutate(session.id)}
-                            disabled={approveMutation.isPending || session.approvalStatus === 'APPROVED'}
+                            disabled={session.approvalStatus === 'APPROVED'}
+                            loading={approveMutation.isPending}
                           >
                             Approve
-                          </button>
-                          <button
-                            className="rounded-lg border border-slate/20 px-3 py-1 text-xs"
+                          </Button>
+                          <Button
+                            variant="outline"
+                            size="sm"
                             onClick={() => setReject({ sessionId: session.id, reason: '' })}
                           >
                             Reject
-                          </button>
+                          </Button>
                         </div>
                       </td>
                     </tr>
@@ -316,19 +292,22 @@ export default function AttendancePage() {
               className="mt-3 w-full rounded-lg border border-slate/20 px-3 py-2 text-sm"
             />
             <div className="mt-4 flex gap-2">
-              <button
-                className="rounded-lg bg-ink px-4 py-2 text-sm font-semibold text-white"
+              <Button
+                variant="primary"
+                size="sm"
                 onClick={() => rejectMutation.mutate()}
-                disabled={!reject.reason || rejectMutation.isPending}
+                disabled={!reject.reason}
+                loading={rejectMutation.isPending}
               >
                 Submit Rejection
-              </button>
-              <button
-                className="rounded-lg border border-slate/20 px-4 py-2 text-sm"
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
                 onClick={() => setReject({ sessionId: '', reason: '' })}
               >
                 Cancel
-              </button>
+              </Button>
             </div>
           </section>
         ) : null}

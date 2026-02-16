@@ -1,6 +1,8 @@
 'use client';
 
 import { useState } from 'react';
+import PageHeader from '../../../components/PageHeader';
+import Button from '../../../components/Button';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { listTickets, createTicket, updateTicket, type SupportTicket } from '../../../services/support.service';
 
@@ -38,25 +40,12 @@ export default function SupportPage() {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50/30 to-purple-50/40 p-6">
-      <div className="mx-auto max-w-7xl space-y-6">
-        {/* Header */}
-        <div className="relative overflow-hidden rounded-3xl bg-gradient-to-r from-blue-600 via-cyan-600 to-teal-700 p-8 text-white shadow-2xl">
-          <div className="absolute inset-0 bg-black/10"></div>
-          <div className="relative">
-            <div className="mb-4 inline-flex items-center rounded-full bg-white/20 px-4 py-2 text-sm font-medium backdrop-blur-sm">
-              <svg className="mr-2 h-4 w-4" fill="currentColor" viewBox="0 0 20 20">
-                <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
-              </svg>
-              Support Center
-            </div>
-            <h1 className="text-4xl font-bold tracking-tight">Help & Support</h1>
-            <p className="mt-2 text-blue-100">Get assistance with technical issues, track support tickets, and access help resources.</p>
-          </div>
-          <div className="absolute -top-10 -right-10 h-40 w-40 rounded-full bg-white/10 animate-pulse"></div>
-          <div className="absolute -bottom-8 -left-8 h-32 w-32 rounded-full bg-white/10 animate-bounce"></div>
-        </div>
-        {/* Stats Cards */}
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50/30 to-purple-50/40">
+      <div className="mx-auto max-w-7xl pr-6 pb-12">
+        <PageHeader
+          title="Help & Support"
+          subtitle="Get assistance with technical issues, track support tickets, and access help resources."
+        />
         <div className="grid gap-6 md:grid-cols-4">
           <div className="rounded-2xl bg-gradient-to-br from-blue-500 to-blue-600 p-6 text-white shadow-lg">
             <div className="flex items-center justify-between">
@@ -151,8 +140,8 @@ export default function SupportPage() {
             </div>
           </div>
           <div className="mt-6 flex items-center gap-4">
-            <button
-              className="rounded-xl bg-gradient-to-r from-blue-600 to-cyan-600 px-6 py-3 text-sm font-semibold text-white shadow-lg transition-all hover:from-blue-700 hover:to-cyan-700 hover:shadow-xl disabled:opacity-50"
+            <Button
+              variant="primary"
               onClick={() => {
                 let error = '';
                 if (!form.subject.trim()) error = 'Subject is required.';
@@ -162,24 +151,15 @@ export default function SupportPage() {
                 createMutation.mutate(form);
               }}
               disabled={createMutation.isPending}
+              loading={createMutation.isPending}
+              icon={
+                <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+                </svg>
+              }
             >
-              {createMutation.isPending ? (
-                <div className="flex items-center">
-                  <svg className="mr-2 h-4 w-4 animate-spin" fill="none" viewBox="0 0 24 24">
-                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                    <path className="opacity-75" fill="currentColor" d="m4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                  </svg>
-                  Creating...
-                </div>
-              ) : (
-                <div className="flex items-center">
-                  <svg className="mr-2 h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
-                  </svg>
-                  Create Ticket
-                </div>
-              )}
-            </button>
+              Create Ticket
+            </Button>
             {formError && (
               <div className="flex items-center text-sm text-red-600">
                 <svg className="mr-1 h-4 w-4" fill="currentColor" viewBox="0 0 20 20">

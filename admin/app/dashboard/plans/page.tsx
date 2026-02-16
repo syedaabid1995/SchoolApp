@@ -7,6 +7,9 @@ import { getSession } from '../../../services/auth.service';
 import { getSubscription, listActivePlans, upsertSubscription } from '../../../services/subscription.service';
 import { useNotify } from '../../../components/NotificationProvider';
 import FullPageLoader from '../../../components/FullPageLoader';
+import Button from '../../../components/Button';
+import PageHeader from '../../../components/PageHeader';
+import DashboardPageContainer from '../../../components/DashboardPageContainer';
 
 export default function PlansPage() {
   const queryClient = useQueryClient();
@@ -132,32 +135,11 @@ export default function PlansPage() {
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50/30 to-indigo-50/40">
       {isBusy ? <FullPageLoader label="Loading plans..." /> : null}
       
-      {/* Hero Section */}
-      <div className="relative overflow-hidden bg-gradient-to-r from-blue-600 via-purple-600 to-indigo-700 px-6 py-16 text-white">
-        <div className="absolute inset-0 bg-black/10"></div>
-        <div className="relative mx-auto max-w-4xl text-center">
-          <div className="mb-4 inline-flex items-center rounded-full bg-white/20 px-4 py-2 text-sm font-medium backdrop-blur-sm">
-            <svg className="mr-2 h-4 w-4" fill="currentColor" viewBox="0 0 20 20">
-              <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
-            </svg>
-            Subscription Management
-          </div>
-          <h1 className="mb-4 text-4xl font-bold tracking-tight sm:text-5xl">
-            Choose Your Perfect Plan
-          </h1>
-          <p className="mx-auto max-w-2xl text-lg text-blue-100">
-            Scale your school management with flexible plans designed to grow with your institution. 
-            Upgrade anytime to unlock advanced features and increased capacity.
-          </p>
-        </div>
-        
-        {/* Animated background elements */}
-        <div className="absolute -top-10 -left-10 h-40 w-40 rounded-full bg-white/10 animate-pulse"></div>
-        <div className="absolute -bottom-10 -right-10 h-32 w-32 rounded-full bg-white/10 animate-bounce"></div>
-        <div className="absolute top-1/2 left-1/4 h-6 w-6 rounded-full bg-white/20 animate-ping"></div>
-      </div>
-
-      <div className="mx-auto max-w-7xl px-6 py-12">
+      <DashboardPageContainer maxWidthClassName="max-w-7xl">
+        <PageHeader
+          title="Subscription Management"
+          subtitle="Scale your school management with flexible plans designed to grow with your institution. Upgrade anytime to unlock advanced features and increased capacity."
+        />
         {/* Current Plan Section */}
         <div className="mb-12">
           <div className="mb-6 text-center">
@@ -348,40 +330,20 @@ export default function PlansPage() {
                     ))}
                   </ul>
 
-                  <button
-                    className={`w-full rounded-xl px-6 py-3 font-semibold transition-all duration-200 ${
-                      isCurrent && !canRenewCurrent
-                        ? 'bg-gray-200 text-gray-600 cursor-not-allowed'
-                        : isPopular
-                        ? 'bg-gradient-to-r from-blue-600 to-purple-600 text-white hover:from-blue-700 hover:to-purple-700 shadow-lg hover:shadow-xl'
-                        : 'bg-gray-900 text-white hover:bg-gray-800 shadow-lg hover:shadow-xl'
-                    }`}
+                  <Button
+                    variant={isCurrent && !canRenewCurrent ? 'outline' : 'primary'}
+                    fullWidth
                     disabled={(isCurrent && !canRenewCurrent) || upgradeMutation.isPending}
+                    loading={upgradeMutation.isPending}
                     onClick={() => upgradeMutation.mutate(plan.id)}
+                    icon={isCurrent && !canRenewCurrent ? (
+                      <svg className="h-4 w-4" fill="currentColor" viewBox="0 0 20 20">
+                        <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+                      </svg>
+                    ) : undefined}
                   >
-                    {canRenewCurrent ? (
-                      <span className="flex items-center justify-center">
-                        Renew Plan
-                      </span>
-                    ) : isCurrent ? (
-                      <span className="flex items-center justify-center">
-                        <svg className="mr-2 h-4 w-4" fill="currentColor" viewBox="0 0 20 20">
-                          <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
-                        </svg>
-                        Current Plan
-                      </span>
-                    ) : upgradeMutation.isPending ? (
-                      <span className="flex items-center justify-center">
-                        <svg className="mr-2 h-4 w-4 animate-spin" fill="none" viewBox="0 0 24 24">
-                          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                          <path className="opacity-75" fill="currentColor" d="m4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                        </svg>
-                        Updating...
-                      </span>
-                    ) : (
-                      'Upgrade Plan'
-                    )}
-                  </button>
+                    {canRenewCurrent ? 'Renew Plan' : isCurrent ? 'Current Plan' : 'Upgrade Plan'}
+                  </Button>
                 </div>
               </div>
             );
@@ -418,7 +380,7 @@ export default function PlansPage() {
             </div>
           </div>
         </div>
-      </div>
+      </DashboardPageContainer>
     </div>
   );
 }

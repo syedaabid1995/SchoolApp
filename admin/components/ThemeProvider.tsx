@@ -16,6 +16,7 @@ const defaultTokens = {
 
 type ThemeTokens = typeof defaultTokens;
 const THEME_TOKEN_KEYS = Object.keys(defaultTokens) as Array<keyof ThemeTokens>;
+const THEME_SYNCED_SCHOOLS = new Set<string>();
 
 export const ThemeContext = createContext<{ logoUrl: string }>({ logoUrl: '' });
 
@@ -58,6 +59,7 @@ export const ThemeProvider = ({ children }: { children: React.ReactNode }) => {
   const [initialSchoolId] = useState(() => getSchoolIdSync());
   const [isHydrated, setIsHydrated] = useState(false);
   const schoolId = session?.schoolId ?? initialSchoolId ?? undefined;
+  const shouldSyncTheme = Boolean(schoolId) && !THEME_SYNCED_SCHOOLS.has(schoolId!);
   const hasCachedTheme = useMemo(() => Boolean(readCachedTokens(schoolId ?? initialSchoolId)), [schoolId, initialSchoolId]);
   const [tokens, setTokens] = useState<ThemeTokens>(() => readCachedTokens(initialSchoolId) ?? defaultTokens);
 
@@ -83,12 +85,22 @@ export const ThemeProvider = ({ children }: { children: React.ReactNode }) => {
   }, [schoolId, initialSchoolId]);
 
   // Revalidate with API in the background once schoolId is known.
-  const { data: activeTheme, isPending } = useQuery({
+  const { data: activeTheme, isPending, isFetched } = useQuery({
     queryKey: ['theme-active', schoolId],
     queryFn: () => fetchActiveTheme(schoolId!),
-    enabled: Boolean(schoolId),
+    enabled: shouldSyncTheme,
     retry: false,
+    staleTime: Number.POSITIVE_INFINITY,
+    gcTime: Number.POSITIVE_INFINITY,
+    refetchOnMount: false,
+    refetchOnWindowFocus: false,
+    refetchOnReconnect: false,
   });
+
+  useEffect(() => {
+    if (!schoolId || !isFetched) return;
+    THEME_SYNCED_SCHOOLS.add(schoolId);
+  }, [schoolId, isFetched]);
 
   // API stores into localStorage. Re-read cache and update UI if changed.
   useEffect(() => {

@@ -1,6 +1,8 @@
 'use client';
 
 import { useMemo, useState } from 'react';
+import PageHeader from '../../../../../components/PageHeader';
+import Button from '../../../../../components/Button';
 import { useQuery } from '@tanstack/react-query';
 import { createStudentAttendanceSession, type StudentAttendanceStatus, updateStudentAttendanceSession } from '../../../../../services/attendanceP1.service';
 import { listClasses, listSections } from '../../../../../services/academic.service';
@@ -110,11 +112,12 @@ export default function StudentAttendanceMarkPage() {
   };
 
   return (
-    <div className="space-y-6 p-6">
-      <div className="rounded-2xl bg-gradient-to-r from-indigo-600 to-blue-600 p-5 text-white shadow">
-        <h1 className="text-2xl font-semibold">Student Attendance</h1>
-        <p className="mt-1 text-sm text-blue-100">Select class and date, then mark each student quickly.</p>
-      </div>
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-indigo-50/30 to-blue-50/40">
+      <div className="mx-auto max-w-7xl pr-6 pb-12">
+        <PageHeader
+          title="Student Attendance"
+          subtitle="Select class and date, then mark each student quickly."
+        />
 
       <div className="rounded-2xl border bg-white p-4 shadow-sm">
         <div className="grid gap-3 md:grid-cols-4">
@@ -153,13 +156,15 @@ export default function StudentAttendanceMarkPage() {
             ))}
           </select>
           <input className="rounded-lg border px-3 py-2 text-sm" type="date" max={today} value={date} onChange={(event) => setDate(event.target.value)} />
-          <button
-            className="rounded-lg bg-blue-600 px-3 py-2 text-sm font-medium text-white disabled:opacity-50"
+          <Button
+            variant="primary"
+            size="sm"
             onClick={upsertSession}
-            disabled={loading || !classId || (sectionRequired && !sectionId)}
+            disabled={!classId || (sectionRequired && !sectionId)}
+            loading={loading}
           >
-            {loading ? 'Loading...' : 'Load Students'}
-          </button>
+            Load Students
+          </Button>
         </div>
       </div>
 
@@ -224,15 +229,16 @@ export default function StudentAttendanceMarkPage() {
       ) : null}
 
       <div className="flex gap-2">
-        <button className="rounded-lg bg-slate-800 px-4 py-2 text-sm text-white disabled:opacity-50" onClick={() => save(false)} disabled={loading || !sessionId}>
+        <Button variant="primary" size="sm" onClick={() => save(false)} disabled={!sessionId} loading={loading}>
           Save Draft
-        </button>
-        <button className="rounded-lg bg-emerald-600 px-4 py-2 text-sm text-white disabled:opacity-50" onClick={() => save(true)} disabled={loading || !sessionId}>
+        </Button>
+        <Button variant="primary" size="sm" onClick={() => save(true)} disabled={!sessionId} loading={loading}>
           Submit & Lock
-        </button>
+        </Button>
       </div>
 
-      {message ? <p className="rounded border bg-slate-50 px-3 py-2 text-sm text-slate-700">{message}</p> : null}
+        {message ? <p className="rounded border bg-slate-50 px-3 py-2 text-sm text-slate-700">{message}</p> : null}
+      </div>
     </div>
   );
 }

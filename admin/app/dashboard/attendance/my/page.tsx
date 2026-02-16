@@ -1,6 +1,8 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
+import PageHeader from '../../../../components/PageHeader';
+import Button from '../../../../components/Button';
 import { getSession } from '../../../../services/auth.service';
 import { listTeacherSelfAttendance, markTeacherSelfAttendance, listLeaveRequests } from '../../../../services/attendanceP1.service';
 
@@ -113,27 +115,11 @@ export default function MyAttendancePage() {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-purple-50/30 to-pink-50/40">
-      {/* Header */}
-      <div className="relative overflow-hidden bg-gradient-to-r from-purple-600 via-pink-600 to-rose-700 px-6 py-12 text-white">
-        <div className="absolute inset-0 bg-black/10"></div>
-        <div className="relative mx-auto max-w-6xl">
-          <div className="flex items-center gap-4 mb-4">
-            <div className="rounded-full bg-white/20 p-3 backdrop-blur-sm">
-              <svg className="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-              </svg>
-            </div>
-            <div>
-              <h1 className="text-3xl font-bold tracking-tight">My Attendance</h1>
-              <p className="text-purple-100">Track your monthly attendance and mark each day from the calendar</p>
-            </div>
-          </div>
-        </div>
-        <div className="absolute -top-10 -right-10 h-32 w-32 rounded-full bg-white/10 animate-pulse"></div>
-        <div className="absolute -bottom-5 -left-5 h-20 w-20 rounded-full bg-white/10 animate-bounce"></div>
-      </div>
-
-      <div className="mx-auto max-w-6xl px-6 py-8 space-y-6">
+      <div className="mx-auto max-w-7xl pr-6 pb-12">
+        <PageHeader
+          title="My Attendance"
+          subtitle="Track your monthly attendance and mark each day from the calendar"
+        />
         {role && role !== 'TEACHER' ? (
           <div className="rounded-2xl border border-amber-300 bg-gradient-to-r from-amber-50 to-yellow-50 p-4 shadow-sm">
             <div className="flex items-center gap-3">
@@ -150,25 +136,29 @@ export default function MyAttendancePage() {
         {/* Calendar */}
         <div className="rounded-2xl bg-white p-6 shadow-lg ring-1 ring-gray-200">
           <div className="mb-6 flex items-center justify-between">
-            <button
-              className="flex items-center gap-2 rounded-xl border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors"
+            <Button
+              variant="outline"
+              size="sm"
               onClick={() => setMonthCursor(new Date(monthCursor.getFullYear(), monthCursor.getMonth() - 1, 1))}
-            >
-              <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              icon={<svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
-              </svg>
+              </svg>}
+              iconPosition="left"
+            >
               Previous
-            </button>
+            </Button>
             <h2 className="text-2xl font-bold text-gray-900">{monthLabel}</h2>
-            <button
-              className="flex items-center gap-2 rounded-xl border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors"
+            <Button
+              variant="outline"
+              size="sm"
               onClick={() => setMonthCursor(new Date(monthCursor.getFullYear(), monthCursor.getMonth() + 1, 1))}
+              icon={<svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+              </svg>}
+              iconPosition="right"
             >
               Next
-              <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-              </svg>
-            </button>
+            </Button>
           </div>
 
           <div className="grid grid-cols-7 gap-2 mb-4">
@@ -270,30 +260,23 @@ export default function MyAttendancePage() {
               </div>
               
               <div className="flex justify-end gap-3">
-                <button 
-                  className="rounded-xl border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors" 
+                <Button 
+                  variant="outline"
+                  size="sm"
                   onClick={() => setSelectedDate(null)} 
                   disabled={isSaving}
                 >
                   Cancel
-                </button>
-                <button 
-                  className="rounded-xl bg-gradient-to-r from-purple-600 to-pink-600 px-6 py-2 text-sm font-semibold text-white shadow-lg hover:from-purple-700 hover:to-pink-700 disabled:opacity-50 transition-all" 
+                </Button>
+                <Button 
+                  variant="primary"
+                  size="sm"
                   onClick={saveMark} 
-                  disabled={isSaving || role !== 'TEACHER'}
+                  disabled={role !== 'TEACHER'}
+                  loading={isSaving}
                 >
-                  {isSaving ? (
-                    <div className="flex items-center gap-2">
-                      <svg className="h-4 w-4 animate-spin" fill="none" viewBox="0 0 24 24">
-                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                        <path className="opacity-75" fill="currentColor" d="m4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                      </svg>
-                      Saving...
-                    </div>
-                  ) : (
-                    'Save Attendance'
-                  )}
-                </button>
+                  Save Attendance
+                </Button>
               </div>
             </div>
           </div>

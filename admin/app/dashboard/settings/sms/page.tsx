@@ -1,6 +1,7 @@
 'use client';
 
 import { useMemo, useState } from 'react';
+import PageHeader from '../../../../components/PageHeader';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { getSession } from '../../../../services/auth.service';
 import {
@@ -106,29 +107,15 @@ export default function SmsSettingsPage() {
   const isBusy = toggleMutation.isPending || saveSchoolConfigMutation.isPending || toggleSchoolConfigMutation.isPending;
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50/30 to-purple-50/40 p-6">
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50/30 to-purple-50/40">
       {isBusy ? <FullPageLoader label="Processing..." /> : null}
-      <div className="mx-auto max-w-7xl space-y-6">
-        {/* Header */}
-        <div className="relative overflow-hidden rounded-3xl bg-gradient-to-r from-green-600 via-emerald-600 to-teal-600 p-8 text-white shadow-2xl">
-          <div className="absolute inset-0 bg-black/10"></div>
-          <div className="relative">
-            <div className="mb-4 inline-flex items-center rounded-full bg-white/20 px-4 py-2 text-sm font-medium backdrop-blur-sm">
-              <svg className="mr-2 h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z" />
-              </svg>
-              SMS Settings
-            </div>
-            <h1 className="text-4xl font-bold tracking-tight">Messaging Configuration</h1>
-            <p className="mt-2 text-green-100">
-              {isSuperAdmin
-                ? 'Manage globally available messaging providers.'
-                : 'Select active provider and save school-level credentials.'}
-            </p>
-          </div>
-          <div className="absolute -top-10 -right-10 h-40 w-40 rounded-full bg-white/10 animate-pulse"></div>
-          <div className="absolute -bottom-8 -left-8 h-32 w-32 rounded-full bg-white/10 animate-bounce"></div>
-        </div>
+      <div className="mx-auto max-w-7xl pr-6 pb-12">
+        <PageHeader
+          title="SMS Settings"
+          subtitle={isSuperAdmin
+            ? 'Manage globally available messaging providers.'
+            : 'Select active provider and save school-level credentials.'}
+        />
 
         {isSuperAdmin ? (
           <section className="rounded-2xl bg-white p-6 shadow-lg ring-1 ring-gray-200">

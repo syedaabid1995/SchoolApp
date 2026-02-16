@@ -1,3 +1,5 @@
+import { clearStoredThemes } from './theme.service';
+
 // Test deployment - updated at $(date)
 export const login = async (payload: { email: string; password: string; schoolId?: string }) => {
   const res = await fetch('/api/auth/login', {
@@ -21,6 +23,7 @@ export const logout = async () => {
   if (!res.ok) {
     throw new Error('Logout failed');
   }
+  clearStoredThemes();
   return res.json();
 };
 

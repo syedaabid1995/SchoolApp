@@ -22,6 +22,8 @@ import {
 } from '../../../services/academic.service';
 import { listSchools } from '../../../services/school.service';
 import { getSession } from '../../../services/auth.service';
+import PageHeader from '../../../components/PageHeader';
+import Button from '../../../components/Button';
 
 export default function AcademicsPage() {
   const queryClient = useQueryClient();
@@ -239,56 +241,11 @@ export default function AcademicsPage() {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50/30 to-indigo-50/40">
-      {/* Hero Section */}
-      <div className="relative overflow-hidden bg-gradient-to-r from-blue-600 via-indigo-600 to-purple-700 px-6 py-16 text-white">
-        <div className="absolute inset-0 bg-black/10"></div>
-        <div className="relative mx-auto max-w-6xl">
-          <div className="flex items-center justify-between">
-            <div>
-              <div className="mb-4 inline-flex items-center rounded-full bg-white/20 px-4 py-2 text-sm font-medium backdrop-blur-sm">
-                <svg className="mr-2 h-4 w-4" fill="currentColor" viewBox="0 0 20 20">
-                  <path d="M10.394 2.08a1 1 0 00-.788 0l-7 3a1 1 0 000 1.84L5.25 8.051a.999.999 0 01.356-.257l4-1.714a1 1 0 11.788 1.838L7.667 9.088l1.94.831a1 1 0 00.787 0l7-3a1 1 0 000-1.838l-7-3zM3.31 9.397L5 10.12v4.102a8.969 8.969 0 00-1.05-.174 1 1 0 01-.89-.89 11.115 11.115 0 01.25-3.762zM9.3 16.573A9.026 9.026 0 007 14.935v-3.957l1.818.78a3 3 0 002.364 0l5.508-2.361a11.026 11.026 0 01.25 3.762 1 1 0 01-.89.89 8.968 8.968 0 00-5.35 2.524 1 1 0 01-1.4 0zM6 18a1 1 0 001-1v-2.065a8.935 8.935 0 00-2-.712V17a1 1 0 001 1z" />
-                </svg>
-                Academic Management
-              </div>
-              <h1 className="mb-4 text-4xl font-bold tracking-tight sm:text-5xl">
-                Academic Structure
-              </h1>
-              <p className="max-w-2xl text-lg text-blue-100">
-                Configure academic years, classes, sections, and subjects to build your school's educational framework.
-              </p>
-            </div>
-            
-            <div className="hidden sm:flex gap-3">
-              <Link
-                href="/dashboard/academics/exams"
-                className="flex items-center rounded-xl bg-white/20 px-6 py-3 font-semibold text-white backdrop-blur-sm transition-all hover:bg-white/30 hover:scale-105"
-              >
-                <svg className="mr-2 h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                </svg>
-                Exams
-              </Link>
-              <Link
-                href="/dashboard/academics/marks"
-                className="flex items-center rounded-xl bg-white/20 px-6 py-3 font-semibold text-white backdrop-blur-sm transition-all hover:bg-white/30 hover:scale-105"
-              >
-                <svg className="mr-2 h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
-                </svg>
-                Marks
-              </Link>
-            </div>
-          </div>
-        </div>
-        
-        {/* Animated background elements */}
-        <div className="absolute -top-10 -left-10 h-40 w-40 rounded-full bg-white/10 animate-pulse"></div>
-        <div className="absolute -bottom-10 -right-10 h-32 w-32 rounded-full bg-white/10 animate-bounce"></div>
-        <div className="absolute top-1/2 left-1/3 h-6 w-6 rounded-full bg-white/20 animate-ping"></div>
-      </div>
-
-      <div className="mx-auto max-w-7xl px-6 py-12">
+      <div className="mx-auto max-w-7xl pr-6 pb-12">
+        <PageHeader
+          title="Academic Structure"
+          subtitle="Configure academic years, classes, sections, and subjects to build your school's educational framework."
+        />
         {/* Stats Cards */}
         <div className="mb-8 grid gap-6 md:grid-cols-4">
           <div className="rounded-2xl bg-gradient-to-br from-blue-500 to-blue-600 p-6 text-white shadow-lg">
@@ -400,8 +357,8 @@ export default function AcademicsPage() {
             </div>
           </div>
           <div className="flex items-center gap-4">
-            <button
-              className="rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 px-6 py-3 text-sm font-semibold text-white shadow-lg transition-all hover:from-blue-700 hover:to-indigo-700 hover:shadow-xl disabled:opacity-50"
+            <Button
+              variant="primary"
               onClick={() => {
                 let error = requireSchool();
                 if (!error && !yearForm.name.trim()) error = 'Year name is required.';
@@ -415,24 +372,15 @@ export default function AcademicsPage() {
                 createYearMutation.mutate({ ...yearForm, schoolId: effectiveSchoolId });
               }}
               disabled={createYearMutation.isPending}
+              loading={createYearMutation.isPending}
+              icon={
+                <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+                </svg>
+              }
             >
-              {createYearMutation.isPending ? (
-                <div className="flex items-center">
-                  <svg className="mr-2 h-4 w-4 animate-spin" fill="none" viewBox="0 0 24 24">
-                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                    <path className="opacity-75" fill="currentColor" d="m4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                  </svg>
-                  Creating...
-                </div>
-              ) : (
-                <div className="flex items-center">
-                  <svg className="mr-2 h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
-                  </svg>
-                  Create Academic Year
-                </div>
-              )}
-            </button>
+              Create Academic Year
+            </Button>
             {yearError && (
               <div className="flex items-center text-sm text-red-600">
                 <svg className="mr-1 h-4 w-4" fill="currentColor" viewBox="0 0 20 20">
@@ -501,8 +449,9 @@ export default function AcademicsPage() {
               </option>
             ))}
           </select>
-          <button
-            className="rounded-lg bg-ink px-4 py-2 text-sm font-semibold text-white"
+          <Button
+            variant="primary"
+            size="sm"
             onClick={() => {
               let error = requireSchool();
               if (!error && !className.trim()) error = 'Class name is required.';
@@ -514,7 +463,7 @@ export default function AcademicsPage() {
             disabled={createClassMutation.isPending}
           >
             Add Class
-          </button>
+          </Button>
         </div>
         {classError ? <p className="mt-3 text-sm font-semibold text-rose-600">{classError}</p> : null}
           <div className="mt-6 overflow-hidden rounded-xl border border-gray-200">
@@ -605,8 +554,9 @@ export default function AcademicsPage() {
             Active
           </label>
         </div>
-        <button
-          className="mt-4 rounded-lg bg-ink px-4 py-2 text-sm font-semibold text-white"
+        <Button
+          variant="primary"
+          size="sm"
           onClick={() => {
             let error = requireSchool();
             if (!error && !examTypeForm.name.trim()) error = 'Exam type name is required.';
@@ -623,7 +573,7 @@ export default function AcademicsPage() {
           disabled={createExamTypeMutation.isPending}
         >
           Add Exam Type
-        </button>
+        </Button>
         {examTypeError ? <p className="mt-3 text-sm font-semibold text-rose-600">{examTypeError}</p> : null}
 
         <div className="mt-6 overflow-hidden rounded-xl border border-gray-200">
@@ -701,8 +651,9 @@ export default function AcademicsPage() {
             ))}
           </select>
         </div>
-        <button
-          className="mt-4 rounded-lg bg-ink px-4 py-2 text-sm font-semibold text-white"
+        <Button
+          variant="primary"
+          size="sm"
           onClick={() => {
             let error = requireSchool();
             if (!error && !sectionForm.name.trim()) error = 'Section name is required.';
@@ -714,7 +665,7 @@ export default function AcademicsPage() {
           disabled={createSectionMutation.isPending}
         >
           Add Section
-        </button>
+        </Button>
         {sectionError ? <p className="mt-3 text-sm font-semibold text-rose-600">{sectionError}</p> : null}
           <div className="mt-6 overflow-hidden rounded-xl border border-gray-200">
             <table className="w-full">
@@ -817,8 +768,9 @@ export default function AcademicsPage() {
             ))}
           </select>
         </div>
-        <button
-          className="mt-4 rounded-lg bg-ink px-4 py-2 text-sm font-semibold text-white"
+        <Button
+          variant="primary"
+          size="sm"
           onClick={() => {
             let error = requireSchool();
             if (!error && !subjectForm.name.trim()) error = 'Subject name is required.';
@@ -836,7 +788,7 @@ export default function AcademicsPage() {
           disabled={createSubjectMutation.isPending}
         >
           Add Subject
-        </button>
+        </Button>
         {subjectError ? <p className="mt-3 text-sm font-semibold text-rose-600">{subjectError}</p> : null}
         <div className="mt-4 grid gap-3 md:grid-cols-3">
           <input

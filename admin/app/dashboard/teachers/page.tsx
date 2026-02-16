@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { listTeachers, updateTeacher, setTeacherStatus, deleteTeacher } from '../../../services/teacher.service';
 import { listSchools } from '../../../services/school.service';
@@ -13,9 +14,13 @@ import {
 } from '../../../services/attendanceSubstitution.service';
 import { getSession } from '../../../services/auth.service';
 import { getEmployeePermissions } from '../../../services/user.service';
+import PageHeader from '../../../components/PageHeader';
+import DashboardPageContainer from '../../../components/DashboardPageContainer';
+import Button from '../../../components/Button';
 
 export default function TeachersPage() {
   const queryClient = useQueryClient();
+  const router = useRouter();
   const [filters, setFilters] = useState({ query: '', status: '' });
   const [roleFilter, setRoleFilter] = useState<'TEACHER' | 'SCHOOL_ADMIN' | 'ACCOUNTANT' | 'LIBRARIAN' | 'STAFF'>('TEACHER');
   const [schoolId, setSchoolId] = useState('');
@@ -175,45 +180,11 @@ export default function TeachersPage() {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-purple-50/30 to-pink-50/40">
-      {/* Hero Section */}
-      <div className="relative overflow-hidden bg-gradient-to-r from-purple-600 via-pink-600 to-rose-700 px-6 py-16 text-white">
-        <div className="absolute inset-0 bg-black/10"></div>
-        <div className="relative mx-auto max-w-6xl">
-          <div className="flex items-center justify-between">
-            <div>
-              <div className="mb-4 inline-flex items-center rounded-full bg-white/20 px-4 py-2 text-sm font-medium backdrop-blur-sm">
-                <svg className="mr-2 h-4 w-4" fill="currentColor" viewBox="0 0 20 20">
-                  <path d="M13 6a3 3 0 11-6 0 3 3 0 016 0zM18 8a2 2 0 11-4 0 2 2 0 014 0zM14 15a4 4 0 00-8 0v3h8v-3z" />
-                </svg>
-                Employee Management
-              </div>
-              <h1 className="mb-4 text-4xl font-bold tracking-tight sm:text-5xl">
-                Employees Directory
-              </h1>
-              <p className="max-w-2xl text-lg text-purple-100">
-                Manage your staff, track assignments, and maintain comprehensive employee records.
-              </p>
-            </div>
-            
-            <Link
-              href="/dashboard/teachers/add"
-              className="hidden sm:flex items-center rounded-xl bg-white/20 px-6 py-3 font-semibold text-white backdrop-blur-sm transition-all hover:bg-white/30 hover:scale-105"
-            >
-              <svg className="mr-2 h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
-              </svg>
-              Add Employee
-            </Link>
-          </div>
-        </div>
-        
-        {/* Animated background elements */}
-        <div className="absolute -top-10 -left-10 h-40 w-40 rounded-full bg-white/10 animate-pulse"></div>
-        <div className="absolute -bottom-10 -right-10 h-32 w-32 rounded-full bg-white/10 animate-bounce"></div>
-        <div className="absolute top-1/2 left-1/3 h-6 w-6 rounded-full bg-white/20 animate-ping"></div>
-      </div>
-
-      <div className="mx-auto max-w-7xl px-6 py-12">
+      <DashboardPageContainer maxWidthClassName="max-w-7xl">
+        <PageHeader
+          title="Employees Directory"
+          subtitle="Manage your staff, track assignments, and maintain comprehensive employee records."
+        />
         <div className="mb-6 flex flex-wrap items-center gap-4 rounded-2xl bg-white/80 p-4 shadow-sm">
           <div className="flex items-center gap-3">
             <label className="text-sm font-medium text-gray-600">Employee Type</label>
@@ -321,15 +292,18 @@ export default function TeachersPage() {
               </select>
             </div>
             
-            <Link
-              href="/dashboard/teachers/add"
-              className="flex items-center justify-center rounded-xl bg-gradient-to-r from-purple-600 to-pink-600 px-6 py-3 font-semibold text-white shadow-lg transition-all hover:from-purple-700 hover:to-pink-700 hover:shadow-xl sm:hidden"
+            <Button
+              variant="primary"
+              size="sm"
+              onClick={() => router.push('/dashboard/teachers/add')}
+              icon={
+                <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+                </svg>
+              }
             >
-              <svg className="mr-2 h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
-              </svg>
               Add Employee
-            </Link>
+            </Button>
           </div>
         </div>
 
@@ -488,18 +462,20 @@ export default function TeachersPage() {
                     : 'Try adjusting your search criteria or filters.')
                 : 'No employees found for the selected role.'}
             </p>
-            <Link
-              href="/dashboard/teachers/add"
-              className="inline-flex items-center rounded-xl bg-gradient-to-r from-purple-600 to-pink-600 px-6 py-3 font-semibold text-white shadow-lg transition-all hover:from-purple-700 hover:to-pink-700 hover:shadow-xl"
+            <Button
+              variant="primary"
+              onClick={() => router.push('/dashboard/teachers/add')}
+              icon={
+                <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+                </svg>
+              }
             >
-              <svg className="mr-2 h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
-              </svg>
               Add Employee
-            </Link>
+            </Button>
           </div>
         )}
-      </div>
+      </DashboardPageContainer>
     </div>
   );
 }
