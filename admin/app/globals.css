@@ -24,17 +24,17 @@ body {
 }
 
 .theme-navbar {
-  background-color: var(--theme-navbar-bg);
+  background: var(--theme-navbar-bg);
   backdrop-filter: blur(10px);
 }
 
 .theme-header {
-  background-color: var(--theme-header-bg);
+  background: var(--theme-header-bg);
   backdrop-filter: blur(10px);
 }
 
 .theme-footer {
-  background-color: var(--theme-footer-bg);
+  background: var(--theme-footer-bg);
   backdrop-filter: blur(10px);
 }
 
@@ -46,7 +46,7 @@ body {
 }
 
 .bg-ink {
-  background-color: var(--theme-button-bg) !important;
+  background: var(--theme-button-bg) !important;
   color: var(--theme-button-text) !important;
 }
 

@@ -9,6 +9,22 @@ import FullPageLoader from '../../../components/FullPageLoader';
 import PageHeader from '../../../components/PageHeader';
 import Button from '../../../components/Button';
 
+const isHexColor = (value: string) => /^#([0-9a-fA-F]{6})$/.test(value.trim());
+
+const parseGradient = (value: string): { from: string; to: string } | null => {
+  const withAngle = value.match(/linear-gradient\(\s*[^,]+,\s*([^,]+),\s*([^)]+)\)/i);
+  if (withAngle) {
+    return { from: withAngle[1].trim(), to: withAngle[2].trim() };
+  }
+  const withoutAngle = value.match(/linear-gradient\(\s*([^,]+),\s*([^)]+)\)/i);
+  if (withoutAngle) {
+    return { from: withoutAngle[1].trim(), to: withoutAngle[2].trim() };
+  }
+  return null;
+};
+
+const makeGradient = (from: string, to: string) => `linear-gradient(135deg, ${from}, ${to})`;
+
 export default function ThemesPage() {
   const queryClient = useQueryClient();
   const [name, setName] = useState('');
@@ -134,7 +150,7 @@ export default function ThemesPage() {
                 </option>
               ))
             ) : (
-              <option value={session?.schoolId}>{session?.schoolName}</option>
+              <option value={session?.schoolId ?? ''}>{session?.schoolName}</option>
             )}
           </select>
         </section>
@@ -196,7 +212,7 @@ export default function ThemesPage() {
                 <div className="flex flex-wrap gap-2">
                   {(['navbarBg', 'headerBg', 'footerBg', 'buttonBg', 'buttonText'] as const).map((key) => (
                     <span key={key} className="flex items-center gap-2 rounded-full border border-gray-200 bg-gray-50 px-3 py-1 text-xs text-gray-600">
-                      <span className="inline-block h-3 w-3 rounded-full border border-gray-300" style={{ backgroundColor: theme.tokens?.[key] ?? '#e2e8f0' }} />
+                      <span className="inline-block h-3 w-3 rounded-full border border-gray-300" style={{ background: theme.tokens?.[key] ?? '#e2e8f0' }} />
                       {key.replace('Bg', '').replace('buttonText', 'text')}
                     </span>
                   ))}
@@ -227,9 +243,83 @@ export default function ThemesPage() {
               <div className="space-y-4">
                 <input value={name} onChange={(e) => setName(e.target.value)} placeholder="Theme name" className="w-full rounded-xl border border-gray-300 px-4 py-3 text-sm focus:border-violet-500 focus:outline-none focus:ring-2 focus:ring-violet-200" />
                 <div className="grid gap-4 md:grid-cols-2">
-                  {([{ key: 'navbarBg', label: 'Navbar' }, { key: 'headerBg', label: 'Header' }, { key: 'footerBg', label: 'Footer' }, { key: 'buttonBg', label: 'Buttons' }, { key: 'buttonText', label: 'Button Text' }] as const).map((item) => (
-                    <label key={item.key} className="flex items-center justify-between rounded-xl border border-gray-200 px-4 py-3"><span className="text-sm font-medium text-gray-900">{item.label}</span><input type="color" value={palette[item.key]} onChange={(e) => setPalette({ ...palette, [item.key]: e.target.value })} className="h-10 w-14 rounded-lg border border-gray-300 cursor-pointer" /></label>
-                  ))}
+                  {([{ key: 'navbarBg', label: 'Navbar Background' }, { key: 'headerBg', label: 'Header Background' }, { key: 'footerBg', label: 'Footer Background' }, { key: 'buttonBg', label: 'Button Background' }] as const).map((item) => {
+                    const currentValue = palette[item.key];
+                    const parsedGradient = parseGradient(currentValue);
+                    const isGradient = Boolean(parsedGradient);
+                    const solidColor = isHexColor(currentValue) ? currentValue : '#2563eb';
+                    const fromColor = isHexColor(parsedGradient?.from ?? '') ? (parsedGradient?.from as string) : '#2563eb';
+                    const toColor = isHexColor(parsedGradient?.to ?? '') ? (parsedGradient?.to as string) : '#7c3aed';
+
+                    return (
+                      <div key={item.key} className="rounded-xl border border-gray-200 p-4">
+                        <div className="mb-3 flex items-center justify-between">
+                          <span className="text-sm font-medium text-gray-900">{item.label}</span>
+                          <div className="flex gap-2">
+                            <button
+                              type="button"
+                              className={`rounded-lg border px-3 py-1 text-xs font-medium ${!isGradient ? 'border-violet-500 bg-violet-50 text-violet-700' : 'border-gray-300 text-gray-600 hover:bg-gray-50'}`}
+                              onClick={() => setPalette({ ...palette, [item.key]: fromColor })}
+                            >
+                              Solid
+                            </button>
+                            <button
+                              type="button"
+                              className={`rounded-lg border px-3 py-1 text-xs font-medium ${isGradient ? 'border-violet-500 bg-violet-50 text-violet-700' : 'border-gray-300 text-gray-600 hover:bg-gray-50'}`}
+                              onClick={() => setPalette({ ...palette, [item.key]: makeGradient(solidColor, '#7c3aed') })}
+                            >
+                              Gradient
+                            </button>
+                          </div>
+                        </div>
+
+                        {!isGradient ? (
+                          <div className="flex items-center justify-between">
+                            <span className="text-xs text-gray-500">Color</span>
+                            <input
+                              type="color"
+                              value={solidColor}
+                              onChange={(e) => setPalette({ ...palette, [item.key]: e.target.value })}
+                              className="h-10 w-14 cursor-pointer rounded-lg border border-gray-300"
+                            />
+                          </div>
+                        ) : (
+                          <div className="space-y-3">
+                            <div className="flex items-center justify-between">
+                              <span className="text-xs text-gray-500">From</span>
+                              <input
+                                type="color"
+                                value={fromColor}
+                                onChange={(e) => setPalette({ ...palette, [item.key]: makeGradient(e.target.value, toColor) })}
+                                className="h-10 w-14 cursor-pointer rounded-lg border border-gray-300"
+                              />
+                            </div>
+                            <div className="flex items-center justify-between">
+                              <span className="text-xs text-gray-500">To</span>
+                              <input
+                                type="color"
+                                value={toColor}
+                                onChange={(e) => setPalette({ ...palette, [item.key]: makeGradient(fromColor, e.target.value) })}
+                                className="h-10 w-14 cursor-pointer rounded-lg border border-gray-300"
+                              />
+                            </div>
+                          </div>
+                        )}
+
+                        <div className="mt-3 h-8 rounded-lg border border-gray-200" style={{ background: palette[item.key] }} />
+                        <p className="mt-2 truncate text-[11px] text-gray-500">{palette[item.key]}</p>
+                      </div>
+                    );
+                  })}
+                  <label className="flex items-center justify-between rounded-xl border border-gray-200 px-4 py-3">
+                    <span className="text-sm font-medium text-gray-900">Button Text</span>
+                    <input
+                      type="color"
+                      value={isHexColor(palette.buttonText) ? palette.buttonText : '#ffffff'}
+                      onChange={(e) => setPalette({ ...palette, buttonText: e.target.value })}
+                      className="h-10 w-14 cursor-pointer rounded-lg border border-gray-300"
+                    />
+                  </label>
                 </div>
                 <div className="rounded-xl border border-gray-200 p-4">
                   <p className="text-sm font-semibold text-gray-900 mb-3">Logo Upload</p>
@@ -238,7 +328,7 @@ export default function ThemesPage() {
                 </div>
                 <div className="rounded-xl border-2 border-gray-200 p-4">
                   <p className="text-xs font-semibold uppercase tracking-wide text-gray-600 mb-3">Preview</p>
-                  <div className="overflow-hidden rounded-lg border border-gray-200"><div className="px-4 py-3 text-sm text-white flex items-center gap-3" style={{ backgroundColor: tokens.navbarBg }}>{tokens.logoUrl && <img src={tokens.logoUrl} alt="Logo" className="h-6 w-6 rounded object-cover" />}<span>Navbar</span></div><div className="px-4 py-3 text-sm text-white" style={{ backgroundColor: tokens.headerBg }}>Header</div><div className="px-4 py-4 bg-white"><button className="rounded-lg px-5 py-2.5 text-sm font-semibold" style={{ backgroundColor: tokens.buttonBg, color: tokens.buttonText }}>Button</button></div><div className="px-4 py-3 text-sm text-white" style={{ backgroundColor: tokens.footerBg }}>Footer</div></div>
+                  <div className="overflow-hidden rounded-lg border border-gray-200"><div className="px-4 py-3 text-sm text-white flex items-center gap-3" style={{ background: tokens.navbarBg }}>{tokens.logoUrl && <img src={tokens.logoUrl} alt="Logo" className="h-6 w-6 rounded object-cover" />}<span>Navbar</span></div><div className="px-4 py-3 text-sm text-white" style={{ background: tokens.headerBg }}>Header</div><div className="px-4 py-4 bg-white"><button className="rounded-lg px-5 py-2.5 text-sm font-semibold" style={{ background: tokens.buttonBg, color: tokens.buttonText }}>Button</button></div><div className="px-4 py-3 text-sm text-white" style={{ background: tokens.footerBg }}>Footer</div></div>
                 </div>
               </div>
               <div className="mt-6 flex justify-end gap-3">
