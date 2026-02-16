@@ -2,6 +2,7 @@ import { api } from '../lib/api';
 
 const THEME_KEY_PREFIX = 'school_theme_';
 const THEME_ACTIVE_PREFIX = 'theme.active.';
+const THEME_ACTIVE_KEY = 'theme.active';
 const THEME_ACTIVE_LAST = 'theme.active.last';
 const THEME_LEGACY_LAST = 'school_theme_last';
 
@@ -26,7 +27,7 @@ export const updateTheme = async (id: string, tokens: Record<string, string>, sc
 
 export const publishTheme = async (id: string, schoolId?: string) => {
   const { data } = await api.post(`/themes/${id}/publish`, { schoolId });
-  if (schoolId) storeTheme(schoolId, data);
+  storeTheme(schoolId, data);
   return data;
 };
 
@@ -40,14 +41,29 @@ export const getActiveTheme = async (params?: { schoolId?: string }) => {
   return data;
 };
 
+const parseTheme = (raw: string | null): Theme | null => {
+  if (!raw) return null;
+  try {
+    return JSON.parse(raw) as Theme;
+  } catch {
+    return null;
+  }
+};
+
 // Theme Service
-export const getStoredTheme = (schoolId: string): Theme | null => {
+export const getStoredTheme = (schoolId?: string): Theme | null => {
   if (typeof window === 'undefined') return null;
   try {
-    const stored =
-      localStorage.getItem(`${THEME_ACTIVE_PREFIX}${schoolId}`) ||
-      localStorage.getItem(`${THEME_KEY_PREFIX}${schoolId}`);
-    return stored ? JSON.parse(stored) : null;
+    const activeTheme =
+      parseTheme(localStorage.getItem(THEME_ACTIVE_KEY)) ||
+      parseTheme(localStorage.getItem(THEME_ACTIVE_LAST)) ||
+      parseTheme(localStorage.getItem(THEME_LEGACY_LAST));
+    if (activeTheme) return activeTheme;
+    if (!schoolId) return null;
+    return (
+      parseTheme(localStorage.getItem(`${THEME_ACTIVE_PREFIX}${schoolId}`)) ||
+      parseTheme(localStorage.getItem(`${THEME_KEY_PREFIX}${schoolId}`))
+    );
   } catch {
     return null;
   }
@@ -56,21 +72,28 @@ export const getStoredTheme = (schoolId: string): Theme | null => {
 export const getStoredThemeLast = (): Theme | null => {
   if (typeof window === 'undefined') return null;
   try {
-    const stored = localStorage.getItem(THEME_ACTIVE_LAST) || localStorage.getItem(THEME_LEGACY_LAST);
-    return stored ? JSON.parse(stored) : null;
+    return (
+      parseTheme(localStorage.getItem(THEME_ACTIVE_KEY)) ||
+      parseTheme(localStorage.getItem(THEME_ACTIVE_LAST)) ||
+      parseTheme(localStorage.getItem(THEME_LEGACY_LAST))
+    );
   } catch {
     return null;
   }
 };
 
-export const storeTheme = (schoolId: string, theme: Theme): void => {
+export const storeTheme = (schoolId: string | undefined, theme: Theme): void => {
   if (typeof window === 'undefined') return;
   try {
-    localStorage.setItem(`${THEME_ACTIVE_PREFIX}${schoolId}`, JSON.stringify(theme));
-    localStorage.setItem(THEME_ACTIVE_LAST, JSON.stringify(theme));
+    const serializedTheme = JSON.stringify(theme);
+    localStorage.setItem(THEME_ACTIVE_KEY, serializedTheme);
+    localStorage.setItem(THEME_ACTIVE_LAST, serializedTheme);
     // Backward compatibility
-    localStorage.setItem(`${THEME_KEY_PREFIX}${schoolId}`, JSON.stringify(theme));
-    localStorage.setItem(THEME_LEGACY_LAST, JSON.stringify(theme));
+    localStorage.setItem(THEME_LEGACY_LAST, serializedTheme);
+    if (schoolId) {
+      localStorage.setItem(`${THEME_ACTIVE_PREFIX}${schoolId}`, serializedTheme);
+      localStorage.setItem(`${THEME_KEY_PREFIX}${schoolId}`, serializedTheme);
+    }
   } catch {}
 };
 

@@ -1,9 +1,9 @@
 'use client';
 
-import { createContext, useEffect, useState } from 'react';
+import { createContext, useEffect, useLayoutEffect, useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { getSession } from '../services/auth.service';
-import { fetchActiveTheme } from '../services/theme.service';
+import { fetchActiveTheme, getStoredTheme, getStoredThemeLast } from '../services/theme.service';
 
 const defaultTokens = {
   navbarBg: '#0f172a',
@@ -13,6 +13,9 @@ const defaultTokens = {
   buttonText: '#ffffff',
   logoUrl: '',
 };
+
+type ThemeTokens = typeof defaultTokens;
+const THEME_TOKEN_KEYS = Object.keys(defaultTokens) as Array<keyof ThemeTokens>;
 
 export const ThemeContext = createContext<{ logoUrl: string }>({ logoUrl: '' });
 
@@ -32,13 +35,33 @@ const getSchoolIdSync = (): string | null => {
   }
 };
 
+const toTokens = (theme: { tokens?: Record<string, string> } | null | undefined) => {
+  if (!theme?.tokens) return null;
+  return {
+    navbarBg: theme.tokens.navbarBg ?? defaultTokens.navbarBg,
+    headerBg: theme.tokens.headerBg ?? defaultTokens.headerBg,
+    footerBg: theme.tokens.footerBg ?? defaultTokens.footerBg,
+    buttonBg: theme.tokens.buttonBg ?? defaultTokens.buttonBg,
+    buttonText: theme.tokens.buttonText ?? defaultTokens.buttonText,
+    logoUrl: theme.tokens.logoUrl ?? defaultTokens.logoUrl,
+  };
+};
+
+const readCachedTokens = (schoolId?: string | null): ThemeTokens | null =>
+  toTokens(getStoredTheme(schoolId ?? undefined) || getStoredThemeLast());
+
+const areTokensEqual = (left: ThemeTokens, right: ThemeTokens) =>
+  THEME_TOKEN_KEYS.every((key) => left[key] === right[key]);
+
 export const ThemeProvider = ({ children }: { children: React.ReactNode }) => {
   const { data: session } = useQuery({ queryKey: ['session'], queryFn: getSession });
   const [initialSchoolId] = useState(() => getSchoolIdSync());
+  const [isHydrated, setIsHydrated] = useState(false);
   const schoolId = session?.schoolId ?? initialSchoolId ?? undefined;
-  const [tokens, setTokens] = useState(defaultTokens);
+  const hasCachedTheme = useMemo(() => Boolean(readCachedTokens(schoolId ?? initialSchoolId)), [schoolId, initialSchoolId]);
+  const [tokens, setTokens] = useState<ThemeTokens>(() => readCachedTokens(initialSchoolId) ?? defaultTokens);
 
-  const applyTokens = (nextTokens: typeof defaultTokens) => {
+  const applyTokens = (nextTokens: ThemeTokens) => {
     const root = document.documentElement;
     root.style.setProperty('--theme-navbar-bg', nextTokens.navbarBg);
     root.style.setProperty('--theme-header-bg', nextTokens.headerBg);
@@ -47,54 +70,50 @@ export const ThemeProvider = ({ children }: { children: React.ReactNode }) => {
     root.style.setProperty('--theme-button-text', nextTokens.buttonText);
   };
 
+  // Hydrate from cache immediately and re-check when school context becomes available.
   useEffect(() => {
-    document.documentElement.classList.add('theme-loading');
+    setIsHydrated(true);
   }, []);
 
-  // Fetch active theme in background
-  const { data: activeTheme, isFetched } = useQuery({
+  // Hydrate from cache immediately and re-check when school context becomes available.
+  useEffect(() => {
+    const cachedTokens = readCachedTokens(schoolId ?? initialSchoolId);
+    if (!cachedTokens) return;
+    setTokens((prev) => (areTokensEqual(prev, cachedTokens) ? prev : cachedTokens));
+  }, [schoolId, initialSchoolId]);
+
+  // Revalidate with API in the background once schoolId is known.
+  const { data: activeTheme, isPending } = useQuery({
     queryKey: ['theme-active', schoolId],
     queryFn: () => fetchActiveTheme(schoolId!),
     enabled: Boolean(schoolId),
     retry: false,
   });
 
-  // Update tokens when API responds
+  // API stores into localStorage. Re-read cache and update UI if changed.
   useEffect(() => {
-    if (activeTheme?.tokens) {
-      setTokens((prev) => {
-        const nextTokens = {
-          navbarBg: activeTheme.tokens.navbarBg ?? defaultTokens.navbarBg,
-          headerBg: activeTheme.tokens.headerBg ?? defaultTokens.headerBg,
-          footerBg: activeTheme.tokens.footerBg ?? defaultTokens.footerBg,
-          buttonBg: activeTheme.tokens.buttonBg ?? defaultTokens.buttonBg,
-          buttonText: activeTheme.tokens.buttonText ?? defaultTokens.buttonText,
-          logoUrl: activeTheme.tokens.logoUrl ?? defaultTokens.logoUrl,
-        };
-        if (JSON.stringify(prev) === JSON.stringify(nextTokens)) return prev;
-        applyTokens(nextTokens);
-        document.documentElement.classList.remove('theme-loading');
-        return nextTokens;
-      });
-    }
-  }, [activeTheme]);
-
-  useEffect(() => {
-    if (isFetched) {
-      document.documentElement.classList.remove('theme-loading');
-    }
-  }, [isFetched]);
+    if (!activeTheme) return;
+    const nextTokens = readCachedTokens(schoolId ?? initialSchoolId) ?? toTokens(activeTheme);
+    if (!nextTokens) return;
+    setTokens((prev) => (areTokensEqual(prev, nextTokens) ? prev : nextTokens));
+  }, [activeTheme, schoolId, initialSchoolId]);
 
   useEffect(() => {
     if (!schoolId) {
       document.documentElement.classList.remove('theme-loading');
+      return;
     }
-  }, [schoolId]);
+    if (!hasCachedTheme && isPending) {
+      document.documentElement.classList.add('theme-loading');
+      return;
+    }
+    document.documentElement.classList.remove('theme-loading');
+  }, [schoolId, hasCachedTheme, isPending]);
 
-  // Apply CSS variables
-  useEffect(() => {
+  // Apply CSS vars before paint when token state changes.
+  useLayoutEffect(() => {
     applyTokens(tokens);
   }, [tokens]);
 
-  return <ThemeContext.Provider value={{ logoUrl: tokens.logoUrl }}>{children}</ThemeContext.Provider>;
+  return <ThemeContext.Provider value={{ logoUrl: isHydrated ? tokens.logoUrl : '' }}>{children}</ThemeContext.Provider>;
 };
