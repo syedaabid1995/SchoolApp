@@ -1,7 +1,6 @@
 'use client';
 
 import { useState } from 'react';
-import Link from 'next/link';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   listAcademicYears,
@@ -25,14 +24,17 @@ import { getSession } from '../../../services/auth.service';
 import PageHeader from '../../../components/PageHeader';
 import Button from '../../../components/Button';
 
+type AcademicTab = 'years' | 'classes' | 'examTypes' | 'sections' | 'subjects';
+
 export default function AcademicsPage() {
+  const [activeTab, setActiveTab] = useState<AcademicTab>('years');
+  const [createModal, setCreateModal] = useState<AcademicTab | null>(null);
   const queryClient = useQueryClient();
   const [yearForm, setYearForm] = useState({ name: '', startDate: '', endDate: '' });
   const [className, setClassName] = useState('');
   const [classYearId, setClassYearId] = useState('');
   const [sectionForm, setSectionForm] = useState({ name: '', classId: '' });
   const [subjectForm, setSubjectForm] = useState({ name: '', classId: '', academicYearId: '' });
-  const [subjectFilters, setSubjectFilters] = useState({ query: '', classId: '', academicYearId: '' });
   const [examTypeForm, setExamTypeForm] = useState({ name: '', code: '', isActive: true });
   const [yearError, setYearError] = useState('');
   const [classError, setClassError] = useState('');
@@ -82,6 +84,7 @@ export default function AcademicsPage() {
     onSuccess: () => {
       setYearForm({ name: '', startDate: '', endDate: '' });
       setYearError('');
+      setCreateModal(null);
       queryClient.invalidateQueries({ queryKey: ['academic-years'] });
     },
   });
@@ -113,6 +116,7 @@ export default function AcademicsPage() {
       setClassName('');
       setClassYearId('');
       setClassError('');
+      setCreateModal(null);
       queryClient.invalidateQueries({ queryKey: ['classes'] });
     },
   });
@@ -143,6 +147,7 @@ export default function AcademicsPage() {
     onSuccess: () => {
       setSectionForm({ name: '', classId: '' });
       setSectionError('');
+      setCreateModal(null);
       queryClient.invalidateQueries({ queryKey: ['sections'] });
     },
   });
@@ -173,6 +178,7 @@ export default function AcademicsPage() {
     onSuccess: () => {
       setSubjectForm({ name: '', classId: '', academicYearId: '' });
       setSubjectError('');
+      setCreateModal(null);
       queryClient.invalidateQueries({ queryKey: ['subjects'] });
     },
   });
@@ -203,6 +209,7 @@ export default function AcademicsPage() {
     onSuccess: () => {
       setExamTypeForm({ name: '', code: '', isActive: true });
       setExamTypeError('');
+      setCreateModal(null);
       queryClient.invalidateQueries({ queryKey: ['exam-types'] });
     },
   });
@@ -215,17 +222,6 @@ export default function AcademicsPage() {
     },
   });
 
-  const filteredSubjects = subjects?.filter(
-    (subject: { id: string; name: string; classId?: string | null; academicYear?: { id: string; name: string } | null }) => {
-      const query = subjectFilters.query.trim().toLowerCase();
-      const nameMatch = !query || subject.name.toLowerCase().includes(query);
-      const classMatch = !subjectFilters.classId || subject.classId === subjectFilters.classId;
-      const yearMatch =
-        !subjectFilters.academicYearId || subject.academicYear?.id === subjectFilters.academicYearId;
-      return nameMatch && classMatch && yearMatch;
-    },
-  );
-
   const requireSchool = () => {
     if (isSuperAdmin && !effectiveSchoolId) return 'Select a school first.';
     return '';
@@ -237,6 +233,77 @@ export default function AcademicsPage() {
     sections: sections?.length || 0,
     subjects: subjects?.length || 0,
     examTypes: examTypes?.length || 0,
+  };
+
+  const openCreateModal = (tab: AcademicTab) => {
+    setYearError('');
+    setClassError('');
+    setSectionError('');
+    setSubjectError('');
+    setExamTypeError('');
+    setCreateModal(tab);
+  };
+
+  const closeCreateModal = () => setCreateModal(null);
+
+  const handleCreateYear = () => {
+    let error = requireSchool();
+    if (!error && !yearForm.name.trim()) error = 'Year name is required.';
+    else if (!error && !yearForm.startDate) error = 'Start date is required.';
+    else if (!error && !yearForm.endDate) error = 'End date is required.';
+    else if (!error && yearForm.startDate && yearForm.endDate && yearForm.startDate > yearForm.endDate) {
+      error = 'End date must be after start date.';
+    }
+    setYearError(error);
+    if (error) return;
+    createYearMutation.mutate({ ...yearForm, schoolId: effectiveSchoolId });
+  };
+
+  const handleCreateClass = () => {
+    let error = requireSchool();
+    if (!error && !className.trim()) error = 'Class name is required.';
+    else if (!error && !classYearId) error = 'Select an academic year.';
+    setClassError(error);
+    if (error) return;
+    createClassMutation.mutate({ name: className, academicYearId: classYearId, schoolId: effectiveSchoolId });
+  };
+
+  const handleCreateExamType = () => {
+    let error = requireSchool();
+    if (!error && !examTypeForm.name.trim()) error = 'Exam type name is required.';
+    else if (!error && !examTypeForm.code.trim()) error = 'Exam type code is required.';
+    setExamTypeError(error);
+    if (error) return;
+    createExamTypeMutation.mutate({
+      name: examTypeForm.name,
+      code: examTypeForm.code,
+      isActive: examTypeForm.isActive,
+      schoolId: effectiveSchoolId,
+    });
+  };
+
+  const handleCreateSection = () => {
+    let error = requireSchool();
+    if (!error && !sectionForm.name.trim()) error = 'Section name is required.';
+    else if (!error && !sectionForm.classId) error = 'Select a class.';
+    setSectionError(error);
+    if (error) return;
+    createSectionMutation.mutate({ name: sectionForm.name, classId: sectionForm.classId, schoolId: effectiveSchoolId });
+  };
+
+  const handleCreateSubject = () => {
+    let error = requireSchool();
+    if (!error && !subjectForm.name.trim()) error = 'Subject name is required.';
+    else if (!error && !subjectForm.academicYearId) error = 'Select an academic year.';
+    else if (!error && !subjectForm.classId) error = 'Select a class.';
+    setSubjectError(error);
+    if (error) return;
+    createSubjectMutation.mutate({
+      name: subjectForm.name,
+      classId: subjectForm.classId || undefined,
+      academicYearId: subjectForm.academicYearId || undefined,
+      schoolId: effectiveSchoolId,
+    });
   };
 
   return (
@@ -324,71 +391,33 @@ export default function AcademicsPage() {
           </div>
         )}
 
-        {/* Academic Years Section */}
-        <section className="mb-8 rounded-2xl bg-white p-6 shadow-lg ring-1 ring-gray-200">
-          <h2 className="mb-6 text-xl font-semibold text-gray-900">Academic Years</h2>
-          <div className="mb-6 grid gap-4 md:grid-cols-3">
-            <div>
-              <label className="mb-2 block text-sm font-medium text-gray-700">Year Name</label>
-              <input
-                value={yearForm.name}
-                onChange={(e) => setYearForm({ ...yearForm, name: e.target.value })}
-                placeholder="e.g., 2024-2025"
-                className="w-full rounded-xl border border-gray-300 px-4 py-3 text-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-200"
-              />
-            </div>
-            <div>
-              <label className="mb-2 block text-sm font-medium text-gray-700">Start Date</label>
-              <input
-                value={yearForm.startDate}
-                onChange={(e) => setYearForm({ ...yearForm, startDate: e.target.value })}
-                type="date"
-                className="w-full rounded-xl border border-gray-300 px-4 py-3 text-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-200"
-              />
-            </div>
-            <div>
-              <label className="mb-2 block text-sm font-medium text-gray-700">End Date</label>
-              <input
-                value={yearForm.endDate}
-                onChange={(e) => setYearForm({ ...yearForm, endDate: e.target.value })}
-                type="date"
-                className="w-full rounded-xl border border-gray-300 px-4 py-3 text-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-200"
-              />
-            </div>
+        {/* Tabs */}
+        <div className="mb-8 rounded-2xl bg-white p-2 shadow-lg ring-1 ring-gray-200">
+          <div className="flex gap-2">
+            <button onClick={() => setActiveTab('years')} className={`flex-1 rounded-xl px-4 py-3 text-sm font-semibold transition-all ${activeTab === 'years' ? 'bg-gradient-to-r from-blue-600 to-purple-600 text-white shadow-lg' : 'text-gray-600 hover:bg-gray-100'}`}>Academic Years</button>
+            <button onClick={() => setActiveTab('classes')} className={`flex-1 rounded-xl px-4 py-3 text-sm font-semibold transition-all ${activeTab === 'classes' ? 'bg-gradient-to-r from-blue-600 to-purple-600 text-white shadow-lg' : 'text-gray-600 hover:bg-gray-100'}`}>Classes</button>
+            <button onClick={() => setActiveTab('examTypes')} className={`flex-1 rounded-xl px-4 py-3 text-sm font-semibold transition-all ${activeTab === 'examTypes' ? 'bg-gradient-to-r from-blue-600 to-purple-600 text-white shadow-lg' : 'text-gray-600 hover:bg-gray-100'}`}>Exam Types</button>
+            <button onClick={() => setActiveTab('sections')} className={`flex-1 rounded-xl px-4 py-3 text-sm font-semibold transition-all ${activeTab === 'sections' ? 'bg-gradient-to-r from-blue-600 to-purple-600 text-white shadow-lg' : 'text-gray-600 hover:bg-gray-100'}`}>Sections</button>
+            <button onClick={() => setActiveTab('subjects')} className={`flex-1 rounded-xl px-4 py-3 text-sm font-semibold transition-all ${activeTab === 'subjects' ? 'bg-gradient-to-r from-blue-600 to-purple-600 text-white shadow-lg' : 'text-gray-600 hover:bg-gray-100'}`}>Subjects</button>
           </div>
-          <div className="flex items-center gap-4">
+        </div>
+
+        {activeTab === 'years' && (
+        <section className="mb-8 rounded-2xl bg-white p-6 shadow-lg ring-1 ring-gray-200">
+          <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
+            <h2 className="text-xl font-semibold text-gray-900">Academic Years</h2>
             <Button
               variant="primary"
-              onClick={() => {
-                let error = requireSchool();
-                if (!error && !yearForm.name.trim()) error = 'Year name is required.';
-                else if (!error && !yearForm.startDate) error = 'Start date is required.';
-                else if (!error && !yearForm.endDate) error = 'End date is required.';
-                else if (!error && yearForm.startDate && yearForm.endDate && yearForm.startDate > yearForm.endDate) {
-                  error = 'End date must be after start date.';
-                }
-                setYearError(error);
-                if (error) return;
-                createYearMutation.mutate({ ...yearForm, schoolId: effectiveSchoolId });
-              }}
-              disabled={createYearMutation.isPending}
-              loading={createYearMutation.isPending}
+              size="sm"
+              onClick={() => openCreateModal('years')}
               icon={
                 <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
                 </svg>
               }
             >
-              Create Academic Year
+              Add Academic Year
             </Button>
-            {yearError && (
-              <div className="flex items-center text-sm text-red-600">
-                <svg className="mr-1 h-4 w-4" fill="currentColor" viewBox="0 0 20 20">
-                  <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
-                </svg>
-                {yearError}
-              </div>
-            )}
           </div>
           <div className="mt-6 overflow-hidden rounded-xl border border-gray-200">
             <table className="w-full">
@@ -418,7 +447,7 @@ export default function AcademicsPage() {
                 {!years?.length && (
                   <tr>
                     <td colSpan={2} className="px-6 py-12 text-center text-sm text-gray-500">
-                      No academic years found. Create your first academic year above.
+                      No academic years found. Use the Add Academic Year button to create one.
                     </td>
                   </tr>
                 )}
@@ -426,46 +455,25 @@ export default function AcademicsPage() {
             </table>
           </div>
         </section>
+        )}
 
-        {/* Classes Section */}
+        {activeTab === 'classes' && (
         <section className="mb-8 rounded-2xl bg-white p-6 shadow-lg ring-1 ring-gray-200">
-          <h2 className="mb-6 text-xl font-semibold text-gray-900">Classes</h2>
-        <div className="mt-4 grid gap-3 md:grid-cols-2">
-          <input
-            value={className}
-            onChange={(e) => setClassName(e.target.value)}
-            placeholder="Class name"
-            className="rounded-lg border border-slate/20 px-3 py-2 text-sm"
-          />
-          <select
-            value={classYearId}
-            onChange={(e) => setClassYearId(e.target.value)}
-            className="rounded-lg border border-slate/20 px-3 py-2 text-sm"
-          >
-            <option value="">Select academic year</option>
-            {years?.map((year: { id: string; name: string }) => (
-              <option key={year.id} value={year.id}>
-                {year.name}
-              </option>
-            ))}
-          </select>
-          <Button
-            variant="primary"
-            size="sm"
-            onClick={() => {
-              let error = requireSchool();
-              if (!error && !className.trim()) error = 'Class name is required.';
-              else if (!error && !classYearId) error = 'Select an academic year.';
-              setClassError(error);
-              if (error) return;
-              createClassMutation.mutate({ name: className, academicYearId: classYearId, schoolId: effectiveSchoolId });
-            }}
-            disabled={createClassMutation.isPending}
-          >
-            Add Class
-          </Button>
-        </div>
-        {classError ? <p className="mt-3 text-sm font-semibold text-rose-600">{classError}</p> : null}
+          <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
+            <h2 className="text-xl font-semibold text-gray-900">Classes</h2>
+            <Button
+              variant="primary"
+              size="sm"
+              onClick={() => openCreateModal('classes')}
+              icon={
+                <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+                </svg>
+              }
+            >
+              Add Class
+            </Button>
+          </div>
           <div className="mt-6 overflow-hidden rounded-xl border border-gray-200">
             <table className="w-full">
               <thead className="bg-gray-50">
@@ -529,52 +537,25 @@ export default function AcademicsPage() {
             </table>
           </div>
       </section>
+      )}
 
+      {activeTab === 'examTypes' && (
       <section className="mt-8 rounded-2xl border border-slate/10 bg-white p-6">
-        <h2 className="text-lg font-semibold">Exam Types</h2>
-        <div className="mt-4 grid gap-3 md:grid-cols-3">
-          <input
-            value={examTypeForm.name}
-            onChange={(e) => setExamTypeForm({ ...examTypeForm, name: e.target.value })}
-            placeholder="Exam type name"
-            className="rounded-lg border border-slate/20 px-3 py-2 text-sm"
-          />
-          <input
-            value={examTypeForm.code}
-            onChange={(e) => setExamTypeForm({ ...examTypeForm, code: e.target.value.toUpperCase() })}
-            placeholder="Code (e.g., MIDTERM)"
-            className="rounded-lg border border-slate/20 px-3 py-2 text-sm uppercase"
-          />
-          <label className="flex items-center gap-2 text-sm text-slate">
-            <input
-              type="checkbox"
-              checked={examTypeForm.isActive}
-              onChange={(e) => setExamTypeForm({ ...examTypeForm, isActive: e.target.checked })}
-            />
-            Active
-          </label>
+        <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
+          <h2 className="text-lg font-semibold">Exam Types</h2>
+          <Button
+            variant="primary"
+            size="sm"
+            onClick={() => openCreateModal('examTypes')}
+            icon={
+              <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+              </svg>
+            }
+          >
+            Add Exam Type
+          </Button>
         </div>
-        <Button
-          variant="primary"
-          size="sm"
-          onClick={() => {
-            let error = requireSchool();
-            if (!error && !examTypeForm.name.trim()) error = 'Exam type name is required.';
-            else if (!error && !examTypeForm.code.trim()) error = 'Exam type code is required.';
-            setExamTypeError(error);
-            if (error) return;
-            createExamTypeMutation.mutate({
-              name: examTypeForm.name,
-              code: examTypeForm.code,
-              isActive: examTypeForm.isActive,
-              schoolId: effectiveSchoolId,
-            });
-          }}
-          disabled={createExamTypeMutation.isPending}
-        >
-          Add Exam Type
-        </Button>
-        {examTypeError ? <p className="mt-3 text-sm font-semibold text-rose-600">{examTypeError}</p> : null}
 
         <div className="mt-6 overflow-hidden rounded-xl border border-gray-200">
           <table className="w-full">
@@ -628,45 +609,25 @@ export default function AcademicsPage() {
           </table>
         </div>
       </section>
+      )}
 
+      {activeTab === 'sections' && (
       <section className="rounded-2xl border border-slate/10 bg-white p-6">
-        <h2 className="text-lg font-semibold">Sections</h2>
-        <div className="mt-4 grid gap-3 md:grid-cols-2">
-          <input
-            value={sectionForm.name}
-            onChange={(e) => setSectionForm({ ...sectionForm, name: e.target.value })}
-            placeholder="Section name"
-            className="rounded-lg border border-slate/20 px-3 py-2 text-sm"
-          />
-          <select
-            value={sectionForm.classId}
-            onChange={(e) => setSectionForm({ ...sectionForm, classId: e.target.value })}
-            className="rounded-lg border border-slate/20 px-3 py-2 text-sm"
+        <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
+          <h2 className="text-lg font-semibold">Sections</h2>
+          <Button
+            variant="primary"
+            size="sm"
+            onClick={() => openCreateModal('sections')}
+            icon={
+              <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+              </svg>
+            }
           >
-            <option value="">Select class</option>
-            {classes?.map((cls: { id: string; name: string }) => (
-              <option key={cls.id} value={cls.id}>
-                {cls.name}
-              </option>
-            ))}
-          </select>
+            Add Section
+          </Button>
         </div>
-        <Button
-          variant="primary"
-          size="sm"
-          onClick={() => {
-            let error = requireSchool();
-            if (!error && !sectionForm.name.trim()) error = 'Section name is required.';
-            else if (!error && !sectionForm.classId) error = 'Select a class.';
-            setSectionError(error);
-            if (error) return;
-            createSectionMutation.mutate({ name: sectionForm.name, classId: sectionForm.classId, schoolId: effectiveSchoolId });
-          }}
-          disabled={createSectionMutation.isPending}
-        >
-          Add Section
-        </Button>
-        {sectionError ? <p className="mt-3 text-sm font-semibold text-rose-600">{sectionError}</p> : null}
           <div className="mt-6 overflow-hidden rounded-xl border border-gray-200">
             <table className="w-full">
               <thead className="bg-gray-50">
@@ -733,100 +694,24 @@ export default function AcademicsPage() {
             </table>
           </div>
       </section>
+      )}
 
+      {activeTab === 'subjects' && (
       <section className="rounded-2xl border border-slate/10 bg-white p-6">
-        <h2 className="text-lg font-semibold">Subjects</h2>
-        <div className="mt-4 grid gap-3 md:grid-cols-3">
-          <input
-            value={subjectForm.name}
-            onChange={(e) => setSubjectForm({ ...subjectForm, name: e.target.value })}
-            placeholder="Subject name"
-            className="rounded-lg border border-slate/20 px-3 py-2 text-sm"
-          />
-          <select
-            value={subjectForm.academicYearId}
-            onChange={(e) => setSubjectForm({ ...subjectForm, academicYearId: e.target.value })}
-            className="rounded-lg border border-slate/20 px-3 py-2 text-sm"
+        <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+          <h2 className="text-lg font-semibold">Subjects</h2>
+          <Button
+            variant="primary"
+            size="sm"
+            onClick={() => openCreateModal('subjects')}
+            icon={
+              <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+              </svg>
+            }
           >
-            <option value="">Select academic year</option>
-            {years?.map((year: { id: string; name: string }) => (
-              <option key={year.id} value={year.id}>
-                {year.name}
-              </option>
-            ))}
-          </select>
-          <select
-            value={subjectForm.classId}
-            onChange={(e) => setSubjectForm({ ...subjectForm, classId: e.target.value })}
-            className="rounded-lg border border-slate/20 px-3 py-2 text-sm"
-          >
-            <option value="">Select class</option>
-            {classes?.map((cls: { id: string; name: string }) => (
-              <option key={cls.id} value={cls.id}>
-                {cls.name}
-              </option>
-            ))}
-          </select>
-        </div>
-        <Button
-          variant="primary"
-          size="sm"
-          onClick={() => {
-            let error = requireSchool();
-            if (!error && !subjectForm.name.trim()) error = 'Subject name is required.';
-            else if (!error && !subjectForm.academicYearId) error = 'Select an academic year.';
-            else if (!error && !subjectForm.classId) error = 'Select a class.';
-            setSubjectError(error);
-            if (error) return;
-            createSubjectMutation.mutate({
-              name: subjectForm.name,
-              classId: subjectForm.classId || undefined,
-              academicYearId: subjectForm.academicYearId || undefined,
-              schoolId: effectiveSchoolId,
-            });
-          }}
-          disabled={createSubjectMutation.isPending}
-        >
-          Add Subject
-        </Button>
-        {subjectError ? <p className="mt-3 text-sm font-semibold text-rose-600">{subjectError}</p> : null}
-        <div className="mt-4 grid gap-3 md:grid-cols-3">
-          <input
-            value={subjectFilters.query}
-            onChange={(e) => setSubjectFilters({ ...subjectFilters, query: e.target.value })}
-            placeholder="Search subjects"
-            className="rounded-lg border border-slate/20 px-3 py-2 text-sm"
-          />
-          <select
-            value={subjectFilters.academicYearId}
-            onChange={(e) => setSubjectFilters({ ...subjectFilters, academicYearId: e.target.value })}
-            className="rounded-lg border border-slate/20 px-3 py-2 text-sm"
-          >
-            <option value="">All academic years</option>
-            {years?.map((year: { id: string; name: string }) => (
-              <option key={year.id} value={year.id}>
-                {year.name}
-              </option>
-            ))}
-          </select>
-          <select
-            value={subjectFilters.classId}
-            onChange={(e) => setSubjectFilters({ ...subjectFilters, classId: e.target.value })}
-            className="rounded-lg border border-slate/20 px-3 py-2 text-sm"
-          >
-            <option value="">All classes</option>
-            {classes?.map((cls: { id: string; name: string }) => (
-              <option key={cls.id} value={cls.id}>
-                {cls.name}
-              </option>
-            ))}
-          </select>
-          <button
-            className="rounded-lg border border-slate/20 px-3 py-2 text-sm font-semibold"
-            onClick={() => setSubjectFilters({ query: '', classId: '', academicYearId: '' })}
-          >
-            Clear filters
-          </button>
+            Add Subject
+          </Button>
         </div>
           <div className="mt-6 overflow-hidden rounded-xl border border-gray-200">
             <table className="w-full">
@@ -839,7 +724,7 @@ export default function AcademicsPage() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-200 bg-white">
-                {filteredSubjects?.map(
+                {subjects?.map(
                   (subject: {
                     id: string;
                     name: string;
@@ -912,6 +797,232 @@ export default function AcademicsPage() {
             </table>
           </div>
       </section>
+      )}
+
+      {createModal ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 backdrop-blur-sm">
+          <div className="w-full max-w-2xl rounded-2xl bg-white p-6 shadow-2xl ring-1 ring-gray-200">
+            <div className="mb-6 flex items-center justify-between">
+              <h3 className="text-xl font-semibold text-gray-900">
+                {createModal === 'years' && 'Add Academic Year'}
+                {createModal === 'classes' && 'Add Class'}
+                {createModal === 'examTypes' && 'Add Exam Type'}
+                {createModal === 'sections' && 'Add Section'}
+                {createModal === 'subjects' && 'Add Subject'}
+              </h3>
+              <button
+                onClick={closeCreateModal}
+                className="rounded-lg border border-gray-300 px-3 py-1 text-sm text-gray-600 hover:bg-gray-100"
+              >
+                Close
+              </button>
+            </div>
+
+            {createModal === 'years' && (
+              <div className="space-y-4">
+                <div className="grid gap-4 md:grid-cols-3">
+                  <div>
+                    <label className="mb-2 block text-sm font-medium text-gray-700">Year Name</label>
+                    <input
+                      value={yearForm.name}
+                      onChange={(e) => setYearForm({ ...yearForm, name: e.target.value })}
+                      placeholder="e.g., 2024-2025"
+                      className="w-full rounded-xl border border-gray-300 px-4 py-3 text-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-200"
+                    />
+                  </div>
+                  <div>
+                    <label className="mb-2 block text-sm font-medium text-gray-700">Start Date</label>
+                    <input
+                      value={yearForm.startDate}
+                      onChange={(e) => setYearForm({ ...yearForm, startDate: e.target.value })}
+                      type="date"
+                      className="w-full rounded-xl border border-gray-300 px-4 py-3 text-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-200"
+                    />
+                  </div>
+                  <div>
+                    <label className="mb-2 block text-sm font-medium text-gray-700">End Date</label>
+                    <input
+                      value={yearForm.endDate}
+                      onChange={(e) => setYearForm({ ...yearForm, endDate: e.target.value })}
+                      type="date"
+                      className="w-full rounded-xl border border-gray-300 px-4 py-3 text-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-200"
+                    />
+                  </div>
+                </div>
+                {yearError ? <p className="text-sm font-semibold text-rose-600">{yearError}</p> : null}
+                <div className="flex justify-end gap-3">
+                  <Button variant="outline" size="sm" onClick={closeCreateModal}>
+                    Cancel
+                  </Button>
+                  <Button variant="primary" size="sm" onClick={handleCreateYear} loading={createYearMutation.isPending}>
+                    Create Academic Year
+                  </Button>
+                </div>
+              </div>
+            )}
+
+            {createModal === 'classes' && (
+              <div className="space-y-4">
+                <div className="grid gap-4 md:grid-cols-2">
+                  <input
+                    value={className}
+                    onChange={(e) => setClassName(e.target.value)}
+                    placeholder="Class name"
+                    className="rounded-xl border border-slate/20 px-4 py-3 text-sm"
+                  />
+                  <select
+                    value={classYearId}
+                    onChange={(e) => setClassYearId(e.target.value)}
+                    className="rounded-xl border border-slate/20 px-4 py-3 text-sm"
+                  >
+                    <option value="">Select academic year</option>
+                    {years?.map((year: { id: string; name: string }) => (
+                      <option key={year.id} value={year.id}>
+                        {year.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                {classError ? <p className="text-sm font-semibold text-rose-600">{classError}</p> : null}
+                <div className="flex justify-end gap-3">
+                  <Button variant="outline" size="sm" onClick={closeCreateModal}>
+                    Cancel
+                  </Button>
+                  <Button variant="primary" size="sm" onClick={handleCreateClass} loading={createClassMutation.isPending}>
+                    Create Class
+                  </Button>
+                </div>
+              </div>
+            )}
+
+            {createModal === 'examTypes' && (
+              <div className="space-y-4">
+                <div className="grid gap-4 md:grid-cols-3">
+                  <input
+                    value={examTypeForm.name}
+                    onChange={(e) => setExamTypeForm({ ...examTypeForm, name: e.target.value })}
+                    placeholder="Exam type name"
+                    className="rounded-xl border border-slate/20 px-4 py-3 text-sm"
+                  />
+                  <input
+                    value={examTypeForm.code}
+                    onChange={(e) => setExamTypeForm({ ...examTypeForm, code: e.target.value.toUpperCase() })}
+                    placeholder="Code (e.g., MIDTERM)"
+                    className="rounded-xl border border-slate/20 px-4 py-3 text-sm uppercase"
+                  />
+                  <label className="flex items-center gap-2 rounded-xl border border-slate/20 px-4 py-3 text-sm text-slate">
+                    <input
+                      type="checkbox"
+                      checked={examTypeForm.isActive}
+                      onChange={(e) => setExamTypeForm({ ...examTypeForm, isActive: e.target.checked })}
+                    />
+                    Active
+                  </label>
+                </div>
+                {examTypeError ? <p className="text-sm font-semibold text-rose-600">{examTypeError}</p> : null}
+                <div className="flex justify-end gap-3">
+                  <Button variant="outline" size="sm" onClick={closeCreateModal}>
+                    Cancel
+                  </Button>
+                  <Button
+                    variant="primary"
+                    size="sm"
+                    onClick={handleCreateExamType}
+                    loading={createExamTypeMutation.isPending}
+                  >
+                    Create Exam Type
+                  </Button>
+                </div>
+              </div>
+            )}
+
+            {createModal === 'sections' && (
+              <div className="space-y-4">
+                <div className="grid gap-4 md:grid-cols-2">
+                  <input
+                    value={sectionForm.name}
+                    onChange={(e) => setSectionForm({ ...sectionForm, name: e.target.value })}
+                    placeholder="Section name"
+                    className="rounded-xl border border-slate/20 px-4 py-3 text-sm"
+                  />
+                  <select
+                    value={sectionForm.classId}
+                    onChange={(e) => setSectionForm({ ...sectionForm, classId: e.target.value })}
+                    className="rounded-xl border border-slate/20 px-4 py-3 text-sm"
+                  >
+                    <option value="">Select class</option>
+                    {classes?.map((cls: { id: string; name: string }) => (
+                      <option key={cls.id} value={cls.id}>
+                        {cls.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                {sectionError ? <p className="text-sm font-semibold text-rose-600">{sectionError}</p> : null}
+                <div className="flex justify-end gap-3">
+                  <Button variant="outline" size="sm" onClick={closeCreateModal}>
+                    Cancel
+                  </Button>
+                  <Button
+                    variant="primary"
+                    size="sm"
+                    onClick={handleCreateSection}
+                    loading={createSectionMutation.isPending}
+                  >
+                    Create Section
+                  </Button>
+                </div>
+              </div>
+            )}
+
+            {createModal === 'subjects' && (
+              <div className="space-y-4">
+                <div className="grid gap-4 md:grid-cols-3">
+                  <input
+                    value={subjectForm.name}
+                    onChange={(e) => setSubjectForm({ ...subjectForm, name: e.target.value })}
+                    placeholder="Subject name"
+                    className="rounded-xl border border-slate/20 px-4 py-3 text-sm"
+                  />
+                  <select
+                    value={subjectForm.academicYearId}
+                    onChange={(e) => setSubjectForm({ ...subjectForm, academicYearId: e.target.value })}
+                    className="rounded-xl border border-slate/20 px-4 py-3 text-sm"
+                  >
+                    <option value="">Select academic year</option>
+                    {years?.map((year: { id: string; name: string }) => (
+                      <option key={year.id} value={year.id}>
+                        {year.name}
+                      </option>
+                    ))}
+                  </select>
+                  <select
+                    value={subjectForm.classId}
+                    onChange={(e) => setSubjectForm({ ...subjectForm, classId: e.target.value })}
+                    className="rounded-xl border border-slate/20 px-4 py-3 text-sm"
+                  >
+                    <option value="">Select class</option>
+                    {classes?.map((cls: { id: string; name: string }) => (
+                      <option key={cls.id} value={cls.id}>
+                        {cls.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                {subjectError ? <p className="text-sm font-semibold text-rose-600">{subjectError}</p> : null}
+                <div className="flex justify-end gap-3">
+                  <Button variant="outline" size="sm" onClick={closeCreateModal}>
+                    Cancel
+                  </Button>
+                  <Button variant="primary" size="sm" onClick={handleCreateSubject} loading={createSubjectMutation.isPending}>
+                    Create Subject
+                  </Button>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      ) : null}
     </div>
     </div>
   );

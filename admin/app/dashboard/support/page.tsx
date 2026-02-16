@@ -8,6 +8,7 @@ import { listTickets, createTicket, updateTicket, type SupportTicket } from '../
 
 export default function SupportPage() {
   const queryClient = useQueryClient();
+  const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [form, setForm] = useState({ subject: '', description: '', priority: 'MEDIUM' });
   const [formError, setFormError] = useState('');
 
@@ -23,6 +24,8 @@ export default function SupportPage() {
     mutationFn: createTicket,
     onSuccess: () => {
       setForm({ subject: '', description: '', priority: 'MEDIUM' });
+      setFormError('');
+      setIsCreateModalOpen(false);
       queryClient.invalidateQueries({ queryKey: ['tickets'] });
     },
   });
@@ -32,13 +35,6 @@ export default function SupportPage() {
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['tickets'] }),
   });
 
-  const stats = {
-    total: tickets?.length || 0,
-    open: tickets?.filter(t => t.status === 'OPEN').length || 0,
-    inProgress: tickets?.filter(t => t.status === 'IN_PROGRESS').length || 0,
-    resolved: tickets?.filter(t => t.status === 'RESOLVED').length || 0,
-  };
-
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50/30 to-purple-50/40">
       <div className="mx-auto max-w-7xl pr-6 pb-12">
@@ -46,134 +42,108 @@ export default function SupportPage() {
           title="Help & Support"
           subtitle="Get assistance with technical issues, track support tickets, and access help resources."
         />
-        <div className="grid gap-6 md:grid-cols-4">
-          <div className="rounded-2xl bg-gradient-to-br from-blue-500 to-blue-600 p-6 text-white shadow-lg">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-blue-100">Total Tickets</p>
-                <p className="text-3xl font-bold">{stats.total}</p>
+        {isCreateModalOpen ? (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+            <section className="w-full max-w-3xl rounded-2xl bg-white p-6 shadow-2xl ring-1 ring-gray-200">
+              <div className="mb-4 flex items-center justify-between">
+                <h2 className="text-xl font-semibold text-gray-900">Create Support Ticket</h2>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => {
+                    setIsCreateModalOpen(false);
+                    setFormError('');
+                  }}
+                >
+                  Close
+                </Button>
               </div>
-              <div className="rounded-full bg-white/20 p-3">
-                <svg className="h-8 w-8" fill="currentColor" viewBox="0 0 20 20">
-                  <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
-                </svg>
+              <div className="grid gap-4 md:grid-cols-3">
+                <div>
+                  <label className="mb-2 block text-sm font-medium text-gray-700">Subject</label>
+                  <input
+                    value={form.subject}
+                    onChange={(e) => setForm({ ...form, subject: e.target.value })}
+                    placeholder="Brief description of the issue"
+                    className="w-full rounded-xl border border-gray-300 px-4 py-3 text-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-200"
+                  />
+                </div>
+                <div>
+                  <label className="mb-2 block text-sm font-medium text-gray-700">Description</label>
+                  <input
+                    value={form.description}
+                    onChange={(e) => setForm({ ...form, description: e.target.value })}
+                    placeholder="Detailed description of the problem"
+                    className="w-full rounded-xl border border-gray-300 px-4 py-3 text-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-200"
+                  />
+                </div>
+                <div>
+                  <label className="mb-2 block text-sm font-medium text-gray-700">Priority</label>
+                  <select
+                    value={form.priority}
+                    onChange={(e) => setForm({ ...form, priority: e.target.value })}
+                    className="w-full rounded-xl border border-gray-300 px-4 py-3 text-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-200"
+                  >
+                    <option value="LOW">Low</option>
+                    <option value="MEDIUM">Medium</option>
+                    <option value="HIGH">High</option>
+                  </select>
+                </div>
               </div>
-            </div>
+              <div className="mt-6 flex items-center gap-4">
+                <Button
+                  variant="primary"
+                  onClick={() => {
+                    let error = '';
+                    if (!form.subject.trim()) error = 'Subject is required.';
+                    else if (!form.description.trim()) error = 'Description is required.';
+                    setFormError(error);
+                    if (error) return;
+                    createMutation.mutate(form);
+                  }}
+                  disabled={createMutation.isPending}
+                  loading={createMutation.isPending}
+                  icon={
+                    <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+                    </svg>
+                  }
+                >
+                  Create Ticket
+                </Button>
+                {formError && (
+                  <div className="flex items-center text-sm text-red-600">
+                    <svg className="mr-1 h-4 w-4" fill="currentColor" viewBox="0 0 20 20">
+                      <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+                    </svg>
+                    {formError}
+                  </div>
+                )}
+              </div>
+            </section>
           </div>
-          
-          <div className="rounded-2xl bg-gradient-to-br from-amber-500 to-amber-600 p-6 text-white shadow-lg">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-amber-100">Open</p>
-                <p className="text-3xl font-bold">{stats.open}</p>
-              </div>
-              <div className="rounded-full bg-white/20 p-3">
-                <svg className="h-8 w-8" fill="currentColor" viewBox="0 0 20 20">
-                  <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
-                </svg>
-              </div>
-            </div>
-          </div>
-          
-          <div className="rounded-2xl bg-gradient-to-br from-purple-500 to-purple-600 p-6 text-white shadow-lg">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-purple-100">In Progress</p>
-                <p className="text-3xl font-bold">{stats.inProgress}</p>
-              </div>
-              <div className="rounded-full bg-white/20 p-3">
-                <svg className="h-8 w-8" fill="currentColor" viewBox="0 0 20 20">
-                  <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-12a1 1 0 10-2 0v4a1 1 0 00.293.707l2.828 2.829a1 1 0 101.415-1.415L11 9.586V6z" clipRule="evenodd" />
-                </svg>
-              </div>
-            </div>
-          </div>
-          
-          <div className="rounded-2xl bg-gradient-to-br from-emerald-500 to-emerald-600 p-6 text-white shadow-lg">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-emerald-100">Resolved</p>
-                <p className="text-3xl font-bold">{stats.resolved}</p>
-              </div>
-              <div className="rounded-full bg-white/20 p-3">
-                <svg className="h-8 w-8" fill="currentColor" viewBox="0 0 20 20">
-                  <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
-                </svg>
-              </div>
-            </div>
-          </div>
-        </div>
+        ) : null}
 
-        {/* Create Ticket Section */}
+        {/* Tickets Table */}
         <section className="rounded-2xl bg-white p-6 shadow-lg ring-1 ring-gray-200">
-          <h2 className="mb-6 text-xl font-semibold text-gray-900">Create Support Ticket</h2>
-          <div className="grid gap-4 md:grid-cols-3">
-            <div>
-              <label className="mb-2 block text-sm font-medium text-gray-700">Subject</label>
-              <input
-                value={form.subject}
-                onChange={(e) => setForm({ ...form, subject: e.target.value })}
-                placeholder="Brief description of the issue"
-                className="w-full rounded-xl border border-gray-300 px-4 py-3 text-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-200"
-              />
-            </div>
-            <div>
-              <label className="mb-2 block text-sm font-medium text-gray-700">Description</label>
-              <input
-                value={form.description}
-                onChange={(e) => setForm({ ...form, description: e.target.value })}
-                placeholder="Detailed description of the problem"
-                className="w-full rounded-xl border border-gray-300 px-4 py-3 text-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-200"
-              />
-            </div>
-            <div>
-              <label className="mb-2 block text-sm font-medium text-gray-700">Priority</label>
-              <select
-                value={form.priority}
-                onChange={(e) => setForm({ ...form, priority: e.target.value })}
-                className="w-full rounded-xl border border-gray-300 px-4 py-3 text-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-200"
-              >
-                <option value="LOW">Low</option>
-                <option value="MEDIUM">Medium</option>
-                <option value="HIGH">High</option>
-              </select>
-            </div>
-          </div>
-          <div className="mt-6 flex items-center gap-4">
+          <div className="mb-6 flex items-center justify-between gap-3">
+            <h2 className="text-xl font-semibold text-gray-900">Support Tickets</h2>
             <Button
               variant="primary"
+              size="sm"
               onClick={() => {
-                let error = '';
-                if (!form.subject.trim()) error = 'Subject is required.';
-                else if (!form.description.trim()) error = 'Description is required.';
-                setFormError(error);
-                if (error) return;
-                createMutation.mutate(form);
+                setFormError('');
+                setIsCreateModalOpen(true);
               }}
-              disabled={createMutation.isPending}
-              loading={createMutation.isPending}
               icon={
                 <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
                 </svg>
               }
             >
-              Create Ticket
+              Create Support Ticket
             </Button>
-            {formError && (
-              <div className="flex items-center text-sm text-red-600">
-                <svg className="mr-1 h-4 w-4" fill="currentColor" viewBox="0 0 20 20">
-                  <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
-                </svg>
-                {formError}
-              </div>
-            )}
           </div>
-        </section>
-
-        {/* Tickets Table */}
-        <section className="rounded-2xl bg-white p-6 shadow-lg ring-1 ring-gray-200">
-          <h2 className="mb-6 text-xl font-semibold text-gray-900">Support Tickets</h2>
           <div className="overflow-hidden rounded-xl border border-gray-200">
             <table className="w-full">
               <thead className="bg-gray-50">

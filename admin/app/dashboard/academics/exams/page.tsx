@@ -1,7 +1,6 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
-import Link from 'next/link';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { listAcademicYears, listClasses, listExamTypes, listSections, listSubjects } from '../../../../services/academic.service';
 import { listSchools } from '../../../../services/school.service';
@@ -31,6 +30,7 @@ const defaultMarks = { maxMarks: '100', passMarks: '35', scheduledAt: '' };
 export default function ExamsPage() {
   const queryClient = useQueryClient();
   const notify = useNotify();
+  const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [step, setStep] = useState<1 | 2 | 3>(1);
   const [schoolId, setSchoolId] = useState('');
   const [examBasics, setExamBasics] = useState({
@@ -53,6 +53,30 @@ export default function ExamsPage() {
   });
   const [subjectMap, setSubjectMap] = useState<Record<string, SubjectSelection>>({});
   const [stepError, setStepError] = useState('');
+
+  const resetCreateExamState = () => {
+    setStep(1);
+    setStepError('');
+    setExamBasics({
+      name: '',
+      type: '',
+      academicYearId: '',
+      classId: '',
+      sectionId: '',
+      examDate: '',
+      resultPublishDate: '',
+      examMode: 'MARKS',
+    });
+    setStructure({
+      sameMarks: false,
+      internalExternal: false,
+      practical: false,
+      internalMarks: '',
+      externalMarks: '',
+      practicalMarks: '',
+    });
+    setSubjectMap({});
+  };
 
   const { data: session } = useQuery({ queryKey: ['session'], queryFn: getSession });
   const isSuperAdmin = session?.role === 'SUPER_ADMIN';
@@ -146,26 +170,8 @@ export default function ExamsPage() {
         status: payload.status,
       }),
     onSuccess: (data, variables) => {
-      setStep(1);
-      setExamBasics({
-        name: '',
-        type: '',
-        academicYearId: '',
-        classId: '',
-        sectionId: '',
-        examDate: '',
-        resultPublishDate: '',
-        examMode: 'MARKS',
-      });
-      setStructure({
-        sameMarks: false,
-        internalExternal: false,
-        practical: false,
-        internalMarks: '',
-        externalMarks: '',
-        practicalMarks: '',
-      });
-      setSubjectMap({});
+      resetCreateExamState();
+      setIsCreateModalOpen(false);
       queryClient.invalidateQueries({ queryKey: ['exams'] });
       
       const status = variables.status === 'DRAFT' ? 'saved as draft' : 'published';
@@ -233,13 +239,6 @@ export default function ExamsPage() {
     }));
   };
 
-  const stats = {
-    exams: exams?.length || 0,
-    subjects: filteredSubjects.length,
-    selected: selectedSubjectIds.length,
-    pending: filteredSubjects.length - selectedSubjectIds.length,
-  };
-
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-orange-50/30 to-red-50/40">
       {createExamMutation.isPending && <FullPageLoader label="Saving exam..." />}
@@ -249,65 +248,6 @@ export default function ExamsPage() {
           title="Exams & Assessments"
           subtitle="Create comprehensive exams, map subjects, and configure assessment structures for your academic programs."
         />
-        {/* Stats Cards */}
-        <div className="mb-8 grid gap-6 md:grid-cols-4">
-          <div className="rounded-2xl bg-gradient-to-br from-blue-500 to-blue-600 p-6 text-white shadow-lg">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-blue-100">Total Exams</p>
-                <p className="text-3xl font-bold">{stats.exams}</p>
-              </div>
-              <div className="rounded-full bg-white/20 p-3">
-                <svg className="h-8 w-8" fill="currentColor" viewBox="0 0 20 20">
-                  <path d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                </svg>
-              </div>
-            </div>
-          </div>
-          
-          <div className="rounded-2xl bg-gradient-to-br from-emerald-500 to-emerald-600 p-6 text-white shadow-lg">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-emerald-100">Available Subjects</p>
-                <p className="text-3xl font-bold">{stats.subjects}</p>
-              </div>
-              <div className="rounded-full bg-white/20 p-3">
-                <svg className="h-8 w-8" fill="currentColor" viewBox="0 0 20 20">
-                  <path fillRule="evenodd" d="M3 4a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm0 4a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm0 4a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm0 4a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1z" clipRule="evenodd" />
-                </svg>
-              </div>
-            </div>
-          </div>
-          
-          <div className="rounded-2xl bg-gradient-to-br from-purple-500 to-purple-600 p-6 text-white shadow-lg">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-purple-100">Selected Subjects</p>
-                <p className="text-3xl font-bold">{stats.selected}</p>
-              </div>
-              <div className="rounded-full bg-white/20 p-3">
-                <svg className="h-8 w-8" fill="currentColor" viewBox="0 0 20 20">
-                  <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
-                </svg>
-              </div>
-            </div>
-          </div>
-          
-          <div className="rounded-2xl bg-gradient-to-br from-amber-500 to-amber-600 p-6 text-white shadow-lg">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-amber-100">Pending Setup</p>
-                <p className="text-3xl font-bold">{stats.pending}</p>
-              </div>
-              <div className="rounded-full bg-white/20 p-3">
-                <svg className="h-8 w-8" fill="currentColor" viewBox="0 0 20 20">
-                  <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
-                </svg>
-              </div>
-            </div>
-          </div>
-        </div>
-
         {/* School Selection for Super Admin */}
         {isSuperAdmin && (
           <div className="mb-8 rounded-2xl bg-white p-6 shadow-lg ring-1 ring-gray-200">
@@ -327,8 +267,22 @@ export default function ExamsPage() {
           </div>
         )}
 
-        {/* Create Exam Form */}
-        <section className="mb-8 rounded-2xl bg-white p-6 shadow-lg ring-1 ring-gray-200">
+        {isCreateModalOpen ? (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+            <section className="max-h-[92vh] w-full max-w-5xl overflow-y-auto rounded-2xl bg-white p-6 shadow-2xl ring-1 ring-gray-200">
+              <div className="mb-4 flex items-center justify-between">
+                <h2 className="text-xl font-semibold text-gray-900">Create New Exam</h2>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => {
+                    setIsCreateModalOpen(false);
+                    resetCreateExamState();
+                  }}
+                >
+                  Close
+                </Button>
+              </div>
           <div className="mb-6 flex items-center justify-center">
             <div className="flex items-center space-x-8">
               {[
@@ -375,7 +329,7 @@ export default function ExamsPage() {
               ))}
             </div>
           </div>
-          <h2 className="mb-6 text-xl font-semibold text-gray-900">Create New Exam</h2>
+          {stepError ? <p className="mb-4 text-sm font-medium text-red-600">{stepError}</p> : null}
 
         {step === 1 ? (
           <div className="mt-4 space-y-4">
@@ -492,13 +446,6 @@ export default function ExamsPage() {
                 onClick={handleContinueFromBasics}
               >
                 Save & Continue
-              </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setStep(1)}
-              >
-                Cancel
               </Button>
             </div>
           </div>
@@ -708,11 +655,26 @@ export default function ExamsPage() {
             </div>
           </div>
         ) : null}
-      </section>
+            </section>
+          </div>
+        ) : null}
 
         {/* Existing Exams */}
         <section className="rounded-2xl bg-white p-6 shadow-lg ring-1 ring-gray-200">
-          <h2 className="mb-6 text-xl font-semibold text-gray-900">Existing Exams</h2>
+          <div className="mb-6 flex items-center justify-between gap-3">
+            <h2 className="text-xl font-semibold text-gray-900">Existing Exams</h2>
+            <Button
+              variant="primary"
+              size="sm"
+              onClick={() => {
+                resetCreateExamState();
+                setIsCreateModalOpen(true);
+              }}
+              disabled={!effectiveSchoolId}
+            >
+              Create New Exam
+            </Button>
+          </div>
           <div className="overflow-hidden rounded-xl border border-gray-200">
             <table className="w-full">
               <thead className="bg-gray-50">
@@ -749,7 +711,7 @@ export default function ExamsPage() {
                 {!exams?.length && (
                   <tr>
                     <td colSpan={5} className="px-6 py-12 text-center text-sm text-gray-500">
-                      No exams found. Create your first exam above.
+                      No exams found. Create your first exam.
                     </td>
                   </tr>
                 )}

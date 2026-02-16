@@ -71,17 +71,6 @@ export default function AuditPage() {
     staleTime: 60_000,
   });
 
-  const stats = {
-    total: data?.total || 0,
-    today: data?.items.filter(log => {
-      const today = new Date();
-      const logDate = new Date(log.createdAt);
-      return logDate.toDateString() === today.toDateString();
-    }).length || 0,
-    actions: new Set(data?.items.map(log => log.action)).size || 0,
-    users: new Set(data?.items.map(log => log.actorId)).size || 0,
-  };
-
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50/30 to-purple-50/40">
       <div className="mx-auto max-w-7xl pr-6 pb-12">
@@ -89,68 +78,10 @@ export default function AuditPage() {
           title="Audit Logs"
           subtitle="Monitor system activities, track user actions, and maintain comprehensive audit trails for compliance."
         />
-        <div className="grid gap-6 md:grid-cols-4">
-          <div className="rounded-2xl bg-gradient-to-br from-blue-500 to-blue-600 p-6 text-white shadow-lg">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-blue-100">Total Logs</p>
-                <p className="text-3xl font-bold">{stats.total}</p>
-              </div>
-              <div className="rounded-full bg-white/20 p-3">
-                <svg className="h-8 w-8" fill="currentColor" viewBox="0 0 20 20">
-                  <path fillRule="evenodd" d="M3 4a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm0 4a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm0 4a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm0 4a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1z" clipRule="evenodd" />
-                </svg>
-              </div>
-            </div>
-          </div>
-          
-          <div className="rounded-2xl bg-gradient-to-br from-emerald-500 to-emerald-600 p-6 text-white shadow-lg">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-emerald-100">Today's Activity</p>
-                <p className="text-3xl font-bold">{stats.today}</p>
-              </div>
-              <div className="rounded-full bg-white/20 p-3">
-                <svg className="h-8 w-8" fill="currentColor" viewBox="0 0 20 20">
-                  <path fillRule="evenodd" d="M6 2a1 1 0 00-1 1v1H4a2 2 0 00-2 2v10a2 2 0 002 2h12a2 2 0 002-2V6a2 2 0 00-2-2h-1V3a1 1 0 10-2 0v1H7V3a1 1 0 00-1-1zm0 5a1 1 0 000 2h8a1 1 0 100-2H6z" clipRule="evenodd" />
-                </svg>
-              </div>
-            </div>
-          </div>
-          
-          <div className="rounded-2xl bg-gradient-to-br from-purple-500 to-purple-600 p-6 text-white shadow-lg">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-purple-100">Action Types</p>
-                <p className="text-3xl font-bold">{stats.actions}</p>
-              </div>
-              <div className="rounded-full bg-white/20 p-3">
-                <svg className="h-8 w-8" fill="currentColor" viewBox="0 0 20 20">
-                  <path fillRule="evenodd" d="M11.49 3.17c-.38-1.56-2.6-1.56-2.98 0a1.532 1.532 0 01-2.286.948c-1.372-.836-2.942.734-2.106 2.106.54.886.061 2.042-.947 2.287-1.561.379-1.561 2.6 0 2.978a1.532 1.532 0 01.947 2.287c-.836 1.372.734 2.942 2.106 2.106a1.532 1.532 0 012.287.947c.379 1.561 2.6 1.561 2.978 0a1.533 1.533 0 012.287-.947c1.372.836 2.942-.734 2.106-2.106a1.533 1.533 0 01.947-2.287c1.561-.379 1.561-2.6 0-2.978a1.532 1.532 0 01-.947-2.287c.836-1.372-.734-2.942-2.106-2.106a1.532 1.532 0 01-2.287-.947zM10 13a3 3 0 100-6 3 3 0 000 6z" clipRule="evenodd" />
-                </svg>
-              </div>
-            </div>
-          </div>
-          
-          <div className="rounded-2xl bg-gradient-to-br from-amber-500 to-amber-600 p-6 text-white shadow-lg">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-amber-100">Active Users</p>
-                <p className="text-3xl font-bold">{stats.users}</p>
-              </div>
-              <div className="rounded-full bg-white/20 p-3">
-                <svg className="h-8 w-8" fill="currentColor" viewBox="0 0 20 20">
-                  <path d="M13 6a3 3 0 11-6 0 3 3 0 016 0zM18 8a2 2 0 11-4 0 2 2 0 014 0zM14 15a4 4 0 00-8 0v3h8v-3z" />
-                </svg>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* Filters Section */}
+        {/* Audit Logs Table */}
         <section className="rounded-2xl bg-white p-6 shadow-lg ring-1 ring-gray-200">
-          <h2 className="mb-6 text-xl font-semibold text-gray-900">Filter Audit Logs</h2>
-          <div className="grid gap-4 md:grid-cols-3">
+          <h2 className="mb-6 text-xl font-semibold text-gray-900">Activity Timeline</h2>
+          <div className="mb-6 grid gap-4 md:grid-cols-3">
             <div>
               <label className="mb-2 block text-sm font-medium text-gray-700">Entity Type</label>
               <select
@@ -216,11 +147,6 @@ export default function AuditPage() {
               </select>
             </div>
           </div>
-        </section>
-
-        {/* Audit Logs Table */}
-        <section className="rounded-2xl bg-white p-6 shadow-lg ring-1 ring-gray-200">
-          <h2 className="mb-6 text-xl font-semibold text-gray-900">Activity Timeline</h2>
           <div className="overflow-hidden rounded-xl border border-gray-200">
             <table className="w-full">
               <thead className="bg-gray-50">
