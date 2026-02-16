@@ -14,6 +14,8 @@ import {
 import { listSubscriptionPlans, upsertSubscription } from '../../../services/subscription.service';
 import { useNotify } from '../../../components/NotificationProvider';
 import FullPageLoader from '../../../components/FullPageLoader';
+import PageHeader from '../../../components/PageHeader';
+import Button from '../../../components/Button';
 
 export default function SchoolsPage() {
   const queryClient = useQueryClient();
@@ -201,25 +203,10 @@ export default function SchoolsPage() {
   }, [form.name, totalSchools, isCodeAuto]);
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50/30 to-purple-50/40 p-6">
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50/30 to-purple-50/40">
       {isBusy ? <FullPageLoader label="Loading schools..." /> : null}
-      <div className="mx-auto max-w-7xl space-y-6">
-        {/* Header */}
-        <div className="relative overflow-hidden rounded-3xl bg-gradient-to-r from-indigo-600 via-purple-600 to-pink-600 p-8 text-white shadow-2xl">
-          <div className="absolute inset-0 bg-black/10"></div>
-          <div className="relative">
-            <div className="mb-4 inline-flex items-center rounded-full bg-white/20 px-4 py-2 text-sm font-medium backdrop-blur-sm">
-              <svg className="mr-2 h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
-              </svg>
-              Schools
-            </div>
-            <h1 className="text-4xl font-bold tracking-tight">Schools</h1>
-            <p className="mt-2 text-purple-100">Manage tenant lifecycle, status, and subscription visibility.</p>
-          </div>
-          <div className="absolute -top-10 -right-10 h-40 w-40 rounded-full bg-white/10 animate-pulse"></div>
-          <div className="absolute -bottom-8 -left-8 h-32 w-32 rounded-full bg-white/10 animate-bounce"></div>
-        </div>
+      <div className="mx-auto max-w-7xl pr-6 pb-12">
+        <PageHeader title="Schools" subtitle="Manage tenant lifecycle, status, and subscription visibility." />
 
         {/* Create School Section */}
         <section className="rounded-2xl bg-white p-6 shadow-lg ring-1 ring-gray-200">
@@ -284,9 +271,7 @@ export default function SchoolsPage() {
               className="rounded-xl border border-gray-300 px-4 py-3 text-sm focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-200"
             />
           </div>
-          <button
-            className="mt-6 flex items-center gap-2 rounded-xl bg-gradient-to-r from-indigo-600 to-purple-600 px-6 py-3 text-sm font-semibold text-white shadow-lg transition-all hover:from-indigo-700 hover:to-purple-700 hover:shadow-xl disabled:opacity-50"
-            onClick={() => {
+          <Button variant="primary" size="sm" onClick={() => {
               const trimmedName = form.name.trim();
               const trimmedCode = form.code.trim();
               const trimmedEmail = form.adminEmail.trim();
@@ -305,26 +290,7 @@ export default function SchoolsPage() {
                 code: trimmedCode,
                 adminEmail: trimmedEmail,
               });
-            }}
-            disabled={createMutation.isPending}
-          >
-            {createMutation.isPending ? (
-              <>
-                <svg className="h-4 w-4 animate-spin" fill="none" viewBox="0 0 24 24">
-                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                  <path className="opacity-75" fill="currentColor" d="m4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                </svg>
-                Creating...
-              </>
-            ) : (
-              <>
-                <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-                </svg>
-                Create School
-              </>
-            )}
-          </button>
+            }} disabled={createMutation.isPending} loading={createMutation.isPending} icon={<svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" /></svg>} iconPosition="left">Create School</Button>
           {formError ? <p className="mt-3 text-sm font-semibold text-rose-600">{formError}</p> : null}
           {createdAdmin ? (
             <div className="mt-6 rounded-xl border-2 border-emerald-200 bg-emerald-50 p-6">

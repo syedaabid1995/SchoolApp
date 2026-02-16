@@ -7,6 +7,8 @@ import { getAnalytics } from '../../../services/analytics.service';
 import { getSession } from '../../../services/auth.service';
 import { listSchools } from '../../../services/school.service';
 import FullPageLoader from '../../../components/FullPageLoader';
+import PageHeader from '../../../components/PageHeader';
+import Button from '../../../components/Button';
 
 export default function AnalyticsPage() {
   const router = useRouter();
@@ -44,24 +46,9 @@ export default function AnalyticsPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50/30 to-purple-50/40 p-6">
-      <div className="mx-auto max-w-7xl space-y-6">
-        {/* Header */}
-        <div className="relative overflow-hidden rounded-3xl bg-gradient-to-r from-blue-600 via-purple-600 to-pink-600 p-8 text-white shadow-2xl">
-          <div className="absolute inset-0 bg-black/10"></div>
-          <div className="relative">
-            <div className="mb-4 inline-flex items-center rounded-full bg-white/20 px-4 py-2 text-sm font-medium backdrop-blur-sm">
-              <svg className="mr-2 h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
-              </svg>
-              Analytics Dashboard
-            </div>
-            <h1 className="text-4xl font-bold tracking-tight">Analytics Dashboard</h1>
-            <p className="mt-2 text-blue-100">Key operational metrics across attendance and academics</p>
-          </div>
-          <div className="absolute -top-10 -right-10 h-40 w-40 rounded-full bg-white/10 animate-pulse"></div>
-          <div className="absolute -bottom-8 -left-8 h-32 w-32 rounded-full bg-white/10 animate-bounce"></div>
-        </div>
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50/30 to-purple-50/40">
+      <div className="mx-auto max-w-7xl pr-6 pb-12">
+        <PageHeader title="Analytics Dashboard" subtitle="Key operational metrics across attendance and academics" />
 
         {/* School Selector for Super Admin */}
         {isSuperAdmin && (
@@ -75,15 +62,7 @@ export default function AnalyticsPage() {
                 </div>
                 <h2 className="text-lg font-semibold text-gray-900">School Context</h2>
               </div>
-              <button
-                onClick={() => router.push('/dashboard/schools')}
-                className="flex items-center gap-2 rounded-xl bg-gradient-to-r from-blue-600 to-purple-600 px-4 py-2 text-sm font-semibold text-white shadow-md transition-all hover:shadow-lg hover:scale-105"
-              >
-                <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-                </svg>
-                Add School
-              </button>
+              <Button variant="primary" size="sm" onClick={() => router.push('/dashboard/schools')} icon={<svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" /></svg>} iconPosition="left">Add School</Button>
             </div>
             <select
               value={schoolId}

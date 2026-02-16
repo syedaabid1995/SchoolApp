@@ -14,6 +14,8 @@ import {
 } from '../../../services/subscription.service';
 import { useNotify } from '../../../components/NotificationProvider';
 import FullPageLoader from '../../../components/FullPageLoader';
+import PageHeader from '../../../components/PageHeader';
+import Button from '../../../components/Button';
 
 export default function SubscriptionsPage() {
   const queryClient = useQueryClient();
@@ -137,25 +139,10 @@ export default function SubscriptionsPage() {
   const isBusy = planMutation.isPending || planLoading;
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50/30 to-purple-50/40 p-6">
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50/30 to-purple-50/40">
       {isBusy ? <FullPageLoader label="Updating plans..." /> : null}
-      <div className="mx-auto max-w-7xl space-y-6">
-        {/* Header */}
-        <div className="relative overflow-hidden rounded-3xl bg-gradient-to-r from-emerald-600 via-teal-600 to-cyan-600 p-8 text-white shadow-2xl">
-          <div className="absolute inset-0 bg-black/10"></div>
-          <div className="relative">
-            <div className="mb-4 inline-flex items-center rounded-full bg-white/20 px-4 py-2 text-sm font-medium backdrop-blur-sm">
-              <svg className="mr-2 h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-              </svg>
-              Subscriptions
-            </div>
-            <h1 className="text-4xl font-bold tracking-tight">Subscription Plans</h1>
-            <p className="mt-2 text-emerald-100">Manage tenant subscription plans and usage limits.</p>
-          </div>
-          <div className="absolute -top-10 -right-10 h-40 w-40 rounded-full bg-white/10 animate-pulse"></div>
-          <div className="absolute -bottom-8 -left-8 h-32 w-32 rounded-full bg-white/10 animate-bounce"></div>
-        </div>
+      <div className="mx-auto max-w-7xl pr-6 pb-12">
+        <PageHeader title="Subscription Plans" subtitle="Manage tenant subscription plans and usage limits." />
 
         {/* Create/Edit Plan Section */}
         <section className="rounded-2xl bg-white p-6 shadow-lg ring-1 ring-gray-200">
@@ -215,28 +202,7 @@ export default function SubscriptionsPage() {
               <option value="ACTIVE">Active</option>
               <option value="INACTIVE">Inactive</option>
             </select>
-            <button
-              className="md:col-span-2 flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 px-6 py-3 text-sm font-semibold text-white shadow-lg transition-all hover:from-emerald-700 hover:to-teal-700 hover:shadow-xl disabled:opacity-50"
-              onClick={() => planMutation.mutate()}
-              disabled={planMutation.isPending}
-            >
-              {planMutation.isPending ? (
-                <>
-                  <svg className="h-4 w-4 animate-spin" fill="none" viewBox="0 0 24 24">
-                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                    <path className="opacity-75" fill="currentColor" d="m4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                  </svg>
-                  Saving...
-                </>
-              ) : (
-                <>
-                  <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                  </svg>
-                  {planForm.id ? 'Update Plan' : 'Create Plan'}
-                </>
-              )}
-            </button>
+            <Button variant="primary" size="sm" onClick={() => planMutation.mutate()} disabled={planMutation.isPending} loading={planMutation.isPending} icon={<svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" /></svg>} iconPosition="left">{planForm.id ? 'Update Plan' : 'Create Plan'}</Button>
           </div>
         </section>
 
