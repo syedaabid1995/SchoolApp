@@ -13,11 +13,13 @@ import { useNotify } from '../../components/NotificationProvider';
 import FullPageLoader from '../../components/FullPageLoader';
 import { getSession } from '../../services/auth.service';
 import { getSubscription } from '../../services/subscription.service';
+import { getTeacherTimetable } from '../../services/academic.service';
 
 export default function DashboardPage() {
   const notify = useNotify();
   const { data: session } = useQuery({ queryKey: ['session'], queryFn: getSession });
   const isSchoolAdmin = session?.role === 'SCHOOL_ADMIN';
+  const isTeacher = session?.role === 'TEACHER';
   const schoolId = session?.schoolId ?? undefined;
   const [loadHeavy, setLoadHeavy] = useState(false);
   const { data, isLoading, isError } = useQuery({
@@ -54,6 +56,13 @@ export default function DashboardPage() {
     queryKey: ['subscription', schoolId],
     queryFn: () => getSubscription(schoolId),
     enabled: Boolean(schoolId) && isSchoolAdmin,
+    refetchOnWindowFocus: false,
+    staleTime: 60_000,
+  });
+  const { data: teacherSchedule } = useQuery({
+    queryKey: ['teacher-timetable-home', schoolId],
+    queryFn: () => getTeacherTimetable({ schoolId }),
+    enabled: Boolean(schoolId && isTeacher),
     refetchOnWindowFocus: false,
     staleTime: 60_000,
   });
@@ -271,6 +280,30 @@ export default function DashboardPage() {
           ))}
         </div>
       </section>
+
+      {isTeacher ? (
+        <section className="rounded-2xl border border-slate/10 bg-white p-6">
+          <h2 className="text-xl font-semibold text-gray-900">Today&apos;s Periods</h2>
+          <p className="mt-1 text-sm text-slate">
+            {teacherSchedule?.version ? `Version: ${teacherSchedule.version.name}` : 'No published timetable for today.'}
+          </p>
+          <div className="mt-4 space-y-3">
+            {(teacherSchedule?.periods ?? []).map((period) => (
+              <div key={period.id} className="rounded-xl border border-slate/10 px-4 py-3">
+                <p className="text-sm font-semibold text-gray-900">
+                  {period.period.name} ({period.period.startTime}-{period.period.endTime})
+                </p>
+                <p className="text-sm text-gray-600">
+                  {period.subject.name} • {period.class.name}
+                  {period.section?.name ? `-${period.section.name}` : ''}
+                  {period.room ? ` • Room ${period.room}` : ''}
+                </p>
+              </div>
+            ))}
+            {!teacherSchedule?.periods?.length ? <p className="text-sm text-slate">No classes assigned for today.</p> : null}
+          </div>
+        </section>
+      ) : null}
 
       {/* Analytics Section */}
       <section className="grid gap-8 lg:grid-cols-3">

@@ -5,9 +5,10 @@ import PageHeader from '../../../../../components/PageHeader';
 import Button from '../../../../../components/Button';
 import { useQuery } from '@tanstack/react-query';
 import { createStudentAttendanceSession, type StudentAttendanceStatus, updateStudentAttendanceSession } from '../../../../../services/attendanceP1.service';
-import { listClasses, listSections } from '../../../../../services/academic.service';
+import { getAttendanceMode, listClasses, listSections } from '../../../../../services/academic.service';
 import { getSession } from '../../../../../services/auth.service';
 import { listStudents } from '../../../../../services/student.service';
+import { listAttendancePeriods } from '../../../../../services/attendance.service';
 
 type Row = { studentId: string; name: string; admissionNo: string; status: StudentAttendanceStatus; remarks: string };
 
@@ -36,10 +37,22 @@ export default function StudentAttendanceMarkPage() {
     queryFn: () => listStudents({ schoolId }),
     enabled: Boolean(schoolId),
   });
+  const { data: attendanceMode } = useQuery({
+    queryKey: ['attendance-mode', schoolId],
+    queryFn: () => getAttendanceMode({ schoolId }),
+    enabled: Boolean(schoolId),
+  });
+  const { data: periods } = useQuery({
+    queryKey: ['attendance-periods', schoolId],
+    queryFn: () => listAttendancePeriods({ schoolId }),
+    enabled: Boolean(schoolId),
+  });
 
   const [classId, setClassId] = useState('');
   const [sectionId, setSectionId] = useState('');
   const [date, setDate] = useState(new Date().toISOString().slice(0, 10));
+  const [periodId, setPeriodId] = useState('');
+  const [shiftKey, setShiftKey] = useState('MORNING');
   const [sessionId, setSessionId] = useState('');
   const [sessionMeta, setSessionMeta] = useState<{
     status?: 'DRAFT' | 'LOCKED';
@@ -50,6 +63,9 @@ export default function StudentAttendanceMarkPage() {
   const [message, setMessage] = useState('');
   const [loading, setLoading] = useState(false);
   const today = new Date().toISOString().slice(0, 10);
+  const mode = attendanceMode?.mode ?? 'DAILY';
+  const requiresPeriod = mode === 'PERIOD_WISE';
+  const requiresShift = mode === 'SHIFT_WISE';
 
   const sectionOptions = useMemo(
     () => (sections ?? []).filter((section: { classId: string }) => section.classId === classId),
@@ -73,6 +89,8 @@ export default function StudentAttendanceMarkPage() {
         classId,
         sectionId: sectionRequired ? sectionId : undefined,
         date,
+        periodId: requiresPeriod ? periodId : undefined,
+        shiftKey: requiresShift ? shiftKey : undefined,
       });
       setSessionId(result.id);
       setSessionMeta({ status: result.status, lockedAt: result.lockedAt ?? null, lockedById: result.lockedById ?? null });
@@ -156,16 +174,44 @@ export default function StudentAttendanceMarkPage() {
             ))}
           </select>
           <input className="rounded-lg border px-3 py-2 text-sm" type="date" max={today} value={date} onChange={(event) => setDate(event.target.value)} />
+          {requiresPeriod ? (
+            <select
+              className="rounded-lg border px-3 py-2 text-sm"
+              value={periodId}
+              onChange={(event) => setPeriodId(event.target.value)}
+            >
+              <option value="">Select period</option>
+              {(periods ?? []).map((period) => (
+                <option key={period.id} value={period.id}>
+                  {period.name} ({period.startTime}-{period.endTime})
+                </option>
+              ))}
+            </select>
+          ) : null}
+          {requiresShift ? (
+            <select
+              className="rounded-lg border px-3 py-2 text-sm"
+              value={shiftKey}
+              onChange={(event) => setShiftKey(event.target.value)}
+            >
+              <option value="MORNING">Morning</option>
+              <option value="AFTERNOON">Afternoon</option>
+              <option value="EVENING">Evening</option>
+            </select>
+          ) : null}
           <Button
             variant="primary"
             size="sm"
             onClick={upsertSession}
-            disabled={!classId || (sectionRequired && !sectionId)}
+            disabled={!classId || (sectionRequired && !sectionId) || (requiresPeriod && !periodId)}
             loading={loading}
           >
             Load Students
           </Button>
         </div>
+        <p className="mt-3 text-xs text-slate-500">
+          Attendance mode: <span className="font-semibold">{mode}</span>
+        </p>
       </div>
 
       <div className="flex flex-wrap gap-2 text-xs">

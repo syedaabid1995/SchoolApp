@@ -64,3 +64,10 @@ export const rejectSession = async (sessionId: string, reason: string, schoolId?
   const { data } = await api.post(`/attendance-approval/sessions/${sessionId}/reject`, { reason, schoolId });
   return data;
 };
+
+export const listAttendancePeriods = async (params?: { schoolId?: string }) => {
+  const { data } = await api.get<Array<{ id: string; name: string; startTime: string; endTime: string }>>('/attendance/periods', {
+    params,
+  });
+  return data;
+};

@@ -23,6 +23,8 @@ export const createStudentAttendanceSession = async (payload: {
   classId: string;
   sectionId?: string;
   date: string;
+  periodId?: string;
+  shiftKey?: string;
   schoolId?: string;
 }) => {
   const { data } = await api.post<StudentAttendanceSession>('/attendance/sessions', payload);

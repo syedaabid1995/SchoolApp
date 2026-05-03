@@ -72,3 +72,7 @@ export const invalidateSubscriptionCache = async (schoolId?: string | null) => {
 export const invalidateThemeCache = async (schoolId: string) => {
   await deleteCacheKeys([cacheKeys.themesList(schoolId), cacheKeys.themesActive(schoolId)]);
 };
+
+export const invalidateTimetableCache = async (schoolId: string) => {
+  await deleteCacheByPattern(`cache:timetable:${schoolId}:*`);
+};

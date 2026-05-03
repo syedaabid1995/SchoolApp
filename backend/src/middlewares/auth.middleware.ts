@@ -142,6 +142,7 @@ export const authMiddleware = async (req: Request, _res: Response, next: NextFun
 
 const resolvePermissionForPath = (path: string) => {
   const targets: Array<{ prefix: string; code: string }> = [
+    { prefix: '/api/v1/academics/timetable/teacher', code: 'attendance.view' },
     { prefix: '/api/v1/teachers', code: 'teachers.list' },
     { prefix: '/api/v1/teacher-assignments', code: 'teachers.list' },
     { prefix: '/api/v1/students', code: 'students.list' },

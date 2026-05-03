@@ -35,6 +35,21 @@ import {
   deleteSubject,
 } from '../controllers/subject.controller';
 import { createExamType, listExamTypes, updateExamType } from '../controllers/exam-type.controller';
+import {
+  createAttendancePeriod,
+  deleteAttendancePeriod,
+  listAttendancePeriods,
+} from '../controllers/attendance-period.controller';
+import { getAttendanceMode, updateAttendanceMode } from '../controllers/attendance-mode.controller';
+import {
+  bulkUpsertTimetableEntriesApi,
+  createTimetableVersionApi,
+  getTeacherTimetableApi,
+  listTimetableEntriesApi,
+  listTimetableTeachersApi,
+  listTimetableVersionsApi,
+  publishTimetableVersionApi,
+} from '../controllers/timetable.controller';
 import { authMiddleware } from '../middlewares/auth.middleware';
 
 export const academicRouter = Router();
@@ -74,3 +89,17 @@ academicRouter.delete('/subjects/:id', deleteSubject);
 academicRouter.get('/exam-types', listExamTypes);
 academicRouter.post('/exam-types', createExamType);
 academicRouter.patch('/exam-types/:id', updateExamType);
+academicRouter.post('/attendance-periods', createAttendancePeriod);
+academicRouter.get('/attendance-periods', listAttendancePeriods);
+academicRouter.delete('/attendance-periods/:id', deleteAttendancePeriod);
+
+academicRouter.get('/attendance-mode', getAttendanceMode);
+academicRouter.put('/attendance-mode', updateAttendanceMode);
+
+academicRouter.post('/timetable/versions', createTimetableVersionApi);
+academicRouter.get('/timetable/versions', listTimetableVersionsApi);
+academicRouter.post('/timetable/entries/bulk', bulkUpsertTimetableEntriesApi);
+academicRouter.get('/timetable/entries', listTimetableEntriesApi);
+academicRouter.get('/timetable/teachers', listTimetableTeachersApi);
+academicRouter.post('/timetable/versions/:id/publish', publishTimetableVersionApi);
+academicRouter.get('/timetable/teacher', getTeacherTimetableApi);

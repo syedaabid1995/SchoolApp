@@ -8,6 +8,7 @@ import { EMPLOYEE_PERMISSION_CATALOG } from '../config/employee-permissions';
 
 const academicItems = [
   { href: '/dashboard/academics', label: 'Academic Setup' },
+  { href: '/dashboard/academics/timetable', label: 'Timetable' },
   { href: '/dashboard/academics/exams', label: 'Exams' },
   { href: '/dashboard/academics/marks', label: 'Upload Marks' },
 ];

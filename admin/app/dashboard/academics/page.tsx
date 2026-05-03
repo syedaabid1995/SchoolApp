@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import Link from 'next/link';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   listAcademicYears,
@@ -313,6 +314,15 @@ export default function AcademicsPage() {
           title="Academic Structure"
           subtitle="Configure academic years, classes, sections, and subjects to build your school's educational framework."
         />
+        <div className="mb-4 flex justify-end">
+          <Link
+            href="/dashboard/academics/timetable"
+            prefetch={false}
+            className="inline-flex items-center rounded-xl border border-indigo-200 bg-indigo-50 px-4 py-2 text-sm font-semibold text-indigo-700 hover:bg-indigo-100"
+          >
+            Open Timetable & Attendance Mode
+          </Link>
+        </div>
         {/* Stats Cards */}
         <div className="mb-8 grid gap-6 md:grid-cols-4">
           <div className="rounded-2xl bg-gradient-to-br from-blue-500 to-blue-600 p-6 text-white shadow-lg">
