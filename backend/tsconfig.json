@@ -11,8 +11,10 @@
     "forceConsistentCasingInFileNames": true,
     "skipLibCheck": true,
     "ignoreDeprecations": "6.0",
-    "typeRoots": ["./node_modules/@types"]
+    "typeRoots": ["./node_modules/@types"],
+    "types": ["node"]
   },
   "include": ["src/**/*"],
   "exclude": ["node_modules", "dist"]
+  
 }
