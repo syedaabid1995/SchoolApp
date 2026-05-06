@@ -1,6 +1,6 @@
 openapi: 3.0.3
 info:
-  title: TechStage IT API
+  title: SAAPT API
   version: 1.0.0
 servers:
   - url: /api/v1

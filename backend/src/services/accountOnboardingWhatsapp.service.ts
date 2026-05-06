@@ -30,7 +30,7 @@ export const sendAccountCreatedWhatsapp = async (params: {
   const displayName = params.fullName?.trim() || params.email;
   const schoolName = await resolveSchoolName(params.schoolId);
   const appLabel =
-    params.role === 'SCHOOL_ADMIN' ? 'TechStage School ERP' : `${schoolName ?? 'School'} ERP`;
+    params.role === 'SCHOOL_ADMIN' ? 'SAAPT School ERP' : `${schoolName ?? 'School'} ERP`;
   const bodyLines = [
     `Hello ${displayName},`,
     '',

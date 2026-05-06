@@ -124,7 +124,7 @@ export default function DashboardClientLayout({
         </main>
         <footer className="theme-footer border-t border-white/10 px-4 py-3 text-xs text-white/80 transition-all duration-200 sm:px-6 backdrop-blur-md flex-shrink-0">
           <div className="mx-auto max-w-7xl">
-            TechStage IT • School Management Console
+            SAAPT • School Management Console
           </div>
         </footer>
       </div>

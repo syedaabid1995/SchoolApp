@@ -261,7 +261,7 @@ export default function LoginPage() {
               </a>
             </p>
             <p className="text-xs text-gray-400 mt-2">
-              © 2026 SchoolApp by TechStage IT. All rights reserved
+              © 2026 SchoolApp by SAAPT. All rights reserved
             </p>
           </div>
         </div>

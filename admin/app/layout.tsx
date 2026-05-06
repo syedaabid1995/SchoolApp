@@ -6,7 +6,7 @@ import { NotificationProvider } from '../components/NotificationProvider';
 
 export const metadata = {
   title: 'Akademify',
-  description: 'TechStage IT Admin Console',
+  description: 'SAAPT Admin Console',
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
