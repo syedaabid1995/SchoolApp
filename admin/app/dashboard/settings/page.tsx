@@ -26,9 +26,16 @@ import SecurityPage from './security/page';
 import SmsPage from './sms/page';
 import ConsentPage from './consent/page';
 import AccessPage from './access/page';
+import {
+  getExamGradingSettings,
+  updateExamGradingSettings,
+  type ExamGradingSettings,
+  type GradeScaleItem,
+} from '../../../services/report.service';
 
 type SettingsTabId =
   | 'brand'
+  | 'marks-grading'
   | 'security'
   | 'messaging'
   | 'features'
@@ -75,6 +82,12 @@ const settingsTabs: SettingsTab[] = [
     label: 'Security',
     description: 'MFA, password policy, sessions, and account security.',
     roles: ['SUPER_ADMIN', 'SCHOOL_ADMIN', 'TEACHER', 'ACCOUNTANT', 'LIBRARIAN', 'STAFF', 'PARENT'],
+  },
+  {
+    id: 'marks-grading',
+    label: 'Marks Grading',
+    description: 'Configure grade ranges and exam fail criteria for this school.',
+    roles: ['SCHOOL_ADMIN'],
   },
   {
     id: 'messaging',
@@ -165,10 +178,262 @@ const textInputClass =
 const selectClass =
   'w-full rounded-xl border border-[var(--shell-border)] bg-[var(--shell-card)] px-3 py-2.5 text-sm font-semibold text-[var(--shell-text)] outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10';
 
+const defaultGradeScale: GradeScaleItem[] = [
+  { grade: 'A+', minPercentage: 80, maxPercentage: 100, status: 'PASS' },
+  { grade: 'A', minPercentage: 70, maxPercentage: 79, status: 'PASS' },
+  { grade: 'B+', minPercentage: 60, maxPercentage: 69, status: 'PASS' },
+  { grade: 'B', minPercentage: 50, maxPercentage: 59, status: 'PASS' },
+  { grade: 'C', minPercentage: 40, maxPercentage: 49, status: 'PASS' },
+  { grade: 'D', minPercentage: 33, maxPercentage: 39, status: 'PASS' },
+  { grade: 'F', minPercentage: 0, maxPercentage: 32, status: 'FAIL' },
+];
+
 function BrandThemeSettingsTab() {
   return (
     <div className="space-y-5">
       <BrandingPage embedded />
+    </div>
+  );
+}
+
+function MarksGradingSettingsTab() {
+  const queryClient = useQueryClient();
+  const [activeMode, setActiveMode] = useState<'grades' | 'fail'>('grades');
+  const [gradeScale, setGradeScale] = useState<GradeScaleItem[]>(defaultGradeScale);
+  const [failCriteria, setFailCriteria] = useState<ExamGradingSettings['failCriteria']>({
+    overallPercentage: 40,
+    subjectPercentage: 33,
+    minimumFailedSubjects: 1,
+  });
+  const [message, setMessage] = useState('');
+
+  const settingsQuery = useQuery({
+    queryKey: ['exam-grading-settings'],
+    queryFn: getExamGradingSettings,
+    refetchOnWindowFocus: false,
+    staleTime: 60_000,
+  });
+
+  useEffect(() => {
+    if (!settingsQuery.data) return;
+    setGradeScale(settingsQuery.data.gradeScale.length ? settingsQuery.data.gradeScale : defaultGradeScale);
+    setFailCriteria(settingsQuery.data.failCriteria);
+  }, [settingsQuery.data]);
+
+  const saveMutation = useMutation({
+    mutationFn: updateExamGradingSettings,
+    onSuccess: (next) => {
+      setGradeScale(next.gradeScale);
+      setFailCriteria(next.failCriteria);
+      setMessage(`Marks grading saved. ${next.recalculatedMarks ?? 0} existing marks recalculated.`);
+      queryClient.invalidateQueries({ queryKey: ['exam-grading-settings'] });
+    },
+    onError: (error) => {
+      window.alert(getApiErrorMessage(error));
+    },
+  });
+
+  const updateGradeRow = <K extends keyof GradeScaleItem>(index: number, key: K, value: GradeScaleItem[K]) => {
+    setMessage('');
+    setGradeScale((current) => current.map((row, rowIndex) => (rowIndex === index ? { ...row, [key]: value } : row)));
+  };
+
+  const validateSettings = () => {
+    if (!gradeScale.length) return 'At least one grading row is required.';
+    const cleaned = gradeScale.map((row) => ({
+      ...row,
+      grade: row.grade.trim(),
+      minPercentage: Number(row.minPercentage),
+      maxPercentage: Number(row.maxPercentage),
+    }));
+
+    for (const row of cleaned) {
+      if (!row.grade) return 'Grade name is required.';
+      if (!Number.isFinite(row.minPercentage) || !Number.isFinite(row.maxPercentage)) return 'Grade percentages must be valid numbers.';
+      if (row.minPercentage < 0 || row.maxPercentage > 100) return 'Grade percentages must be between 0 and 100.';
+      if (row.maxPercentage < row.minPercentage) return '% Upto must be greater than or equal to % From.';
+    }
+
+    const sorted = [...cleaned].sort((a, b) => a.minPercentage - b.minPercentage);
+    for (let index = 1; index < sorted.length; index += 1) {
+      if (sorted[index].minPercentage <= sorted[index - 1].maxPercentage) {
+        return `Grade ranges overlap: ${sorted[index - 1].grade} and ${sorted[index].grade}.`;
+      }
+    }
+
+    if (
+      failCriteria.overallPercentage < 0 ||
+      failCriteria.overallPercentage > 100 ||
+      failCriteria.subjectPercentage < 0 ||
+      failCriteria.subjectPercentage > 100
+    ) {
+      return 'Fail criteria percentages must be between 0 and 100.';
+    }
+    if (!Number.isInteger(failCriteria.minimumFailedSubjects) || failCriteria.minimumFailedSubjects < 1) {
+      return 'No. of subjects must be at least 1.';
+    }
+    return '';
+  };
+
+  const save = () => {
+    const error = validateSettings();
+    if (error) {
+      window.alert(error);
+      return;
+    }
+    saveMutation.mutate({
+      gradeScale: gradeScale.map((row) => ({
+        grade: row.grade.trim(),
+        minPercentage: Number(row.minPercentage),
+        maxPercentage: Number(row.maxPercentage),
+        status: row.status,
+      })),
+      failCriteria,
+    });
+  };
+
+  const addGrade = () => {
+    setMessage('');
+    setGradeScale((current) => [...current, { grade: '', minPercentage: 0, maxPercentage: 0, status: 'PASS' }]);
+  };
+
+  const removeGrade = (index: number) => {
+    if (gradeScale.length <= 1) {
+      window.alert('At least one grading row is required.');
+      return;
+    }
+    setMessage('');
+    setGradeScale((current) => current.filter((_, rowIndex) => rowIndex !== index));
+  };
+
+  if (settingsQuery.isLoading) return <FullPageLoader label="Loading marks grading..." />;
+
+  return (
+    <div className="space-y-5">
+      {saveMutation.isPending ? <FullPageLoader label="Saving marks grading..." /> : null}
+      <section className="rounded-2xl border border-[var(--shell-border)] bg-[var(--shell-card)] p-5 shadow-sm">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <h2 className="text-lg font-bold text-[var(--shell-text)]">Exam Grading</h2>
+            <p className="mt-1 text-sm text-[var(--shell-muted)]">
+              School Admin controls grade ranges and fail criteria for this school only.
+            </p>
+          </div>
+          <div className="flex rounded-xl border border-[var(--shell-border)] bg-[var(--shell-subtle)] p-1">
+            <button
+              type="button"
+              onClick={() => setActiveMode('grades')}
+              className={`rounded-lg px-4 py-2 text-sm font-bold ${activeMode === 'grades' ? 'bg-blue-600 text-white' : 'text-[var(--shell-muted)] hover:text-[var(--shell-text)]'}`}
+            >
+              Marks Grading
+            </button>
+            <button
+              type="button"
+              onClick={() => setActiveMode('fail')}
+              className={`rounded-lg px-4 py-2 text-sm font-bold ${activeMode === 'fail' ? 'bg-blue-600 text-white' : 'text-[var(--shell-muted)] hover:text-[var(--shell-text)]'}`}
+            >
+              Fail Criteria
+            </button>
+          </div>
+        </div>
+        {message ? <p className="mt-4 rounded-xl bg-emerald-50 px-4 py-3 text-sm font-semibold text-emerald-700">{message}</p> : null}
+      </section>
+
+      {activeMode === 'grades' ? (
+        <section className="rounded-2xl border border-[var(--shell-border)] bg-[var(--shell-card)] p-5 shadow-sm">
+          <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <h3 className="text-base font-bold text-[var(--shell-text)]">Customize Grading</h3>
+              <p className="mt-1 text-sm text-[var(--shell-muted)]">Ranges are based on percentage scored in each paper.</p>
+            </div>
+            <Button variant="outline" size="sm" onClick={addGrade}>Add Grade</Button>
+          </div>
+
+          <div className="space-y-3">
+            {gradeScale.map((row, index) => (
+              <div key={`${row.grade}-${index}`} className="grid gap-3 rounded-xl border border-[var(--shell-border)] bg-[var(--shell-subtle)] p-3 md:grid-cols-[1fr_120px_120px_140px_auto] md:items-end">
+                <label className="space-y-1">
+                  <span className="text-xs font-bold uppercase text-[var(--shell-muted)]">Grade</span>
+                  <input className={textInputClass} value={row.grade} onChange={(event) => updateGradeRow(index, 'grade', event.target.value)} />
+                </label>
+                <label className="space-y-1">
+                  <span className="text-xs font-bold uppercase text-[var(--shell-muted)]">% From</span>
+                  <input className={textInputClass} type="number" min={0} max={100} value={row.minPercentage} onChange={(event) => updateGradeRow(index, 'minPercentage', Number(event.target.value))} />
+                </label>
+                <label className="space-y-1">
+                  <span className="text-xs font-bold uppercase text-[var(--shell-muted)]">% Upto</span>
+                  <input className={textInputClass} type="number" min={0} max={100} value={row.maxPercentage} onChange={(event) => updateGradeRow(index, 'maxPercentage', Number(event.target.value))} />
+                </label>
+                <label className="space-y-1">
+                  <span className="text-xs font-bold uppercase text-[var(--shell-muted)]">Status</span>
+                  <select className={selectClass} value={row.status} onChange={(event) => updateGradeRow(index, 'status', event.target.value as GradeScaleItem['status'])}>
+                    <option value="PASS">PASS</option>
+                    <option value="FAIL">FAIL</option>
+                  </select>
+                </label>
+                <button
+                  type="button"
+                  onClick={() => removeGrade(index)}
+                  className="rounded-xl border border-rose-200 bg-white px-3 py-2 text-sm font-bold text-rose-700 hover:bg-rose-50"
+                >
+                  Remove
+                </button>
+              </div>
+            ))}
+          </div>
+        </section>
+      ) : (
+        <section className="rounded-2xl border border-[var(--shell-border)] bg-[var(--shell-card)] p-5 shadow-sm">
+          <h3 className="text-base font-bold text-[var(--shell-text)]">Fail Criteria</h3>
+          <p className="mt-1 text-sm text-[var(--shell-muted)]">
+            A student is marked failed when the overall percentage is at or below the overall limit, or when subject percentage is at or below the subject limit in the configured number of subjects.
+          </p>
+          <div className="mt-5 grid gap-4 lg:grid-cols-3">
+            <label className="space-y-2">
+              <span className="text-sm font-semibold text-[var(--shell-text)]">Overall %</span>
+              <input
+                className={textInputClass}
+                type="number"
+                min={0}
+                max={100}
+                value={failCriteria.overallPercentage}
+                onChange={(event) => setFailCriteria((current) => ({ ...current, overallPercentage: Number(event.target.value) }))}
+                placeholder="Example 40"
+              />
+            </label>
+            <label className="space-y-2">
+              <span className="text-sm font-semibold text-[var(--shell-text)]">Subject %</span>
+              <input
+                className={textInputClass}
+                type="number"
+                min={0}
+                max={100}
+                value={failCriteria.subjectPercentage}
+                onChange={(event) => setFailCriteria((current) => ({ ...current, subjectPercentage: Number(event.target.value) }))}
+                placeholder="Example 33"
+              />
+            </label>
+            <label className="space-y-2">
+              <span className="text-sm font-semibold text-[var(--shell-text)]">No. of Subjects</span>
+              <input
+                className={textInputClass}
+                type="number"
+                min={1}
+                max={20}
+                value={failCriteria.minimumFailedSubjects}
+                onChange={(event) => setFailCriteria((current) => ({ ...current, minimumFailedSubjects: Number(event.target.value) }))}
+                placeholder="Example 1"
+              />
+            </label>
+          </div>
+        </section>
+      )}
+
+      <div className="flex justify-end">
+        <Button variant="primary" onClick={save} loading={saveMutation.isPending} disabled={saveMutation.isPending}>
+          Save Changes
+        </Button>
+      </div>
     </div>
   );
 }
@@ -771,6 +1036,8 @@ export default function SettingsPage() {
     switch (activeTab) {
       case 'brand':
         return <BrandThemeSettingsTab />;
+      case 'marks-grading':
+        return <MarksGradingSettingsTab />;
       case 'security':
         return <SecurityPage />;
       case 'messaging':

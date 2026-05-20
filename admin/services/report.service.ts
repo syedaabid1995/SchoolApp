@@ -1,7 +1,36 @@
 import { api } from '../lib/api';
 
+export type GradeScaleItem = {
+  grade: string;
+  minPercentage: number;
+  maxPercentage: number;
+  status: 'PASS' | 'FAIL';
+};
+
+export type FailCriteria = {
+  overallPercentage: number;
+  subjectPercentage: number;
+  minimumFailedSubjects: number;
+};
+
+export type ExamGradingSettings = {
+  gradeScale: GradeScaleItem[];
+  failCriteria: FailCriteria;
+  recalculatedMarks?: number;
+};
+
 export const listExams = async () => {
   const { data } = await api.get('/exams');
+  return data;
+};
+
+export const getExamGradingSettings = async () => {
+  const { data } = await api.get<ExamGradingSettings>('/exams/grading-settings');
+  return data;
+};
+
+export const updateExamGradingSettings = async (payload: ExamGradingSettings) => {
+  const { data } = await api.put<ExamGradingSettings>('/exams/grading-settings', payload);
   return data;
 };
 

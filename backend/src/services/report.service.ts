@@ -1,6 +1,7 @@
 import PDFDocument from 'pdfkit';
 import { prisma } from '../config/db';
 import { HttpError } from '../middlewares/error.middleware';
+import { evaluateFailCriteria, getExamGradingSettings } from './grade.service';
 
 export const generateTermReport = async (params: {
   schoolId: string;
@@ -34,6 +35,11 @@ export const generateTermReport = async (params: {
       examPaper: { include: { subject: true, exam: true } },
     },
   });
+  const gradingSettings = await getExamGradingSettings(schoolId);
+  const evaluation = evaluateFailCriteria(
+    marks.map((mark) => ({ marks: mark.marks, maxMarks: mark.examPaper.maxMarks })),
+    gradingSettings.failCriteria,
+  );
 
   const doc = new PDFDocument({ margin: 40 });
   const chunks: Buffer[] = [];
@@ -44,6 +50,7 @@ export const generateTermReport = async (params: {
   doc.moveDown();
   doc.fontSize(12).text(`Student: ${student.firstName} ${student.lastName}`);
   doc.text(`Term: ${term.name}`);
+  doc.text(`Result: ${evaluation.status}`);
   doc.moveDown();
 
   doc.fontSize(12).text('Subject', 50, doc.y, { continued: true });
@@ -98,6 +105,11 @@ export const generateAnnualReport = async (params: {
       examPaper: { include: { subject: true, exam: true } },
     },
   });
+  const gradingSettings = await getExamGradingSettings(schoolId);
+  const evaluation = evaluateFailCriteria(
+    marks.map((mark) => ({ marks: mark.marks, maxMarks: mark.examPaper.maxMarks })),
+    gradingSettings.failCriteria,
+  );
 
   const doc = new PDFDocument({ margin: 40 });
   const chunks: Buffer[] = [];
@@ -108,6 +120,7 @@ export const generateAnnualReport = async (params: {
   doc.moveDown();
   doc.fontSize(12).text(`Student: ${student.firstName} ${student.lastName}`);
   doc.text(`Academic Year: ${academicYear.name}`);
+  doc.text(`Result: ${evaluation.status}`);
   doc.moveDown();
 
   doc.fontSize(12).text('Subject', 50, doc.y, { continued: true });

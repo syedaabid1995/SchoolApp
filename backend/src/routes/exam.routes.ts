@@ -14,6 +14,10 @@ import {
   moderateMark,
   requestRevaluation,
 } from '../controllers/marks.controller';
+import {
+  getExamGradingSettingsApi,
+  updateExamGradingSettingsApi,
+} from '../controllers/examGrading.controller';
 
 export const examRouter = Router();
 
@@ -21,6 +25,8 @@ examRouter.use(authMiddleware);
 
 examRouter.post('/', createExam);
 examRouter.get('/', listExams);
+examRouter.get('/grading-settings', getExamGradingSettingsApi);
+examRouter.put('/grading-settings', updateExamGradingSettingsApi);
 examRouter.get('/marks', listMarks);
 examRouter.get('/:id', getExam);
 examRouter.patch('/:id', updateExam);

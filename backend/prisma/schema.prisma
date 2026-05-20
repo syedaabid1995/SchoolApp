@@ -50,6 +50,7 @@ model School {
   timetableVersions              TimetableVersion[]
   timetableEntries               TimetableEntry[]
   exams                          Exam[]
+  examGradingSetting             ExamGradingSetting?
   examTypes                      ExamTypeConfig[]
   themes                         Theme[]
   featureFlagOverrides           FeatureFlagOverride[]
@@ -1212,6 +1213,20 @@ model ExamTypeConfig {
   @@unique([schoolId, code])
   @@index([schoolId])
   @@map("exam_types")
+}
+
+model ExamGradingSetting {
+  id           String   @id @default(uuid()) @db.Uuid
+  schoolId     String   @unique @map("school_id") @db.Uuid
+  gradeScale   Json     @map("grade_scale")
+  failCriteria Json     @map("fail_criteria")
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  school School @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+
+  @@index([schoolId])
+  @@map("exam_grading_settings")
 }
 
 model ExamPaper {

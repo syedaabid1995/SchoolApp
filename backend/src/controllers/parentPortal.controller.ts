@@ -2,6 +2,7 @@ import type { Request, Response } from 'express';
 import { prisma } from '../config/db';
 import { HttpError } from '../middlewares/error.middleware';
 import { requireAuth } from '../middlewares/rbac.middleware';
+import { evaluateFailCriteria, getExamGradingSettings } from '../services/grade.service';
 
 const resolveParentProfiles = async (userId: string) => {
   return prisma.parentProfile.findMany({
@@ -112,9 +113,10 @@ export const getParentDashboard = async (req: Request, res: Response) => {
     where: { studentId: child.id },
     include: { examPaper: { include: { exam: true } } },
   });
+  const gradingSettings = await getExamGradingSettings(child.schoolId);
   let latestResult: { examName: string; total: string; status: string } | null = null;
   if (marks.length) {
-    const byExam = new Map<string, { examName: string; totalMarks: number; maxMarks: number; pass: boolean; createdAt: Date }>();
+    const byExam = new Map<string, { examName: string; totalMarks: number; maxMarks: number; subjectMarks: Array<{ marks: number; maxMarks: number }>; createdAt: Date }>();
     marks.forEach((mark) => {
       const exam = mark.examPaper.exam;
       if (!exam) return;
@@ -122,12 +124,12 @@ export const getParentDashboard = async (req: Request, res: Response) => {
         examName: exam.name,
         totalMarks: 0,
         maxMarks: 0,
-        pass: true,
+        subjectMarks: [],
         createdAt: exam.createdAt,
       };
       entry.totalMarks += mark.marks;
       entry.maxMarks += mark.examPaper.maxMarks;
-      if (mark.marks < mark.examPaper.passMarks) entry.pass = false;
+      entry.subjectMarks.push({ marks: mark.marks, maxMarks: mark.examPaper.maxMarks });
       if (exam.createdAt > entry.createdAt) entry.createdAt = exam.createdAt;
       byExam.set(exam.id, entry);
     });
@@ -136,7 +138,7 @@ export const getParentDashboard = async (req: Request, res: Response) => {
       latestResult = {
         examName: latest.examName,
         total: `${latest.totalMarks}/${latest.maxMarks}`,
-        status: latest.pass ? 'Pass' : 'Fail',
+        status: evaluateFailCriteria(latest.subjectMarks, gradingSettings.failCriteria).status === 'PASS' ? 'Pass' : 'Fail',
       };
     }
   }
@@ -327,9 +329,22 @@ export const getParentResults = async (req: Request, res: Response) => {
     percentage: entry.totalMaxMarks ? Math.round((entry.totalMarks / entry.totalMaxMarks) * 100) : null,
   }));
 
+  const gradingSettings = await getExamGradingSettings(child.schoolId);
+  const itemsWithStatus = items.map((entry) => {
+    const evaluation = evaluateFailCriteria(
+      entry.subjects.map((subject) => ({ marks: subject.marks, maxMarks: subject.maxMarks })),
+      gradingSettings.failCriteria,
+    );
+    return {
+      ...entry,
+      resultStatus: evaluation.status,
+      failedSubjects: evaluation.failedSubjects,
+    };
+  });
+
   res.status(200).json({
     child,
-    items,
+    items: itemsWithStatus,
   });
 };
 

@@ -3,7 +3,7 @@ import { z } from 'zod';
 import { prisma } from '../config/db';
 import { HttpError } from '../middlewares/error.middleware';
 import { resolveSchoolId } from '../utils/tenant';
-import { calculateGrade } from '../services/grade.service';
+import { calculateGrade, getExamGradingSettings } from '../services/grade.service';
 import { logAudit } from '../utils/audit';
 import { invalidateAdminDashboardCache, invalidateAttendanceCache } from '../services/cache/cache.invalidation';
 import { buildQueryFingerprint, cacheKeys } from '../services/cache/cache.keys';
@@ -133,6 +133,8 @@ export const uploadMarks = async (req: Request, res: Response) => {
     return;
   }
 
+  const gradingSettings = await getExamGradingSettings(schoolId);
+
   const results = await prisma.$transaction(async (tx) => {
     const created = [] as Array<{ studentId: string; grade: string }>; 
     for (const entry of payload.entries) {
@@ -149,7 +151,7 @@ export const uploadMarks = async (req: Request, res: Response) => {
         throw new HttpError(422, 'Marks exceed max marks');
       }
 
-      const grade = calculateGrade(entry.marks, paper.maxMarks);
+      const grade = calculateGrade(entry.marks, paper.maxMarks, gradingSettings.gradeScale);
 
       const mark = await tx.mark.upsert({
         where: { examPaperId_studentId: { examPaperId: paper.id, studentId: entry.studentId } },
@@ -235,7 +237,8 @@ export const moderateMark = async (req: Request, res: Response) => {
     throw new HttpError(422, 'Adjusted marks exceed max marks');
   }
 
-  const grade = calculateGrade(payload.adjustedMarks, mark.examPaper.maxMarks);
+  const gradingSettings = await getExamGradingSettings(schoolId);
+  const grade = calculateGrade(payload.adjustedMarks, mark.examPaper.maxMarks, gradingSettings.gradeScale);
 
   const updated = await prisma.$transaction(async (tx) => {
     const updatedMark = await tx.mark.update({
