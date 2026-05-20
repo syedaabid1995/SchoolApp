@@ -90,6 +90,7 @@ export const Sidebar = ({
     { href: '/dashboard/audit', label: 'Logs' },
     { href: '/dashboard/themes', label: 'Themes' },
     { href: '/dashboard/settings', label: 'Settings' },
+    { href: '/dashboard/settings/security', label: 'Security' },
     { href: '/dashboard/settings/sms', label: 'SMS Settings' },
   ];
 
@@ -236,6 +237,8 @@ export const Sidebar = ({
               {isAllowedNavItem('/dashboard/support')
                 ? renderLink({ href: '/dashboard/support', label: 'Support' })
                 : null}
+              <div className="border-t border-white/10 my-2"></div>
+              {renderLink({ href: '/dashboard/settings/security', label: 'Security' })}
             </>
           ) : null}
 
@@ -387,6 +390,8 @@ export const Sidebar = ({
                 ? renderLink({ href: '/dashboard/settings/access', label: 'Access Control' })
                 : null}
               {isAllowedNavItem('/dashboard/settings/access') ? <div className="border-t border-white/10 my-2"></div> : null}
+              {renderLink({ href: '/dashboard/settings/security', label: 'Security' })}
+              <div className="border-t border-white/10 my-2"></div>
               {renderLink({ href: '/dashboard/settings/sms', label: 'SMS Settings' })}
             </>
           ) : null}

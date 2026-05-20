@@ -30,6 +30,14 @@ export function middleware(req: NextRequest) {
     return NextResponse.next();
   }
 
+  if (pathname.startsWith('/change-password')) {
+    const token = req.cookies.get(ACCESS_COOKIE)?.value;
+    if (!token) {
+      return NextResponse.redirect(new URL('/login', req.url));
+    }
+    return NextResponse.next();
+  }
+
   if (pathname.startsWith('/dashboard')) {
     const token = req.cookies.get(ACCESS_COOKIE)?.value;
     if (!token) {
@@ -38,7 +46,7 @@ export function middleware(req: NextRequest) {
 
     const mustChangePassword = req.cookies.get('must_change_password')?.value === '1';
     if (mustChangePassword) {
-      return NextResponse.redirect(new URL('/reset-password', req.url));
+      return NextResponse.redirect(new URL('/change-password', req.url));
     }
 
     const tokenData = decodeToken(token);
@@ -61,5 +69,5 @@ export function middleware(req: NextRequest) {
 }
 
 export const config = {
-  matcher: ['/dashboard/:path*', '/login', '/reset-password'],
+  matcher: ['/dashboard/:path*', '/login', '/reset-password', '/change-password'],
 };

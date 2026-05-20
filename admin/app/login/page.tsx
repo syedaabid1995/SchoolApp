@@ -1,271 +1,662 @@
 'use client';
 
+import type { CSSProperties, FormEvent } from 'react';
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { login } from '../../services/auth.service';
-import FullPageLoader from '../../components/FullPageLoader';
+import {
+  defaultLoginBranding,
+  getLoginBranding,
+  type LoginBranding,
+} from '../../services/branding.service';
+
+type FieldErrors = Partial<Record<'schoolCode' | 'identifier' | 'password' | 'forgotEmail' | 'forgotSchoolCode' | 'form', string>>;
+type RememberedLogin = {
+  rememberMe?: boolean;
+  email?: string;
+  username?: string;
+  schoolCode?: string;
+  schoolId?: string;
+};
+type BrandStyle = CSSProperties & Record<`--brand-${string}`, string>;
+
+const genericLoginError = 'Invalid login details. Please try again.';
+const rememberStorageKey = 'login.remember';
+const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{12}$/i;
+
+const formCopy = {
+  schoolLabel: 'School Code / School ID',
+  schoolPlaceholder: 'Enter school code or ID',
+  identifierLabel: 'Email or Username',
+  identifierPlaceholder: 'name@school.com',
+  passwordLabel: 'Password',
+  passwordPlaceholder: 'Enter password',
+  showPassword: 'Show password',
+  hidePassword: 'Hide password',
+  rememberMe: 'Remember me',
+  forgotHeading: 'Reset password',
+  forgotSubtitle: 'Enter your account details. If an account exists, reset instructions will be sent.',
+  forgotEmailLabel: 'Account email',
+  sendReset: 'Send reset instructions',
+  backToLogin: 'Back to login',
+  loading: 'Processing...',
+  brandingLoading: 'Updating branding',
+  invalidSchool: 'Enter a valid school code or school ID.',
+  identifierRequired: 'Email or username is required.',
+  passwordRequired: 'Password is required.',
+  passwordLength: 'Password must be at least 8 characters.',
+  resetEmailRequired: 'Email address is required.',
+  resetEmailInvalid: 'Enter a valid email address.',
+  resetGenericSuccess: 'If an account exists, password reset instructions have been sent.',
+} as const;
+
+const inputClassName =
+  'w-full rounded-[var(--brand-radius-half)] border bg-[var(--brand-card)] px-4 py-3 text-sm text-[var(--brand-text)] outline-none transition placeholder:text-[var(--brand-muted)] focus:border-[var(--brand-focus)] focus:ring-4 focus:ring-[var(--brand-focus-soft)]';
+
+const isEmail = (value: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
+
+const isValidSchoolInput = (value: string) => {
+  const trimmed = value.trim();
+  if (!trimmed) return true;
+  return uuidPattern.test(trimmed) || /^[a-zA-Z0-9_-]{2,64}$/.test(trimmed);
+};
+
+const hexToRgb = (hex: string) => {
+  const normalized = hex.replace('#', '');
+  const value = Number.parseInt(normalized, 16);
+  return {
+    r: (value >> 16) & 255,
+    g: (value >> 8) & 255,
+    b: value & 255,
+  };
+};
+
+const rgba = (hex: string, alpha: number) => {
+  const { r, g, b } = hexToRgb(hex);
+  return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+};
+
+const initialsFromBranding = (branding: LoginBranding) => {
+  const source = branding.schoolName || branding.appName || defaultLoginBranding.appName;
+  return source
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => part[0]?.toUpperCase())
+    .join('');
+};
+
+const buildBackgroundStyle = (branding: LoginBranding): CSSProperties => {
+  if (branding.backgroundType === 'image' && branding.backgroundImageUrl) {
+    return {
+      backgroundColor: 'var(--brand-bg)',
+      backgroundImage: `linear-gradient(${rgba(branding.backgroundColor, 0.72)}, ${rgba(branding.backgroundColor, 0.86)}), url(${branding.backgroundImageUrl})`,
+      backgroundPosition: 'center',
+      backgroundSize: 'cover',
+    };
+  }
+  if (branding.backgroundType === 'pattern' && branding.backgroundImageUrl) {
+    return {
+      backgroundColor: 'var(--brand-bg)',
+      backgroundImage: `url(${branding.backgroundImageUrl})`,
+      backgroundRepeat: 'repeat',
+    };
+  }
+  if (branding.backgroundType === 'gradient') {
+    return {
+      background: `linear-gradient(135deg, ${branding.gradientFrom ?? branding.backgroundColor}, ${branding.gradientTo ?? branding.cardBackgroundColor})`,
+    };
+  }
+  return { backgroundColor: 'var(--brand-bg)' };
+};
+
+const clearRememberedLogin = () => {
+  localStorage.removeItem(rememberStorageKey);
+};
+
+const safeRememberedLogin = (value: unknown): RememberedLogin | null => {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+  const source = value as Record<string, unknown>;
+  if (source.rememberMe !== true) return null;
+
+  const safe: RememberedLogin = { rememberMe: true };
+  if (typeof source.email === 'string') safe.email = source.email.trim();
+  if (typeof source.username === 'string') safe.username = source.username.trim();
+  if (typeof source.schoolCode === 'string') safe.schoolCode = source.schoolCode.trim();
+  if (typeof source.schoolId === 'string') safe.schoolId = source.schoolId.trim();
+
+  return safe;
+};
+
+const readRememberedLogin = () => {
+  const raw = localStorage.getItem(rememberStorageKey);
+  if (!raw) return null;
+
+  try {
+    const safe = safeRememberedLogin(JSON.parse(raw));
+    if (!safe) {
+      clearRememberedLogin();
+      return null;
+    }
+
+    // Re-save only non-secret identifiers so any old password/token fields are purged.
+    localStorage.setItem(rememberStorageKey, JSON.stringify(safe));
+    return safe;
+  } catch {
+    clearRememberedLogin();
+    return null;
+  }
+};
+
+function BrandLogo({ branding, className }: { branding: LoginBranding; className?: string }) {
+  const [failed, setFailed] = useState(false);
+  const logoUrl = branding.logoUrl || branding.compactLogoUrl;
+
+  useEffect(() => {
+    setFailed(false);
+  }, [logoUrl]);
+
+  if (logoUrl && !failed) {
+    return (
+      <img
+        src={logoUrl}
+        alt={`${branding.schoolName || branding.appName} logo`}
+        className={`object-contain ${className ?? ''}`}
+        onError={() => setFailed(true)}
+      />
+    );
+  }
+
+  return (
+    <span
+      className={`flex items-center justify-center rounded-[var(--brand-radius-half)] bg-[var(--brand-primary)] font-bold text-[var(--brand-button-text)] ${className ?? ''}`}
+      aria-label={`${branding.schoolName || branding.appName} logo`}
+      role="img"
+    >
+      {initialsFromBranding(branding)}
+    </span>
+  );
+}
 
 export default function LoginPage() {
   const router = useRouter();
-  const [email, setEmail] = useState('');
+  const [branding, setBranding] = useState<LoginBranding>(defaultLoginBranding);
+  const [brandingLoading, setBrandingLoading] = useState(false);
+  const [schoolCode, setSchoolCode] = useState('');
+  const [identifier, setIdentifier] = useState('');
   const [password, setPassword] = useState('');
-  const [schoolId, setSchoolId] = useState('');
   const [rememberMe, setRememberMe] = useState(false);
-  const [error, setError] = useState('');
-  const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
+  const [forgotOpen, setForgotOpen] = useState(false);
+  const [forgotEmail, setForgotEmail] = useState('');
+  const [forgotSchoolCode, setForgotSchoolCode] = useState('');
+  const [errors, setErrors] = useState<FieldErrors>({});
+  const [message, setMessage] = useState('');
+  const [submitting, setSubmitting] = useState(false);
 
-  useEffect(() => {
-    try {
-      const stored = localStorage.getItem('login.remember');
-      if (!stored) return;
-      const parsed = JSON.parse(stored) as { email?: string; password?: string; schoolId?: string };
-      if (parsed.email) setEmail(parsed.email);
-      if (parsed.password) setPassword(parsed.password);
-      if (parsed.schoolId) setSchoolId(parsed.schoolId);
-      setRememberMe(true);
-    } catch {
-      // ignore malformed storage
-    }
-  }, []);
+  const leftPanelEnabled = branding.leftPanelEnabled !== false;
+  const pageShellClassName = leftPanelEnabled
+    ? 'mx-auto grid min-h-screen w-full max-w-7xl items-center gap-6 px-4 py-6 sm:px-6 lg:grid-cols-[minmax(0,1fr)_minmax(390px,500px)] lg:px-8'
+    : 'mx-auto flex min-h-screen w-full max-w-2xl items-center justify-center px-4 py-6 sm:px-6';
+  const brandStyle: BrandStyle = {
+    '--brand-primary': branding.primaryColor,
+    '--brand-secondary': branding.secondaryColor,
+    '--brand-accent': branding.accentColor,
+    '--brand-bg': branding.backgroundColor,
+    '--brand-card': branding.cardBackgroundColor,
+    '--brand-text': branding.textColor,
+    '--brand-muted': branding.mutedTextColor,
+    '--brand-border': branding.borderColor,
+    '--brand-button': branding.buttonBackgroundColor || branding.primaryColor,
+    '--brand-button-text': branding.buttonTextColor,
+    '--brand-link': branding.linkColor,
+    '--brand-error': branding.errorColor,
+    '--brand-success': branding.successColor || '#16a34a',
+    '--brand-focus': branding.focusRingColor || branding.primaryColor,
+    '--brand-focus-soft': rgba(branding.focusRingColor || branding.primaryColor, 0.18),
+    '--brand-radius': branding.borderRadius || '24px',
+    '--brand-radius-half': `calc(${branding.borderRadius || '24px'} / 2)`,
+    '--brand-radius-soft': `calc(${branding.borderRadius || '24px'} / 1.4)`,
+    '--brand-radius-small': `calc(${branding.borderRadius || '24px'} / 3)`,
+    '--brand-shadow': branding.cardShadow || '0 24px 70px rgba(15, 23, 42, 0.14)',
+    '--brand-logo-size': branding.logoSize || '56px',
+    ...buildBackgroundStyle(branding),
+  };
 
-  const handleSubmit = async (event: React.FormEvent) => {
-    event.preventDefault();
-    setError('');
-    setLoading(true);
+  const loadBranding = async (nextSchoolCode?: string) => {
+    setBrandingLoading(true);
     try {
-      if (rememberMe) {
-        localStorage.setItem('login.remember', JSON.stringify({ email, password, schoolId }));
-      } else {
-        localStorage.removeItem('login.remember');
-      }
-      const result = await login({ email, password, schoolId: schoolId || undefined });
-      if (result?.mustChangePassword) {
-        router.replace('/reset-password');
-      } else if (result?.subscriptionRestricted) {
-        router.replace('/dashboard/plans');
-      } else {
-        router.replace('/dashboard');
-      }
-    } catch (err) {
-      const message = (err as Error)?.message || 'Login failed';
-      const lower = message.toLowerCase();
-      if (lower.includes('suspend') || lower.includes('inactive')) {
-        window.dispatchEvent(
-          new CustomEvent('account-suspended', {
-            detail: {
-              title: 'Account Suspended',
-              message: 'Your access has been suspended. Please contact support.',
-            },
-          }),
-        );
-        setError('');
-        return;
-      }
-      setError(message);
+      setBranding(await getLoginBranding(nextSchoolCode));
     } finally {
-      setLoading(false);
+      setBrandingLoading(false);
     }
   };
 
+  useEffect(() => {
+    const remembered = readRememberedLogin();
+    if (remembered) {
+      const rememberedIdentifier = remembered.email || remembered.username || '';
+      const rememberedSchool = remembered.schoolCode || remembered.schoolId || '';
+      setIdentifier(rememberedIdentifier);
+      setSchoolCode(rememberedSchool);
+      setForgotEmail(rememberedIdentifier);
+      setForgotSchoolCode(rememberedSchool);
+      setRememberMe(true);
+      void loadBranding(rememberedSchool || undefined);
+      return;
+    }
+    void loadBranding();
+  }, []);
+
+  useEffect(() => {
+    if (!branding.faviconUrl) return;
+    let link = document.querySelector<HTMLLinkElement>("link[rel='icon']");
+    if (!link) {
+      link = document.createElement('link');
+      link.rel = 'icon';
+      document.head.appendChild(link);
+    }
+    link.href = branding.faviconUrl;
+  }, [branding.faviconUrl]);
+
+  const persistRememberedLogin = () => {
+    if (!rememberMe) {
+      clearRememberedLogin();
+      return;
+    }
+    // Never store passwords or tokens in browser storage. Remember-me keeps only non-secret identifiers.
+    const trimmedIdentifier = identifier.trim();
+    const trimmedSchool = schoolCode.trim();
+    localStorage.setItem(
+      rememberStorageKey,
+      JSON.stringify({
+        rememberMe: true,
+        ...(isEmail(trimmedIdentifier) ? { email: trimmedIdentifier } : { username: trimmedIdentifier }),
+        ...(uuidPattern.test(trimmedSchool) ? { schoolId: trimmedSchool } : trimmedSchool ? { schoolCode: trimmedSchool } : {}),
+      }),
+    );
+  };
+
+  const handleRememberMeChange = (checked: boolean) => {
+    setRememberMe(checked);
+    if (!checked) clearRememberedLogin();
+  };
+
+  const handleSchoolBlur = () => {
+    const trimmed = schoolCode.trim();
+    if (!trimmed || !isValidSchoolInput(trimmed)) return;
+    void loadBranding(trimmed);
+  };
+
+  const validateLogin = () => {
+    const nextErrors: FieldErrors = {};
+    if (schoolCode.trim() && !isValidSchoolInput(schoolCode)) nextErrors.schoolCode = formCopy.invalidSchool;
+    if (!identifier.trim()) nextErrors.identifier = formCopy.identifierRequired;
+    if (!password) nextErrors.password = formCopy.passwordRequired;
+    else if (password.length < 8) nextErrors.password = formCopy.passwordLength;
+    return nextErrors;
+  };
+
+  const submitLogin = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    setMessage('');
+    const nextErrors = validateLogin();
+    setErrors(nextErrors);
+    if (Object.keys(nextErrors).length) return;
+
+    setSubmitting(true);
+    try {
+      const trimmedIdentifier = identifier.trim();
+      const trimmedSchool = schoolCode.trim();
+      const result = await login({
+        ...(trimmedIdentifier.includes('@') ? { email: trimmedIdentifier } : { username: trimmedIdentifier }),
+        password,
+        ...(uuidPattern.test(trimmedSchool) ? { schoolId: trimmedSchool } : trimmedSchool ? { schoolCode: trimmedSchool } : {}),
+        rememberMe,
+      });
+
+      persistRememberedLogin();
+      if (result.mfaRequired) {
+        if (!result.challengeId) {
+          throw new Error(genericLoginError);
+        }
+        sessionStorage.setItem('auth.mfaChallengeId', result.challengeId);
+        sessionStorage.setItem('auth.mfaMethod', result.mfaMethod || 'email');
+        sessionStorage.setItem('auth.mfaRememberMe', rememberMe ? '1' : '0');
+        sessionStorage.setItem('auth.mfaStartedAt', String(Date.now()));
+        router.replace('/verify-2fa');
+        return;
+      }
+      if (result.user?.role === 'PARENT') router.replace('/parent/dashboard');
+      else if (result.mustChangePassword) router.replace('/change-password');
+      else if (result.subscriptionRestricted) router.replace('/dashboard/plans');
+      else router.replace('/dashboard');
+    } catch {
+      setErrors({ form: genericLoginError });
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const submitForgotPassword = async () => {
+    const trimmedEmail = forgotEmail.trim();
+    const trimmedSchool = forgotSchoolCode.trim();
+    const nextErrors: FieldErrors = {};
+    if (!trimmedEmail) nextErrors.forgotEmail = formCopy.resetEmailRequired;
+    else if (!isEmail(trimmedEmail)) nextErrors.forgotEmail = formCopy.resetEmailInvalid;
+    if (trimmedSchool && !isValidSchoolInput(trimmedSchool)) nextErrors.forgotSchoolCode = formCopy.invalidSchool;
+    setErrors(nextErrors);
+    setMessage('');
+    if (Object.keys(nextErrors).length) return;
+
+    setSubmitting(true);
+    try {
+      const res = await fetch('/api/auth/forgot-password', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          email: trimmedEmail,
+          ...(uuidPattern.test(trimmedSchool) ? { schoolId: trimmedSchool } : trimmedSchool ? { schoolCode: trimmedSchool } : {}),
+        }),
+      });
+      const data = await res.json().catch(() => null);
+      setMessage((data as { message?: string } | null)?.message || formCopy.resetGenericSuccess);
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const fieldError = (key: keyof FieldErrors) =>
+    errors[key] ? (
+      <p className="mt-1 text-xs font-semibold text-[var(--brand-error)]" id={`${key}-error`}>
+        {errors[key]}
+      </p>
+    ) : null;
+
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 via-indigo-50 to-purple-50 flex items-center justify-center p-4 relative overflow-hidden">
-      {loading && <FullPageLoader label="Signing in..." />}
-      
-      {/* Wavy background */}
-      <div className="absolute inset-0">
-        <svg className="absolute bottom-0 left-0 w-full h-full" viewBox="0 0 1440 800" fill="none" xmlns="http://www.w3.org/2000/svg">
-          <path d="M0,320L48,341.3C96,363,192,405,288,426.7C384,448,480,448,576,437.3C672,427,768,405,864,394.7C960,384,1056,384,1152,394.7C1248,405,1344,427,1392,437.3L1440,448L1440,800L1392,800C1344,800,1248,800,1152,800C1056,800,960,800,864,800C768,800,672,800,576,800C480,800,384,800,288,800C192,800,96,800,48,800L0,800Z" fill="url(#gradient1)" fillOpacity="0.3"/>
-          <path d="M0,480L48,469.3C96,459,192,437,288,437.3C384,437,480,459,576,474.7C672,491,768,501,864,496C960,491,1056,469,1152,448C1248,427,1344,405,1392,394.7L1440,384L1440,800L1392,800C1344,800,1248,800,1152,800C1056,800,960,800,864,800C768,800,672,800,576,800C480,800,384,800,288,800C192,800,96,800,48,800L0,800Z" fill="url(#gradient2)" fillOpacity="0.2"/>
-          <path d="M0,640L48,629.3C96,619,192,597,288,586.7C384,576,480,576,576,586.7C672,597,768,619,864,629.3C960,640,1056,640,1152,629.3C1248,619,1344,597,1392,586.7L1440,576L1440,800L1392,800C1344,800,1248,800,1152,800C1056,800,960,800,864,800C768,800,672,800,576,800C480,800,384,800,288,800C192,800,96,800,48,800L0,800Z" fill="url(#gradient3)" fillOpacity="0.1"/>
-          <defs>
-            <linearGradient id="gradient1" x1="0%" y1="0%" x2="100%" y2="100%">
-              <stop offset="0%" stopColor="#3B82F6" />
-              <stop offset="100%" stopColor="#6366F1" />
-            </linearGradient>
-            <linearGradient id="gradient2" x1="0%" y1="0%" x2="100%" y2="100%">
-              <stop offset="0%" stopColor="#6366F1" />
-              <stop offset="100%" stopColor="#8B5CF6" />
-            </linearGradient>
-            <linearGradient id="gradient3" x1="0%" y1="0%" x2="100%" y2="100%">
-              <stop offset="0%" stopColor="#8B5CF6" />
-              <stop offset="100%" stopColor="#A855F7" />
-            </linearGradient>
-          </defs>
-        </svg>
-        
-        {/* Floating elements */}
-        <div className="absolute top-20 left-20 w-32 h-32 bg-gradient-to-br from-blue-400/10 to-purple-400/10 rounded-full blur-xl animate-pulse"></div>
-        <div className="absolute top-40 right-32 w-24 h-24 bg-gradient-to-br from-indigo-400/10 to-pink-400/10 rounded-full blur-xl animate-pulse" style={{animationDelay: '1s'}}></div>
-        <div className="absolute bottom-32 left-1/4 w-20 h-20 bg-gradient-to-br from-purple-400/10 to-blue-400/10 rounded-full blur-xl animate-pulse" style={{animationDelay: '2s'}}></div>
-      </div>
+    <main className="min-h-screen w-full overflow-x-hidden text-[var(--brand-text)]" style={brandStyle}>
+      <div className={pageShellClassName}>
+        {leftPanelEnabled ? (
+          <section className="hidden h-[calc(100vh-48px)] min-h-[640px] max-h-[760px] flex-col justify-between overflow-y-auto rounded-[var(--brand-radius)] bg-[var(--brand-secondary)] p-8 text-[var(--brand-button-text)] shadow-[var(--brand-shadow)] lg:flex xl:p-10">
+            <div className="flex items-center gap-4">
+              <BrandLogo branding={branding} className="h-[var(--brand-logo-size)] w-[var(--brand-logo-size)] bg-white/10" />
+              <div className="min-w-0">
+                <p className="truncate text-xl font-bold">{branding.schoolName || branding.appName}</p>
+                <p className="text-sm opacity-75">{branding.appName}</p>
+              </div>
+            </div>
 
-      <div className="relative w-full max-w-md">
-        {/* Logo/Brand section */}
-        <div className="text-center mb-8">
-          <div className="inline-flex items-center justify-center w-16 h-16 bg-gradient-to-r from-blue-600 to-indigo-600 rounded-2xl mb-4 shadow-lg">
-            <svg className="w-8 h-8 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.746 0 3.332.477 4.5 1.253v13C19.832 18.477 18.246 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
-            </svg>
+            <div className="max-w-xl">
+              <h1 className="break-words text-4xl font-bold leading-tight xl:text-5xl">{branding.leftPanelTitle}</h1>
+              <p className="mt-5 text-base leading-7 opacity-80">{branding.leftPanelDescription}</p>
+              {branding.illustrationUrl ? (
+                <img src={branding.illustrationUrl} alt={`${branding.appName} illustration`} className="mt-8 max-h-56 w-full rounded-[var(--brand-radius-soft)] object-cover xl:max-h-64" />
+              ) : null}
+            </div>
+
+            <div className="grid gap-3">
+              {branding.features.map((feature) => (
+                <div key={feature} className="flex items-center gap-3 rounded-[var(--brand-radius-half)] border border-white/15 bg-white/10 px-4 py-3 backdrop-blur">
+                  <span className="h-2.5 w-2.5 rounded-full bg-[var(--brand-accent)]" />
+                  <span className="text-sm font-semibold">{feature}</span>
+                </div>
+              ))}
+              <p className="pt-2 text-sm opacity-75">{branding.securityNote}</p>
+            </div>
+          </section>
+        ) : null}
+
+        <section className="mx-auto w-full min-w-0 max-w-xl">
+          <div className="mb-5 flex items-center gap-3 lg:hidden">
+            <BrandLogo branding={branding} className="h-12 w-12" />
+            <div className="min-w-0">
+              <p className="truncate font-bold">{branding.schoolName || branding.appName}</p>
+              <p className="text-sm text-[var(--brand-muted)]">{branding.appName}</p>
+            </div>
           </div>
-          <h1 className="text-3xl font-bold text-gray-900 mb-2">Welcome Back</h1>
-          <p className="text-gray-600">Sign in to your SchoolApp admin dashboard</p>
-        </div>
 
-        {/* Login form */}
-        <div className="bg-white/80 backdrop-blur-xl rounded-3xl shadow-2xl border border-white/20 p-8">
-          <form onSubmit={handleSubmit} className="space-y-6">
-            {/* Email field */}
-            <div className="space-y-2">
-              <label className="block text-sm font-semibold text-gray-700">Email Address</label>
-              <div className="relative">
-                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                  <svg className="h-5 w-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 12a4 4 0 10-8 0 4 4 0 008 0zm0 0v1.5a2.5 2.5 0 005 0V12a9 9 0 10-9 9m4.5-1.206a8.959 8.959 0 01-4.5 1.207" />
-                  </svg>
+          <div className="w-full max-w-full overflow-hidden rounded-[var(--brand-radius)] border border-[var(--brand-border)] bg-[var(--brand-card)] p-5 shadow-[var(--brand-shadow)] sm:p-7">
+            <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+              <div className="min-w-0">
+                <div className="hidden items-center gap-3 lg:flex">
+                  <BrandLogo branding={branding} className="h-14 w-14" />
+                  <div className="min-w-0">
+                    <p className="truncate font-bold">{branding.schoolName || branding.appName}</p>
+                    <p className="text-sm text-[var(--brand-muted)]">{branding.appName}</p>
+                  </div>
                 </div>
-                <input
-                  type="email"
-                  required
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  className="w-full pl-10 pr-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200 bg-gray-50/50 backdrop-blur-sm"
-                  placeholder="Enter your email"
-                />
+                <h2 className="mt-6 break-words text-2xl font-bold sm:text-3xl">
+                  {forgotOpen ? formCopy.forgotHeading : branding.loginHeading}
+                </h2>
+                <p className="mt-2 text-sm leading-6 text-[var(--brand-muted)]">
+                  {forgotOpen ? formCopy.forgotSubtitle : branding.loginSubtitle}
+                </p>
               </div>
+              {brandingLoading ? (
+                <div className="min-w-24 sm:mt-1" aria-live="polite" aria-label={formCopy.brandingLoading}>
+                  <div className="h-2 w-24 animate-pulse rounded-full bg-[var(--brand-border)]" />
+                  <div className="mt-2 h-2 w-16 animate-pulse rounded-full bg-[var(--brand-border)]" />
+                </div>
+              ) : null}
             </div>
 
-            {/* Password field */}
-            <div className="space-y-2">
-              <label className="block text-sm font-semibold text-gray-700">Password</label>
-              <div className="relative">
-                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                  <svg className="h-5 w-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
-                  </svg>
-                </div>
-                <input
-                  type={showPassword ? 'text' : 'password'}
-                  required
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  className="w-full pl-10 pr-12 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200 bg-gray-50/50 backdrop-blur-sm"
-                  placeholder="Enter your password"
-                />
-                <button
-                  type="button"
-                  onClick={() => setShowPassword(!showPassword)}
-                  className="absolute inset-y-0 right-0 pr-3 flex items-center text-gray-400 hover:text-gray-600 transition-colors"
-                >
-                  {showPassword ? (
-                    <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.878 9.878L3 3m6.878 6.878L21 21" />
-                    </svg>
-                  ) : (
-                    <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
-                    </svg>
-                  )}
-                </button>
-              </div>
-            </div>
-
-            {/* School ID field */}
-            <div className="space-y-2">
-              <label className="block text-sm font-semibold text-gray-700">School ID <span className="text-gray-400 font-normal">(required)</span></label>
-              <div className="relative">
-                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                  <svg className="h-5 w-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
-                  </svg>
-                </div>
-                <input
-                  type="text"
-                  value={schoolId}
-                  onChange={(e) => setSchoolId(e.target.value)}
-                  className="w-full pl-10 pr-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200 bg-gray-50/50 backdrop-blur-sm"
-                  placeholder="Enter school ID"
-                />
-              </div>
-            </div>
-
-            {/* Remember me */}
-            <label className="flex items-center gap-2 text-sm text-gray-600">
-              <input
-                type="checkbox"
-                checked={rememberMe}
-                onChange={(e) => setRememberMe(e.target.checked)}
-                className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
-              />
-              Remember me
-            </label>
-
-            {/* Error message */}
-            {error && (
-              <div className="bg-red-50 border border-red-200 rounded-xl p-4 flex items-center space-x-3">
-                <svg className="h-5 w-5 text-red-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                </svg>
-                <p className="text-sm text-red-700">{error}</p>
-              </div>
-            )}
-
-            {/* Submit button */}
-            <button
-              type="submit"
-              disabled={loading}
-              className="w-full bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 disabled:from-gray-400 disabled:to-gray-500 text-white font-semibold py-3 px-4 rounded-xl transition-all duration-200 transform hover:scale-[1.02] disabled:scale-100 shadow-lg hover:shadow-xl disabled:shadow-md flex items-center justify-center space-x-2"
+            <form
+              className="mt-7 space-y-5"
+              onSubmit={(event) => {
+                if (forgotOpen) {
+                  event.preventDefault();
+                  void submitForgotPassword();
+                  return;
+                }
+                void submitLogin(event);
+              }}
             >
-              {loading ? (
+              {forgotOpen ? (
                 <>
-                  <svg className="animate-spin h-5 w-5" fill="none" viewBox="0 0 24 24">
-                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                    <path className="opacity-75" fill="currentColor" d="m4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                  </svg>
-                  <span>Signing in...</span>
+                  <div>
+                    <label className="block text-sm font-semibold" htmlFor="forgotEmail">
+                      {formCopy.forgotEmailLabel}
+                    </label>
+                    <input
+                      id="forgotEmail"
+                      name="forgotEmail"
+                      type="email"
+                      autoComplete="email"
+                      value={forgotEmail}
+                      onChange={(event) => setForgotEmail(event.target.value)}
+                      className={`${inputClassName} mt-2`}
+                      placeholder={formCopy.identifierPlaceholder}
+                      aria-describedby={errors.forgotEmail ? 'forgotEmail-error' : undefined}
+                      aria-invalid={Boolean(errors.forgotEmail)}
+                    />
+                    {fieldError('forgotEmail')}
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-semibold" htmlFor="forgotSchoolCode">
+                      {formCopy.schoolLabel}
+                    </label>
+                    <input
+                      id="forgotSchoolCode"
+                      name="forgotSchoolCode"
+                      type="text"
+                      autoComplete="organization"
+                      value={forgotSchoolCode}
+                      onChange={(event) => setForgotSchoolCode(event.target.value)}
+                      onBlur={() => {
+                        if (isValidSchoolInput(forgotSchoolCode)) void loadBranding(forgotSchoolCode.trim() || undefined);
+                      }}
+                      className={`${inputClassName} mt-2`}
+                      placeholder={formCopy.schoolPlaceholder}
+                      aria-describedby={errors.forgotSchoolCode ? 'forgotSchoolCode-error' : undefined}
+                      aria-invalid={Boolean(errors.forgotSchoolCode)}
+                    />
+                    {fieldError('forgotSchoolCode')}
+                  </div>
+
+                  <div className="flex flex-col gap-3 sm:flex-row">
+                    <button
+                      type="submit"
+                      disabled={submitting}
+                      className="flex flex-1 items-center justify-center rounded-[var(--brand-radius-half)] bg-[var(--brand-button)] px-4 py-3 text-sm font-bold text-[var(--brand-button-text)] shadow-lg transition hover:opacity-95 disabled:cursor-not-allowed disabled:opacity-60 focus:outline-none focus:ring-4 focus:ring-[var(--brand-focus-soft)]"
+                    >
+                      {submitting ? formCopy.loading : formCopy.sendReset}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setForgotOpen(false);
+                        setErrors({});
+                        setMessage('');
+                      }}
+                      className="rounded-[var(--brand-radius-half)] border border-[var(--brand-border)] px-4 py-3 text-sm font-bold text-[var(--brand-text)] transition hover:bg-[var(--brand-bg)] focus:outline-none focus:ring-4 focus:ring-[var(--brand-focus-soft)]"
+                    >
+                      {formCopy.backToLogin}
+                    </button>
+                  </div>
                 </>
               ) : (
                 <>
-                  <span>Sign In</span>
-                  <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7l5 5m0 0l-5 5m5-5H6" />
-                  </svg>
+                  <div>
+                    <label className="block text-sm font-semibold" htmlFor="schoolCode">
+                      {formCopy.schoolLabel}
+                    </label>
+                    <input
+                      id="schoolCode"
+                      name="schoolCode"
+                      type="text"
+                      autoComplete="organization"
+                      value={schoolCode}
+                      onChange={(event) => {
+                        setSchoolCode(event.target.value);
+                        setForgotSchoolCode(event.target.value);
+                      }}
+                      onBlur={handleSchoolBlur}
+                      className={`${inputClassName} mt-2`}
+                      placeholder={formCopy.schoolPlaceholder}
+                      aria-describedby={errors.schoolCode ? 'schoolCode-error' : undefined}
+                      aria-invalid={Boolean(errors.schoolCode)}
+                    />
+                    {fieldError('schoolCode')}
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-semibold" htmlFor="identifier">
+                      {formCopy.identifierLabel}
+                    </label>
+                    <input
+                      id="identifier"
+                      name="username"
+                      type="text"
+                      autoComplete="username"
+                      value={identifier}
+                      onChange={(event) => {
+                        setIdentifier(event.target.value);
+                        setForgotEmail(event.target.value);
+                      }}
+                      className={`${inputClassName} mt-2`}
+                      placeholder={formCopy.identifierPlaceholder}
+                      aria-describedby={errors.identifier ? 'identifier-error' : undefined}
+                      aria-invalid={Boolean(errors.identifier)}
+                    />
+                    {fieldError('identifier')}
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-semibold" htmlFor="password">
+                      {formCopy.passwordLabel}
+                    </label>
+                    <div className="relative mt-2">
+                      <input
+                        id="password"
+                        name="password"
+                        type={showPassword ? 'text' : 'password'}
+                        autoComplete="current-password"
+                        value={password}
+                        onChange={(event) => setPassword(event.target.value)}
+                        className={`${inputClassName} pr-12`}
+                        placeholder={formCopy.passwordPlaceholder}
+                        aria-describedby={errors.password ? 'password-error' : undefined}
+                        aria-invalid={Boolean(errors.password)}
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowPassword((current) => !current)}
+                        className="absolute inset-y-0 right-2 my-auto flex h-9 w-9 items-center justify-center rounded-[var(--brand-radius-small)] text-[var(--brand-muted)] transition hover:bg-[var(--brand-bg)] focus:outline-none focus:ring-4 focus:ring-[var(--brand-focus-soft)]"
+                        aria-label={showPassword ? formCopy.hidePassword : formCopy.showPassword}
+                      >
+                        {showPassword ? (
+                          <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 3l18 18M10.6 10.6a2 2 0 002.8 2.8M9.9 4.2A10.4 10.4 0 0112 4c5 0 8.5 4.2 9.5 8a10.8 10.8 0 01-2.2 4M6.2 6.2A10.8 10.8 0 002.5 12c1 3.8 4.5 8 9.5 8a10.8 10.8 0 005.1-1.3" />
+                          </svg>
+                        ) : (
+                          <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.5 12c1-3.8 4.5-8 9.5-8s8.5 4.2 9.5 8c-1 3.8-4.5 8-9.5 8S3.5 15.8 2.5 12z" />
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15a3 3 0 100-6 3 3 0 000 6z" />
+                          </svg>
+                        )}
+                      </button>
+                    </div>
+                    {fieldError('password')}
+                  </div>
+
+                  <div className="flex flex-col gap-3 text-sm sm:flex-row sm:items-center sm:justify-between">
+                    <label className="flex items-center gap-2 text-[var(--brand-muted)]">
+                      <input
+                        type="checkbox"
+                        checked={rememberMe}
+                        onChange={(event) => handleRememberMeChange(event.target.checked)}
+                        className="h-4 w-4 rounded border-[var(--brand-border)]"
+                        style={{ accentColor: 'var(--brand-primary)' }}
+                      />
+                      {formCopy.rememberMe}
+                    </label>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setForgotOpen(true);
+                        setForgotEmail(identifier.trim());
+                        setForgotSchoolCode(schoolCode.trim());
+                        setErrors({});
+                        setMessage('');
+                      }}
+                      className="w-fit font-semibold text-[var(--brand-link)] transition hover:opacity-80 focus:outline-none focus:ring-4 focus:ring-[var(--brand-focus-soft)]"
+                    >
+                      {branding.forgotPasswordText}
+                    </button>
+                  </div>
                 </>
               )}
-            </button>
 
-            {/* Forgot Password */}
-            <div className="text-center">
-              <button
-                type="button"
-                className="text-sm text-blue-600 hover:text-blue-700 font-medium transition-colors hover:underline"
-                onClick={() => {/* TODO: Add forgot password functionality */}}
-              >
-                Forgot your password?
-              </button>
+              {message ? (
+                <p className="rounded-[var(--brand-radius-half)] px-4 py-3 text-sm font-semibold text-[var(--brand-success)]" style={{ backgroundColor: rgba(branding.successColor || '#16a34a', 0.1) }} role="status">
+                  {message}
+                </p>
+              ) : null}
+              {errors.form ? (
+                <p className="rounded-[var(--brand-radius-half)] px-4 py-3 text-sm font-semibold text-[var(--brand-error)]" style={{ backgroundColor: rgba(branding.errorColor, 0.08) }} role="alert">
+                  {errors.form}
+                </p>
+              ) : null}
+
+              {!forgotOpen ? (
+                <button
+                  type="submit"
+                  disabled={submitting}
+                  className="flex w-full items-center justify-center rounded-[var(--brand-radius-half)] bg-[var(--brand-button)] px-4 py-3 text-sm font-bold text-[var(--brand-button-text)] shadow-lg transition hover:opacity-95 disabled:cursor-not-allowed disabled:opacity-60 focus:outline-none focus:ring-4 focus:ring-[var(--brand-focus-soft)]"
+                >
+                  {submitting ? formCopy.loading : branding.loginButtonText}
+                </button>
+              ) : null}
+            </form>
+
+            <div className="mt-6 border-t border-[var(--brand-border)] pt-5 text-center">
+              <p className="text-sm text-[var(--brand-muted)]">{branding.supportText}</p>
+              <p className="mt-2 text-xs text-[var(--brand-muted)]">{branding.footerText}</p>
             </div>
-          </form>
-
-          {/* Footer */}
-          <div className="mt-8 text-center">
-            <p className="text-sm text-gray-500">
-              Need help?{' '}
-              <a
-                href="https://techstageit.com/#contact"
-                target="_blank"
-                rel="noreferrer"
-                className="text-blue-600 hover:text-blue-700 font-medium transition-colors"
-              >
-                Contact Support
-              </a>
-            </p>
-            <p className="text-xs text-gray-400 mt-2">
-              © 2026 SchoolApp by SAAPT. All rights reserved
-            </p>
           </div>
-        </div>
+        </section>
       </div>
-    </div>
+    </main>
   );
 }

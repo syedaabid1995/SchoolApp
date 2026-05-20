@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="128" height="128" viewBox="0 0 128 128" role="img" aria-label="DPS compact logo">
+  <rect width="128" height="128" rx="28" fill="#0f172a"/>
+  <circle cx="64" cy="48" r="28" fill="#1d4ed8"/>
+  <path d="M35 52l29-14 29 14-29 14-29-14z" fill="#ffffff"/>
+  <text x="64" y="101" text-anchor="middle" font-family="Arial, sans-serif" font-size="26" font-weight="700" fill="#ffffff">DPS</text>
+</svg>

@@ -3,25 +3,16 @@ import { getApiBase } from '../../../../lib/getApiBase';
 
 export async function POST(req: Request) {
   const API_BASE = getApiBase();
-  let payload: { refreshToken?: string } = {};
-  try {
-    payload = await req.json();
-  } catch {
-    payload = {};
-  }
   const cookieHeader = req.headers.get('cookie') ?? '';
-  const cookieToken = cookieHeader
-    .split(';')
-    .map((part) => part.trim())
-    .find((part) => part.startsWith('refresh_token='))
-    ?.split('=')[1];
-  if (!payload.refreshToken && cookieToken) {
-    payload.refreshToken = cookieToken;
+  const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+  if (cookieHeader) {
+    headers.Cookie = cookieHeader;
   }
+
   const res = await fetch(`${API_BASE}/auth/refresh`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(payload),
+    headers,
+    body: JSON.stringify({}),
   });
 
   if (!res.ok) {
@@ -30,13 +21,28 @@ export async function POST(req: Request) {
   }
 
   const data = await res.json();
-  const response = NextResponse.json(data);
+  const response = NextResponse.json({
+    success: true,
+    tokenType: data.tokenType,
+    expiresIn: data.expiresIn,
+  });
   response.cookies.set('access_token', data.accessToken, {
     httpOnly: true,
     sameSite: 'lax',
     secure: process.env.NODE_ENV === 'production',
     path: '/',
+    maxAge: 15 * 60,
   });
+  const refreshMaxAge = Number(data.refreshTokenMaxAge);
+  if (data.refreshToken) {
+    response.cookies.set('refresh_token', data.refreshToken, {
+      httpOnly: true,
+      sameSite: 'lax',
+      secure: process.env.NODE_ENV === 'production',
+      path: '/',
+      ...(Number.isFinite(refreshMaxAge) && refreshMaxAge > 0 ? { maxAge: refreshMaxAge } : {}),
+    });
+  }
 
   return response;
 }

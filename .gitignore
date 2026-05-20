@@ -109,3 +109,4 @@ backend/frontend-deployment.json
 backend/lightsail-deployment.json
 backend/simple-deployment.json
 backend/test-deployment.json
+/tools

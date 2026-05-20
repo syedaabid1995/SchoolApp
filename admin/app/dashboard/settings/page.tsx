@@ -13,6 +13,7 @@ import {
 import FullPageLoader from '../../../components/FullPageLoader';
 import PageHeader from '../../../components/PageHeader';
 import Button from '../../../components/Button';
+import LoginExperienceSettings from '../../../components/LoginExperienceSettings';
 
 export default function SettingsPage() {
   const queryClient = useQueryClient();
@@ -69,6 +70,8 @@ export default function SettingsPage() {
       {isBusy ? <FullPageLoader label="Processing..." /> : null}
       <div className="mx-auto max-w-7xl pr-6 pb-12">
         <PageHeader title="System Settings" subtitle="Configure feature flags and tenant overrides." />
+
+        <LoginExperienceSettings />
 
         {/* Feature Flags Section */}
         <section className="rounded-2xl bg-white p-6 shadow-lg ring-1 ring-gray-200">

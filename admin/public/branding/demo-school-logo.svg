@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="240" height="240" viewBox="0 0 240 240" role="img" aria-label="Demo Public School logo">
+  <rect width="240" height="240" rx="52" fill="#1d4ed8"/>
+  <path d="M48 88l72-34 72 34-72 34-72-34z" fill="#ffffff"/>
+  <path d="M75 113v38c0 15 20 28 45 28s45-13 45-28v-38l-45 21-45-21z" fill="#dbeafe"/>
+  <path d="M185 96v54" stroke="#ffffff" stroke-width="10" stroke-linecap="round"/>
+  <circle cx="185" cy="161" r="10" fill="#16a34a"/>
+  <text x="120" y="211" text-anchor="middle" font-family="Arial, sans-serif" font-size="24" font-weight="700" fill="#ffffff">DPS</text>
+</svg>

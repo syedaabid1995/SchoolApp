@@ -1,7 +1,10 @@
 import type { Request, Response } from 'express';
+import crypto from 'crypto';
 import jwt, { type Secret, type SignOptions } from 'jsonwebtoken';
 import { z } from 'zod';
 import { requestOtp, verifyOtp } from '../services/otp.service';
+import { createRefreshSession } from '../services/refreshSession.service';
+import { createAuthAuditLog } from '../utils/audit';
 import { resolveSchoolId } from '../utils/tenant';
 import { prisma } from '../config/db';
 import { env } from '../config/env';
@@ -20,7 +23,7 @@ const verifySchema = z.object({
 });
 
 const ACCESS_TOKEN_TTL = '15m';
-const REFRESH_TOKEN_TTL = '30d';
+const REFRESH_TOKEN_TTL_SECONDS = 7 * 24 * 60 * 60;
 const jwtSecret: Secret = env.JWT_SECRET;
 
 const normalizePhone = (phone: string) => phone.replace(/\s+/g, '');
@@ -59,7 +62,14 @@ const resolveSchoolForPhone = async (req: Request, phone: string, schoolId?: str
 };
 
 const signToken = (
-  payload: { sub: string; schoolId: string | null; role: string | null; email?: string | null; typ: 'access' | 'refresh' },
+  payload: {
+    sub: string;
+    schoolId: string | null;
+    role: string | null;
+    email?: string | null;
+    jti?: string;
+    typ: 'access' | 'refresh';
+  },
   expiresIn: SignOptions['expiresIn'],
 ) => jwt.sign(payload, jwtSecret, { expiresIn });
 
@@ -141,7 +151,42 @@ export const verifyOtpApi = async (req: Request, res: Response) => {
   };
 
   const accessToken = signToken({ ...payloadBase, typ: 'access' }, ACCESS_TOKEN_TTL);
-  const refreshToken = signToken({ ...payloadBase, typ: 'refresh' }, REFRESH_TOKEN_TTL);
+  const refreshTokenExpiresAt = new Date(Date.now() + REFRESH_TOKEN_TTL_SECONDS * 1000);
+  const refreshToken = signToken(
+    { ...payloadBase, jti: crypto.randomUUID(), typ: 'refresh' },
+    REFRESH_TOKEN_TTL_SECONDS,
+  );
+
+  await createRefreshSession({
+    req,
+    userId,
+    schoolId: null,
+    refreshToken,
+    expiresAt: refreshTokenExpiresAt,
+  });
+
+  try {
+    await createAuthAuditLog({
+      req,
+      userId,
+      schoolId: null,
+      action: 'LOGIN_SUCCESS',
+      metadata: {
+        loginMethod: 'parent_otp',
+        role: payloadBase.role,
+      },
+    });
+  } catch {
+    // OTP login must still succeed if audit logging is unavailable.
+  }
+
+  res.cookie('refresh_token', refreshToken, {
+    httpOnly: true,
+    sameSite: 'lax',
+    secure: env.NODE_ENV === 'production',
+    path: '/',
+    maxAge: REFRESH_TOKEN_TTL_SECONDS * 1000,
+  });
 
   res.status(200).json({
     ...result,
@@ -149,5 +194,7 @@ export const verifyOtpApi = async (req: Request, res: Response) => {
     refreshToken,
     tokenType: 'Bearer',
     expiresIn: ACCESS_TOKEN_TTL,
+    refreshTokenMaxAge: REFRESH_TOKEN_TTL_SECONDS,
+    refreshTokenExpiresAt: refreshTokenExpiresAt.toISOString(),
   });
 };

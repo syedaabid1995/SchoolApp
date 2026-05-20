@@ -66,6 +66,11 @@ model School {
   transferRequestsTo             StudentTransferRequest[]        @relation("TransferToSchool")
   employeeRolePermissions        EmployeeRolePermission[]
   employeeUserPermissions        EmployeeUserPermission[]
+  refreshSessions                RefreshSession[]
+  passwordResetTokens            PasswordResetToken[]
+  mfaChallenges                  MfaChallenge[]
+  totpCredentials                TotpCredential[]
+  totpBackupCodes                TotpBackupCode[]
 
   @@map("schools")
 }
@@ -92,6 +97,8 @@ model User {
   email              String
   passwordHash       String     @map("password_hash")
   mustChangePassword Boolean    @default(false) @map("must_change_password")
+  mfaEnabled         Boolean    @default(false) @map("mfa_enabled")
+  mfaMethod          String?    @map("mfa_method")
   status             UserStatus @default(ACTIVE)
   createdAt          DateTime   @default(now()) @map("created_at")
   updatedAt          DateTime   @updatedAt @map("updated_at")
@@ -129,10 +136,126 @@ model User {
   teacherAttendanceSubstitutionsCanceled TeacherAttendanceSubstitution[] @relation("TeacherAttendanceSubstitutionCanceledBy")
   timetableVersionsCreated               TimetableVersion[]
   employeeUserPermissions                EmployeeUserPermission[]
+  refreshSessions                        RefreshSession[]
+  passwordResetTokens                    PasswordResetToken[]
+  mfaChallenges                          MfaChallenge[]
+  totpCredential                         TotpCredential?
+  totpBackupCodes                        TotpBackupCode[]
 
   @@unique([schoolId, email])
   @@index([schoolId])
   @@map("users")
+}
+
+model RefreshSession {
+  id         String    @id @default(uuid()) @db.Uuid
+  userId     String    @map("user_id") @db.Uuid
+  schoolId   String?   @map("school_id") @db.Uuid
+  tokenHash  String    @unique @map("token_hash")
+  userAgent  String?   @map("user_agent")
+  ipAddress  String?   @map("ip_address")
+  deviceName String?   @map("device_name")
+  expiresAt  DateTime  @map("expires_at")
+  revokedAt  DateTime? @map("revoked_at")
+  createdAt  DateTime  @default(now()) @map("created_at")
+  lastUsedAt DateTime? @map("last_used_at")
+
+  user   User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  school School? @relation(fields: [schoolId], references: [id], onDelete: SetNull)
+
+  @@index([userId])
+  @@index([schoolId])
+  @@index([expiresAt])
+  @@index([revokedAt])
+  @@map("refresh_sessions")
+}
+
+model PasswordResetToken {
+  id        String    @id @default(uuid()) @db.Uuid
+  userId    String    @map("user_id") @db.Uuid
+  schoolId  String?   @map("school_id") @db.Uuid
+  tokenHash String    @unique @map("token_hash")
+  expiresAt DateTime  @map("expires_at")
+  usedAt    DateTime? @map("used_at")
+  createdAt DateTime  @default(now()) @map("created_at")
+  createdIp String?   @map("created_ip")
+  userAgent String?   @map("user_agent")
+
+  user   User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  school School? @relation(fields: [schoolId], references: [id], onDelete: SetNull)
+
+  @@index([userId])
+  @@index([schoolId])
+  @@index([expiresAt])
+  @@index([usedAt])
+  @@map("password_reset_tokens")
+}
+
+model MfaChallenge {
+  id          String    @id @default(uuid()) @db.Uuid
+  userId      String    @map("user_id") @db.Uuid
+  schoolId    String?   @map("school_id") @db.Uuid
+  otpHash     String    @map("otp_hash")
+  purpose     String    @default("LOGIN")
+  expiresAt   DateTime  @map("expires_at")
+  verifiedAt  DateTime? @map("verified_at")
+  attempts    Int       @default(0)
+  maxAttempts Int       @default(5) @map("max_attempts")
+  createdAt   DateTime  @default(now()) @map("created_at")
+  createdIp   String?   @map("created_ip")
+  userAgent   String?   @map("user_agent")
+
+  user   User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  school School? @relation(fields: [schoolId], references: [id], onDelete: SetNull)
+
+  @@index([userId])
+  @@index([schoolId])
+  @@index([expiresAt])
+  @@index([verifiedAt])
+  @@map("mfa_challenges")
+}
+
+model TotpCredential {
+  id              String    @id @default(uuid()) @db.Uuid
+  userId          String    @unique @map("user_id") @db.Uuid
+  schoolId        String?   @map("school_id") @db.Uuid
+  encryptedSecret String    @map("encrypted_secret")
+  issuer          String
+  label           String
+  enabledAt       DateTime? @map("enabled_at")
+  disabledAt      DateTime? @map("disabled_at")
+  setupStartedAt  DateTime  @default(now()) @map("setup_started_at")
+  lastUsedAt      DateTime? @map("last_used_at")
+  createdAt       DateTime  @default(now()) @map("created_at")
+  updatedAt       DateTime  @updatedAt @map("updated_at")
+
+  user   User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  school School? @relation(fields: [schoolId], references: [id], onDelete: SetNull)
+
+  @@index([userId])
+  @@index([schoolId])
+  @@index([enabledAt])
+  @@index([disabledAt])
+  @@map("totp_credentials")
+}
+
+model TotpBackupCode {
+  id        String    @id @default(uuid()) @db.Uuid
+  userId    String    @map("user_id") @db.Uuid
+  schoolId  String?   @map("school_id") @db.Uuid
+  codeHash  String    @unique @map("code_hash")
+  usedAt    DateTime? @map("used_at")
+  createdAt DateTime  @default(now()) @map("created_at")
+  createdIp String?   @map("created_ip")
+  userAgent String?   @map("user_agent")
+
+  user   User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  school School? @relation(fields: [schoolId], references: [id], onDelete: SetNull)
+
+  @@index([userId])
+  @@index([schoolId])
+  @@index([usedAt])
+  @@map("totp_backup_codes")
 }
 
 model Role {

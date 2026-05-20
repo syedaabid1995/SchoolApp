@@ -46,6 +46,7 @@ import { leaveRouter } from './routes/leave.routes';
 import { uploadRouter } from './routes/upload.routes';
 import { messagingAdminRouter } from './routes/messagingAdmin.routes';
 import { messagingSettingsRouter } from './routes/messagingSettings.routes';
+import { publicBrandingRouter } from './routes/publicBranding.routes';
 import { rateLimit } from './middlewares/rate-limit.middleware';
 import { apiVersionMiddleware } from './middlewares/version.middleware';
 
@@ -124,9 +125,11 @@ export const createApp = () => {
 
   app.use('/docs', swaggerUi.serve, swaggerUi.setup(openapiSpec));
 
+  app.use('/api/v1/public/branding', publicBrandingRouter);
+
   // Apply write operation guard to all API routes except auth and subscriptions
   app.use('/api/v1', (req, res, next) => {
-    if (req.path.startsWith('/auth') || req.path.startsWith('/subscriptions') || req.path.startsWith('/admin')) {
+    if (req.path.startsWith('/auth') || req.path.startsWith('/public') || req.path.startsWith('/subscriptions') || req.path.startsWith('/admin')) {
       return next();
     }
     return writeOperationGuard(req, res, next);

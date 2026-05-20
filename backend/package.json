@@ -7,7 +7,12 @@
     "build": "tsc -p tsconfig.json",
     "start": "node dist/server.js",
     "test:cache": "npm run build && node --test dist/services/cache/__tests__/*.test.js",
-    "prisma": "prisma"
+    "test:auth": "npm run build && node --test dist/controllers/__tests__/auth.security.test.js",
+    "prisma": "prisma",
+    "seed": "prisma db seed"
+  },
+  "prisma": {
+    "seed": "tsx prisma/seed.ts"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.980.0",
@@ -25,9 +30,11 @@
     "ioredis": "^5.4.2",
     "jsonwebtoken": "^9.0.2",
     "multer": "^2.0.2",
+    "otplib": "^13.4.0",
     "pdfkit": "^0.15.0",
     "pino": "^9.2.0",
     "pino-pretty": "^11.2.0",
+    "qrcode": "^1.5.4",
     "rate-limiter-flexible": "^9.0.1",
     "swagger-ui-express": "^5.0.1",
     "yaml": "^2.8.2",
@@ -42,6 +49,7 @@
     "@types/multer": "^1.4.12",
     "@types/node": "^20.19.39",
     "@types/pdfkit": "^0.13.6",
+    "@types/qrcode": "^1.5.6",
     "@types/swagger-ui-express": "^4.1.8",
     "@types/yamljs": "^0.2.34",
     "prisma": "^5.22.0",

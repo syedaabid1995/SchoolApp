@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="760" height="420" viewBox="0 0 760 420" role="img" aria-label="School dashboard illustration">
+  <rect width="760" height="420" rx="32" fill="#eff6ff"/>
+  <rect x="72" y="58" width="616" height="304" rx="24" fill="#ffffff" stroke="#bfdbfe" stroke-width="4"/>
+  <rect x="104" y="92" width="162" height="236" rx="18" fill="#0f172a"/>
+  <rect x="128" y="121" width="84" height="16" rx="8" fill="#ffffff"/>
+  <rect x="128" y="163" width="108" height="12" rx="6" fill="#93c5fd"/>
+  <rect x="128" y="194" width="86" height="12" rx="6" fill="#93c5fd"/>
+  <rect x="128" y="225" width="116" height="12" rx="6" fill="#93c5fd"/>
+  <rect x="128" y="277" width="95" height="24" rx="12" fill="#16a34a"/>
+  <rect x="300" y="94" width="150" height="92" rx="18" fill="#dbeafe"/>
+  <rect x="475" y="94" width="150" height="92" rx="18" fill="#dcfce7"/>
+  <rect x="300" y="216" width="325" height="32" rx="16" fill="#e2e8f0"/>
+  <rect x="300" y="268" width="268" height="32" rx="16" fill="#e2e8f0"/>
+  <circle cx="374" cy="139" r="22" fill="#1d4ed8"/>
+  <circle cx="549" cy="139" r="22" fill="#16a34a"/>
+  <path d="M335 328c39-57 73-64 112-21 37 40 79 34 132-28" fill="none" stroke="#1d4ed8" stroke-width="12" stroke-linecap="round"/>
+</svg>
