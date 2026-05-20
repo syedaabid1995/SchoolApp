@@ -655,11 +655,16 @@ export const login = async (req: Request, res: Response) => {
     },
   });
 
+  res.cookie('access_token', accessToken, {
+    httpOnly: true,
+    sameSite: 'lax',
+    secure: env.NODE_ENV === 'production',
+    path: '/',
+    maxAge: ACCESS_TOKEN_COOKIE_MAX_AGE_SECONDS * 1000,
+  });
   res.cookie('refresh_token', refreshToken, refreshCookieOptions(refreshTokenMaxAge));
 
   res.status(200).json({
-    accessToken,
-    refreshToken,
     tokenType: 'Bearer',
     expiresIn: ACCESS_TOKEN_TTL,
     refreshTokenMaxAge,
@@ -1121,8 +1126,6 @@ export const refreshToken = async (req: Request, res: Response) => {
   res.cookie('refresh_token', nextRefreshToken, refreshCookieOptions(refreshTokenMaxAge));
 
   res.status(200).json({
-    accessToken,
-    refreshToken: nextRefreshToken,
     tokenType: 'Bearer',
     expiresIn: ACCESS_TOKEN_TTL,
     refreshTokenMaxAge,

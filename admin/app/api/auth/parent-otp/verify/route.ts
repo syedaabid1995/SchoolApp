@@ -1,6 +1,13 @@
 import { NextResponse } from 'next/server';
 import { getApiBase } from '../../../../../lib/getApiBase';
 
+const getBackendSetCookies = (headers: Headers) => {
+  const getSetCookie = (headers as Headers & { getSetCookie?: () => string[] }).getSetCookie;
+  if (typeof getSetCookie === 'function') return getSetCookie.call(headers);
+  const setCookie = headers.get('set-cookie');
+  return setCookie ? [setCookie] : [];
+};
+
 export async function POST(req: Request) {
   const API_BASE = getApiBase();
   const payload = await req.json();
@@ -28,26 +35,13 @@ export async function POST(req: Request) {
 
   const data = await res.json();
   const { accessToken, refreshToken, refreshTokenMaxAge, refreshTokenExpiresAt, ...safeData } = data;
+  void accessToken;
+  void refreshToken;
+  void refreshTokenMaxAge;
   void refreshTokenExpiresAt;
   const response = NextResponse.json(safeData);
-  if (accessToken) {
-    response.cookies.set('access_token', accessToken, {
-      httpOnly: true,
-      sameSite: 'lax',
-      secure: process.env.NODE_ENV === 'production',
-      path: '/',
-      maxAge: 15 * 60,
-    });
-  }
-  if (refreshToken) {
-    const refreshMaxAge = Number(refreshTokenMaxAge);
-    response.cookies.set('refresh_token', refreshToken, {
-      httpOnly: true,
-      sameSite: 'lax',
-      secure: process.env.NODE_ENV === 'production',
-      path: '/',
-      ...(Number.isFinite(refreshMaxAge) && refreshMaxAge > 0 ? { maxAge: refreshMaxAge } : {}),
-    });
+  for (const cookie of getBackendSetCookies(res.headers)) {
+    response.headers.append('set-cookie', cookie);
   }
 
   return response;

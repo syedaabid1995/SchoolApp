@@ -7,15 +7,16 @@ interface PageHeaderProps {
 
 export default function PageHeader({ title, subtitle }: PageHeaderProps) {
   return (
-    <div className="mb-8 rounded-2xl bg-gradient-to-r from-blue-600 via-purple-600 to-indigo-700 p-8 shadow-xl text-center">
-      <h1 className="text-4xl font-bold text-white mb-2">
-        {title}
-      </h1>
+    <header className="mb-6 rounded-2xl border border-slate-200 bg-white px-5 py-5 shadow-sm md:px-6">
+      <div className="flex flex-col gap-2">
+        <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Workspace</p>
+        <h1 className="text-2xl font-bold tracking-tight text-slate-950 md:text-3xl">{title}</h1>
       {subtitle && (
-        <p className="text-lg text-blue-100">
+          <p className="max-w-4xl text-sm leading-6 text-slate-600">
           {subtitle}
         </p>
       )}
-    </div>
+      </div>
+    </header>
   );
 }

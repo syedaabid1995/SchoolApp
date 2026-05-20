@@ -40,14 +40,15 @@ export const exportTenantData = async (params: {
     entityType: 'DataExportJob',
     entityId: job.id,
     action: 'EXPORT',
-    afterState: { filePath },
+    afterState: { status: 'COMPLETED' },
   });
 
-  return { jobId: job.id, filePath };
+  return { jobId: job.id, status: 'COMPLETED' };
 };
 
 export const getExportJob = async (id: string, schoolId: string) => {
   const job = await prisma.dataExportJob.findFirst({ where: { id, schoolId } });
   if (!job) throw new HttpError(404, 'Export job not found');
-  return job;
+  const { filePath: _filePath, ...safeJob } = job;
+  return safeJob;
 };

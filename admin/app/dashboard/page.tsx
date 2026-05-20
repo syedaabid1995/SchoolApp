@@ -14,10 +14,12 @@ import FullPageLoader from '../../components/FullPageLoader';
 import { getSession } from '../../services/auth.service';
 import { getSubscription } from '../../services/subscription.service';
 import { getTeacherTimetable } from '../../services/academic.service';
+import SuperAdminDashboardClient from '../../components/dashboard/SuperAdminDashboardClient';
 
 export default function DashboardPage() {
   const notify = useNotify();
-  const { data: session } = useQuery({ queryKey: ['session'], queryFn: getSession });
+  const { data: session, isLoading: isSessionLoading } = useQuery({ queryKey: ['session'], queryFn: getSession });
+  const isSuperAdmin = session?.role === 'SUPER_ADMIN';
   const isSchoolAdmin = session?.role === 'SCHOOL_ADMIN';
   const isTeacher = session?.role === 'TEACHER';
   const schoolId = session?.schoolId ?? undefined;
@@ -25,6 +27,7 @@ export default function DashboardPage() {
   const { data, isLoading, isError } = useQuery({
     queryKey: ['admin-dashboard'],
     queryFn: getAdminDashboardMetrics,
+    enabled: Boolean(session) && !isSuperAdmin,
     refetchOnWindowFocus: false,
     staleTime: 30_000,
   });
@@ -32,7 +35,7 @@ export default function DashboardPage() {
   const { data: weeklyData } = useQuery({
     queryKey: ['weekly-analytics'],
     queryFn: getWeeklyAnalytics,
-    enabled: loadHeavy,
+    enabled: Boolean(session) && !isSuperAdmin && loadHeavy,
     refetchOnWindowFocus: false,
     staleTime: 60_000,
   });
@@ -40,7 +43,7 @@ export default function DashboardPage() {
   const { data: performanceData } = useQuery({
     queryKey: ['performance-metrics'],
     queryFn: getPerformanceMetrics,
-    enabled: loadHeavy,
+    enabled: Boolean(session) && !isSuperAdmin && loadHeavy,
     refetchOnWindowFocus: false,
     staleTime: 60_000,
   });
@@ -48,7 +51,7 @@ export default function DashboardPage() {
   const { data: auditData } = useQuery({
     queryKey: ['recent-audit-logs'],
     queryFn: () => listAuditLogs({ limit: 5 }),
-    enabled: loadHeavy,
+    enabled: Boolean(session) && !isSuperAdmin && loadHeavy,
     refetchOnWindowFocus: false,
     staleTime: 60_000,
   });
@@ -86,6 +89,14 @@ export default function DashboardPage() {
     : weeklyData?.attendance ?? defaultSeries;
   const performanceSeries = weeklyData?.performance ?? defaultSeries;
   const enrollmentSeries = weeklyData?.enrollment ?? defaultSeries;
+  if (isSessionLoading) {
+    return <FullPageLoader label="Loading dashboard..." />;
+  }
+
+  if (isSuperAdmin) {
+    return <SuperAdminDashboardClient />;
+  }
+
   if (isLoading) {
     return <FullPageLoader label="Loading dashboard..." />;
   }
@@ -371,7 +382,7 @@ export default function DashboardPage() {
                   }`}></div>
                   <div className="flex-1 min-w-0">
                     <p className="text-sm font-medium text-gray-900 truncate">
-                      {log.action} {log.entityType.toLowerCase()}
+                      {log.action ?? 'Activity'} {(log.entityType ?? log.targetType ?? 'record').toLowerCase()}
                     </p>
                     <p className="text-xs text-gray-500">
                       {new Date(log.createdAt).toLocaleString()}

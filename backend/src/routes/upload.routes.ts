@@ -38,6 +38,15 @@ const upload = multer({
 
 export const uploadRouter = Router();
 
+uploadRouter.use(authMiddleware);
+
+const isSafeStorageKey = (key: string) => {
+  if (!key || key.length > 512) return false;
+  if (key.startsWith('/') || key.includes('\\')) return false;
+  if (key.split('/').some((part) => part === '..' || part === '')) return false;
+  return /^[a-zA-Z0-9/_.,=@-]+$/.test(key);
+};
+
 uploadRouter.get('/signed', async (req, res) => {
   const rawKey = req.query.key as string | undefined;
   const bucket = (req.query.bucket as string | undefined) ?? getBucketName();
@@ -45,25 +54,25 @@ uploadRouter.get('/signed', async (req, res) => {
     res.status(400).json({ error: { message: 'key is required', details: null } });
     return;
   }
+  if (!isSafeStorageKey(rawKey)) {
+    res.status(400).json({ error: { message: 'Invalid key', details: null } });
+    return;
+  }
   if (bucket !== getBucketName()) {
     res.status(400).json({ error: { message: 'Invalid bucket', details: null } });
     return;
   }
-  if (req.auth) {
-    const parts = rawKey.split('/');
-    if (parts[0] === 'schools' && parts[1]) {
-      resolveSchoolId(req, parts[1]);
-    }
+  const parts = rawKey.split('/');
+  if (parts[0] === 'schools' && parts[1]) {
+    resolveSchoolId(req, parts[1]);
   }
   try {
     const signed = await getSignedUrlForKey({ key: rawKey });
     res.redirect(302, signed);
-  } catch (err) {
-    res.status(500).json({ error: { message: 'Failed to sign url', details: (err as Error).message } });
+  } catch {
+    res.status(500).json({ error: { message: 'Failed to sign url', details: null } });
   }
 });
-
-uploadRouter.use(authMiddleware);
 
 uploadRouter.post('/photos', upload.single('file'), (req, res) => {
   if (!req.file) {

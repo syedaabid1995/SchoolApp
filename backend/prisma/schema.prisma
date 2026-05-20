@@ -60,7 +60,9 @@ model School {
   consentRecords                 ConsentRecord[]
   dataExportJobs                 DataExportJob[]
   dataDeletionJobs               DataDeletionJob[]
+  auditExports                   AuditExport[]
   supportTickets                 SupportTicket[]
+  supportTicketComments          TicketComment[]
   messagingConfigs               SchoolMessagingConfig[]
   transferRequestsFrom           StudentTransferRequest[]        @relation("TransferFromSchool")
   transferRequestsTo             StudentTransferRequest[]        @relation("TransferToSchool")
@@ -124,7 +126,10 @@ model User {
   dataDeletionRequests                   DataDeletionJob[]               @relation("DeletionRequestedBy")
   dataDeletionApprovals                  DataDeletionJob[]               @relation("DeletionApprovedBy")
   auditLogs                              AuditLog[]
-  supportTickets                         SupportTicket[]
+  auditExports                           AuditExport[]
+  supportTickets                         SupportTicket[]                 @relation("SupportTicketCreatedBy")
+  assignedSupportTickets                 SupportTicket[]                 @relation("SupportTicketAssignedTo")
+  supportTicketComments                  TicketComment[]                 @relation("SupportTicketCommentAuthor")
   transferRequestsCreated                StudentTransferRequest[]        @relation("TransferRequestedBy")
   transferRequestsDecided                StudentTransferRequest[]        @relation("TransferDecidedBy")
   studentAttendanceSessionsCreated       StudentAttendanceSession[]      @relation("StudentAttendanceSessionCreatedBy")
@@ -1562,6 +1567,31 @@ model AuditLog {
   @@map("audit_logs")
 }
 
+model AuditExport {
+  id            String    @id @default(uuid()) @db.Uuid
+  requestedById String    @map("requested_by_id") @db.Uuid
+  schoolId      String?   @map("school_id") @db.Uuid
+  format        String
+  filters       Json?
+  reason        String?
+  status        String    @default("PENDING")
+  rowCount      Int?      @map("row_count")
+  fileUrl       String?   @map("file_url")
+  fileKey       String?   @map("file_key")
+  errorMessage  String?   @map("error_message")
+  createdAt     DateTime  @default(now()) @map("created_at")
+  completedAt   DateTime? @map("completed_at")
+
+  requestedBy User    @relation(fields: [requestedById], references: [id], onDelete: Restrict)
+  school      School? @relation(fields: [schoolId], references: [id], onDelete: SetNull)
+
+  @@index([requestedById])
+  @@index([schoolId])
+  @@index([status])
+  @@index([createdAt])
+  @@map("audit_exports")
+}
+
 model Subscription {
   id              String    @id @default(uuid()) @db.Uuid
   schoolId        String    @unique @map("school_id") @db.Uuid
@@ -1761,23 +1791,48 @@ enum TicketPriority {
 }
 
 model SupportTicket {
-  id          String         @id @default(uuid()) @db.Uuid
-  schoolId    String         @map("school_id") @db.Uuid
-  createdById String         @map("created_by_id") @db.Uuid
-  subject     String
-  description String
-  status      TicketStatus   @default(OPEN)
-  priority    TicketPriority @default(MEDIUM)
-  slaDueAt    DateTime?      @map("sla_due_at")
-  escalation  Boolean        @default(false)
-  createdAt   DateTime       @default(now()) @map("created_at")
-  updatedAt   DateTime       @updatedAt @map("updated_at")
+  id           String         @id @default(uuid()) @db.Uuid
+  schoolId     String         @map("school_id") @db.Uuid
+  createdById  String         @map("created_by_id") @db.Uuid
+  assignedToId String?        @map("assigned_to_id") @db.Uuid
+  subject      String
+  description  String
+  status       TicketStatus   @default(OPEN)
+  priority     TicketPriority @default(MEDIUM)
+  slaDueAt     DateTime?      @map("sla_due_at")
+  escalation   Boolean        @default(false)
+  createdAt    DateTime       @default(now()) @map("created_at")
+  updatedAt    DateTime       @updatedAt @map("updated_at")
 
-  school    School @relation(fields: [schoolId], references: [id], onDelete: Cascade)
-  createdBy User   @relation(fields: [createdById], references: [id], onDelete: Restrict)
+  school     School          @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  createdBy  User            @relation("SupportTicketCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+  assignedTo User?           @relation("SupportTicketAssignedTo", fields: [assignedToId], references: [id], onDelete: SetNull)
+  comments   TicketComment[]
 
   @@index([schoolId])
   @@index([createdById])
+  @@index([assignedToId])
   @@index([status])
   @@map("support_tickets")
+}
+
+model TicketComment {
+  id         String   @id @default(uuid()) @db.Uuid
+  ticketId   String   @map("ticket_id") @db.Uuid
+  authorId   String   @map("author_id") @db.Uuid
+  schoolId   String?  @map("school_id") @db.Uuid
+  body       String
+  isInternal Boolean  @default(false) @map("is_internal")
+  createdAt  DateTime @default(now()) @map("created_at")
+  updatedAt  DateTime @updatedAt @map("updated_at")
+
+  ticket SupportTicket @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+  author User          @relation("SupportTicketCommentAuthor", fields: [authorId], references: [id], onDelete: Restrict)
+  school School?       @relation(fields: [schoolId], references: [id], onDelete: SetNull)
+
+  @@index([ticketId])
+  @@index([authorId])
+  @@index([schoolId])
+  @@index([createdAt])
+  @@map("ticket_comments")
 }

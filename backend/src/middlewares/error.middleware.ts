@@ -1,4 +1,5 @@
 import type { NextFunction, Request, Response } from 'express';
+import { ZodError } from 'zod';
 import { logger } from '../config/logger';
 
 export class HttpError extends Error {
@@ -22,9 +23,14 @@ export const errorMiddleware = (
   res: Response,
   _next: NextFunction,
 ) => {
-  const error = err instanceof HttpError ? err : new HttpError(500, 'Internal server error');
+  const error =
+    err instanceof HttpError
+      ? err
+      : err instanceof ZodError
+        ? new HttpError(400, 'Invalid request body.', err.flatten())
+        : new HttpError(500, 'Internal server error');
 
-  if (!(err instanceof HttpError)) {
+  if (!(err instanceof HttpError) && !(err instanceof ZodError)) {
     logger.error({ err }, 'unhandled error');
   }
 

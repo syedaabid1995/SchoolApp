@@ -17,9 +17,8 @@ export const subscriptionGuard = (type: 'students' | 'teachers') => {
 
 export const writeOperationGuard = async (req: Request, _res: Response, next: NextFunction) => {
   try {
-    // Auth runs inside route handlers; if not set yet, defer enforcement until after auth.
     if (!req.auth) {
-      return next();
+      throw new HttpError(401, 'Unauthorized');
     }
     if (req.auth?.role === 'SUPER_ADMIN' && !req.auth.schoolId && !req.body?.schoolId && !req.query.schoolId) {
       return next();

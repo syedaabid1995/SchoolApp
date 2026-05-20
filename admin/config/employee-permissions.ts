@@ -10,6 +10,7 @@ export type PermissionCatalogItem = {
 
 export const EMPLOYEE_PERMISSION_CATALOG: PermissionCatalogItem[] = [
   { code: 'dashboard.overview', label: 'Overview', path: '/dashboard', group: 'Overview' },
+  { code: 'dashboard.overview', label: 'Reports', path: '/dashboard/reports', group: 'Overview' },
   { code: 'plans.view', label: 'Plans', path: '/dashboard/plans', group: 'Plans' },
   { code: 'settings.access', label: 'Access Control', path: '/dashboard/settings/access', group: 'Utilities' },
   { code: 'teachers.list', label: 'Employees - List', path: '/dashboard/teachers', group: 'Employees' },
@@ -34,6 +35,7 @@ export const EMPLOYEE_PERMISSION_CATALOG: PermissionCatalogItem[] = [
 ];
 
 export const getRequiredPermissionForPath = (pathname: string) => {
+  if (pathname.startsWith('/dashboard/reports')) return 'dashboard.overview';
   if (pathname === '/dashboard') return 'dashboard.overview';
   if (pathname.startsWith('/dashboard/plans')) return 'plans.view';
 

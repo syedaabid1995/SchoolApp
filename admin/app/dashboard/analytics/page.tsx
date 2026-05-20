@@ -46,8 +46,8 @@ export default function AnalyticsPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50/30 to-purple-50/40">
-      <div className="mx-auto max-w-7xl pr-6 pb-12">
+    <div className="space-y-6">
+      <div className="mx-auto max-w-[1500px] space-y-6 pb-12">
         <PageHeader title="Analytics Dashboard" subtitle="Key operational metrics across attendance and academics" />
 
         {/* School Selector for Super Admin */}

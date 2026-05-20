@@ -9,6 +9,7 @@ import path from 'path';
 import { logger } from './config/logger';
 import { env } from './config/env';
 import { errorMiddleware, notFoundMiddleware } from './middlewares/error.middleware';
+import { authMiddleware } from './middlewares/auth.middleware';
 import { writeOperationGuard } from './middlewares/subscriptionGuard.middleware';
 import { authRouter } from './routes/auth.routes';
 import { academicRouter } from './routes/academic.routes';
@@ -26,13 +27,13 @@ import { jobRouter } from './routes/job.routes';
 import { notificationRouter } from './routes/notification.routes';
 import { backupRouter } from './routes/backup.routes';
 import { attendanceApprovalRouter } from './routes/attendanceApproval.routes';
-import { auditLogRouter } from './routes/auditLog.routes';
+import { adminAuditExportRouter, adminAuditLogRouter, auditLogRouter } from './routes/auditLog.routes';
 import { teacherAssignmentRouter } from './routes/teacherAssignment.routes';
-import { subscriptionRouter } from './routes/subscription.routes';
+import { adminSubscriptionRouter, subscriptionRouter } from './routes/subscription.routes';
 import { otpRouter } from './routes/otp.routes';
 import { consentRouter } from './routes/consent.routes';
-import { dataComplianceRouter } from './routes/dataCompliance.routes';
-import { ticketRouter } from './routes/ticket.routes';
+import { adminDataComplianceRouter, dataComplianceRouter } from './routes/dataCompliance.routes';
+import { adminSupportRouter, ticketRouter } from './routes/ticket.routes';
 import { analyticsRouter } from './routes/analytics.routes';
 import { schoolAdminRouter } from './routes/schoolAdmin.routes';
 import { subscriptionMetricsRouter } from './routes/subscriptionMetrics.routes';
@@ -40,6 +41,8 @@ import { subscriptionPlanRouter } from './routes/subscriptionPlan.routes';
 import { teacherRouter } from './routes/teacher.routes';
 import { attendanceSummaryRouter } from './routes/attendanceSummary.routes';
 import { adminDashboardRouter } from './routes/adminDashboard.routes';
+import { adminSystemRouter } from './routes/adminSystem.routes';
+import { adminUserRouter } from './routes/adminUser.routes';
 import { userRouter } from './routes/user.routes';
 import { parentPortalRouter } from './routes/parentPortal.routes';
 import { leaveRouter } from './routes/leave.routes';
@@ -127,12 +130,22 @@ export const createApp = () => {
 
   app.use('/api/v1/public/branding', publicBrandingRouter);
 
-  // Apply write operation guard to all API routes except auth and subscriptions
+  const isWriteMethod = (method: string) => ['POST', 'PUT', 'PATCH', 'DELETE'].includes(method);
+  const skipWriteGuard = (pathName: string) =>
+    pathName.startsWith('/auth') ||
+    pathName.startsWith('/public') ||
+    pathName.startsWith('/subscriptions') ||
+    pathName.startsWith('/admin');
+
   app.use('/api/v1', (req, res, next) => {
-    if (req.path.startsWith('/auth') || req.path.startsWith('/public') || req.path.startsWith('/subscriptions') || req.path.startsWith('/admin')) {
+    if (!isWriteMethod(req.method) || skipWriteGuard(req.path)) {
       return next();
     }
-    return writeOperationGuard(req, res, next);
+
+    return authMiddleware(req, res, (authError) => {
+      if (authError) return next(authError);
+      return writeOperationGuard(req, res, next);
+    });
   });
 
   app.use('/api/v1/auth', authRouter);
@@ -155,8 +168,11 @@ export const createApp = () => {
   app.use('/api/v1/backups', backupRouter);
   app.use('/api/v1/attendance-approval', attendanceApprovalRouter);
   app.use('/api/v1/audit-logs', auditLogRouter);
+  app.use('/api/v1/admin/audit-logs', adminAuditLogRouter);
+  app.use('/api/v1/admin/audit-exports', adminAuditExportRouter);
   app.use('/api/v1/teacher-assignments', teacherAssignmentRouter);
   app.use('/api/v1/subscriptions', subscriptionRouter);
+  app.use('/api/v1/admin/subscriptions', adminSubscriptionRouter);
   app.use('/api/v1/otp', otpRouter);
   app.use('/api/v1/consents', consentRouter);
   app.use('/api/v1/compliance', dataComplianceRouter);
@@ -165,9 +181,14 @@ export const createApp = () => {
   app.use('/api/v1/admin/schools', schoolAdminRouter);
   app.use('/api/v1/admin/subscription-plans', subscriptionPlanRouter);
   app.use('/api/v1/admin/subscription-metrics', subscriptionMetricsRouter);
+  app.use('/api/v1/admin', backupRouter);
   app.use('/api/v1/teachers', teacherRouter);
   app.use('/api/v1/attendance-summary', attendanceSummaryRouter);
   app.use('/api/v1/admin/dashboard', adminDashboardRouter);
+  app.use('/api/v1/admin/users', adminUserRouter);
+  app.use('/api/v1/admin/support', adminSupportRouter);
+  app.use('/api/v1/admin/compliance', adminDataComplianceRouter);
+  app.use('/api/v1/admin', adminSystemRouter);
   app.use('/api/v1/users', userRouter);
   app.use('/api/v1/parents/portal', parentPortalRouter);
   app.use('/api/v1/uploads', uploadRouter);

@@ -18,5 +18,5 @@ let didLogRedisError = false;
 redis.on('error', (error) => {
   if (didLogRedisError) return;
   didLogRedisError = true;
-  logger.warn({ err: error, redisUrl: env.REDIS_URL }, 'redis unavailable; continuing with degraded mode');
+  logger.warn({ err: error }, 'redis unavailable; continuing with degraded mode');
 });

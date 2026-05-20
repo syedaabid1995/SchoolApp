@@ -261,6 +261,9 @@ const rejectAuthRateLimit = (result: RateLimitResult, next: NextFunction) => {
 };
 
 export const rateLimit = () => async (req: Request, _res: Response, next: NextFunction) => {
+  if (env.NODE_ENV === 'test') {
+    return next();
+  }
   try {
     await defaultLimiter.consume(keyFor(req));
     return next();

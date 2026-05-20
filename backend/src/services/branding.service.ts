@@ -131,7 +131,7 @@ const resolveSchoolCodeFromHost = (host?: string | null) => {
   return SCHOOL_CODE_PATTERN.test(subdomain) ? subdomain : undefined;
 };
 
-const normalizeBranding = (
+export const normalizeLoginBranding = (
   source: unknown,
   params: {
     schoolName?: string | null;
@@ -184,12 +184,12 @@ const normalizeBranding = (
     successColor: pickColor(tokens.loginSuccessColor ?? tokens.successColor ?? theme.successColor, defaultLoginBranding.successColor ?? '#16a34a'),
     backgroundType: pickBackgroundType(tokens.loginBackgroundType ?? tokens.backgroundType ?? data.backgroundType, defaultLoginBranding.backgroundType),
     backgroundImageUrl: pickString(tokens.loginBackgroundImageUrl ?? tokens.backgroundImageUrl ?? data.backgroundImageUrl, '', 2000),
-    gradientFrom: pickColor(tokens.loginGradientFrom ?? firstHexFromCss(tokens.navbarBg), defaultLoginBranding.gradientFrom ?? defaultLoginBranding.backgroundColor),
-    gradientTo: pickColor(tokens.loginGradientTo ?? firstHexFromCss(tokens.headerBg), defaultLoginBranding.gradientTo ?? defaultLoginBranding.cardBackgroundColor),
-    borderRadius: pickString(tokens.loginBorderRadius ?? tokens.borderRadius, defaultLoginBranding.borderRadius, 32),
-    cardShadow: pickString(tokens.loginCardShadow ?? tokens.cardShadow, defaultLoginBranding.cardShadow, 140),
-    logoSize: pickString(tokens.loginLogoSize ?? tokens.logoSize, defaultLoginBranding.logoSize, 32),
-    illustrationUrl: pickString(tokens.loginIllustrationUrl ?? tokens.illustrationUrl, '', 2000),
+    gradientFrom: pickColor(tokens.loginGradientFrom ?? data.gradientFrom ?? firstHexFromCss(tokens.navbarBg), defaultLoginBranding.gradientFrom ?? defaultLoginBranding.backgroundColor),
+    gradientTo: pickColor(tokens.loginGradientTo ?? data.gradientTo ?? firstHexFromCss(tokens.headerBg), defaultLoginBranding.gradientTo ?? defaultLoginBranding.cardBackgroundColor),
+    borderRadius: pickString(tokens.loginBorderRadius ?? data.borderRadius ?? tokens.borderRadius, defaultLoginBranding.borderRadius, 32),
+    cardShadow: pickString(tokens.loginCardShadow ?? data.cardShadow ?? tokens.cardShadow, defaultLoginBranding.cardShadow, 140),
+    logoSize: pickString(tokens.loginLogoSize ?? data.logoSize ?? tokens.logoSize, defaultLoginBranding.logoSize, 32),
+    illustrationUrl: pickString(tokens.loginIllustrationUrl ?? data.illustrationUrl ?? tokens.illustrationUrl, '', 2000),
     leftPanelEnabled: pickBoolean(tokens.leftPanelEnabled ?? data.leftPanelEnabled, defaultLoginBranding.leftPanelEnabled ?? true),
   };
 };
@@ -216,7 +216,7 @@ export const getLoginBranding = async (params: { schoolCode?: string; host?: str
       })
     : null;
 
-  return normalizeBranding(config?.value, {
+  return normalizeLoginBranding(config?.value, {
     schoolName: school?.name,
     themeTokens: isRecord(activeTheme?.tokens) ? activeTheme.tokens : undefined,
   });

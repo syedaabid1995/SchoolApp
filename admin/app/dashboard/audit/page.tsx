@@ -1,272 +1,600 @@
 'use client';
 
-import Link from 'next/link';
+import { useEffect, useMemo, useState, type ReactNode } from 'react';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import PageHeader from '../../../components/PageHeader';
-import { useMemo, useState, useEffect } from 'react';
-import { useQuery } from '@tanstack/react-query';
-import Button from '../../../components/Button';
-import { listAuditLogs } from '../../../services/audit.service';
+import FullPageLoader from '../../../components/FullPageLoader';
+import { useNotify } from '../../../components/NotificationProvider';
 import { getSession } from '../../../services/auth.service';
+import { listSchools } from '../../../services/school.service';
+import {
+  downloadAuditExport,
+  getAuditExports,
+  getAuditLogById,
+  getAuditLogs,
+  getAuditLogSummary,
+  getHighRiskAuditLogs,
+  listAuditLogs,
+  requestAuditExport,
+  type AuditExportItem,
+  type AuditLogItem,
+} from '../../../services/audit.service';
+
+const severityOptions = ['LOW', 'MEDIUM', 'HIGH', 'CRITICAL'];
+const roleOptions = ['SUPER_ADMIN', 'SCHOOL_ADMIN', 'TEACHER', 'ACCOUNTANT', 'LIBRARIAN', 'STAFF', 'PARENT', 'STUDENT'];
+
+const formatLabel = (value?: string | null) =>
+  (value ?? 'N/A')
+    .toLowerCase()
+    .split('_')
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(' ');
+
+const formatDateTime = (value?: string | null) => {
+  if (!value) return 'N/A';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return 'N/A';
+  return date.toLocaleString('en-IN', {
+    day: '2-digit',
+    month: 'short',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  });
+};
+
+const severityClass = (severity?: string | null) => {
+  if (severity === 'CRITICAL') return 'bg-rose-600 text-white ring-rose-700';
+  if (severity === 'HIGH') return 'bg-red-50 text-red-700 ring-red-200';
+  if (severity === 'MEDIUM') return 'bg-amber-50 text-amber-700 ring-amber-200';
+  return 'bg-slate-100 text-slate-600 ring-slate-200';
+};
+
+const exportStatusClass = (status?: string | null) => {
+  if (status === 'COMPLETED') return 'bg-emerald-50 text-emerald-700 ring-emerald-200';
+  if (status === 'FAILED') return 'bg-rose-50 text-rose-700 ring-rose-200';
+  if (status === 'RUNNING' || status === 'PENDING') return 'bg-blue-50 text-blue-700 ring-blue-200';
+  return 'bg-slate-100 text-slate-600 ring-slate-200';
+};
+
+function Badge({ children, className }: { children: ReactNode; className: string }) {
+  return <span className={`inline-flex rounded-full px-2.5 py-1 text-xs font-semibold ring-1 ${className}`}>{children}</span>;
+}
+
+function StatCard({ label, value, helper }: { label: string; value: ReactNode; helper: string }) {
+  return (
+    <div className="rounded-2xl border border-[var(--shell-border)] bg-[var(--shell-card)] p-5 shadow-sm">
+      <p className="text-xs font-semibold uppercase tracking-[0.16em] text-[var(--shell-muted)]">{label}</p>
+      <p className="mt-3 text-2xl font-bold text-[var(--shell-text)]">{value}</p>
+      <p className="mt-1 text-sm text-[var(--shell-muted)]">{helper}</p>
+    </div>
+  );
+}
+
+const defaultExportDates = () => {
+  const to = new Date();
+  const from = new Date(to.getTime() - 30 * 24 * 60 * 60 * 1000);
+  return {
+    dateFrom: from.toISOString().slice(0, 10),
+    dateTo: to.toISOString().slice(0, 10),
+  };
+};
 
 export default function AuditPage() {
+  const notify = useNotify();
+  const queryClient = useQueryClient();
+  const [selectedLogId, setSelectedLogId] = useState<string | null>(null);
+  const [exportOpen, setExportOpen] = useState(false);
   const [filters, setFilters] = useState({
-    entityType: '',
-    actorRole: '',
-    action: '',
     page: 1,
+    limit: 20,
+    search: '',
+    action: '',
+    severity: '',
+    schoolId: '',
+    actorRole: '',
+    targetType: '',
+    targetId: '',
+    ipAddress: '',
+    dateFrom: '',
+    dateTo: '',
+  });
+  const [exportForm, setExportForm] = useState({
+    format: 'csv' as 'csv' | 'json',
+    ...defaultExportDates(),
+    action: '',
+    severity: '',
+    schoolId: '',
+    reason: '',
+    confirmed: false,
   });
 
-  const { data: session } = useQuery({
+  const { data: session, isLoading: isSessionLoading } = useQuery({
     queryKey: ['session'],
     queryFn: getSession,
     refetchOnWindowFocus: false,
-    refetchOnMount: false,
-    staleTime: 5 * 60_000,
+    staleTime: 60_000,
   });
-
-  const roleOptions = useMemo(() => {
-    if (session?.role === 'TEACHER') {
-      return [{ value: 'TEACHER', label: 'Teacher' }];
-    }
-    if (session?.role === 'SCHOOL_ADMIN') {
-      return [
-        { value: 'SCHOOL_ADMIN', label: 'School Admin' },
-        { value: 'TEACHER', label: 'Teacher' },
-      ];
-    }
-    return [
-      { value: 'SUPER_ADMIN', label: 'Super Admin' },
-      { value: 'SCHOOL_ADMIN', label: 'School Admin' },
-      { value: 'TEACHER', label: 'Teacher' },
-      { value: 'PARENT', label: 'Parent' },
-    ];
-  }, [session?.role]);
+  const isSuperAdmin = session?.role === 'SUPER_ADMIN';
 
   useEffect(() => {
-    if (!session?.role) return;
-    setFilters((prev) => {
-      if (session.role === 'TEACHER') {
-        return prev.actorRole === 'TEACHER' ? prev : { ...prev, actorRole: 'TEACHER', page: 1 };
-      }
-      if (session.role === 'SCHOOL_ADMIN') {
-        if (prev.actorRole && !['SCHOOL_ADMIN', 'TEACHER'].includes(prev.actorRole)) {
-          return { ...prev, actorRole: '', page: 1 };
-        }
-      }
-      return prev;
-    });
+    if (session?.role === 'TEACHER') {
+      setFilters((current) => ({ ...current, actorRole: 'TEACHER' }));
+    }
   }, [session?.role]);
 
-  const { data } = useQuery({
-    queryKey: ['audit-logs', filters],
-    queryFn: () =>
-      listAuditLogs({
-        entityType: filters.entityType || undefined,
-        actorRole: filters.actorRole || undefined,
-        action: filters.action || undefined,
-        page: filters.page,
-      }),
+  const queryParams = useMemo(
+    () => ({
+      page: filters.page,
+      limit: filters.limit,
+      search: filters.search.trim() || undefined,
+      action: filters.action || undefined,
+      event: filters.action || undefined,
+      severity: isSuperAdmin ? filters.severity || undefined : undefined,
+      schoolId: isSuperAdmin ? filters.schoolId || undefined : undefined,
+      actorRole: filters.actorRole || undefined,
+      targetType: filters.targetType || undefined,
+      entityType: filters.targetType || undefined,
+      targetId: filters.targetId || undefined,
+      entityId: filters.targetId || undefined,
+      ipAddress: isSuperAdmin ? filters.ipAddress || undefined : undefined,
+      dateFrom: filters.dateFrom || undefined,
+      dateTo: filters.dateTo || undefined,
+    }),
+    [filters, isSuperAdmin],
+  );
+
+  const {
+    data: logs,
+    isLoading: logsLoading,
+    isError: logsError,
+    refetch,
+  } = useQuery({
+    queryKey: ['audit-logs-advanced', isSuperAdmin, queryParams],
+    queryFn: () => (isSuperAdmin ? getAuditLogs(queryParams) : listAuditLogs(queryParams)),
+    enabled: Boolean(session?.role),
     refetchOnWindowFocus: false,
-    refetchOnMount: false,
+    staleTime: 30_000,
+  });
+
+  const { data: summary, isLoading: summaryLoading } = useQuery({
+    queryKey: ['audit-summary'],
+    queryFn: getAuditLogSummary,
+    enabled: isSuperAdmin,
+    refetchOnWindowFocus: false,
+    staleTime: 30_000,
+  });
+
+  const { data: highRisk } = useQuery({
+    queryKey: ['audit-high-risk'],
+    queryFn: () => getHighRiskAuditLogs({ limit: 8 }),
+    enabled: isSuperAdmin,
+    refetchOnWindowFocus: false,
+    staleTime: 30_000,
+  });
+
+  const { data: exportsData } = useQuery({
+    queryKey: ['audit-exports'],
+    queryFn: () => getAuditExports({ limit: 8 }),
+    enabled: isSuperAdmin,
+    refetchOnWindowFocus: false,
+    staleTime: 30_000,
+  });
+
+  const { data: schools } = useQuery({
+    queryKey: ['audit-schools'],
+    queryFn: () => listSchools({ limit: 100 }),
+    enabled: isSuperAdmin,
+    refetchOnWindowFocus: false,
     staleTime: 60_000,
   });
 
+  const { data: selectedLog, isLoading: selectedLogLoading } = useQuery({
+    queryKey: ['audit-log-detail', selectedLogId],
+    queryFn: () => getAuditLogById(selectedLogId as string),
+    enabled: Boolean(selectedLogId) && isSuperAdmin,
+    staleTime: 15_000,
+  });
+
+  const exportMutation = useMutation({
+    mutationFn: () => {
+      if (!exportForm.reason.trim()) throw new Error('Export reason is required.');
+      if (!exportForm.confirmed) throw new Error('Confirm that you understand audit export sensitivity.');
+      return requestAuditExport({
+        format: exportForm.format,
+        filters: {
+          dateFrom: exportForm.dateFrom,
+          dateTo: exportForm.dateTo,
+          action: exportForm.action || undefined,
+          event: exportForm.action || undefined,
+          severity: exportForm.severity || undefined,
+          schoolId: exportForm.schoolId || undefined,
+        },
+        reason: exportForm.reason.trim(),
+      });
+    },
+    onSuccess: (result) => {
+      notify.success('Audit export created', result.message);
+      setExportOpen(false);
+      setExportForm({ format: 'csv', ...defaultExportDates(), action: '', severity: '', schoolId: '', reason: '', confirmed: false });
+      queryClient.invalidateQueries({ queryKey: ['audit-exports'] });
+      queryClient.invalidateQueries({ queryKey: ['audit-summary'] });
+    },
+    onError: (error: any) => {
+      notify.error('Export failed', error?.response?.data?.error?.message || error?.message || 'Unable to export audit logs.');
+    },
+  });
+
+  const downloadMutation = useMutation({
+    mutationFn: async (item: AuditExportItem) => {
+      const blob = await downloadAuditExport(item.id);
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `audit-export-${item.id}.${item.format}`;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(url);
+    },
+    onSuccess: () => notify.success('Download started', 'The audit export download has started.'),
+    onError: (error: any) => notify.error('Download failed', error?.response?.data?.error?.message || 'Download not available yet.'),
+  });
+
+  const setFilter = (key: keyof typeof filters, value: string | number) => {
+    setFilters((current) => ({ ...current, [key]: value, ...(key === 'page' ? {} : { page: 1 }) }));
+  };
+
+  if (isSessionLoading || !session?.role) {
+    return <FullPageLoader label="Loading audit logs..." />;
+  }
+
+  const rows = logs?.items ?? [];
+  const pagination = logs?.pagination ?? {
+    page: logs?.page ?? filters.page,
+    limit: logs?.limit ?? filters.limit,
+    total: logs?.total ?? 0,
+    totalPages: logs?.pages ?? 1,
+  };
+
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50/30 to-purple-50/40">
-      <div className="mx-auto max-w-7xl pr-6 pb-12">
+    <div className="space-y-6 pb-12">
+      {(logsLoading || summaryLoading) ? <FullPageLoader label="Loading audit logs..." /> : null}
+      <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
         <PageHeader
           title="Audit Logs"
-          subtitle="Monitor system activities, track user actions, and maintain comprehensive audit trails for compliance."
+          subtitle="Inspect platform activity, security events, and administrative actions."
         />
-        {/* Audit Logs Table */}
-        <section className="rounded-2xl bg-white p-6 shadow-lg ring-1 ring-gray-200">
-          <h2 className="mb-6 text-xl font-semibold text-gray-900">Activity Timeline</h2>
-          <div className="mb-6 grid gap-4 md:grid-cols-3">
-            <div>
-              <label className="mb-2 block text-sm font-medium text-gray-700">Entity Type</label>
-              <select
-                value={filters.entityType}
-                onChange={(e) => setFilters({ ...filters, entityType: e.target.value, page: 1 })}
-                className="w-full rounded-xl border border-gray-300 px-4 py-3 text-sm focus:border-gray-500 focus:outline-none focus:ring-2 focus:ring-gray-200"
-              >
-                <option value="">All entities</option>
-                <option value="STUDENT">Student</option>
-                <option value="PARENT">Parent</option>
-                <option value="TEACHER">Teacher</option>
-                <option value="EXAM">Exam</option>
-                <option value="EXAM_PAPER">Exam Paper</option>
-                <option value="MARKS">Marks Upload</option>
-                <option value="MARK">Mark</option>
-                <option value="ATTENDANCE_SESSION">Attendance Session</option>
-                <option value="ATTENDANCE">Attendance Capture</option>
-                <option value="ATTENDANCE_RECORD">Attendance Record</option>
-                <option value="STUDENT_STATUS">Student Status</option>
-                <option value="STUDENT_PARENT">Student-Parent Link</option>
-                <option value="STUDENT_TRANSFER">Student Transfer</option>
-              </select>
-            </div>
-            <div>
-              <label className="mb-2 block text-sm font-medium text-gray-700">User Role</label>
-              <select
-                value={filters.actorRole}
-                onChange={(e) => setFilters({ ...filters, actorRole: e.target.value, page: 1 })}
-                className="w-full rounded-xl border border-gray-300 px-4 py-3 text-sm focus:border-gray-500 focus:outline-none focus:ring-2 focus:ring-gray-200"
-                disabled={session?.role === 'TEACHER'}
-              >
-                <option value="">All roles</option>
-                {roleOptions.map((role) => (
-                  <option key={role.value} value={role.value}>{role.label}</option>
-                ))}
-              </select>
-            </div>
-            <div>
-              <label className="mb-2 block text-sm font-medium text-gray-700">Action</label>
-              <select
-                value={filters.action}
-                onChange={(e) => setFilters({ ...filters, action: e.target.value, page: 1 })}
-                className="w-full rounded-xl border border-gray-300 px-4 py-3 text-sm focus:border-gray-500 focus:outline-none focus:ring-2 focus:ring-gray-200"
-              >
-                <option value="">All actions</option>
-                <option value="CREATE">Create</option>
-                <option value="UPDATE">Update</option>
-                <option value="DELETE">Delete</option>
-                <option value="STATUS_CHANGE">Status Change</option>
-                <option value="LINK">Link</option>
-                <option value="UNLINK">Unlink</option>
-                <option value="REQUEST">Request</option>
-                <option value="ACCEPT">Accept</option>
-                <option value="REJECT">Reject</option>
-                <option value="START">Start</option>
-                <option value="CAPTURE">Capture</option>
-                <option value="CLOSE">Close</option>
-                <option value="OVERRIDE">Override</option>
-                <option value="UPLOAD">Upload</option>
-                <option value="MODERATE">Moderate</option>
-                <option value="REVALUATION_REQUEST">Revaluation Request</option>
-                <option value="APPROVE">Approve</option>
-              </select>
-            </div>
+        <div className="flex gap-2">
+          <button
+            type="button"
+            onClick={() => refetch()}
+            className="rounded-xl border border-[var(--shell-border)] bg-[var(--shell-card)] px-4 py-2 text-sm font-semibold text-[var(--shell-text)] shadow-sm hover:bg-[var(--shell-hover)]"
+          >
+            Refresh
+          </button>
+          {isSuperAdmin ? (
+            <button
+              type="button"
+              onClick={() => setExportOpen(true)}
+              className="rounded-xl bg-blue-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-blue-700"
+            >
+              Export
+            </button>
+          ) : null}
+        </div>
+      </div>
+
+      {isSuperAdmin ? (
+        <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-6">
+          <StatCard label="Total" value={summary?.total ?? 0} helper="All audit logs" />
+          <StatCard label="Today" value={summary?.today ?? 0} helper="Events today" />
+          <StatCard label="High Risk" value={summary?.highRiskToday ?? 0} helper="High or critical today" />
+          <StatCard label="Failed Logins" value={summary?.failedLoginsToday ?? 0} helper="Login failures today" />
+          <StatCard label="Admin Actions" value={summary?.adminActionsToday ?? 0} helper="Platform actions today" />
+          <StatCard label="Exports" value={summary?.exportsToday ?? 0} helper="Audit exports today" />
+        </section>
+      ) : null}
+
+      <section className="rounded-2xl border border-[var(--shell-border)] bg-[var(--shell-card)] p-5 shadow-sm">
+        <div className="grid gap-3 lg:grid-cols-6">
+          <label className="lg:col-span-2">
+            <span className="text-xs font-semibold uppercase tracking-[0.14em] text-[var(--shell-muted)]">Search</span>
+            <input
+              value={filters.search}
+              onChange={(event) => setFilter('search', event.target.value)}
+              placeholder="Event, actor, target"
+              className="mt-1 w-full rounded-xl border border-[var(--shell-border)] bg-[var(--shell-subtle)] px-3 py-2 text-sm text-[var(--shell-text)] outline-none focus:ring-2 focus:ring-blue-500"
+            />
+          </label>
+          <FilterInput label="Event" value={filters.action} onChange={(value) => setFilter('action', value)} placeholder="LOGIN_FAILED" />
+          <FilterSelect label="Role" value={filters.actorRole} onChange={(value) => setFilter('actorRole', value)} disabled={session.role === 'TEACHER'}>
+            <option value="">All roles</option>
+            {roleOptions.map((role) => (
+              <option key={role} value={role}>{formatLabel(role)}</option>
+            ))}
+          </FilterSelect>
+          {isSuperAdmin ? (
+            <FilterSelect label="Severity" value={filters.severity} onChange={(value) => setFilter('severity', value)}>
+              <option value="">All severities</option>
+              {severityOptions.map((severity) => (
+                <option key={severity} value={severity}>{formatLabel(severity)}</option>
+              ))}
+            </FilterSelect>
+          ) : null}
+          <FilterInput label="Target Type" value={filters.targetType} onChange={(value) => setFilter('targetType', value)} placeholder="USER" />
+          {isSuperAdmin ? (
+            <FilterSelect label="School" value={filters.schoolId} onChange={(value) => setFilter('schoolId', value)}>
+              <option value="">All schools</option>
+              {(schools?.items ?? []).map((school) => (
+                <option key={school.id} value={school.id}>{school.name} ({school.code})</option>
+              ))}
+            </FilterSelect>
+          ) : null}
+          {isSuperAdmin ? <FilterInput label="IP Address" value={filters.ipAddress} onChange={(value) => setFilter('ipAddress', value)} placeholder="103." /> : null}
+          <FilterInput label="Date From" type="date" value={filters.dateFrom} onChange={(value) => setFilter('dateFrom', value)} />
+          <FilterInput label="Date To" type="date" value={filters.dateTo} onChange={(value) => setFilter('dateTo', value)} />
+        </div>
+      </section>
+
+      <section className="overflow-hidden rounded-2xl border border-[var(--shell-border)] bg-[var(--shell-card)] shadow-sm">
+        <div className="flex flex-col gap-3 border-b border-[var(--shell-border)] px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <h2 className="text-lg font-semibold text-[var(--shell-text)]">Activity Timeline</h2>
+            <p className="text-sm text-[var(--shell-muted)]">{pagination.total} records found</p>
           </div>
-          <div className="overflow-hidden rounded-xl border border-gray-200">
-            <table className="w-full">
-              <thead className="bg-gray-50">
+          <FilterSelect label="Rows" value={String(filters.limit)} onChange={(value) => setFilter('limit', Number(value))}>
+            {[10, 20, 50, 100].map((size) => <option key={size} value={size}>{size}</option>)}
+          </FilterSelect>
+        </div>
+
+        {logsError ? (
+          <div className="p-8 text-center">
+            <p className="text-sm font-semibold text-rose-600">Unable to load audit logs.</p>
+            <button type="button" onClick={() => refetch()} className="mt-3 rounded-xl bg-blue-600 px-4 py-2 text-sm font-semibold text-white">Retry</button>
+          </div>
+        ) : rows.length === 0 && !logsLoading ? (
+          <div className="p-10 text-center text-sm text-[var(--shell-muted)]">No audit logs found.</div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="min-w-full divide-y divide-[var(--shell-border)] text-sm">
+              <thead className="bg-[var(--shell-subtle)] text-left text-xs font-semibold uppercase tracking-[0.14em] text-[var(--shell-muted)]">
                 <tr>
-                  <th className="px-6 py-4 text-left text-xs font-medium uppercase tracking-wider text-gray-500">Timestamp</th>
-                  <th className="px-6 py-4 text-left text-xs font-medium uppercase tracking-wider text-gray-500">User</th>
-                  <th className="px-6 py-4 text-left text-xs font-medium uppercase tracking-wider text-gray-500">Entity</th>
-                  <th className="px-6 py-4 text-left text-xs font-medium uppercase tracking-wider text-gray-500">Action</th>
+                  <th className="px-5 py-3">Time</th>
+                  <th className="px-5 py-3">Event</th>
+                  <th className="px-5 py-3">Actor</th>
+                  <th className="px-5 py-3">School</th>
+                  <th className="px-5 py-3">Target</th>
+                  <th className="px-5 py-3">IP</th>
+                  <th className="px-5 py-3">Summary</th>
+                  <th className="px-5 py-3 text-right">Action</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-gray-200 bg-white">
-                {data?.items.map((log) => (
-                  <tr key={log.id} className="hover:bg-gray-50">
-                    <td className="px-6 py-4 text-sm text-gray-900">
-                      <div className="flex items-center">
-                        <div className="flex h-8 w-8 items-center justify-center rounded-full bg-gray-100">
-                          <svg className="h-4 w-4 text-gray-600" fill="currentColor" viewBox="0 0 20 20">
-                            <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-12a1 1 0 10-2 0v4a1 1 0 00.293.707l2.828 2.829a1 1 0 101.415-1.415L11 9.586V6z" clipRule="evenodd" />
-                          </svg>
-                        </div>
-                        <div className="ml-3">
-                          <div className="text-sm font-medium text-gray-900">
-                            {new Date(log.createdAt).toLocaleDateString()}
-                          </div>
-                          <div className="text-xs text-gray-500">
-                            {new Date(log.createdAt).toLocaleTimeString()}
-                          </div>
-                        </div>
-                      </div>
-                    </td>
-                    <td className="px-6 py-4 text-sm text-gray-900">
-                      <Link
-                        href={
-                          log.actor?.teacherProfile?.id
-                            ? `/dashboard/teachers/${log.actor.teacherProfile.id}`
-                            : log.actor?.parentProfiles?.[0]?.id
-                              ? `/dashboard/parents/${log.actor.parentProfiles[0].id}`
-                              : log.entityType === 'STUDENT'
-                                ? `/dashboard/students/${log.entityId}`
-                                : `/dashboard/users/${log.actorId}`
-                        }
-                        className="font-medium text-gray-900 hover:text-gray-600 transition-colors"
-                      >
-                        {log.actor?.teacherProfile
-                          ? `${log.actor.teacherProfile.firstName} ${log.actor.teacherProfile.lastName}`
-                          : log.actor?.parentProfiles?.[0]
-                            ? `${log.actor.parentProfiles[0].firstName} ${log.actor.parentProfiles[0].lastName}`
-                            : log.actor?.email ?? log.actorId}
-                      </Link>
-                      <div className="text-xs text-gray-500">
-                        <span className={`inline-flex rounded-full px-2 py-1 text-xs font-semibold ${
-                          log.actorRole === 'SUPER_ADMIN' ? 'bg-red-100 text-red-800' :
-                          log.actorRole === 'SCHOOL_ADMIN' ? 'bg-blue-100 text-blue-800' :
-                          log.actorRole === 'TEACHER' ? 'bg-purple-100 text-purple-800' :
-                          'bg-green-100 text-green-800'
-                        }`}>
-                          {log.actorRole.replace('_', ' ')}
-                        </span>
-                      </div>
-                    </td>
-                    <td className="px-6 py-4 text-sm text-gray-500">
-                      <span className="inline-flex rounded-full bg-gray-100 px-2 py-1 text-xs font-semibold text-gray-800">
-                        {log.entityType.replace('_', ' ')}
-                      </span>
-                    </td>
-                    <td className="px-6 py-4 text-sm text-gray-500">
-                      <span className={`inline-flex rounded-full px-2 py-1 text-xs font-semibold ${
-                        log.action === 'CREATE' ? 'bg-green-100 text-green-800' :
-                        log.action === 'UPDATE' ? 'bg-blue-100 text-blue-800' :
-                        log.action === 'DELETE' ? 'bg-red-100 text-red-800' :
-                        'bg-amber-100 text-amber-800'
-                      }`}>
-                        {log.action.replace('_', ' ')}
-                      </span>
-                    </td>
-                  </tr>
+              <tbody className="divide-y divide-[var(--shell-border)]">
+                {rows.map((log) => (
+                  <AuditRow key={log.id} log={log} isSuperAdmin={isSuperAdmin} onView={() => setSelectedLogId(log.id)} />
                 ))}
-                {!data?.items.length && (
-                  <tr>
-                    <td colSpan={4} className="px-6 py-12 text-center">
-                      <div className="flex flex-col items-center">
-                        <svg className="h-12 w-12 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                        </svg>
-                        <h3 className="mt-2 text-sm font-medium text-gray-900">No audit logs found</h3>
-                        <p className="mt-1 text-sm text-gray-500">Try adjusting your filters to see more results.</p>
-                      </div>
-                    </td>
-                  </tr>
-                )}
               </tbody>
             </table>
           </div>
-          
-          {/* Pagination */}
-          <div className="mt-6 flex items-center justify-between">
-            <div className="text-sm text-gray-700">
-              Page {data?.page ?? filters.page} of {data?.pages ?? 1}
+        )}
+
+        <div className="flex flex-col gap-3 border-t border-[var(--shell-border)] px-5 py-4 text-sm text-[var(--shell-muted)] sm:flex-row sm:items-center sm:justify-between">
+          <span>Page {pagination.page} of {pagination.totalPages}</span>
+          <div className="flex gap-2">
+            <button type="button" disabled={filters.page <= 1} onClick={() => setFilter('page', Math.max(1, filters.page - 1))} className="rounded-lg border border-[var(--shell-border)] px-3 py-1.5 font-semibold disabled:opacity-40">Previous</button>
+            <button type="button" disabled={filters.page >= pagination.totalPages} onClick={() => setFilter('page', filters.page + 1)} className="rounded-lg border border-[var(--shell-border)] px-3 py-1.5 font-semibold disabled:opacity-40">Next</button>
+          </div>
+        </div>
+      </section>
+
+      {isSuperAdmin ? (
+        <section className="grid gap-6 xl:grid-cols-2">
+          <Panel title="High-risk events">
+            {(highRisk?.items ?? []).length === 0 ? (
+              <EmptyText>No high-risk audit events found.</EmptyText>
+            ) : (
+              <div className="space-y-3">
+                {highRisk?.items.map((log) => (
+                  <div key={log.id} className="rounded-xl border border-[var(--shell-border)] bg-[var(--shell-subtle)] p-4">
+                    <div className="flex items-start justify-between gap-3">
+                      <div>
+                        <p className="font-semibold text-[var(--shell-text)]">{formatLabel(log.event ?? log.action)}</p>
+                        <p className="text-xs text-[var(--shell-muted)]">{log.actor?.email ?? 'Unknown actor'} - {formatDateTime(log.createdAt)}</p>
+                      </div>
+                      <Badge className={severityClass(log.severity)}>{formatLabel(log.severity)}</Badge>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </Panel>
+
+          <Panel title="Audit export history">
+            {(exportsData?.items ?? []).length === 0 ? (
+              <EmptyText>No audit exports found.</EmptyText>
+            ) : (
+              <div className="space-y-3">
+                {exportsData?.items.map((item) => (
+                  <div key={item.id} className="rounded-xl border border-[var(--shell-border)] bg-[var(--shell-subtle)] p-4">
+                    <div className="flex items-start justify-between gap-3">
+                      <div>
+                        <p className="font-semibold text-[var(--shell-text)]">{item.format.toUpperCase()} export</p>
+                        <p className="text-xs text-[var(--shell-muted)]">{item.reason ?? 'No reason'} - {formatDateTime(item.createdAt)}</p>
+                        <p className="mt-1 text-xs text-[var(--shell-muted)]">{item.rowCount ?? 0} rows</p>
+                      </div>
+                      <div className="flex flex-col items-end gap-2">
+                        <Badge className={exportStatusClass(item.status)}>{formatLabel(item.status)}</Badge>
+                        <button
+                          type="button"
+                          disabled={!item.downloadAvailable || downloadMutation.isPending}
+                          onClick={() => downloadMutation.mutate(item)}
+                          className="rounded-lg border border-[var(--shell-border)] px-3 py-1.5 text-xs font-semibold text-[var(--shell-text)] disabled:opacity-40"
+                        >
+                          Download
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </Panel>
+        </section>
+      ) : null}
+
+      {selectedLogId ? (
+        <div className="fixed inset-0 z-50 flex justify-end bg-black/40">
+          <button type="button" aria-label="Close audit detail" className="absolute inset-0 cursor-default" onClick={() => setSelectedLogId(null)} />
+          <aside className="relative h-full w-full max-w-3xl overflow-y-auto bg-[var(--shell-card)] p-5 shadow-2xl">
+            <div className="flex items-start justify-between gap-4 border-b border-[var(--shell-border)] pb-4">
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-[0.16em] text-[var(--shell-muted)]">Audit detail</p>
+                <h2 className="mt-1 text-2xl font-bold text-[var(--shell-text)]">{formatLabel(selectedLog?.event ?? selectedLog?.action)}</h2>
+                <p className="text-sm text-[var(--shell-muted)]">{selectedLogId}</p>
+              </div>
+              <button type="button" onClick={() => setSelectedLogId(null)} className="rounded-xl border border-[var(--shell-border)] px-3 py-2 text-sm font-semibold text-[var(--shell-text)]">Close</button>
             </div>
-            <div className="flex gap-2">
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setFilters({ ...filters, page: Math.max(1, filters.page - 1) })}
-                disabled={filters.page <= 1}
-              >
-                Previous
-              </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setFilters({ ...filters, page: (data?.page ?? 1) + 1 })}
-                disabled={(data?.page ?? 1) >= (data?.pages ?? 1)}
-              >
-                Next
-              </Button>
+            {selectedLogLoading || !selectedLog ? (
+              <div className="p-8 text-sm text-[var(--shell-muted)]">Loading detail...</div>
+            ) : (
+              <div className="space-y-5 py-5">
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <InfoBox label="Severity" value={<Badge className={severityClass(selectedLog.severity)}>{formatLabel(selectedLog.severity)}</Badge>} />
+                  <InfoBox label="Time" value={formatDateTime(selectedLog.createdAt)} />
+                  <InfoBox label="Actor" value={selectedLog.actor?.email ?? 'Unknown'} />
+                  <InfoBox label="School" value={selectedLog.schoolName ?? selectedLog.school?.name ?? 'Global'} />
+                  <InfoBox label="Target" value={`${selectedLog.targetType ?? selectedLog.entityType ?? 'N/A'} / ${selectedLog.targetId ?? selectedLog.entityId ?? 'N/A'}`} />
+                  <InfoBox label="IP" value={selectedLog.ipAddress ?? 'N/A'} />
+                </div>
+                <section className="rounded-2xl border border-[var(--shell-border)] p-4">
+                  <h3 className="text-sm font-semibold uppercase tracking-[0.14em] text-[var(--shell-muted)]">Sanitized metadata</h3>
+                  <pre className="mt-3 max-h-[420px] overflow-auto rounded-xl bg-[var(--shell-subtle)] p-4 text-xs text-[var(--shell-text)]">
+                    {JSON.stringify(selectedLog.metadata ?? {}, null, 2)}
+                  </pre>
+                </section>
+              </div>
+            )}
+          </aside>
+        </div>
+      ) : null}
+
+      {exportOpen ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/45 px-4">
+          <div className="w-full max-w-xl rounded-2xl border border-[var(--shell-border)] bg-[var(--shell-card)] p-5 shadow-2xl">
+            <div className="flex items-start justify-between gap-4 border-b border-[var(--shell-border)] pb-4">
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-[0.16em] text-[var(--shell-muted)]">Audit export</p>
+                <h2 className="mt-1 text-xl font-bold text-[var(--shell-text)]">Create safe audit export</h2>
+              </div>
+              <button type="button" onClick={() => setExportOpen(false)} className="rounded-xl border border-[var(--shell-border)] px-3 py-2 text-sm font-semibold text-[var(--shell-text)]">Close</button>
+            </div>
+            <div className="mt-4 grid gap-3 sm:grid-cols-2">
+              <FilterSelect label="Format" value={exportForm.format} onChange={(value) => setExportForm({ ...exportForm, format: value as 'csv' | 'json' })}>
+                <option value="csv">CSV</option>
+                <option value="json">JSON</option>
+              </FilterSelect>
+              <FilterInput label="Event" value={exportForm.action} onChange={(value) => setExportForm({ ...exportForm, action: value })} placeholder="LOGIN_FAILED" />
+              <FilterInput label="Date From" type="date" value={exportForm.dateFrom} onChange={(value) => setExportForm({ ...exportForm, dateFrom: value })} />
+              <FilterInput label="Date To" type="date" value={exportForm.dateTo} onChange={(value) => setExportForm({ ...exportForm, dateTo: value })} />
+              <FilterSelect label="Severity" value={exportForm.severity} onChange={(value) => setExportForm({ ...exportForm, severity: value })}>
+                <option value="">Any severity</option>
+                {severityOptions.map((severity) => <option key={severity} value={severity}>{formatLabel(severity)}</option>)}
+              </FilterSelect>
+              <FilterSelect label="School" value={exportForm.schoolId} onChange={(value) => setExportForm({ ...exportForm, schoolId: value })}>
+                <option value="">All schools</option>
+                {(schools?.items ?? []).map((school) => <option key={school.id} value={school.id}>{school.name}</option>)}
+              </FilterSelect>
+              <label className="sm:col-span-2">
+                <span className="text-xs font-semibold uppercase tracking-[0.14em] text-[var(--shell-muted)]">Reason</span>
+                <textarea value={exportForm.reason} onChange={(event) => setExportForm({ ...exportForm, reason: event.target.value })} rows={3} className="mt-1 w-full rounded-xl border border-[var(--shell-border)] bg-[var(--shell-subtle)] px-3 py-2 text-sm text-[var(--shell-text)]" />
+              </label>
+              <label className="sm:col-span-2 rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
+                <input type="checkbox" checked={exportForm.confirmed} onChange={(event) => setExportForm({ ...exportForm, confirmed: event.target.checked })} className="mr-2" />
+                I understand audit exports may contain sensitive operational information.
+              </label>
+            </div>
+            <div className="mt-5 flex justify-end gap-2 border-t border-[var(--shell-border)] pt-4">
+              <button type="button" onClick={() => setExportOpen(false)} className="rounded-xl border border-[var(--shell-border)] px-4 py-2 text-sm font-semibold text-[var(--shell-text)]">Cancel</button>
+              <button type="button" disabled={exportMutation.isPending} onClick={() => exportMutation.mutate()} className="rounded-xl bg-blue-600 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50">
+                {exportMutation.isPending ? 'Exporting...' : 'Create Export'}
+              </button>
             </div>
           </div>
-        </section>
-      </div>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+function AuditRow({ log, isSuperAdmin, onView }: { log: AuditLogItem; isSuperAdmin: boolean; onView: () => void }) {
+  const event = log.event ?? log.action;
+  const targetType = log.targetType ?? log.entityType;
+  const targetId = log.targetId ?? log.entityId;
+  return (
+    <tr className="hover:bg-[var(--shell-hover)]">
+      <td className="px-5 py-4 text-[var(--shell-muted)]">{formatDateTime(log.createdAt)}</td>
+      <td className="px-5 py-4">
+        <div className="font-semibold text-[var(--shell-text)]">{formatLabel(event)}</div>
+        {isSuperAdmin ? <Badge className={severityClass(log.severity)}>{formatLabel(log.severity)}</Badge> : null}
+      </td>
+      <td className="px-5 py-4">
+        <div className="font-semibold text-[var(--shell-text)]">{log.actor?.name ?? log.actor?.email ?? log.actorId ?? 'Unknown'}</div>
+        <div className="text-xs text-[var(--shell-muted)]">{formatLabel(log.actor?.role ?? log.actorRole)}</div>
+      </td>
+      <td className="px-5 py-4 text-[var(--shell-muted)]">{log.schoolName ?? 'Global'}</td>
+      <td className="px-5 py-4 text-[var(--shell-muted)]">{targetType ?? 'N/A'} / {targetId ?? 'N/A'}</td>
+      <td className="px-5 py-4 text-[var(--shell-muted)]">{log.ipAddress ?? 'N/A'}</td>
+      <td className="max-w-[260px] truncate px-5 py-4 text-[var(--shell-muted)]">{log.metadataSummary ?? 'N/A'}</td>
+      <td className="px-5 py-4 text-right">
+        {isSuperAdmin ? (
+          <button type="button" onClick={onView} className="rounded-lg border border-[var(--shell-border)] px-3 py-1.5 text-xs font-semibold text-[var(--shell-text)] hover:bg-[var(--shell-hover)]">View</button>
+        ) : (
+          <span className="text-xs text-[var(--shell-muted)]">Scoped</span>
+        )}
+      </td>
+    </tr>
+  );
+}
+
+function FilterInput({ label, value, onChange, placeholder, type = 'text' }: { label: string; value: string; onChange: (value: string) => void; placeholder?: string; type?: string }) {
+  return (
+    <label>
+      <span className="text-xs font-semibold uppercase tracking-[0.14em] text-[var(--shell-muted)]">{label}</span>
+      <input type={type} value={value} onChange={(event) => onChange(event.target.value)} placeholder={placeholder} className="mt-1 w-full rounded-xl border border-[var(--shell-border)] bg-[var(--shell-subtle)] px-3 py-2 text-sm text-[var(--shell-text)] outline-none focus:ring-2 focus:ring-blue-500" />
+    </label>
+  );
+}
+
+function FilterSelect({ label, value, onChange, children, disabled = false }: { label: string; value: string; onChange: (value: string) => void; children: ReactNode; disabled?: boolean }) {
+  return (
+    <label>
+      <span className="text-xs font-semibold uppercase tracking-[0.14em] text-[var(--shell-muted)]">{label}</span>
+      <select value={value} onChange={(event) => onChange(event.target.value)} disabled={disabled} className="mt-1 w-full rounded-xl border border-[var(--shell-border)] bg-[var(--shell-subtle)] px-3 py-2 text-sm text-[var(--shell-text)] outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-60">
+        {children}
+      </select>
+    </label>
+  );
+}
+
+function Panel({ title, children }: { title: string; children: ReactNode }) {
+  return (
+    <section className="rounded-2xl border border-[var(--shell-border)] bg-[var(--shell-card)] p-5 shadow-sm">
+      <h2 className="text-lg font-semibold text-[var(--shell-text)]">{title}</h2>
+      <div className="mt-4">{children}</div>
+    </section>
+  );
+}
+
+function EmptyText({ children }: { children: ReactNode }) {
+  return <p className="rounded-xl border border-dashed border-[var(--shell-border)] p-6 text-center text-sm text-[var(--shell-muted)]">{children}</p>;
+}
+
+function InfoBox({ label, value }: { label: string; value: ReactNode }) {
+  return (
+    <div className="rounded-xl bg-[var(--shell-subtle)] p-4">
+      <p className="text-xs font-semibold uppercase tracking-[0.14em] text-[var(--shell-muted)]">{label}</p>
+      <div className="mt-1 text-sm font-semibold text-[var(--shell-text)]">{value}</div>
     </div>
   );
 }

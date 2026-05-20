@@ -180,6 +180,13 @@ export const verifyOtpApi = async (req: Request, res: Response) => {
     // OTP login must still succeed if audit logging is unavailable.
   }
 
+  res.cookie('access_token', accessToken, {
+    httpOnly: true,
+    sameSite: 'lax',
+    secure: env.NODE_ENV === 'production',
+    path: '/',
+    maxAge: 15 * 60 * 1000,
+  });
   res.cookie('refresh_token', refreshToken, {
     httpOnly: true,
     sameSite: 'lax',
@@ -190,8 +197,6 @@ export const verifyOtpApi = async (req: Request, res: Response) => {
 
   res.status(200).json({
     ...result,
-    accessToken,
-    refreshToken,
     tokenType: 'Bearer',
     expiresIn: ACCESS_TOKEN_TTL,
     refreshTokenMaxAge: REFRESH_TOKEN_TTL_SECONDS,

@@ -242,9 +242,9 @@ export default function SecuritySessionsPage() {
   const isBusy = loading || settingsLoading || settingsSaving || Boolean(busySessionId) || logoutAllBusy;
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50/30 to-purple-50/40">
+    <div className="space-y-6">
       {isBusy ? <FullPageLoader label="Updating sessions..." /> : null}
-      <div className="mx-auto max-w-6xl pr-6 pb-12">
+      <div className="mx-auto max-w-6xl space-y-6 pb-12">
         <PageHeader title="Security Sessions" subtitle="Review active devices and revoke refresh sessions." />
 
         <section className="mb-6 rounded-2xl border border-slate-200 bg-white/80 p-6 shadow-sm">

@@ -4,6 +4,17 @@ import axios from 'axios';
 
 const GENERIC_LOGIN_ERROR = 'Invalid login details. Please try again.';
 
+const appendBackendSetCookies = (
+  response: NextResponse,
+  setCookieHeader: string | string[] | undefined,
+) => {
+  if (!setCookieHeader) return;
+  const cookies = Array.isArray(setCookieHeader) ? setCookieHeader : [setCookieHeader];
+  for (const cookie of cookies) {
+    if (cookie) response.headers.append('set-cookie', cookie);
+  }
+};
+
 export async function POST(req: Request) {
   const API_BASE = getApiBase();
   let payload: unknown;
@@ -48,22 +59,8 @@ export async function POST(req: Request) {
       subscriptionRestricted: Boolean(data.subscriptionRestricted),
       user: data.user ?? null,
     });
+    appendBackendSetCookies(nextResponse, response.headers['set-cookie']);
 
-    nextResponse.cookies.set('access_token', data.accessToken, {
-      httpOnly: true,
-      sameSite: 'lax',
-      secure: process.env.NODE_ENV === 'production',
-      path: '/',
-      maxAge: 15 * 60,
-    });
-    const refreshMaxAge = Number(data.refreshTokenMaxAge);
-    nextResponse.cookies.set('refresh_token', data.refreshToken, {
-      httpOnly: true,
-      sameSite: 'lax',
-      secure: process.env.NODE_ENV === 'production',
-      path: '/',
-      ...(Number.isFinite(refreshMaxAge) && refreshMaxAge > 0 ? { maxAge: refreshMaxAge } : {}),
-    });
     if (data.mustChangePassword) {
       nextResponse.cookies.set('must_change_password', '1', {
         httpOnly: true,

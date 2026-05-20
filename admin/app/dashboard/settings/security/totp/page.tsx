@@ -51,9 +51,9 @@ export default function TotpSettingsPage() {
 
   if (!settings) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50/30 to-purple-50/40">
+      <div className="space-y-6">
         {busy ? <FullPageLoader label="Loading authenticator settings..." /> : null}
-        <div className="mx-auto max-w-5xl pr-6 pb-12">
+        <div className="mx-auto max-w-5xl space-y-6 pb-12">
           <PageHeader title="Authenticator App" subtitle="Checking two-step verification settings." />
           <div className="mb-5">
             <Link href="/dashboard/settings/security" className="text-sm font-semibold text-blue-700 hover:text-blue-800">
@@ -72,8 +72,8 @@ export default function TotpSettingsPage() {
 
   if (settings && (!settings.twoStepEnabled || !settings.authenticatorAppEnabled)) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50/30 to-purple-50/40">
-        <div className="mx-auto max-w-5xl pr-6 pb-12">
+      <div className="space-y-6">
+        <div className="mx-auto max-w-5xl space-y-6 pb-12">
           <PageHeader title="Authenticator App" subtitle="Two-step verification is currently disabled." />
           <div className="mb-5">
             <Link href="/dashboard/settings/security" className="text-sm font-semibold text-blue-700 hover:text-blue-800">
@@ -151,9 +151,9 @@ export default function TotpSettingsPage() {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50/30 to-purple-50/40">
+    <div className="space-y-6">
       {busy ? <FullPageLoader label="Updating authenticator settings..." /> : null}
-      <div className="mx-auto max-w-5xl pr-6 pb-12">
+      <div className="mx-auto max-w-5xl space-y-6 pb-12">
         <PageHeader title="Authenticator App" subtitle="Add app-based verification and one-time backup codes." />
 
         <div className="mb-5">

@@ -180,10 +180,9 @@ export const resolveUploadUrl = (value?: string | null) => {
     const stripped = value.replace(/^s3:\/\//, '');
     const [bucket, ...rest] = stripped.split('/');
     const key = rest.join('/');
-    const base = env.apiBaseUrl.replace(/\/api\/v1\/?$/, '');
     const params = new URLSearchParams({ key });
     if (bucket) params.set('bucket', bucket);
-    return `${base}/api/v1/uploads/signed?${params.toString()}`;
+    return `/api/proxy/uploads/signed?${params.toString()}`;
   }
   const base = env.apiBaseUrl.replace(/\/api\/v1\/?$/, '');
   const url = value.startsWith('/') ? `${base}${value}` : `${base}/${value}`;

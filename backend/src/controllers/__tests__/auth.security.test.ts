@@ -243,6 +243,13 @@ const patchPrisma = () => {
   patchMethod(prisma.subscriptionPlanPermission as any, 'findMany', async () => []);
   patchMethod(prisma.employeeRolePermission as any, 'findMany', async () => []);
   patchMethod(prisma.employeeUserPermission as any, 'findMany', async () => []);
+  patchMethod(prisma.configEntry as any, 'findUnique', async () => null);
+  patchMethod(prisma.configEntry as any, 'upsert', async ({ create, update }: any) => ({
+    id: 'auth-security-config',
+    key: create?.key ?? 'auth.security',
+    value: update?.value ?? create?.value ?? {},
+    version: 1,
+  }));
   patchMethod(prisma.teacherProfile as any, 'findFirst', async () => null);
   patchMethod(prisma.parentProfile as any, 'findMany', async () => []);
   patchMethod(prisma.studentParent as any, 'findMany', async () => []);
@@ -557,10 +564,12 @@ test('normal user without 2FA can login normally and creates a refresh session',
 
   assert.equal(res.statusCode, 200);
   assert.equal((res.body as any).mfaRequired, undefined);
-  assert.equal(typeof (res.body as any).accessToken, 'string');
+  assert.equal((res.body as any).accessToken, undefined);
+  assert.equal((res.body as any).refreshToken, undefined);
   assert.equal((res.body as any).user.email, EMAIL);
   assert.equal((res.body as any).user.schoolId, SCHOOL_A_ID);
   assert.equal(refreshSessions.size, 1);
+  assert.ok(res.cookies.access_token.value);
   assert.ok(res.cookies.refresh_token.value);
   assert.equal(mfaChallenges.size, 0);
 });
@@ -969,10 +978,15 @@ test('user from school A cannot login to school B', async () => {
 
 test('remember me does not store password in localStorage', () => {
   const loginPage = fs.readFileSync(path.resolve(process.cwd(), '../admin/app/login/page.tsx'), 'utf8');
-  const rememberStorageWrites = loginPage.match(/localStorage\.setItem\(\s*'login\.remember'[\s\S]{0,900}/g) ?? [];
+  const rememberStart = loginPage.indexOf('const safeRememberedLogin');
+  const rememberEnd = loginPage.indexOf('const handleRememberMeChange');
+  const rememberLogic = rememberStart >= 0 && rememberEnd > rememberStart
+    ? loginPage.slice(rememberStart, rememberEnd)
+    : '';
 
-  assert.ok(rememberStorageWrites.length > 0);
-  assert.equal(rememberStorageWrites.some((write) => /password\s*:/.test(write)), false);
+  assert.ok(rememberLogic.includes('localStorage.setItem('));
+  assert.ok(rememberLogic.includes('rememberStorageKey'));
+  assert.equal(/password\s*:|accessToken|refreshToken/.test(rememberLogic), false);
   assert.equal(/parsed\.password|setPassword\(\s*parsed/.test(loginPage), false);
 });
 
@@ -991,6 +1005,29 @@ test('logout revokes the current refresh session', async () => {
   assert.equal(logoutRes.statusCode, 200);
   assert.equal(Array.from(refreshSessions.values())[0].revokedAt instanceof Date, true);
   assert.ok(logoutRes.clearedCookies.includes('refresh_token'));
+});
+
+test('refresh rotates session and returns tokens only as httpOnly cookies', async () => {
+  const loginRes = await invoke(login, loginRequest());
+  const refresh = loginRes.cookies.refresh_token.value;
+
+  const refreshRes = await invoke(
+    refreshToken,
+    createRequest({
+      body: {},
+      cookie: `refresh_token=${encodeURIComponent(refresh)}`,
+      originalUrl: '/api/v1/auth/refresh',
+    }),
+  );
+
+  assert.equal(refreshRes.statusCode, 200);
+  assert.equal((refreshRes.body as any).accessToken, undefined);
+  assert.equal((refreshRes.body as any).refreshToken, undefined);
+  assert.equal((refreshRes.body as any).tokenType, 'Bearer');
+  assert.ok(refreshRes.cookies.access_token.value);
+  assert.ok(refreshRes.cookies.refresh_token.value);
+  assert.equal(refreshSessions.size, 2);
+  assert.equal(Array.from(refreshSessions.values())[0].revokedAt instanceof Date, true);
 });
 
 test('revoked refresh token cannot be used', async () => {

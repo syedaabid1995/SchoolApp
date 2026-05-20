@@ -1,3 +1,5 @@
+import { api } from '../lib/api';
+
 export type LoginBranding = {
   appName: string;
   schoolName?: string;
@@ -184,3 +186,59 @@ export const getLoginBranding = async (schoolCode?: string): Promise<LoginBrandi
     return defaultLoginBranding;
   }
 };
+
+type ApiEnvelope<T> = T | { success?: boolean; data: T };
+
+const unwrapData = <T>(payload: ApiEnvelope<T>): T => {
+  if (
+    payload &&
+    typeof payload === 'object' &&
+    'data' in payload &&
+    (payload as { data?: T }).data !== undefined
+  ) {
+    return (payload as { data: T }).data;
+  }
+  return payload as T;
+};
+
+const cleanParams = (params?: { schoolId?: string }) => {
+  if (!params?.schoolId) return undefined;
+  return { schoolId: params.schoolId };
+};
+
+export const getLoginBrandingSettings = async (params?: { schoolId?: string }) => {
+  const { data } = await api.get<ApiEnvelope<LoginBranding>>('/themes/login-branding', {
+    params: cleanParams(params),
+  });
+  return unwrapData(data);
+};
+
+export const updateLoginBranding = async (payload: LoginBranding, params?: { schoolId?: string }) => {
+  const { data } = await api.put<ApiEnvelope<LoginBranding>>('/themes/login-branding', payload, {
+    params: cleanParams(params),
+  });
+  return unwrapData(data);
+};
+
+export const publishLoginBranding = async (params?: { schoolId?: string }) => {
+  const { data } = await api.post<ApiEnvelope<LoginBranding>>('/themes/login-branding/publish', {}, {
+    params: cleanParams(params),
+  });
+  return unwrapData(data);
+};
+
+export const rollbackLoginBranding = async (params?: { schoolId?: string }) => {
+  const { data } = await api.post<ApiEnvelope<LoginBranding>>('/themes/login-branding/rollback', {}, {
+    params: cleanParams(params),
+  });
+  return unwrapData(data);
+};
+
+export const resetLoginBranding = async (params?: { schoolId?: string }) => {
+  const { data } = await api.post<ApiEnvelope<LoginBranding>>('/themes/login-branding/reset', {}, {
+    params: cleanParams(params),
+  });
+  return unwrapData(data);
+};
+
+export const getPublicLoginBranding = getLoginBranding;

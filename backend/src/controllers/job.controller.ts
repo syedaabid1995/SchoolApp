@@ -6,6 +6,10 @@ import { HttpError } from '../middlewares/error.middleware';
 
 const queueEvents = new QueueEvents('import-jobs', { connection: redis });
 
+export const __closeJobQueueEventsForTests = async () => {
+  await queueEvents.close();
+};
+
 export const getJobStatus = async (req: Request, res: Response) => {
   const { queue, id } = req.params;
 

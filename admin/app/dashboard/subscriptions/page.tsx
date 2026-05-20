@@ -1,615 +1,914 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState, type ReactNode } from 'react';
+import { useRouter } from 'next/navigation';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import {
-  listSubscriptionPlans,
-  upsertSubscription,
-  createSubscriptionPlan,
-  updateSubscriptionPlan,
-  deleteSubscriptionPlan,
-  listPlanSchools,
-  getPlanPermissions,
-  updatePlanPermissions,
-} from '../../../services/subscription.service';
-import { useNotify } from '../../../components/NotificationProvider';
 import FullPageLoader from '../../../components/FullPageLoader';
 import PageHeader from '../../../components/PageHeader';
-import Button from '../../../components/Button';
+import { useNotify } from '../../../components/NotificationProvider';
+import { getSession } from '../../../services/auth.service';
+import {
+  assignSchoolPlan,
+  cancelSubscription,
+  downgradeSubscription,
+  extendTrial,
+  getSchoolSubscriptionDetail,
+  getSchoolSubscriptions,
+  getSubscriptionSummary,
+  listSubscriptionPlans,
+  pauseSubscription,
+  recordManualPayment,
+  renewSubscription,
+  resumeSubscription,
+  startTrial,
+  updateSubscriptionLimits,
+  upgradeSubscription,
+  type SchoolSubscriptionListItem,
+  type SubscriptionPlan,
+} from '../../../services/subscription.service';
+
+type LifecycleAction =
+  | 'assign'
+  | 'start-trial'
+  | 'extend-trial'
+  | 'upgrade'
+  | 'downgrade'
+  | 'pause'
+  | 'resume'
+  | 'cancel'
+  | 'renew'
+  | 'limits'
+  | 'manual-payment';
+
+const statusOptions = ['ACTIVE', 'TRIAL', 'PAUSED', 'CANCELLED', 'EXPIRED', 'OVERDUE', 'PENDING'];
+const billingCycles = ['MONTHLY', 'QUARTERLY', 'ANNUAL', 'YEARLY'];
+
+const formatLabel = (value?: string | null) =>
+  (value ?? 'N/A')
+    .toLowerCase()
+    .split('_')
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(' ');
+
+const formatDate = (value?: string | null) => {
+  if (!value) return 'N/A';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return 'N/A';
+  return date.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
+};
+
+const formatDateTime = (value?: string | null) => {
+  if (!value) return 'N/A';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return 'N/A';
+  return date.toLocaleString('en-IN', {
+    day: '2-digit',
+    month: 'short',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  });
+};
+
+const formatCurrency = (value?: number | null, currency = 'INR') =>
+  new Intl.NumberFormat('en-IN', {
+    style: 'currency',
+    currency,
+    maximumFractionDigits: 0,
+  }).format(value ?? 0);
+
+const usagePercent = (used?: number, limit?: number | null) => {
+  if (!limit || limit <= 0) return 0;
+  return Math.min(100, Math.round(((used ?? 0) / limit) * 100));
+};
+
+const statusBadgeClass = (status?: string | null) => {
+  if (status === 'ACTIVE') return 'bg-emerald-50 text-emerald-700 ring-emerald-200';
+  if (status === 'TRIAL') return 'bg-blue-50 text-blue-700 ring-blue-200';
+  if (status === 'PAUSED' || status === 'PENDING_CANCEL') return 'bg-amber-50 text-amber-700 ring-amber-200';
+  if (status === 'CANCELLED') return 'bg-slate-100 text-slate-600 ring-slate-200';
+  if (status === 'EXPIRED' || status === 'OVERDUE') return 'bg-rose-50 text-rose-700 ring-rose-200';
+  return 'bg-violet-50 text-violet-700 ring-violet-200';
+};
+
+function Badge({ children, className }: { children: ReactNode; className: string }) {
+  return <span className={`inline-flex rounded-full px-2.5 py-1 text-xs font-semibold ring-1 ${className}`}>{children}</span>;
+}
+
+function StatCard({ label, value, helper }: { label: string; value: ReactNode; helper: string }) {
+  return (
+    <div className="rounded-2xl border border-[var(--shell-border)] bg-[var(--shell-card)] p-5 shadow-sm">
+      <p className="text-xs font-semibold uppercase tracking-[0.16em] text-[var(--shell-muted)]">{label}</p>
+      <p className="mt-3 text-2xl font-bold text-[var(--shell-text)]">{value}</p>
+      <p className="mt-1 text-sm text-[var(--shell-muted)]">{helper}</p>
+    </div>
+  );
+}
+
+function UsageBar({ label, used, limit }: { label: string; used?: number; limit?: number | null }) {
+  const percent = usagePercent(used, limit);
+  return (
+    <div>
+      <div className="flex items-center justify-between text-xs">
+        <span className="font-semibold text-[var(--shell-text)]">{label}</span>
+        <span className="text-[var(--shell-muted)]">
+          {used ?? 0} / {limit ?? 'N/A'}
+        </span>
+      </div>
+      <div className="mt-2 h-2 rounded-full bg-slate-200">
+        <div
+          className={`h-2 rounded-full ${percent >= 90 ? 'bg-rose-500' : percent >= 70 ? 'bg-amber-500' : 'bg-emerald-500'}`}
+          style={{ width: `${percent}%` }}
+        />
+      </div>
+    </div>
+  );
+}
+
+const initialActionForm = {
+  planId: '',
+  billingCycle: 'MONTHLY',
+  startDate: '',
+  trialDays: 14,
+  extraDays: 7,
+  effectiveDate: 'IMMEDIATE',
+  force: false,
+  cancelAt: 'IMMEDIATE',
+  periodMonths: 1,
+  studentLimit: '',
+  teacherLimit: '',
+  storageLimitMb: '',
+  amount: '',
+  currency: 'INR',
+  method: 'UPI',
+  reference: '',
+  paidAt: new Date().toISOString().slice(0, 10),
+  notes: '',
+  reason: '',
+};
 
 export default function SubscriptionsPage() {
-  const queryClient = useQueryClient();
+  const router = useRouter();
   const notify = useNotify();
-  const [planForm, setPlanForm] = useState({
-    id: '',
-    name: '',
-    priceCents: 0,
-    features: '',
-    studentLimit: 500,
-    teacherLimit: 50,
-    status: 'ACTIVE',
+  const queryClient = useQueryClient();
+  const [selectedSchoolId, setSelectedSchoolId] = useState<string | null>(null);
+  const [actionState, setActionState] = useState<{ action: LifecycleAction; item: SchoolSubscriptionListItem } | null>(null);
+  const [actionForm, setActionForm] = useState(initialActionForm);
+  const [filters, setFilters] = useState({
+    page: 1,
+    limit: 20,
+    search: '',
+    status: '',
+    planId: '',
+    billingCycle: '',
+    trial: '',
+    overdue: '',
   });
-  const [planBlocker, setPlanBlocker] = useState<{
-    open: boolean;
-    planId: string;
-    planName: string;
-    schools: { id: string; name: string; code: string; status: string; subscriptionPlan: string }[];
-    mode: 'disable' | 'delete';
-  }>({ open: false, planId: '', planName: '', schools: [], mode: 'disable' });
-  const [planMoves, setPlanMoves] = useState<Record<string, string>>({});
-  const [planLoading, setPlanLoading] = useState(false);
-  const [permissionEditor, setPermissionEditor] = useState<{
-    open: boolean;
-    planId: string;
-    planName: string;
-  }>({ open: false, planId: '', planName: '' });
-  const [planPermissionCodes, setPlanPermissionCodes] = useState<string[]>([]);
-  const { data: plans } = useQuery({
-    queryKey: ['subscription-plans'],
-    queryFn: () => listSubscriptionPlans(),
-    refetchOnWindowFocus: false,
-    refetchOnMount: false,
+
+  const { data: session, isLoading: isSessionLoading } = useQuery({
+    queryKey: ['session'],
+    queryFn: getSession,
     staleTime: 60_000,
-  });
-
-  const { data: planPermissions, isLoading: permissionsLoading } = useQuery({
-    queryKey: ['subscription-plan-permissions', permissionEditor.planId],
-    queryFn: () => getPlanPermissions(permissionEditor.planId),
-    enabled: Boolean(permissionEditor.planId),
     refetchOnWindowFocus: false,
   });
-
-  const permissionsMutation = useMutation({
-    mutationFn: () => updatePlanPermissions(permissionEditor.planId, planPermissionCodes),
-    onSuccess: () => {
-      notify.success('Plan access updated', 'Navigation access controls saved.');
-      queryClient.invalidateQueries({ queryKey: ['subscription-plan-permissions', permissionEditor.planId] });
-      setPermissionEditor({ open: false, planId: '', planName: '' });
-    },
-    onError: (error: any) => {
-      const message = error?.response?.data?.error?.message || error?.message || 'Failed to update plan access';
-      notify.error('Update failed', message);
-    },
-  });
+  const isSuperAdmin = session?.role === 'SUPER_ADMIN';
 
   useEffect(() => {
-    if (!planPermissions) return;
-    setPlanPermissionCodes(
-      planPermissions.permissions.filter((permission) => permission.enabled).map((permission) => permission.code),
-    );
-  }, [planPermissions]);
+    if (!isSessionLoading && session?.role && !isSuperAdmin) {
+      router.replace('/dashboard');
+    }
+  }, [isSessionLoading, isSuperAdmin, router, session?.role]);
 
-  const planMutation = useMutation({
+  const queryParams = useMemo(() => {
+    const trial = filters.trial === '' ? undefined : filters.trial === 'true';
+    const overdue = filters.overdue === '' ? undefined : filters.overdue === 'true';
+    return {
+      page: filters.page,
+      limit: filters.limit,
+      search: filters.search.trim() || undefined,
+      status: filters.status || undefined,
+      planId: filters.planId || undefined,
+      billingCycle: filters.billingCycle || undefined,
+      trial,
+      overdue,
+    };
+  }, [filters]);
+
+  const { data: summary, isLoading: isSummaryLoading } = useQuery({
+    queryKey: ['subscription-lifecycle-summary'],
+    queryFn: getSubscriptionSummary,
+    enabled: isSuperAdmin,
+    staleTime: 30_000,
+    refetchOnWindowFocus: false,
+  });
+
+  const {
+    data: subscriptions,
+    isLoading: isSubscriptionsLoading,
+    isError: isSubscriptionsError,
+    refetch,
+  } = useQuery({
+    queryKey: ['school-subscriptions', queryParams],
+    queryFn: () => getSchoolSubscriptions(queryParams),
+    enabled: isSuperAdmin,
+    staleTime: 30_000,
+    refetchOnWindowFocus: false,
+  });
+
+  const { data: plans } = useQuery({
+    queryKey: ['subscription-plans'],
+    queryFn: listSubscriptionPlans,
+    enabled: isSuperAdmin,
+    staleTime: 60_000,
+    refetchOnWindowFocus: false,
+  });
+
+  const { data: detail, isLoading: isDetailLoading } = useQuery({
+    queryKey: ['school-subscription-detail', selectedSchoolId],
+    queryFn: () => getSchoolSubscriptionDetail(selectedSchoolId as string),
+    enabled: Boolean(selectedSchoolId) && isSuperAdmin,
+    staleTime: 15_000,
+  });
+
+  const lifecycleMutation = useMutation({
     mutationFn: async () => {
-      if (!planForm.name.trim()) throw new Error('Plan name is required');
-      if (planForm.id) {
-        const updated = await updateSubscriptionPlan(planForm.id, {
-          name: planForm.name.trim(),
-          status: planForm.status,
-          priceCents: Number(planForm.priceCents),
-          features: planForm.features
-            .split(',')
-            .map((item) => item.trim())
-            .filter(Boolean),
-          studentLimit: Number(planForm.studentLimit),
-          teacherLimit: Number(planForm.teacherLimit),
+      if (!actionState) throw new Error('No action selected');
+      const schoolId = actionState.item.schoolId;
+      const reason = actionForm.reason.trim() || null;
+
+      if (['assign', 'start-trial', 'upgrade', 'downgrade'].includes(actionState.action) && !actionForm.planId) {
+        throw new Error('Select a plan.');
+      }
+      if (['pause', 'resume', 'cancel', 'limits'].includes(actionState.action) && !reason) {
+        throw new Error('Reason is required.');
+      }
+
+      if (actionState.action === 'assign') {
+        return assignSchoolPlan(schoolId, {
+          planId: actionForm.planId,
+          billingCycle: actionForm.billingCycle,
+          startDate: actionForm.startDate || undefined,
+          trialDays: Number(actionForm.trialDays) || 0,
+          reason,
         });
-        return { plan: updated, created: false };
       }
-      const created = await createSubscriptionPlan({
-        name: planForm.name.trim(),
-        status: planForm.status,
-        priceCents: Number(planForm.priceCents),
-        features: planForm.features
-          .split(',')
-          .map((item) => item.trim())
-          .filter(Boolean),
-        studentLimit: Number(planForm.studentLimit),
-        teacherLimit: Number(planForm.teacherLimit),
+      if (actionState.action === 'start-trial') {
+        return startTrial(schoolId, {
+          planId: actionForm.planId,
+          trialDays: Number(actionForm.trialDays) || 14,
+          reason,
+        });
+      }
+      if (actionState.action === 'extend-trial') {
+        return extendTrial(schoolId, { extraDays: Number(actionForm.extraDays) || 7, reason });
+      }
+      if (actionState.action === 'upgrade') {
+        return upgradeSubscription(schoolId, {
+          newPlanId: actionForm.planId,
+          effectiveDate: actionForm.effectiveDate,
+          reason,
+        });
+      }
+      if (actionState.action === 'downgrade') {
+        return downgradeSubscription(schoolId, {
+          newPlanId: actionForm.planId,
+          effectiveDate: actionForm.effectiveDate,
+          force: actionForm.force,
+          reason,
+        });
+      }
+      if (actionState.action === 'pause') return pauseSubscription(schoolId, { reason });
+      if (actionState.action === 'resume') return resumeSubscription(schoolId, { reason });
+      if (actionState.action === 'cancel') {
+        return cancelSubscription(schoolId, { cancelAt: actionForm.cancelAt, reason });
+      }
+      if (actionState.action === 'renew') {
+        return renewSubscription(schoolId, { periodMonths: Number(actionForm.periodMonths) || 1, reason });
+      }
+      if (actionState.action === 'limits') {
+        return updateSubscriptionLimits(schoolId, {
+          studentLimit: actionForm.studentLimit ? Number(actionForm.studentLimit) : undefined,
+          teacherLimit: actionForm.teacherLimit ? Number(actionForm.teacherLimit) : undefined,
+          storageLimitMb: actionForm.storageLimitMb ? Number(actionForm.storageLimitMb) : undefined,
+          reason,
+        });
+      }
+      return recordManualPayment(schoolId, {
+        amount: Number(actionForm.amount),
+        currency: actionForm.currency,
+        method: actionForm.method,
+        reference: actionForm.reference || null,
+        paidAt: actionForm.paidAt,
+        notes: actionForm.notes || null,
       });
-      return { plan: created, created: true };
     },
-    onSuccess: (result) => {
-      queryClient.invalidateQueries({ queryKey: ['subscription-plans'] });
-      if (result?.created && result.plan?.id) {
-        setPermissionEditor({ open: true, planId: result.plan.id, planName: result.plan.name });
+    onSuccess: (result: any) => {
+      queryClient.invalidateQueries({ queryKey: ['school-subscriptions'] });
+      queryClient.invalidateQueries({ queryKey: ['subscription-lifecycle-summary'] });
+      if (actionState?.item.schoolId) {
+        queryClient.invalidateQueries({ queryKey: ['school-subscription-detail', actionState.item.schoolId] });
       }
-      setPlanForm({
-        id: '',
-        name: '',
-        priceCents: 0,
-        features: '',
-        studentLimit: 500,
-        teacherLimit: 50,
-        status: 'ACTIVE',
-      });
-      notify.success('Plan saved', 'Subscription plan updated successfully');
+      const message = result?.message || 'Subscription lifecycle action completed.';
+      notify.success('Subscription updated', message);
+      setActionState(null);
+      setActionForm(initialActionForm);
     },
     onError: (error: any) => {
-      const message = error?.response?.data?.error?.message || error?.message || 'Failed to save plan';
-      notify.error('Plan update failed', message);
+      const message = error?.response?.data?.error?.message || error?.message || 'Unable to update subscription.';
+      notify.error('Action failed', message);
     },
   });
 
-  const closeBlocker = () => {
-    setPlanBlocker({ open: false, planId: '', planName: '', schools: [], mode: 'disable' });
-    setPlanMoves({});
-    setPlanLoading(false);
+  const setFilter = (key: keyof typeof filters, value: string | number) => {
+    setFilters((current) => ({
+      ...current,
+      [key]: value,
+      ...(key === 'page' ? {} : { page: 1 }),
+    }));
   };
-  const isBusy = planMutation.isPending || planLoading;
+
+  const openAction = (item: SchoolSubscriptionListItem, action: LifecycleAction) => {
+    setActionState({ item, action });
+    setActionForm({
+      ...initialActionForm,
+      planId: item.planId ?? '',
+      billingCycle: item.billingCycle ?? 'MONTHLY',
+      studentLimit: item.studentLimit ? String(item.studentLimit) : '',
+      teacherLimit: item.teacherLimit ? String(item.teacherLimit) : '',
+    });
+  };
+
+  const activePlans = plans?.filter((plan) => plan.status === 'ACTIVE') ?? [];
+  const rows = subscriptions?.items ?? [];
+  const pagination = subscriptions?.pagination;
+  const totalPages = pagination?.totalPages ?? 1;
+  const busy = isSessionLoading || isSummaryLoading || isSubscriptionsLoading || lifecycleMutation.isPending;
+
+  if (isSessionLoading || !session?.role) {
+    return <FullPageLoader label="Checking access..." />;
+  }
+
+  if (!isSuperAdmin) {
+    return null;
+  }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50/30 to-purple-50/40">
-      {isBusy ? <FullPageLoader label="Updating plans..." /> : null}
-      <div className="mx-auto max-w-7xl pr-6 pb-12">
-        <PageHeader title="Subscription Plans" subtitle="Manage tenant subscription plans and usage limits." />
+    <div className="space-y-6 pb-12">
+      {busy ? <FullPageLoader label="Loading subscriptions..." /> : null}
+      <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+        <PageHeader
+          title="School Subscriptions"
+          subtitle="Manage plans, trials, renewals, limits, and subscription lifecycle for all schools."
+        />
+        <button
+          type="button"
+          onClick={() => refetch()}
+          className="rounded-xl border border-[var(--shell-border)] bg-[var(--shell-card)] px-4 py-2 text-sm font-semibold text-[var(--shell-text)] shadow-sm hover:bg-[var(--shell-hover)]"
+        >
+          Refresh
+        </button>
+      </div>
 
-        {/* Create/Edit Plan Section */}
-        <section className="rounded-2xl bg-white p-6 shadow-lg ring-1 ring-gray-200">
-          <div className="flex items-center gap-3 mb-6">
-            <div className="rounded-full bg-gradient-to-br from-emerald-100 to-teal-100 p-3">
-              <svg className="h-6 w-6 text-emerald-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-              </svg>
-            </div>
-            <div>
-              <h2 className="text-xl font-bold text-gray-900">{planForm.id ? 'Edit Plan' : 'Create Plan'}</h2>
-              <p className="text-sm text-gray-500">Configure subscription plan details and limits</p>
-            </div>
-          </div>
-          <div className="grid gap-4 md:grid-cols-6">
-            <input
-              value={planForm.name}
-              onChange={(e) => setPlanForm({ ...planForm, name: e.target.value })}
-              placeholder="Plan name"
-              className="rounded-xl border border-gray-300 px-4 py-3 text-sm focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-200"
-            />
-            <input
-              type="number"
-              min={0}
-              value={planForm.priceCents / 100}
-              onChange={(e) => setPlanForm({ ...planForm, priceCents: Math.round(Number(e.target.value) * 100) })}
-              placeholder="Amount (₹)"
-              className="rounded-xl border border-gray-300 px-4 py-3 text-sm focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-200"
-            />
-            <input
-              value={planForm.features}
-              onChange={(e) => setPlanForm({ ...planForm, features: e.target.value })}
-              placeholder="Features (comma separated)"
-              className="md:col-span-2 rounded-xl border border-gray-300 px-4 py-3 text-sm focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-200"
-            />
-            <input
-              type="number"
-              min={1}
-              value={planForm.studentLimit}
-              onChange={(e) => setPlanForm({ ...planForm, studentLimit: Number(e.target.value) })}
-              placeholder="Student limit"
-              className="rounded-xl border border-gray-300 px-4 py-3 text-sm focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-200"
-            />
-            <input
-              type="number"
-              min={1}
-              value={planForm.teacherLimit}
-              onChange={(e) => setPlanForm({ ...planForm, teacherLimit: Number(e.target.value) })}
-              placeholder="Teacher limit"
-              className="rounded-xl border border-gray-300 px-4 py-3 text-sm focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-200"
-            />
-            <select
-              value={planForm.status}
-              onChange={(e) => setPlanForm({ ...planForm, status: e.target.value })}
-              className="md:col-span-2 rounded-xl border border-gray-300 px-4 py-3 text-sm focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-200"
-            >
-              <option value="ACTIVE">Active</option>
-              <option value="INACTIVE">Inactive</option>
-            </select>
-            <Button variant="primary" size="sm" onClick={() => planMutation.mutate()} disabled={planMutation.isPending} loading={planMutation.isPending} icon={<svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" /></svg>} iconPosition="left">{planForm.id ? 'Update Plan' : 'Create Plan'}</Button>
-          </div>
-        </section>
+      <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800">
+        Billing gateway integration is not connected. Revenue is estimated from plan prices, and manual payments are recorded as audit history only.
+      </div>
 
-        {/* Plans Directory */}
-        <section className="rounded-2xl bg-white p-6 shadow-lg ring-1 ring-gray-200">
-          <div className="flex items-center gap-3 mb-6">
-            <div className="rounded-full bg-gradient-to-br from-blue-100 to-purple-100 p-3">
-              <svg className="h-6 w-6 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01" />
-              </svg>
-            </div>
-            <div>
-              <h2 className="text-xl font-bold text-gray-900">Plans Directory</h2>
-              <p className="text-sm text-gray-500">{plans?.length ?? 0} plans configured</p>
-            </div>
+      <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        <StatCard label="Active" value={summary?.activeSubscriptions ?? 0} helper="Currently active schools" />
+        <StatCard label="Trial" value={summary?.trialSubscriptions ?? 0} helper="Schools in trial" />
+        <StatCard label="Paused" value={summary?.pausedSubscriptions ?? 0} helper="Temporarily paused" />
+        <StatCard label="Cancelled" value={summary?.cancelledSubscriptions ?? 0} helper="Cancelled subscriptions" />
+        <StatCard label="Expired" value={summary?.expiredSubscriptions ?? 0} helper="Past period end" />
+        <StatCard label="Overdue" value={summary?.overdueSubscriptions ?? 0} helper="Past next due date" />
+        <StatCard label="Estimated MRR" value={formatCurrency(summary?.estimatedMonthlyRevenue, summary?.currency)} helper="Not payment gateway revenue" />
+        <StatCard label="Manual Payments" value={summary?.pendingManualPayments ?? 0} helper="Payment model not implemented" />
+      </section>
+
+      <section className="rounded-2xl border border-[var(--shell-border)] bg-[var(--shell-card)] p-5 shadow-sm">
+        <div className="grid gap-3 lg:grid-cols-6">
+          <label className="lg:col-span-2">
+            <span className="text-xs font-semibold uppercase tracking-[0.14em] text-[var(--shell-muted)]">Search</span>
+            <input
+              value={filters.search}
+              onChange={(event) => setFilter('search', event.target.value)}
+              placeholder="School name, code, plan"
+              className="mt-1 w-full rounded-xl border border-[var(--shell-border)] bg-[var(--shell-subtle)] px-3 py-2 text-sm text-[var(--shell-text)] outline-none focus:ring-2 focus:ring-blue-500"
+            />
+          </label>
+          <FilterSelect label="Status" value={filters.status} onChange={(value) => setFilter('status', value)}>
+            <option value="">All statuses</option>
+            {statusOptions.map((status) => (
+              <option key={status} value={status}>{formatLabel(status)}</option>
+            ))}
+          </FilterSelect>
+          <FilterSelect label="Plan" value={filters.planId} onChange={(value) => setFilter('planId', value)}>
+            <option value="">All plans</option>
+            {(plans ?? []).map((plan) => (
+              <option key={plan.id} value={plan.id}>{plan.name}</option>
+            ))}
+          </FilterSelect>
+          <FilterSelect label="Billing" value={filters.billingCycle} onChange={(value) => setFilter('billingCycle', value)}>
+            <option value="">Any cycle</option>
+            {billingCycles.map((cycle) => (
+              <option key={cycle} value={cycle}>{formatLabel(cycle)}</option>
+            ))}
+          </FilterSelect>
+          <FilterSelect label="Overdue" value={filters.overdue} onChange={(value) => setFilter('overdue', value)}>
+            <option value="">Any</option>
+            <option value="true">Overdue</option>
+            <option value="false">Not overdue</option>
+          </FilterSelect>
+        </div>
+      </section>
+
+      <section className="overflow-hidden rounded-2xl border border-[var(--shell-border)] bg-[var(--shell-card)] shadow-sm">
+        <div className="flex flex-col gap-3 border-b border-[var(--shell-border)] px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <h2 className="text-lg font-semibold text-[var(--shell-text)]">School Subscription Lifecycle</h2>
+            <p className="text-sm text-[var(--shell-muted)]">
+              {pagination ? `${pagination.total} schools found` : 'Manage every tenant subscription'}
+            </p>
           </div>
-          <div className="overflow-hidden rounded-xl border border-gray-200">
-            <table className="w-full">
-              <thead className="bg-gray-50">
+          <FilterSelect label="Rows" value={String(filters.limit)} onChange={(value) => setFilter('limit', Number(value))}>
+            {[10, 20, 50, 100].map((size) => (
+              <option key={size} value={size}>{size}</option>
+            ))}
+          </FilterSelect>
+        </div>
+
+        {isSubscriptionsError ? (
+          <div className="p-8 text-center">
+            <p className="text-sm font-semibold text-rose-600">Unable to load subscriptions.</p>
+            <button type="button" onClick={() => refetch()} className="mt-3 rounded-xl bg-blue-600 px-4 py-2 text-sm font-semibold text-white">
+              Retry
+            </button>
+          </div>
+        ) : rows.length === 0 && !isSubscriptionsLoading ? (
+          <div className="p-10 text-center text-sm text-[var(--shell-muted)]">No school subscriptions found.</div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="min-w-full divide-y divide-[var(--shell-border)] text-sm">
+              <thead className="bg-[var(--shell-subtle)] text-left text-xs font-semibold uppercase tracking-[0.14em] text-[var(--shell-muted)]">
                 <tr>
-                  <th className="px-6 py-4 text-left text-xs font-semibold uppercase tracking-wider text-gray-600">Name</th>
-                  <th className="px-6 py-4 text-left text-xs font-semibold uppercase tracking-wider text-gray-600">Status</th>
-                  <th className="px-6 py-4 text-left text-xs font-semibold uppercase tracking-wider text-gray-600">Amount</th>
-                  <th className="px-6 py-4 text-left text-xs font-semibold uppercase tracking-wider text-gray-600">Features</th>
-                  <th className="px-6 py-4 text-left text-xs font-semibold uppercase tracking-wider text-gray-600">Student Limit</th>
-                  <th className="px-6 py-4 text-left text-xs font-semibold uppercase tracking-wider text-gray-600">Teacher Limit</th>
-                  <th className="px-6 py-4 text-left text-xs font-semibold uppercase tracking-wider text-gray-600">Access</th>
-                  <th className="px-6 py-4 text-right text-xs font-semibold uppercase tracking-wider text-gray-600">Actions</th>
+                  <th className="px-5 py-3">School</th>
+                  <th className="px-5 py-3">Plan</th>
+                  <th className="px-5 py-3">Status</th>
+                  <th className="px-5 py-3">Period</th>
+                  <th className="px-5 py-3">Usage</th>
+                  <th className="px-5 py-3">Amount</th>
+                  <th className="px-5 py-3 text-right">Actions</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-gray-200 bg-white">
-                {plans?.length ? (
-                  plans.map((plan) => (
-                    <tr key={plan.id} className="hover:bg-gray-50 transition-colors">
-                      <td className="px-6 py-4">
-                        <div className="flex items-center">
-                          <div className="flex h-10 w-10 items-center justify-center rounded-full bg-gradient-to-br from-emerald-500 to-teal-500 text-white font-bold">
-                            {plan.name.charAt(0).toUpperCase()}
-                          </div>
-                          <div className="ml-3 text-sm font-medium text-gray-900">{plan.name}</div>
-                        </div>
-                      </td>
-                      <td className="px-6 py-4">
-                        <button
-                          type="button"
-                          aria-pressed={plan.status === 'ACTIVE'}
-                          className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 ${
-                            plan.status === 'ACTIVE' ? 'bg-emerald-500 focus:ring-emerald-500' : 'bg-rose-500 focus:ring-rose-500'
-                          }`}
-                          onClick={() =>
-                            (async () => {
-                              if (plan.status === 'ACTIVE') {
-                                setPlanLoading(true);
-                                try {
-                                  const result = await listPlanSchools(plan.id);
-                                  if (result.items.length > 0) {
-                                    setPlanBlocker({
-                                      open: true,
-                                      planId: plan.id,
-                                      planName: plan.name,
-                                      schools: result.items,
-                                      mode: 'disable',
-                                    });
-                                  } else {
-                                    await updateSubscriptionPlan(plan.id, { status: 'INACTIVE' });
-                                    queryClient.invalidateQueries({ queryKey: ['subscription-plans'] });
-                                  }
-                                } catch (error: any) {
-                                  const message =
-                                    error?.response?.data?.error?.message || error?.message || 'Failed to update status';
-                                  notify.error('Status update failed', message);
-                                } finally {
-                                  setPlanLoading(false);
-                                }
-                                return;
-                              }
-                              updateSubscriptionPlan(plan.id, {
-                                status: 'ACTIVE',
-                              })
-                                .then(() => {
-                                  queryClient.invalidateQueries({ queryKey: ['subscription-plans'] });
-                                })
-                                .catch((error: any) => {
-                                  const message =
-                                    error?.response?.data?.error?.message || error?.message || 'Failed to update status';
-                                  notify.error('Status update failed', message);
-                                });
-                            })()
-                          }
-                        >
-                          <span
-                            className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${
-                              plan.status === 'ACTIVE' ? 'translate-x-6' : 'translate-x-1'
-                            }`}
-                          />
-                        </button>
-                      </td>
-                      <td className="px-6 py-4 text-sm text-gray-600">₹{(plan.priceCents / 100).toFixed(0)}</td>
-                      <td className="px-6 py-4 text-sm text-gray-600 max-w-[240px] truncate">{plan.features?.length ? plan.features.join(', ') : '—'}</td>
-                      <td className="px-6 py-4 text-sm text-gray-600">{plan.studentLimit}</td>
-                      <td className="px-6 py-4 text-sm text-gray-600">{plan.teacherLimit}</td>
-                      <td className="px-6 py-4">
-                        <button
-                          className="rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-700 hover:bg-emerald-100"
-                          onClick={() => setPermissionEditor({ open: true, planId: plan.id, planName: plan.name })}
-                        >
-                          Configure
-                        </button>
-                      </td>
-                    <td className="px-6 py-4 text-right">
-                      <button
-                        className="rounded-lg border border-gray-300 px-3 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50"
-                        onClick={() =>
-                          setPlanForm({
-                            id: plan.id,
-                            name: plan.name,
-                            priceCents: plan.priceCents ?? 0,
-                            features: plan.features?.join(', ') ?? '',
-                            studentLimit: plan.studentLimit,
-                            teacherLimit: plan.teacherLimit,
-                            status: plan.status,
-                          })
-                        }
-                      >
-                        Edit
-                      </button>
-                      <button
-                        className="ml-2 rounded-lg border border-rose-200 px-3 py-1.5 text-xs font-medium text-rose-700 hover:bg-rose-50"
-                        onClick={async () => {
-                          setPlanLoading(true);
-                          try {
-                            const result = await listPlanSchools(plan.id);
-                            if (result.items.length > 0) {
-                              setPlanBlocker({
-                                open: true,
-                                planId: plan.id,
-                                planName: plan.name,
-                                schools: result.items,
-                                mode: 'delete',
-                              });
-                            } else {
-                              await deleteSubscriptionPlan(plan.id);
-                              queryClient.invalidateQueries({ queryKey: ['subscription-plans'] });
-                              notify.success('Plan deleted', 'Plan removed successfully');
-                            }
-                          } catch (error: any) {
-                            const message =
-                              error?.response?.data?.error?.message || error?.message || 'Failed to delete plan';
-                            if (String(message).toLowerCase().includes('plan is in use')) {
-                              try {
-                                const result = await listPlanSchools(plan.id);
-                                if (result.items.length > 0) {
-                                  setPlanBlocker({
-                                    open: true,
-                                    planId: plan.id,
-                                    planName: plan.name,
-                                    schools: result.items,
-                                    mode: 'delete',
-                                  });
-                                  return;
-                                }
-                              } catch {
-                                // fall through to error toast
-                              }
-                            }
-                            notify.error('Delete failed', message);
-                          } finally {
-                            setPlanLoading(false);
-                          }
-                        }}
-                      >
-                        Delete
-                      </button>
+              <tbody className="divide-y divide-[var(--shell-border)]">
+                {rows.map((item) => (
+                  <tr key={item.schoolId} className="hover:bg-[var(--shell-hover)]">
+                    <td className="px-5 py-4">
+                      <div className="font-semibold text-[var(--shell-text)]">{item.schoolName}</div>
+                      <div className="text-xs text-[var(--shell-muted)]">{item.schoolCode ?? 'No code'} - {formatLabel(item.schoolStatus)}</div>
                     </td>
-                    </tr>
-                  ))
-                ) : (
-                  <tr>
-                    <td colSpan={8} className="px-6 py-12 text-center">
-                      <div className="flex flex-col items-center text-gray-400">
-                        <svg className="h-12 w-12" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01" />
-                        </svg>
-                        <p className="mt-2 text-sm font-medium text-gray-600">No plans available</p>
-                        <p className="text-xs text-gray-500">Create your first plan above</p>
+                    <td className="px-5 py-4">
+                      <div className="font-semibold text-[var(--shell-text)]">{item.planName ?? 'No plan assigned'}</div>
+                      <div className="text-xs text-[var(--shell-muted)]">{formatLabel(item.billingCycle)}</div>
+                    </td>
+                    <td className="px-5 py-4">
+                      <Badge className={statusBadgeClass(item.status)}>{formatLabel(item.status)}</Badge>
+                    </td>
+                    <td className="px-5 py-4 text-[var(--shell-muted)]">
+                      <div>Ends: {formatDate(item.currentPeriodEnd)}</div>
+                      {item.trialEndsAt ? <div className="text-xs">Trial ends: {formatDate(item.trialEndsAt)}</div> : null}
+                    </td>
+                    <td className="min-w-[180px] px-5 py-4">
+                      <UsageBar label="Students" used={item.usage?.students} limit={item.studentLimit} />
+                      <div className="mt-2">
+                        <UsageBar label="Teachers" used={item.usage?.teachers} limit={item.teacherLimit} />
+                      </div>
+                    </td>
+                    <td className="px-5 py-4 text-[var(--shell-text)]">{formatCurrency(item.price, item.currency)}</td>
+                    <td className="px-5 py-4">
+                      <div className="flex flex-wrap justify-end gap-2">
+                        <ActionButton onClick={() => setSelectedSchoolId(item.schoolId)}>View</ActionButton>
+                        <ActionButton onClick={() => openAction(item, item.subscriptionId ? 'upgrade' : 'assign')}>{item.subscriptionId ? 'Change Plan' : 'Assign Plan'}</ActionButton>
+                        {item.status === 'TRIAL' ? <ActionButton onClick={() => openAction(item, 'extend-trial')}>Extend Trial</ActionButton> : <ActionButton onClick={() => openAction(item, 'start-trial')}>Start Trial</ActionButton>}
+                        {item.status === 'PAUSED' ? <ActionButton onClick={() => openAction(item, 'resume')}>Resume</ActionButton> : <ActionButton onClick={() => openAction(item, 'pause')}>Pause</ActionButton>}
+                        <ActionButton onClick={() => openAction(item, 'renew')}>Renew</ActionButton>
+                        <ActionButton onClick={() => openAction(item, 'limits')}>Limits</ActionButton>
+                        <ActionButton onClick={() => openAction(item, 'manual-payment')}>Payment</ActionButton>
+                        {item.status !== 'CANCELLED' ? <ActionButton danger onClick={() => openAction(item, 'cancel')}>Cancel</ActionButton> : null}
                       </div>
                     </td>
                   </tr>
-                )}
+                ))}
               </tbody>
             </table>
           </div>
-        </section>
-      </div>
+        )}
 
-      {permissionEditor.open ? (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4">
-          <div className="w-full max-w-3xl rounded-2xl bg-white p-6 shadow-2xl">
-            <div className="flex items-start justify-between gap-4 border-b border-gray-200 pb-4">
-              <div>
-                <h3 className="text-xl font-semibold text-gray-900">Plan Access Controls</h3>
-                <p className="text-sm text-gray-500">
-                  {permissionEditor.planName} · Select navigation items enabled for this plan.
-                </p>
-              </div>
-              <button
-                onClick={() => setPermissionEditor({ open: false, planId: '', planName: '' })}
-                className="rounded-full border border-gray-200 px-3 py-1 text-sm text-gray-600 hover:bg-gray-100"
-              >
-                Close
-              </button>
-            </div>
-
-            {permissionsLoading ? (
-              <div className="py-10 text-center text-sm text-gray-500">Loading access controls...</div>
-            ) : (
-              <div className="mt-4 max-h-[60vh] space-y-4 overflow-y-auto pr-2">
-                {Object.entries(
-                  planPermissions?.permissions.reduce<Record<string, typeof planPermissions.permissions>>((acc, item) => {
-                    if (!acc[item.group]) acc[item.group] = [];
-                    acc[item.group].push(item);
-                    return acc;
-                  }, {}) ?? {},
-                ).map(([group, items]) => (
-                  <div key={group} className="rounded-xl border border-gray-200">
-                    <div className="bg-gray-50 px-4 py-2 text-sm font-semibold text-gray-700">{group}</div>
-                    <div className="divide-y divide-gray-100">
-                      {items.map((permission) => {
-                        const enabled = planPermissionCodes.includes(permission.code);
-                        return (
-                          <label key={permission.code} className="flex items-center justify-between px-4 py-3 text-sm">
-                            <div>
-                              <p className="font-medium text-gray-800">{permission.label}</p>
-                              <p className="text-xs text-gray-500">{permission.path}</p>
-                            </div>
-                            <button
-                              type="button"
-                              onClick={() =>
-                                setPlanPermissionCodes((prev) =>
-                                  prev.includes(permission.code)
-                                    ? prev.filter((code) => code !== permission.code)
-                                    : [...prev, permission.code],
-                                )
-                              }
-                              className={`relative h-6 w-11 rounded-full p-1 transition-all ${
-                                enabled ? 'bg-emerald-500' : 'bg-slate-200 border border-slate-300'
-                              }`}
-                            >
-                              <span
-                                className={`block h-4 w-4 rounded-full bg-white shadow transition-transform ${
-                                  enabled ? 'translate-x-5' : 'translate-x-0'
-                                }`}
-                              />
-                            </button>
-                          </label>
-                        );
-                      })}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-
-            <div className="mt-6 flex items-center justify-between gap-4 border-t border-gray-200 pt-4">
-              <p className="text-xs text-gray-500">
-                Default is none. Only enabled items will be visible and accessible for schools on this plan.
-              </p>
-              <button
-                type="button"
-                onClick={() => permissionsMutation.mutate()}
-                className="rounded-xl bg-emerald-600 px-5 py-2 text-sm font-semibold text-white hover:bg-emerald-700 disabled:opacity-50"
-                disabled={permissionsMutation.isPending}
-              >
-                {permissionsMutation.isPending ? 'Saving...' : 'Save Access'}
-              </button>
-            </div>
+        <div className="flex flex-col gap-3 border-t border-[var(--shell-border)] px-5 py-4 text-sm text-[var(--shell-muted)] sm:flex-row sm:items-center sm:justify-between">
+          <span>Page {filters.page} of {totalPages}</span>
+          <div className="flex gap-2">
+            <button
+              type="button"
+              disabled={filters.page <= 1}
+              onClick={() => setFilter('page', Math.max(1, filters.page - 1))}
+              className="rounded-lg border border-[var(--shell-border)] px-3 py-1.5 font-semibold disabled:opacity-40"
+            >
+              Previous
+            </button>
+            <button
+              type="button"
+              disabled={filters.page >= totalPages}
+              onClick={() => setFilter('page', filters.page + 1)}
+              className="rounded-lg border border-[var(--shell-border)] px-3 py-1.5 font-semibold disabled:opacity-40"
+            >
+              Next
+            </button>
           </div>
         </div>
+      </section>
+
+      <section className="rounded-2xl border border-[var(--shell-border)] bg-[var(--shell-card)] p-5 shadow-sm">
+        <h2 className="text-lg font-semibold text-[var(--shell-text)]">Plan Catalog</h2>
+        <p className="mt-1 text-sm text-[var(--shell-muted)]">Existing subscription plans used for lifecycle actions.</p>
+        <div className="mt-4 grid gap-3 md:grid-cols-3">
+          {(plans ?? []).map((plan) => (
+            <div key={plan.id} className="rounded-xl border border-[var(--shell-border)] bg-[var(--shell-subtle)] p-4">
+              <div className="flex items-center justify-between gap-3">
+                <p className="font-semibold text-[var(--shell-text)]">{plan.name}</p>
+                <Badge className={statusBadgeClass(plan.status)}>{formatLabel(plan.status)}</Badge>
+              </div>
+              <p className="mt-2 text-xl font-bold text-[var(--shell-text)]">{formatCurrency(plan.priceCents / 100)}</p>
+              <p className="text-xs text-[var(--shell-muted)]">Students {plan.studentLimit} - Teachers {plan.teacherLimit}</p>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      {selectedSchoolId ? (
+        <SubscriptionDetailDrawer
+          schoolId={selectedSchoolId}
+          detail={detail}
+          loading={isDetailLoading}
+          onClose={() => setSelectedSchoolId(null)}
+          onAction={(itemAction) => {
+            const item = rows.find((row) => row.schoolId === selectedSchoolId);
+            if (item) openAction(item, itemAction);
+          }}
+        />
       ) : null}
 
-      {/* Plan Blocker Modal */}
-      {planBlocker.open ? (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
-          <div className="w-full max-w-4xl rounded-2xl bg-white p-6 shadow-2xl">
-            <div className="flex items-start justify-between gap-3 mb-6">
-              <div className="flex items-center gap-3">
-                <div className="rounded-full bg-amber-100 p-3">
-                  <svg className="h-6 w-6 text-amber-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-                  </svg>
-                </div>
-                <div>
-                  <h3 className="text-lg font-bold text-gray-900">
-                    {planBlocker.mode === 'delete' ? 'Plan in use (delete)' : 'Plan in use'}
-                  </h3>
-                  <p className="text-sm text-gray-600">
-                    {planBlocker.planName} is assigned to the following schools. Reassign them before{' '}
-                    {planBlocker.mode === 'delete' ? 'deleting' : 'disabling'} this plan.
-                  </p>
-                </div>
-              </div>
-              <button className="text-gray-400 hover:text-gray-600" onClick={closeBlocker}>
-                <svg className="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                </svg>
-              </button>
-            </div>
-            <div className="overflow-hidden rounded-xl border border-gray-200">
-              <table className="w-full text-sm">
-                <thead className="bg-gray-50">
-                  <tr>
-                    <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-600">Name</th>
-                    <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-600">Code</th>
-                    <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-600">Status</th>
-                    <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-600">Current Plan</th>
-                    <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-600">New Plan</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-200 bg-white">
-                  {planBlocker.schools.map((school) => (
-                    <tr key={school.id} className="hover:bg-gray-50">
-                      <td className="px-4 py-3 text-gray-900">{school.name}</td>
-                      <td className="px-4 py-3 text-gray-600">{school.code}</td>
-                      <td className="px-4 py-3 text-gray-600">{school.status}</td>
-                      <td className="px-4 py-3 text-gray-600">{school.subscriptionPlan}</td>
-                      <td className="px-4 py-3">
-                        <select
-                          value={planMoves[school.id] ?? ''}
-                          onChange={(e) =>
-                            setPlanMoves((prev) => ({ ...prev, [school.id]: e.target.value }))
-                          }
-                          className="rounded-lg border border-gray-300 px-3 py-1.5 text-xs focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-200"
-                        >
-                          <option value="">Select plan</option>
-                          {plans
-                            ?.filter((item) => item.status === 'ACTIVE' && item.id !== planBlocker.planId)
-                            .map((plan) => (
-                              <option key={plan.id} value={plan.id}>
-                                {plan.name}
-                              </option>
-                            ))}
-                        </select>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-            <div className="mt-6 flex items-center justify-between">
-              <p className="text-sm text-gray-600">
-                Assign a new plan to each school to {planBlocker.mode === 'delete' ? 'delete' : 'disable'}{' '}
-                {planBlocker.planName}.
-              </p>
-              <div className="flex gap-2">
-                <button className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50" onClick={closeBlocker}>
-                  Cancel
-                </button>
-                <button
-                  className={`rounded-lg px-6 py-2 text-sm font-semibold text-white shadow-lg disabled:opacity-50 ${
-                    planBlocker.mode === 'delete'
-                      ? 'bg-gradient-to-r from-rose-600 to-rose-700 hover:from-rose-700 hover:to-rose-800'
-                      : 'bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700'
-                  }`}
-                  disabled={
-                    planBlocker.schools.some((school) => !planMoves[school.id]) || planLoading
-                  }
-                  onClick={async () => {
-                    setPlanLoading(true);
-                    try {
-                      await Promise.all(
-                        planBlocker.schools.map((school) =>
-                          upsertSubscription({
-                            schoolId: school.id,
-                            planId: planMoves[school.id],
-                            status: 'ACTIVE',
-                            startsAt: new Date().toISOString(),
-                          }),
-                        ),
-                      );
-                      if (planBlocker.mode === 'delete') {
-                        await deleteSubscriptionPlan(planBlocker.planId);
-                        notify.success('Plan deleted', 'Schools reassigned and plan deleted');
-                      } else {
-                        await updateSubscriptionPlan(planBlocker.planId, { status: 'INACTIVE' });
-                        notify.success('Plan disabled', 'Schools reassigned and plan disabled');
-                      }
-                      queryClient.invalidateQueries({ queryKey: ['subscription-plans'] });
-                      queryClient.invalidateQueries({ queryKey: ['schools'] });
-                      closeBlocker();
-                    } catch (error: any) {
-                      const message =
-                        error?.response?.data?.error?.message ||
-                        error?.message ||
-                        `Failed to ${planBlocker.mode === 'delete' ? 'delete' : 'disable'} plan`;
-                      notify.error('Update failed', message);
-                    } finally {
-                      setPlanLoading(false);
-                    }
-                  }}
-                >
-                  {planBlocker.mode === 'delete' ? 'Delete Plan' : 'Disable Plan'}
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
+      {actionState ? (
+        <ActionModal
+          action={actionState.action}
+          item={actionState.item}
+          plans={activePlans}
+          form={actionForm}
+          setForm={setActionForm}
+          loading={lifecycleMutation.isPending}
+          onClose={() => setActionState(null)}
+          onSubmit={() => {
+            if (actionState.action === 'cancel' && !window.confirm('Cancel this subscription? This may restrict school access.')) return;
+            if (actionState.action === 'pause' && !window.confirm('Pause this subscription? The school may lose access to paid modules.')) return;
+            if (actionState.action === 'downgrade' && !window.confirm('Downgrading may disable modules or reduce limits.')) return;
+            if (actionState.action === 'limits' && !window.confirm('Override plan limits for this school?')) return;
+            if (actionState.action === 'manual-payment' && !window.confirm('Record this manual payment? This does not charge a real payment gateway.')) return;
+            lifecycleMutation.mutate();
+          }}
+        />
       ) : null}
     </div>
+  );
+}
+
+function FilterSelect({
+  label,
+  value,
+  onChange,
+  children,
+}: {
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+  children: ReactNode;
+}) {
+  return (
+    <label>
+      <span className="text-xs font-semibold uppercase tracking-[0.14em] text-[var(--shell-muted)]">{label}</span>
+      <select
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+        className="mt-1 w-full rounded-xl border border-[var(--shell-border)] bg-[var(--shell-subtle)] px-3 py-2 text-sm text-[var(--shell-text)] outline-none focus:ring-2 focus:ring-blue-500"
+      >
+        {children}
+      </select>
+    </label>
+  );
+}
+
+function ActionButton({ children, onClick, danger = false }: { children: ReactNode; onClick: () => void; danger?: boolean }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={`rounded-lg border px-3 py-1.5 text-xs font-semibold ${
+        danger
+          ? 'border-rose-200 bg-rose-50 text-rose-700'
+          : 'border-[var(--shell-border)] bg-[var(--shell-subtle)] text-[var(--shell-text)] hover:bg-[var(--shell-hover)]'
+      }`}
+    >
+      {children}
+    </button>
+  );
+}
+
+function SubscriptionDetailDrawer({
+  detail,
+  loading,
+  onClose,
+  onAction,
+}: {
+  schoolId: string;
+  detail: Awaited<ReturnType<typeof getSchoolSubscriptionDetail>> | undefined;
+  loading: boolean;
+  onClose: () => void;
+  onAction: (action: LifecycleAction) => void;
+}) {
+  return (
+    <div className="fixed inset-0 z-50 flex justify-end bg-black/40">
+      <button type="button" aria-label="Close subscription detail" className="absolute inset-0 cursor-default" onClick={onClose} />
+      <aside className="relative h-full w-full max-w-3xl overflow-y-auto bg-[var(--shell-card)] p-5 shadow-2xl">
+        <div className="flex items-start justify-between gap-4 border-b border-[var(--shell-border)] pb-4">
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-[0.16em] text-[var(--shell-muted)]">Subscription detail</p>
+            <h2 className="mt-1 text-2xl font-bold text-[var(--shell-text)]">{detail?.school.name ?? 'Loading school...'}</h2>
+            <p className="text-sm text-[var(--shell-muted)]">{detail?.school.code}</p>
+          </div>
+          <button type="button" onClick={onClose} className="rounded-xl border border-[var(--shell-border)] px-3 py-2 text-sm font-semibold text-[var(--shell-text)]">
+            Close
+          </button>
+        </div>
+
+        {loading || !detail ? (
+          <div className="p-8 text-sm text-[var(--shell-muted)]">Loading subscription detail...</div>
+        ) : (
+          <div className="space-y-5 py-5">
+            <section className="grid gap-3 sm:grid-cols-2">
+              <InfoBox label="Plan" value={detail.subscription?.plan?.name ?? 'No plan assigned'} />
+              <InfoBox label="Status" value={formatLabel(detail.subscription?.status)} />
+              <InfoBox label="Current Period" value={`${formatDate(detail.subscription?.currentPeriodStart)} to ${formatDate(detail.subscription?.currentPeriodEnd)}`} />
+              <InfoBox label="Trial Ends" value={formatDate(detail.subscription?.trialEndsAt)} />
+            </section>
+
+            <section className="rounded-2xl border border-[var(--shell-border)] p-4">
+              <h3 className="text-sm font-semibold uppercase tracking-[0.14em] text-[var(--shell-muted)]">Usage and limits</h3>
+              <div className="mt-4 space-y-4">
+                <UsageBar label="Students" used={detail.subscription?.usage.students} limit={detail.subscription?.limits.students} />
+                <UsageBar label="Teachers" used={detail.subscription?.usage.teachers} limit={detail.subscription?.limits.teachers} />
+                <UsageBar label="Storage" used={detail.subscription?.usage.storageMb} limit={detail.subscription?.limits.storageMb ?? null} />
+              </div>
+            </section>
+
+            <section className="rounded-2xl border border-[var(--shell-border)] p-4">
+              <h3 className="text-sm font-semibold uppercase tracking-[0.14em] text-[var(--shell-muted)]">Lifecycle actions</h3>
+              <div className="mt-4 flex flex-wrap gap-2">
+                <ActionButton onClick={() => onAction('assign')}>Assign Plan</ActionButton>
+                <ActionButton onClick={() => onAction('upgrade')}>Upgrade</ActionButton>
+                <ActionButton onClick={() => onAction('downgrade')}>Downgrade</ActionButton>
+                <ActionButton onClick={() => onAction('extend-trial')}>Extend Trial</ActionButton>
+                <ActionButton onClick={() => onAction('pause')}>Pause</ActionButton>
+                <ActionButton onClick={() => onAction('resume')}>Resume</ActionButton>
+                <ActionButton onClick={() => onAction('renew')}>Renew</ActionButton>
+                <ActionButton onClick={() => onAction('limits')}>Override Limits</ActionButton>
+                <ActionButton onClick={() => onAction('manual-payment')}>Manual Payment</ActionButton>
+                <ActionButton danger onClick={() => onAction('cancel')}>Cancel</ActionButton>
+              </div>
+            </section>
+
+            <section className="rounded-2xl border border-[var(--shell-border)] p-4">
+              <h3 className="text-sm font-semibold uppercase tracking-[0.14em] text-[var(--shell-muted)]">Billing records</h3>
+              <p className="mt-2 text-sm text-[var(--shell-muted)]">
+                {detail.billingMessage ?? 'No invoice or payment records are available.'}
+              </p>
+            </section>
+
+            <section className="rounded-2xl border border-[var(--shell-border)] p-4">
+              <h3 className="text-sm font-semibold uppercase tracking-[0.14em] text-[var(--shell-muted)]">History</h3>
+              <div className="mt-3 space-y-2">
+                {detail.history.length === 0 ? (
+                  <p className="text-sm text-[var(--shell-muted)]">No subscription history found.</p>
+                ) : (
+                  detail.history.map((item) => (
+                    <div key={item.id} className="rounded-xl bg-[var(--shell-subtle)] p-3">
+                      <p className="font-semibold text-[var(--shell-text)]">{formatLabel(item.action)}</p>
+                      <p className="text-xs text-[var(--shell-muted)]">{item.actorName ?? 'System'} - {formatDateTime(item.createdAt)}</p>
+                      {item.reason ? <p className="mt-1 text-xs text-[var(--shell-muted)]">Reason: {String(item.reason)}</p> : null}
+                    </div>
+                  ))
+                )}
+              </div>
+            </section>
+          </div>
+        )}
+      </aside>
+    </div>
+  );
+}
+
+function InfoBox({ label, value }: { label: string; value: ReactNode }) {
+  return (
+    <div className="rounded-xl bg-[var(--shell-subtle)] p-4">
+      <p className="text-xs font-semibold uppercase tracking-[0.14em] text-[var(--shell-muted)]">{label}</p>
+      <p className="mt-1 text-sm font-semibold text-[var(--shell-text)]">{value}</p>
+    </div>
+  );
+}
+
+function ActionModal({
+  action,
+  item,
+  plans,
+  form,
+  setForm,
+  loading,
+  onClose,
+  onSubmit,
+}: {
+  action: LifecycleAction;
+  item: SchoolSubscriptionListItem;
+  plans: SubscriptionPlan[];
+  form: typeof initialActionForm;
+  setForm: (form: typeof initialActionForm) => void;
+  loading: boolean;
+  onClose: () => void;
+  onSubmit: () => void;
+}) {
+  const selectedPlan = plans.find((plan) => plan.id === form.planId);
+  const exceedsSelectedPlan =
+    action === 'downgrade' &&
+    selectedPlan &&
+    ((item.usage?.students ?? 0) > selectedPlan.studentLimit || (item.usage?.teachers ?? 0) > selectedPlan.teacherLimit);
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/45 px-4">
+      <div className="w-full max-w-2xl rounded-2xl border border-[var(--shell-border)] bg-[var(--shell-card)] p-5 shadow-2xl">
+        <div className="flex items-start justify-between gap-4 border-b border-[var(--shell-border)] pb-4">
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-[0.16em] text-[var(--shell-muted)]">{formatLabel(action)}</p>
+            <h2 className="mt-1 text-xl font-bold text-[var(--shell-text)]">{item.schoolName}</h2>
+          </div>
+          <button type="button" onClick={onClose} className="rounded-xl border border-[var(--shell-border)] px-3 py-2 text-sm font-semibold text-[var(--shell-text)]">
+            Close
+          </button>
+        </div>
+
+        <div className="mt-4 grid gap-3 sm:grid-cols-2">
+          {['assign', 'start-trial', 'upgrade', 'downgrade'].includes(action) ? (
+            <label className="sm:col-span-2">
+              <span className="text-xs font-semibold uppercase tracking-[0.14em] text-[var(--shell-muted)]">Plan</span>
+              <select value={form.planId} onChange={(event) => setForm({ ...form, planId: event.target.value })} className="mt-1 w-full rounded-xl border border-[var(--shell-border)] bg-[var(--shell-subtle)] px-3 py-2 text-sm text-[var(--shell-text)]">
+                <option value="">Select plan</option>
+                {plans.map((plan) => (
+                  <option key={plan.id} value={plan.id}>{plan.name} - {formatCurrency(plan.priceCents / 100)}</option>
+                ))}
+              </select>
+            </label>
+          ) : null}
+
+          {action === 'assign' ? (
+            <>
+              <FormSelect label="Billing cycle" value={form.billingCycle} onChange={(value) => setForm({ ...form, billingCycle: value })}>
+                {billingCycles.map((cycle) => <option key={cycle} value={cycle}>{formatLabel(cycle)}</option>)}
+              </FormSelect>
+              <FormInput label="Trial days" type="number" value={String(form.trialDays)} onChange={(value) => setForm({ ...form, trialDays: Number(value) })} />
+              <FormInput label="Start date" type="date" value={form.startDate} onChange={(value) => setForm({ ...form, startDate: value })} />
+            </>
+          ) : null}
+
+          {action === 'start-trial' ? (
+            <FormInput label="Trial days" type="number" value={String(form.trialDays)} onChange={(value) => setForm({ ...form, trialDays: Number(value) })} />
+          ) : null}
+
+          {action === 'extend-trial' ? (
+            <FormInput label="Extra days" type="number" value={String(form.extraDays)} onChange={(value) => setForm({ ...form, extraDays: Number(value) })} />
+          ) : null}
+
+          {['upgrade', 'downgrade'].includes(action) ? (
+            <FormSelect label="Effective date" value={form.effectiveDate} onChange={(value) => setForm({ ...form, effectiveDate: value })}>
+              <option value="IMMEDIATE">Immediate</option>
+              <option value="NEXT_BILLING_CYCLE">Next billing cycle</option>
+            </FormSelect>
+          ) : null}
+
+          {action === 'downgrade' && exceedsSelectedPlan ? (
+            <label className="sm:col-span-2 rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
+              <input type="checkbox" checked={form.force} onChange={(event) => setForm({ ...form, force: event.target.checked })} className="mr-2" />
+              Current usage exceeds selected plan limits. Force downgrade after review.
+            </label>
+          ) : null}
+
+          {action === 'cancel' ? (
+            <FormSelect label="Cancel when" value={form.cancelAt} onChange={(value) => setForm({ ...form, cancelAt: value })}>
+              <option value="IMMEDIATE">Immediately</option>
+              <option value="PERIOD_END">At period end</option>
+            </FormSelect>
+          ) : null}
+
+          {action === 'renew' ? (
+            <FormInput label="Period months" type="number" value={String(form.periodMonths)} onChange={(value) => setForm({ ...form, periodMonths: Number(value) })} />
+          ) : null}
+
+          {action === 'limits' ? (
+            <>
+              <FormInput label="Student limit" type="number" value={form.studentLimit} onChange={(value) => setForm({ ...form, studentLimit: value })} />
+              <FormInput label="Teacher limit" type="number" value={form.teacherLimit} onChange={(value) => setForm({ ...form, teacherLimit: value })} />
+              <FormInput label="Storage limit MB" type="number" value={form.storageLimitMb} onChange={(value) => setForm({ ...form, storageLimitMb: value })} />
+              <p className="text-xs text-[var(--shell-muted)]">Storage limit is not persisted in the current backend schema.</p>
+            </>
+          ) : null}
+
+          {action === 'manual-payment' ? (
+            <>
+              <FormInput label="Amount" type="number" value={form.amount} onChange={(value) => setForm({ ...form, amount: value })} />
+              <FormInput label="Currency" value={form.currency} onChange={(value) => setForm({ ...form, currency: value.toUpperCase().slice(0, 3) })} />
+              <FormInput label="Method" value={form.method} onChange={(value) => setForm({ ...form, method: value })} />
+              <FormInput label="Reference" value={form.reference} onChange={(value) => setForm({ ...form, reference: value })} />
+              <FormInput label="Paid date" type="date" value={form.paidAt} onChange={(value) => setForm({ ...form, paidAt: value })} />
+              <FormInput label="Notes" value={form.notes} onChange={(value) => setForm({ ...form, notes: value })} />
+              <p className="sm:col-span-2 rounded-xl border border-blue-200 bg-blue-50 p-3 text-sm text-blue-800">
+                This records a manual payment note. It does not charge a payment gateway.
+              </p>
+            </>
+          ) : null}
+
+          <label className="sm:col-span-2">
+            <span className="text-xs font-semibold uppercase tracking-[0.14em] text-[var(--shell-muted)]">Reason</span>
+            <textarea
+              value={form.reason}
+              onChange={(event) => setForm({ ...form, reason: event.target.value })}
+              rows={3}
+              className="mt-1 w-full rounded-xl border border-[var(--shell-border)] bg-[var(--shell-subtle)] px-3 py-2 text-sm text-[var(--shell-text)]"
+              placeholder="Reason for this lifecycle action"
+            />
+          </label>
+        </div>
+
+        <div className="mt-5 flex justify-end gap-2 border-t border-[var(--shell-border)] pt-4">
+          <button type="button" onClick={onClose} className="rounded-xl border border-[var(--shell-border)] px-4 py-2 text-sm font-semibold text-[var(--shell-text)]">
+            Cancel
+          </button>
+          <button type="button" disabled={loading} onClick={onSubmit} className="rounded-xl bg-blue-600 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50">
+            {loading ? 'Saving...' : 'Save'}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function FormInput({
+  label,
+  value,
+  onChange,
+  type = 'text',
+}: {
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+  type?: string;
+}) {
+  return (
+    <label>
+      <span className="text-xs font-semibold uppercase tracking-[0.14em] text-[var(--shell-muted)]">{label}</span>
+      <input
+        type={type}
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+        className="mt-1 w-full rounded-xl border border-[var(--shell-border)] bg-[var(--shell-subtle)] px-3 py-2 text-sm text-[var(--shell-text)]"
+      />
+    </label>
+  );
+}
+
+function FormSelect({
+  label,
+  value,
+  onChange,
+  children,
+}: {
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+  children: ReactNode;
+}) {
+  return (
+    <label>
+      <span className="text-xs font-semibold uppercase tracking-[0.14em] text-[var(--shell-muted)]">{label}</span>
+      <select
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+        className="mt-1 w-full rounded-xl border border-[var(--shell-border)] bg-[var(--shell-subtle)] px-3 py-2 text-sm text-[var(--shell-text)]"
+      >
+        {children}
+      </select>
+    </label>
   );
 }

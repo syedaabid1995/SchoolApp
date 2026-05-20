@@ -23,6 +23,113 @@ body {
   scroll-behavior: smooth;
 }
 
+.dashboard-shell {
+  color-scheme: light;
+  background: var(--shell-bg);
+}
+
+.dashboard-shell-dark {
+  color-scheme: dark;
+}
+
+.dashboard-shell .bg-white {
+  background-color: var(--shell-card) !important;
+}
+
+.dashboard-shell .bg-slate-50,
+.dashboard-shell .bg-slate-100,
+.dashboard-shell .bg-gray-50,
+.dashboard-shell .bg-gray-100 {
+  background-color: var(--shell-subtle) !important;
+}
+
+.dashboard-shell .border-slate-200,
+.dashboard-shell .border-gray-200,
+.dashboard-shell .border-slate\/10,
+.dashboard-shell .border-gray-300,
+.dashboard-shell .divide-slate-100 > :not([hidden]) ~ :not([hidden]),
+.dashboard-shell .divide-gray-100 > :not([hidden]) ~ :not([hidden]) {
+  border-color: var(--shell-border) !important;
+}
+
+.dashboard-shell .text-slate-950,
+.dashboard-shell .text-slate-900,
+.dashboard-shell .text-slate-800,
+.dashboard-shell .text-gray-900,
+.dashboard-shell .text-gray-800,
+.dashboard-shell .text-ink {
+  color: var(--shell-text) !important;
+}
+
+.dashboard-shell .text-slate-700,
+.dashboard-shell .text-slate-600,
+.dashboard-shell .text-slate-500,
+.dashboard-shell .text-gray-700,
+.dashboard-shell .text-gray-600,
+.dashboard-shell .text-gray-500,
+.dashboard-shell .text-slate {
+  color: var(--shell-muted) !important;
+}
+
+.dashboard-shell input,
+.dashboard-shell select,
+.dashboard-shell textarea {
+  background-color: var(--shell-card);
+  border-color: var(--shell-border);
+  color: var(--shell-text);
+}
+
+.dashboard-shell input::placeholder,
+.dashboard-shell textarea::placeholder {
+  color: var(--shell-muted);
+}
+
+.dashboard-shell table thead {
+  background: var(--shell-subtle);
+}
+
+.dashboard-shell table tbody tr:hover {
+  background: var(--shell-subtle);
+}
+
+.super-admin-console {
+  --sa-border: var(--shell-border);
+  --sa-card: var(--shell-card);
+  --sa-muted: var(--shell-muted);
+  --sa-ink: var(--shell-text);
+}
+
+.super-admin-console .shadow-lg,
+.super-admin-console .shadow-xl {
+  box-shadow: 0 10px 28px rgba(15, 23, 42, 0.08) !important;
+}
+
+.super-admin-console section.bg-white,
+.super-admin-console div.bg-white {
+  border-color: var(--sa-border);
+}
+
+.super-admin-console input,
+.super-admin-console select,
+.super-admin-console textarea {
+  border-color: var(--shell-border);
+}
+
+.super-admin-console input:focus,
+.super-admin-console select:focus,
+.super-admin-console textarea:focus {
+  border-color: #2563eb;
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.14);
+}
+
+.super-admin-console table {
+  font-size: 0.875rem;
+}
+
+.super-admin-console thead {
+  background: var(--shell-subtle);
+}
+
 .theme-navbar {
   background: var(--theme-navbar-bg);
   backdrop-filter: blur(10px);

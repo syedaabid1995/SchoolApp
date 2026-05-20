@@ -8,6 +8,11 @@ import {
   rollbackTheme,
   listThemes,
   getActiveTheme,
+  getLoginBrandingSettings,
+  updateLoginBrandingSettings,
+  publishLoginBranding,
+  rollbackLoginBranding,
+  resetLoginBranding,
 } from '../controllers/theme.controller';
 
 export const themeRouter = Router();
@@ -20,6 +25,16 @@ themeRouter.post('/', createTheme);
 themeRouter.get('/', listThemes);
 
 themeRouter.get('/active', getActiveTheme);
+
+themeRouter.get('/login-branding', getLoginBrandingSettings);
+
+themeRouter.put('/login-branding', updateLoginBrandingSettings);
+
+themeRouter.post('/login-branding/publish', publishLoginBranding);
+
+themeRouter.post('/login-branding/rollback', rollbackLoginBranding);
+
+themeRouter.post('/login-branding/reset', resetLoginBranding);
 
 themeRouter.patch('/:id', updateThemeTokens);
 
