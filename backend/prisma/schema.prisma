@@ -1328,11 +1328,13 @@ enum FeatureFlagStatus {
 }
 
 model FeatureFlag {
-  id        String            @id @default(uuid()) @db.Uuid
-  key       String
-  status    FeatureFlagStatus @default(DISABLED)
-  createdAt DateTime          @default(now()) @map("created_at")
-  updatedAt DateTime          @updatedAt @map("updated_at")
+  id          String            @id @default(uuid()) @db.Uuid
+  key         String
+  name        String?
+  description String?
+  status      FeatureFlagStatus @default(DISABLED)
+  createdAt   DateTime          @default(now()) @map("created_at")
+  updatedAt   DateTime          @updatedAt @map("updated_at")
 
   overrides FeatureFlagOverride[]
 
@@ -1361,12 +1363,13 @@ model FeatureFlagOverride {
 }
 
 model ConfigEntry {
-  id        String   @id @default(uuid()) @db.Uuid
-  key       String
-  value     Json
-  version   Int      @default(1)
-  createdAt DateTime @default(now()) @map("created_at")
-  updatedAt DateTime @updatedAt @map("updated_at")
+  id          String   @id @default(uuid()) @db.Uuid
+  key         String
+  value       Json
+  description String?
+  version     Int      @default(1)
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
 
   overrides TenantConfigOverride[]
 

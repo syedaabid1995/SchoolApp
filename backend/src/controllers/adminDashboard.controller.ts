@@ -1,11 +1,43 @@
 import type { Request, Response } from 'express';
+import { z } from 'zod';
 import { resolveSchoolId } from '../utils/tenant';
-import { getAdminDashboardMetrics } from '../services/adminDashboard.service';
+import {
+  getAdminDashboardMetrics,
+  getPlatformActivity,
+  getRevenueSummary,
+  getSchoolGrowth,
+  getSuperAdminDashboardSummary,
+  getSupportSummary,
+  getSystemStatus,
+  getTopSchools,
+} from '../services/adminDashboard.service';
 import { getWeeklyAnalytics, getPerformanceMetrics } from '../services/analytics.service';
 import { prisma } from '../config/db';
 import { cacheKeys, buildQueryFingerprint } from '../services/cache/cache.keys';
 import { rememberCache, setCacheHeader } from '../services/cache/cache.service';
 import { cacheTTL } from '../services/cache/cache.ttl';
+import { HttpError } from '../middlewares/error.middleware';
+
+const rangeQuerySchema = z.object({
+  range: z.enum(['7d', '30d', '6m', '12m']).default('12m'),
+});
+
+const limitQuerySchema = z.object({
+  limit: z.coerce.number().int().min(1).max(50).default(20),
+});
+
+const topSchoolsQuerySchema = z.object({
+  sortBy: z.enum(['students', 'teachers', 'storage', 'revenue', 'tickets']).default('students'),
+  limit: z.coerce.number().int().min(1).max(50).default(10),
+});
+
+const parseQuery = <T>(schema: z.ZodType<T>, query: unknown) => {
+  const result = schema.safeParse(query);
+  if (!result.success) {
+    throw new HttpError(400, 'Invalid dashboard query.', result.error.flatten());
+  }
+  return result.data;
+};
 
 export const getAdminDashboardApi = async (req: Request, res: Response) => {
   if (req.auth?.role === 'SUPER_ADMIN' && !req.query.schoolId) {
@@ -83,10 +115,41 @@ export const getRecentActivitiesApi = async (req: Request, res: Response) => {
   res.status(200).json(activities);
 };
 
+export const getDashboardSummaryApi = async (_req: Request, res: Response) => {
+  const summary = await getSuperAdminDashboardSummary();
+  res.status(200).json(summary);
+};
+
+export const getSchoolGrowthApi = async (req: Request, res: Response) => {
+  const { range } = parseQuery(rangeQuerySchema, req.query);
+  const growth = await getSchoolGrowth(range);
+  res.status(200).json(growth);
+};
+
+export const getRevenueSummaryApi = async (req: Request, res: Response) => {
+  const { range } = parseQuery(rangeQuerySchema, req.query);
+  const revenue = await getRevenueSummary(range);
+  res.status(200).json(revenue);
+};
+
+export const getPlatformActivityApi = async (req: Request, res: Response) => {
+  const { limit } = parseQuery(limitQuerySchema, req.query);
+  const activity = await getPlatformActivity(limit);
+  res.status(200).json(activity);
+};
+
+export const getSupportSummaryApi = async (_req: Request, res: Response) => {
+  const support = await getSupportSummary();
+  res.status(200).json(support);
+};
+
+export const getTopSchoolsApi = async (req: Request, res: Response) => {
+  const { sortBy, limit } = parseQuery(topSchoolsQuerySchema, req.query);
+  const topSchools = await getTopSchools(sortBy, limit);
+  res.status(200).json(topSchools);
+};
+
 export const getSystemStatusApi = async (_req: Request, res: Response) => {
-  res.status(200).json({
-    api: 'ok',
-    db: 'ok',
-    uptimeSeconds: Math.floor(process.uptime()),
-  });
+  const status = await getSystemStatus();
+  res.status(200).json(status);
 };
