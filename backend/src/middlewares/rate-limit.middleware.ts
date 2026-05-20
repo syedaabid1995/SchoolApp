@@ -297,16 +297,9 @@ export const aiRateLimit = () => async (req: Request, _res: Response, next: Next
 };
 
 export const loginIpRateLimit = () => async (req: Request, _res: Response, next: NextFunction) => {
-  try {
-    const result = await consumeAuthBucket(loginIpKey(req), 20, 15 * 60);
-    if (result.limited) {
-      await auditRateLimitTriggered(req, 'LOGIN');
-      return rejectAuthRateLimit(result, next);
-    }
-    return next();
-  } catch (err) {
-    return next(err);
-  }
+  void req;
+  // Temporarily disabled for demo login recovery. Re-enable before production hardening.
+  return next();
 };
 
 export const forgotPasswordRateLimit = () => async (req: Request, _res: Response, next: NextFunction) => {
@@ -334,20 +327,22 @@ export const forgotPasswordRateLimit = () => async (req: Request, _res: Response
 };
 
 export const assertLoginFailureLimit = async (identifier: string, schoolScope: string) => {
-  const result = await peekAuthBucket(loginFailureKey(identifier, schoolScope), 5);
-  if (result.limited) {
-    throw new HttpError(429, AUTH_RATE_LIMIT_MESSAGE);
-  }
+  void identifier;
+  void schoolScope;
+  // Temporarily disabled for demo login recovery. Re-enable before production hardening.
 };
 
 export const recordLoginFailure = async (identifier: string, schoolScope: string) => {
-  if (!identifier) return { limited: false, retryAfterSeconds: 0 };
-  return consumeAuthBucket(loginFailureKey(identifier, schoolScope), 5, 15 * 60);
+  void identifier;
+  void schoolScope;
+  // Temporarily disabled for demo login recovery. Re-enable before production hardening.
+  return { limited: false, retryAfterSeconds: 0 };
 };
 
 export const resetLoginFailureCounter = async (identifier: string, schoolScope: string) => {
-  if (!identifier) return;
-  await clearAuthBucket(loginFailureKey(identifier, schoolScope));
+  void identifier;
+  void schoolScope;
+  // Temporarily disabled for demo login recovery. Re-enable before production hardening.
 };
 
 export const consumeMfaChallengeLimit = async (userId: string, schoolId: string | null) => {
