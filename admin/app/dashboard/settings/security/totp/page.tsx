@@ -1,9 +1,13 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import FullPageLoader from '../../../../../components/FullPageLoader';
 import PageHeader from '../../../../../components/PageHeader';
+import {
+  getAuthSecuritySettings,
+  type AuthSecuritySettings,
+} from '../../../../../services/auth-security.service';
 import {
   disableTotp,
   startTotpSetup,
@@ -19,9 +23,9 @@ type SetupState = {
 };
 
 const normalizeCode = (value: string) => value.replace(/\D/g, '').slice(0, 6);
-const twoStepVerificationEnabled = false;
 
 export default function TotpSettingsPage() {
+  const [settings, setSettings] = useState<AuthSecuritySettings | null>(null);
   const [setup, setSetup] = useState<SetupState | null>(null);
   const [verifyCode, setVerifyCode] = useState('');
   const [disableCode, setDisableCode] = useState('');
@@ -30,7 +34,43 @@ export default function TotpSettingsPage() {
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
 
-  if (!twoStepVerificationEnabled) {
+  useEffect(() => {
+    const loadSettings = async () => {
+      setBusy(true);
+      try {
+        setSettings(await getAuthSecuritySettings());
+      } catch (err) {
+        setError((err as Error)?.message || 'Unable to load authenticator settings.');
+      } finally {
+        setBusy(false);
+      }
+    };
+
+    void loadSettings();
+  }, []);
+
+  if (!settings) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50/30 to-purple-50/40">
+        {busy ? <FullPageLoader label="Loading authenticator settings..." /> : null}
+        <div className="mx-auto max-w-5xl pr-6 pb-12">
+          <PageHeader title="Authenticator App" subtitle="Checking two-step verification settings." />
+          <div className="mb-5">
+            <Link href="/dashboard/settings/security" className="text-sm font-semibold text-blue-700 hover:text-blue-800">
+              Back to security sessions
+            </Link>
+          </div>
+          {error ? (
+            <p className="rounded-xl bg-rose-50 px-4 py-3 text-sm font-semibold text-rose-700" role="alert">
+              {error}
+            </p>
+          ) : null}
+        </div>
+      </div>
+    );
+  }
+
+  if (settings && (!settings.twoStepEnabled || !settings.authenticatorAppEnabled)) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50/30 to-purple-50/40">
         <div className="mx-auto max-w-5xl pr-6 pb-12">
@@ -43,7 +83,7 @@ export default function TotpSettingsPage() {
           <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
             <h2 className="text-xl font-bold text-slate-950">Two-step verification disabled</h2>
             <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-600">
-              Login will continue with email or username and password only. Authenticator app setup is unavailable for now.
+              Login will continue with email or username and password only. Enable two-step verification and authenticator app from security settings to use this page.
             </p>
           </section>
         </div>

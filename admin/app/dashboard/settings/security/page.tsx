@@ -4,6 +4,12 @@ import { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import FullPageLoader from '../../../../components/FullPageLoader';
 import PageHeader from '../../../../components/PageHeader';
+import { getSession } from '../../../../services/auth.service';
+import {
+  getAuthSecuritySettings,
+  updateAuthSecuritySettings,
+  type AuthSecuritySettings,
+} from '../../../../services/auth-security.service';
 import {
   listUserSessions,
   logoutAllSessions,
@@ -80,14 +86,58 @@ function SessionRow({
   );
 }
 
+function ToggleRow({
+  title,
+  description,
+  checked,
+  disabled,
+  onChange,
+}: {
+  title: string;
+  description: string;
+  checked: boolean;
+  disabled: boolean;
+  onChange: (checked: boolean) => void;
+}) {
+  return (
+    <div className="flex flex-col gap-4 rounded-xl border border-slate-200 bg-white p-4 shadow-sm sm:flex-row sm:items-center sm:justify-between">
+      <div>
+        <p className="font-semibold text-slate-950">{title}</p>
+        <p className="mt-1 text-sm leading-6 text-slate-600">{description}</p>
+      </div>
+      <button
+        type="button"
+        onClick={() => onChange(!checked)}
+        disabled={disabled}
+        className={`relative h-8 w-14 shrink-0 rounded-full transition-colors focus:outline-none focus:ring-4 focus:ring-blue-100 disabled:cursor-not-allowed disabled:opacity-60 ${
+          checked ? 'bg-blue-600' : 'bg-slate-300'
+        }`}
+        aria-pressed={checked}
+      >
+        <span
+          className={`absolute top-1 h-6 w-6 rounded-full bg-white shadow transition-transform ${
+            checked ? 'translate-x-7' : 'translate-x-1'
+          }`}
+        />
+      </button>
+    </div>
+  );
+}
+
 export default function SecuritySessionsPage() {
   const router = useRouter();
   const [sessions, setSessions] = useState<UserSession[]>([]);
+  const [authSettings, setAuthSettings] = useState<AuthSecuritySettings | null>(null);
+  const [sessionRole, setSessionRole] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [settingsLoading, setSettingsLoading] = useState(true);
+  const [settingsSaving, setSettingsSaving] = useState(false);
   const [busySessionId, setBusySessionId] = useState<string | null>(null);
   const [logoutAllBusy, setLogoutAllBusy] = useState(false);
   const [error, setError] = useState('');
   const [message, setMessage] = useState('');
+  const [settingsError, setSettingsError] = useState('');
+  const [settingsMessage, setSettingsMessage] = useState('');
 
   const currentSession = useMemo(
     () => sessions.find((session) => session.currentSession) ?? null,
@@ -110,9 +160,51 @@ export default function SecuritySessionsPage() {
     }
   };
 
+  const loadAuthSettings = async () => {
+    setSettingsError('');
+    try {
+      const [settings, currentSession] = await Promise.all([
+        getAuthSecuritySettings(),
+        getSession(),
+      ]);
+      setAuthSettings(settings);
+      setSessionRole(currentSession.role);
+    } catch (err) {
+      setSettingsError((err as Error)?.message || 'Unable to load authentication security settings.');
+    } finally {
+      setSettingsLoading(false);
+    }
+  };
+
   useEffect(() => {
     void loadSessions();
+    void loadAuthSettings();
   }, []);
+
+  const canManageAuthSettings = sessionRole === 'SUPER_ADMIN';
+
+  const handleAuthSettingChange = async (patch: Partial<AuthSecuritySettings>) => {
+    if (!authSettings || !canManageAuthSettings) return;
+
+    const nextSettings = { ...authSettings, ...patch };
+    if (nextSettings.twoStepEnabled && !nextSettings.emailOtpEnabled && !nextSettings.authenticatorAppEnabled) {
+      setSettingsError('Enable email verification or authenticator app before enabling two-step verification.');
+      return;
+    }
+
+    setSettingsSaving(true);
+    setSettingsError('');
+    setSettingsMessage('');
+    try {
+      const updated = await updateAuthSecuritySettings(nextSettings);
+      setAuthSettings(updated);
+      setSettingsMessage('Authentication security settings updated.');
+    } catch (err) {
+      setSettingsError((err as Error)?.message || 'Unable to update authentication security settings.');
+    } finally {
+      setSettingsSaving(false);
+    }
+  };
 
   const handleRevoke = async (session: UserSession) => {
     setBusySessionId(session.id);
@@ -147,7 +239,7 @@ export default function SecuritySessionsPage() {
     }
   };
 
-  const isBusy = loading || Boolean(busySessionId) || logoutAllBusy;
+  const isBusy = loading || settingsLoading || settingsSaving || Boolean(busySessionId) || logoutAllBusy;
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50/30 to-purple-50/40">
@@ -155,11 +247,65 @@ export default function SecuritySessionsPage() {
       <div className="mx-auto max-w-6xl pr-6 pb-12">
         <PageHeader title="Security Sessions" subtitle="Review active devices and revoke refresh sessions." />
 
+        <section className="mb-6 rounded-2xl border border-slate-200 bg-white/80 p-6 shadow-sm">
+          <div className="mb-5 flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+            <div>
+              <h2 className="text-xl font-bold text-slate-950">Login Verification Settings</h2>
+              <p className="mt-1 text-sm leading-6 text-slate-600">
+                Enable or disable two-step login and the verification methods used during sign in.
+              </p>
+            </div>
+            <span className={`w-fit rounded-full px-3 py-1 text-xs font-semibold ${
+              authSettings?.twoStepEnabled ? 'bg-emerald-50 text-emerald-700' : 'bg-slate-100 text-slate-600'
+            }`}>
+              {authSettings?.twoStepEnabled ? 'Two-step on' : 'Two-step off'}
+            </span>
+          </div>
+
+          {!canManageAuthSettings ? (
+            <p className="mb-4 rounded-xl bg-amber-50 px-4 py-3 text-sm font-semibold text-amber-800">
+              Only super admin can change login verification settings.
+            </p>
+          ) : null}
+          {settingsMessage ? <p className="mb-4 rounded-xl bg-emerald-50 px-4 py-3 text-sm font-semibold text-emerald-700">{settingsMessage}</p> : null}
+          {settingsError ? <p className="mb-4 rounded-xl bg-rose-50 px-4 py-3 text-sm font-semibold text-rose-700">{settingsError}</p> : null}
+
+          {authSettings ? (
+            <div className="grid gap-3">
+              <ToggleRow
+                title="Two-step verification"
+                description="Require privileged users to complete a second verification step after password login."
+                checked={authSettings.twoStepEnabled}
+                disabled={!canManageAuthSettings || settingsSaving}
+                onChange={(checked) => handleAuthSettingChange({ twoStepEnabled: checked })}
+              />
+              <ToggleRow
+                title="Email verification code"
+                description="Send a one-time login code to the user's email address when two-step verification is required."
+                checked={authSettings.emailOtpEnabled}
+                disabled={!canManageAuthSettings || settingsSaving}
+                onChange={(checked) => handleAuthSettingChange({ emailOtpEnabled: checked })}
+              />
+              <ToggleRow
+                title="Authenticator app"
+                description="Allow users to set up and verify login using an authenticator app and backup codes."
+                checked={authSettings.authenticatorAppEnabled}
+                disabled={!canManageAuthSettings || settingsSaving}
+                onChange={(checked) => handleAuthSettingChange({ authenticatorAppEnabled: checked })}
+              />
+            </div>
+          ) : (
+            <div className="rounded-xl border border-slate-200 bg-white p-6 text-sm text-slate-500">
+              Authentication security settings are loading.
+            </div>
+          )}
+        </section>
+
         <div className="mb-6 flex flex-col gap-3 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900 sm:flex-row sm:items-center sm:justify-between">
           <p className="font-medium">Use logout from all devices if you do not recognize an active session.</p>
           <div className="flex flex-col gap-2 sm:flex-row">
             <span className="rounded-lg border border-amber-300 bg-white px-4 py-2 text-center text-sm font-semibold text-amber-900">
-              Two-step verification disabled
+              {authSettings?.twoStepEnabled ? 'Two-step verification enabled' : 'Two-step verification disabled'}
             </span>
             <button
               type="button"
