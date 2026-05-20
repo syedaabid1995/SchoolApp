@@ -1,6 +1,8 @@
 'use client';
 
-import { useState } from 'react';
+import Link from 'next/link';
+import { useEffect, useMemo, useState } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   type ConfigEntry,
@@ -15,10 +17,44 @@ import {
   updateConfigEntry,
   updateFeatureFlag,
 } from '../../../services/config.service';
+import {
+  type PlatformGeneralSettings,
+  DEFAULT_PLATFORM_GENERAL_SETTINGS,
+  PLATFORM_GENERAL_CONFIG_KEY,
+  normalizePlatformGeneralSettings,
+} from '../../../services/platform-settings.service';
+import { getSession } from '../../../services/auth.service';
 import FullPageLoader from '../../../components/FullPageLoader';
 import PageHeader from '../../../components/PageHeader';
 import Button from '../../../components/Button';
 import LoginExperienceSettings from '../../../components/LoginExperienceSettings';
+import BrandingPage from './branding/page';
+import SecurityPage from './security/page';
+import SmsPage from './sms/page';
+import ConsentPage from './consent/page';
+import AccessPage from './access/page';
+import ThemesPage from '../themes/page';
+
+type SettingsTabId =
+  | 'general'
+  | 'branding'
+  | 'login'
+  | 'theme'
+  | 'security'
+  | 'messaging'
+  | 'features'
+  | 'modules'
+  | 'access'
+  | 'compliance'
+  | 'backups'
+  | 'advanced';
+
+type SettingsTab = {
+  id: SettingsTabId;
+  label: string;
+  description: string;
+  roles: string[];
+};
 
 type FlagDraft = {
   name: string;
@@ -33,6 +69,96 @@ type ConfigDraft = {
 };
 
 const flagKeyPattern = /^[a-z0-9][a-z0-9_-]*$/;
+
+const settingsTabs: SettingsTab[] = [
+  {
+    id: 'general',
+    label: 'General',
+    description: 'Platform name, shell text, support details, and default theme.',
+    roles: ['SUPER_ADMIN'],
+  },
+  {
+    id: 'branding',
+    label: 'Branding',
+    description: 'Login logos, colors, school branding, and preview.',
+    roles: ['SUPER_ADMIN', 'SCHOOL_ADMIN'],
+  },
+  {
+    id: 'login',
+    label: 'Login',
+    description: 'Login text, role cards, colors, and authentication options.',
+    roles: ['SUPER_ADMIN'],
+  },
+  {
+    id: 'theme',
+    label: 'Theme',
+    description: 'Theme token publishing and rollback.',
+    roles: ['SUPER_ADMIN', 'SCHOOL_ADMIN'],
+  },
+  {
+    id: 'security',
+    label: 'Security',
+    description: 'MFA, password policy, sessions, and account security.',
+    roles: ['SUPER_ADMIN', 'SCHOOL_ADMIN', 'TEACHER', 'ACCOUNTANT', 'LIBRARIAN', 'STAFF', 'PARENT'],
+  },
+  {
+    id: 'messaging',
+    label: 'Messaging',
+    description: 'Super Admin provider settings for platform and per-school delivery credentials.',
+    roles: ['SUPER_ADMIN'],
+  },
+  {
+    id: 'features',
+    label: 'Feature Flags',
+    description: 'Platform flags and advanced configuration entries.',
+    roles: ['SUPER_ADMIN'],
+  },
+  {
+    id: 'modules',
+    label: 'Modules',
+    description: 'Create module flags for attendance, exams, fees, messaging, and reports.',
+    roles: ['SUPER_ADMIN'],
+  },
+  {
+    id: 'access',
+    label: 'Access',
+    description: 'Role permissions and staff access control.',
+    roles: ['SUPER_ADMIN', 'SCHOOL_ADMIN'],
+  },
+  {
+    id: 'compliance',
+    label: 'Compliance',
+    description: 'Consent records and links to compliance operations.',
+    roles: ['SUPER_ADMIN'],
+  },
+  {
+    id: 'backups',
+    label: 'Backups',
+    description: 'Backup/restore readiness and operational links.',
+    roles: ['SUPER_ADMIN'],
+  },
+  {
+    id: 'advanced',
+    label: 'Advanced',
+    description: 'Raw JSON configs for rollout and developer settings.',
+    roles: ['SUPER_ADMIN'],
+  },
+];
+
+const moduleCatalog = [
+  { key: 'module_attendance', label: 'Attendance', description: 'Attendance pages and related workflows.' },
+  { key: 'module_academics', label: 'Academics', description: 'Academic setup, classes, sections, and terms.' },
+  { key: 'module_timetable', label: 'Timetable', description: 'Scheduling and timetable management.' },
+  { key: 'module_exams', label: 'Exams', description: 'Exams, marks upload, and results workflows.' },
+  { key: 'module_fees', label: 'Fees', description: 'Fee collection and finance workflows.' },
+  { key: 'module_library', label: 'Library', description: 'Library and book issue workflows.' },
+  { key: 'module_transport', label: 'Transport', description: 'Routes, vehicles, and transport assignment.' },
+  { key: 'module_support', label: 'Support', description: 'School support tickets and replies.' },
+  { key: 'module_reports', label: 'Reports', description: 'Report landing pages and exports.' },
+  { key: 'module_messaging', label: 'Messaging', description: 'SMS, notifications, and provider integrations.' },
+  { key: 'module_parent_portal', label: 'Parent Portal', description: 'Parent portal access and school-facing communication.' },
+  { key: 'module_id_cards', label: 'ID Cards', description: 'Student ID card generation workflows.' },
+];
 
 const formatJson = (value: unknown) => JSON.stringify(value ?? {}, null, 2);
 
@@ -58,7 +184,152 @@ const getApiErrorMessage = (error: unknown) => {
   return responseMessage?.error?.message || responseMessage?.message || 'Unable to save settings. Please try again.';
 };
 
-export default function SettingsPage() {
+const isValidUrlOrEmpty = (value: string) => {
+  if (!value.trim()) return true;
+  try {
+    const url = new URL(value);
+    return url.protocol === 'http:' || url.protocol === 'https:';
+  } catch {
+    return false;
+  }
+};
+
+const textInputClass =
+  'w-full rounded-xl border border-[var(--shell-border)] bg-[var(--shell-card)] px-3 py-2.5 text-sm text-[var(--shell-text)] outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10';
+
+const selectClass =
+  'w-full rounded-xl border border-[var(--shell-border)] bg-[var(--shell-card)] px-3 py-2.5 text-sm font-semibold text-[var(--shell-text)] outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10';
+
+function GeneralSettingsTab() {
+  const queryClient = useQueryClient();
+  const [form, setForm] = useState<PlatformGeneralSettings>(DEFAULT_PLATFORM_GENERAL_SETTINGS);
+  const [message, setMessage] = useState('');
+  const [error, setError] = useState('');
+
+  const configsQuery = useQuery({
+    queryKey: ['config-entries'],
+    queryFn: listConfigEntries,
+    refetchOnWindowFocus: false,
+    staleTime: 60_000,
+  });
+
+  const platformConfig = configsQuery.data?.find((entry) => entry.key === PLATFORM_GENERAL_CONFIG_KEY);
+
+  useEffect(() => {
+    setForm(normalizePlatformGeneralSettings(platformConfig?.value));
+  }, [platformConfig?.value]);
+
+  const saveMutation = useMutation({
+    mutationFn: (payload: PlatformGeneralSettings) =>
+      platformConfig
+        ? updateConfigEntry(platformConfig.id, { value: payload, description: 'Platform shell and general console settings.' })
+        : createConfigEntry({
+            key: PLATFORM_GENERAL_CONFIG_KEY,
+            description: 'Platform shell and general console settings.',
+            value: payload,
+          }),
+    onSuccess: () => {
+      setError('');
+      setMessage('General settings saved. Header, sidebar, and footer will use these values.');
+      queryClient.invalidateQueries({ queryKey: ['config-entries'] });
+    },
+    onError: (mutationError) => {
+      setMessage('');
+      setError(getApiErrorMessage(mutationError));
+    },
+  });
+
+  const updateForm = <K extends keyof PlatformGeneralSettings>(key: K, value: PlatformGeneralSettings[K]) => {
+    setForm((current) => ({ ...current, [key]: value }));
+    setMessage('');
+    setError('');
+  };
+
+  const save = () => {
+    if (!form.platformName.trim()) {
+      setError('Platform name is required.');
+      return;
+    }
+    if (!form.consoleName.trim()) {
+      setError('Console name is required.');
+      return;
+    }
+    if (!isValidUrlOrEmpty(form.supportUrl)) {
+      setError('Support URL must be a valid http or https URL.');
+      return;
+    }
+    saveMutation.mutate(form);
+  };
+
+  return (
+    <section className="rounded-2xl border border-[var(--shell-border)] bg-[var(--shell-card)] p-5 shadow-sm">
+      {saveMutation.isPending ? <FullPageLoader label="Saving settings..." /> : null}
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <h2 className="text-lg font-bold text-[var(--shell-text)]">General Platform Settings</h2>
+          <p className="mt-1 text-sm text-[var(--shell-muted)]">
+            These values drive the Super Admin header, sidebar brand, footer text, and default theme preference.
+          </p>
+        </div>
+        <Button variant="primary" size="sm" onClick={save} disabled={saveMutation.isPending} loading={saveMutation.isPending}>
+          Save General Settings
+        </Button>
+      </div>
+
+      <div className="mt-5 grid gap-4 lg:grid-cols-2">
+        <label className="space-y-2">
+          <span className="text-sm font-semibold text-[var(--shell-text)]">Platform Name</span>
+          <input className={textInputClass} value={form.platformName} onChange={(event) => updateForm('platformName', event.target.value)} />
+        </label>
+        <label className="space-y-2">
+          <span className="text-sm font-semibold text-[var(--shell-text)]">Console Name</span>
+          <input className={textInputClass} value={form.consoleName} onChange={(event) => updateForm('consoleName', event.target.value)} />
+        </label>
+        <label className="space-y-2">
+          <span className="text-sm font-semibold text-[var(--shell-text)]">Support Email</span>
+          <input className={textInputClass} value={form.supportEmail} onChange={(event) => updateForm('supportEmail', event.target.value)} />
+        </label>
+        <label className="space-y-2">
+          <span className="text-sm font-semibold text-[var(--shell-text)]">Support URL</span>
+          <input className={textInputClass} value={form.supportUrl} onChange={(event) => updateForm('supportUrl', event.target.value)} placeholder="https://..." />
+        </label>
+        <label className="space-y-2">
+          <span className="text-sm font-semibold text-[var(--shell-text)]">Default Theme</span>
+          <select
+            className={selectClass}
+            value={form.defaultThemeMode}
+            onChange={(event) => updateForm('defaultThemeMode', event.target.value as PlatformGeneralSettings['defaultThemeMode'])}
+          >
+            <option value="system">System</option>
+            <option value="light">Light</option>
+            <option value="dark">Dark</option>
+          </select>
+        </label>
+        <label className="flex items-center justify-between gap-3 rounded-xl border border-[var(--shell-border)] bg-[var(--shell-subtle)] px-4 py-3">
+          <span>
+            <span className="block text-sm font-semibold text-[var(--shell-text)]">Maintenance Mode Flag</span>
+            <span className="block text-xs text-[var(--shell-muted)]">Saved as a platform setting for operational use.</span>
+          </span>
+          <input
+            type="checkbox"
+            checked={form.maintenanceMode}
+            onChange={(event) => updateForm('maintenanceMode', event.target.checked)}
+            className="h-5 w-5"
+          />
+        </label>
+        <label className="space-y-2 lg:col-span-2">
+          <span className="text-sm font-semibold text-[var(--shell-text)]">Footer Text</span>
+          <input className={textInputClass} value={form.footerText} onChange={(event) => updateForm('footerText', event.target.value)} />
+        </label>
+      </div>
+
+      {error ? <p className="mt-4 text-sm font-semibold text-rose-600">{error}</p> : null}
+      {message ? <p className="mt-4 text-sm font-semibold text-emerald-600">{message}</p> : null}
+    </section>
+  );
+}
+
+function FeatureConfigSettingsTab({ advancedOnly = false }: { advancedOnly?: boolean }) {
   const queryClient = useQueryClient();
   const [flagForm, setFlagForm] = useState({
     key: '',
@@ -76,15 +347,13 @@ export default function SettingsPage() {
     queryKey: ['feature-flags'],
     queryFn: listFeatureFlags,
     refetchOnWindowFocus: false,
-    refetchOnMount: false,
-    staleTime: 5 * 60_000,
+    staleTime: 60_000,
   });
   const configsQuery = useQuery({
     queryKey: ['config-entries'],
     queryFn: listConfigEntries,
     refetchOnWindowFocus: false,
-    refetchOnMount: false,
-    staleTime: 5 * 60_000,
+    staleTime: 60_000,
   });
 
   const refreshFlags = () => queryClient.invalidateQueries({ queryKey: ['feature-flags'] });
@@ -196,7 +465,6 @@ export default function SettingsPage() {
 
   const handleSaveFlag = (flag: FeatureFlag) => {
     const draft = getFlagDraft(flag);
-    setFlagError('');
     updateFlagMutation.mutate({
       id: flag.id,
       payload: {
@@ -264,83 +532,66 @@ export default function SettingsPage() {
   };
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-5">
       {isBusy ? <FullPageLoader label="Processing..." /> : null}
-      <div className="mx-auto max-w-[1500px] space-y-6 pb-12">
-        <PageHeader title="System Settings" subtitle="Configure feature flags and tenant overrides." />
-
-        <LoginExperienceSettings />
-
-        <section className="rounded-2xl bg-white p-6 shadow-lg ring-1 ring-gray-200">
-          <div className="mb-6 flex items-center gap-3">
-            <div className="rounded-full bg-gradient-to-br from-blue-100 to-indigo-100 p-3">
-              <svg className="h-6 w-6 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 21v-4m0 0V5a2 2 0 012-2h6.5l1 1H21l-3 6 3 6h-8.5l-1-1H5a2 2 0 00-2 2zm9-13.5V9" />
-              </svg>
-            </div>
-            <div>
-              <h2 className="text-xl font-bold text-gray-900">Feature Flags</h2>
-              <p className="text-sm text-gray-500">Toggle features across the platform</p>
-            </div>
+      {!advancedOnly ? (
+        <section className="rounded-2xl border border-[var(--shell-border)] bg-[var(--shell-card)] p-5 shadow-sm">
+          <div className="flex flex-col gap-1">
+            <h2 className="text-lg font-bold text-[var(--shell-text)]">Feature Flags</h2>
+            <p className="text-sm text-[var(--shell-muted)]">Toggle global feature behavior and module readiness.</p>
           </div>
 
-          <div className="mb-4 grid gap-4 md:grid-cols-4">
+          <div className="mt-5 grid gap-3 md:grid-cols-4">
             <input
               value={flagForm.key}
               onChange={(event) => setFlagForm({ ...flagForm, key: normalizeFlagKey(event.target.value) })}
               placeholder="Feature key"
-              className="rounded-xl border border-gray-300 px-4 py-3 text-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-200"
+              className={textInputClass}
             />
             <input
               value={flagForm.name}
               onChange={(event) => setFlagForm({ ...flagForm, name: event.target.value })}
               placeholder="Name"
-              className="rounded-xl border border-gray-300 px-4 py-3 text-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-200"
+              className={textInputClass}
             />
             <input
               value={flagForm.description}
               onChange={(event) => setFlagForm({ ...flagForm, description: event.target.value })}
               placeholder="Description"
-              className="rounded-xl border border-gray-300 px-4 py-3 text-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-200"
+              className={textInputClass}
             />
             <select
               value={flagForm.status}
               onChange={(event) => setFlagForm({ ...flagForm, status: event.target.value as FeatureFlagStatus })}
-              className="rounded-xl border border-gray-300 px-4 py-3 text-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-200"
+              className={selectClass}
             >
               <option value="ENABLED">Enabled</option>
               <option value="DISABLED">Disabled</option>
             </select>
           </div>
 
-          <Button
-            variant="primary"
-            size="sm"
-            onClick={handleCreateFlag}
-            disabled={createFlagMutation.isPending}
-            loading={createFlagMutation.isPending}
-            icon={<svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" /></svg>}
-            iconPosition="left"
-          >
-            Create Flag
-          </Button>
+          <div className="mt-4">
+            <Button variant="primary" size="sm" onClick={handleCreateFlag} disabled={createFlagMutation.isPending} loading={createFlagMutation.isPending}>
+              Create Flag
+            </Button>
+          </div>
           {flagError ? <p className="mt-3 text-sm font-semibold text-rose-600">{flagError}</p> : null}
 
-          <div className="mt-6 space-y-3">
-            {flagsQuery.isLoading ? <p className="text-sm text-gray-500">Loading feature flags...</p> : null}
+          <div className="mt-5 space-y-3">
+            {flagsQuery.isLoading ? <div className="h-16 animate-pulse rounded-xl bg-[var(--shell-hover)]" /> : null}
             {flags.map((flag) => {
               const draft = getFlagDraft(flag);
               const isEnabled = flag.status === 'ENABLED';
 
               return (
-                <div key={flag.id} className="rounded-xl border border-gray-200 px-4 py-3 transition-colors hover:border-blue-300">
-                  <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-                    <div className="min-w-0 flex-1">
+                <div key={flag.id} className="rounded-xl border border-[var(--shell-border)] bg-[var(--shell-subtle)] px-4 py-3">
+                  <div className="grid gap-3 lg:grid-cols-[1fr_auto] lg:items-center">
+                    <div className="min-w-0">
                       <div className="mb-3 flex items-center gap-3">
-                        <div className={`h-2 w-2 rounded-full ${isEnabled ? 'bg-emerald-500' : 'bg-gray-400'}`} />
+                        <span className={`h-2.5 w-2.5 rounded-full ${isEnabled ? 'bg-emerald-500' : 'bg-slate-400'}`} />
                         <div>
-                          <p className="text-sm font-semibold text-gray-900">{flag.key}</p>
-                          <p className="text-xs text-gray-500">{flag.status}</p>
+                          <p className="text-sm font-bold text-[var(--shell-text)]">{flag.key}</p>
+                          <p className="text-xs text-[var(--shell-muted)]">{flag.status}</p>
                         </div>
                       </div>
                       <div className="grid gap-3 md:grid-cols-2">
@@ -348,36 +599,40 @@ export default function SettingsPage() {
                           value={draft.name}
                           onChange={(event) => updateFlagDraft(flag, { name: event.target.value })}
                           placeholder="Name"
-                          className="rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-100"
+                          className={textInputClass}
                         />
                         <input
                           value={draft.description}
                           onChange={(event) => updateFlagDraft(flag, { description: event.target.value })}
                           placeholder="Description"
-                          className="rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-100"
+                          className={textInputClass}
                         />
                       </div>
                     </div>
                     <div className="flex flex-wrap items-center gap-2">
                       <button
-                        className={`rounded-lg px-3 py-1.5 text-xs font-medium transition-colors ${
+                        className={`rounded-lg px-3 py-2 text-xs font-bold transition-colors ${
                           isEnabled
-                            ? 'border border-rose-300 bg-rose-50 text-rose-700 hover:bg-rose-100'
-                            : 'border border-emerald-300 bg-emerald-50 text-emerald-700 hover:bg-emerald-100'
+                            ? 'border border-rose-200 bg-rose-50 text-rose-700 hover:bg-rose-100'
+                            : 'border border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100'
                         }`}
                         onClick={() => handleToggleFlag(flag)}
                       >
                         {isEnabled ? 'Disable' : 'Enable'}
                       </button>
                       <button
-                        className="rounded-lg border border-gray-300 px-3 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50"
+                        className="rounded-lg border border-[var(--shell-border)] px-3 py-2 text-xs font-bold text-[var(--shell-text)] hover:bg-[var(--shell-hover)]"
                         onClick={() => handleSaveFlag(flag)}
                       >
                         Save
                       </button>
                       <button
-                        className="rounded-lg border border-rose-300 px-3 py-1.5 text-xs font-medium text-rose-700 hover:bg-rose-50"
-                        onClick={() => deleteFlagMutation.mutate(flag.id)}
+                        className="rounded-lg border border-rose-200 px-3 py-2 text-xs font-bold text-rose-700 hover:bg-rose-50"
+                        onClick={() => {
+                          if (window.confirm(`Delete feature flag "${flag.key}"?`)) {
+                            deleteFlagMutation.mutate(flag.id);
+                          }
+                        }}
                       >
                         Delete
                       </button>
@@ -387,111 +642,355 @@ export default function SettingsPage() {
               );
             })}
             {!flagsQuery.isLoading && !flags.length ? (
-              <div className="flex flex-col items-center py-8 text-gray-400">
-                <svg className="h-12 w-12" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 21v-4m0 0V5a2 2 0 012-2h6.5l1 1H21l-3 6 3 6h-8.5l-1-1H5a2 2 0 00-2 2zm9-13.5V9" />
-                </svg>
-                <p className="mt-2 text-sm font-medium text-gray-600">No feature flags</p>
-                <p className="text-xs text-gray-500">Create your first flag above</p>
+              <div className="rounded-xl border border-dashed border-[var(--shell-border)] p-6 text-center text-sm text-[var(--shell-muted)]">
+                No feature flags found.
               </div>
             ) : null}
           </div>
         </section>
+      ) : null}
 
-        <section className="mt-8 rounded-2xl bg-white p-6 shadow-lg ring-1 ring-gray-200">
-          <div className="mb-6 flex items-center gap-3">
-            <div className="rounded-full bg-gradient-to-br from-purple-100 to-pink-100 p-3">
-              <svg className="h-6 w-6 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4" />
-              </svg>
-            </div>
-            <div>
-              <h2 className="text-xl font-bold text-gray-900">Config Entries</h2>
-              <p className="text-sm text-gray-500">Manage system configuration values as JSON objects</p>
-            </div>
-          </div>
+      <section className="rounded-2xl border border-[var(--shell-border)] bg-[var(--shell-card)] p-5 shadow-sm">
+        <div className="flex flex-col gap-1">
+          <h2 className="text-lg font-bold text-[var(--shell-text)]">Config Entries</h2>
+          <p className="text-sm text-[var(--shell-muted)]">Manage system configuration values as JSON objects.</p>
+        </div>
 
-          <div className="mb-4 grid gap-4 lg:grid-cols-[1fr_1fr_2fr]">
-            <input
-              value={configForm.key}
-              onChange={(event) => setConfigForm({ ...configForm, key: event.target.value })}
-              placeholder="Key"
-              className="rounded-xl border border-gray-300 px-4 py-3 text-sm focus:border-purple-500 focus:outline-none focus:ring-2 focus:ring-purple-200"
-            />
-            <input
-              value={configForm.description}
-              onChange={(event) => setConfigForm({ ...configForm, description: event.target.value })}
-              placeholder="Description"
-              className="rounded-xl border border-gray-300 px-4 py-3 text-sm focus:border-purple-500 focus:outline-none focus:ring-2 focus:ring-purple-200"
-            />
-            <textarea
-              value={configForm.value}
-              onChange={(event) => setConfigForm({ ...configForm, value: event.target.value })}
-              placeholder='{"enabled": true}'
-              rows={4}
-              className="rounded-xl border border-gray-300 px-4 py-3 font-mono text-sm focus:border-purple-500 focus:outline-none focus:ring-2 focus:ring-purple-200"
-            />
-          </div>
+        <div className="mt-5 grid gap-3 lg:grid-cols-[1fr_1fr_2fr]">
+          <input
+            value={configForm.key}
+            onChange={(event) => setConfigForm({ ...configForm, key: event.target.value })}
+            placeholder="Key"
+            className={textInputClass}
+          />
+          <input
+            value={configForm.description}
+            onChange={(event) => setConfigForm({ ...configForm, description: event.target.value })}
+            placeholder="Description"
+            className={textInputClass}
+          />
+          <textarea
+            value={configForm.value}
+            onChange={(event) => setConfigForm({ ...configForm, value: event.target.value })}
+            placeholder='{"enabled": true}'
+            rows={4}
+            className={`${textInputClass} font-mono`}
+          />
+        </div>
 
-          <Button
-            variant="primary"
-            size="sm"
-            onClick={handleCreateConfig}
-            disabled={createConfigMutation.isPending}
-            loading={createConfigMutation.isPending}
-            icon={<svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" /></svg>}
-            iconPosition="left"
-          >
+        <div className="mt-4">
+          <Button variant="primary" size="sm" onClick={handleCreateConfig} disabled={createConfigMutation.isPending} loading={createConfigMutation.isPending}>
             Create Config
           </Button>
-          {configError ? <p className="mt-3 text-sm font-semibold text-rose-600">{configError}</p> : null}
+        </div>
+        {configError ? <p className="mt-3 text-sm font-semibold text-rose-600">{configError}</p> : null}
 
-          <div className="mt-6 space-y-3">
-            {configsQuery.isLoading ? <p className="text-sm text-gray-500">Loading config entries...</p> : null}
-            {configs.map((config) => {
-              const draft = getConfigDraft(config);
-              return (
-                <div key={config.id} className="rounded-xl border border-gray-200 px-4 py-3 transition-colors hover:border-purple-300">
-                  <div className="grid gap-3 lg:grid-cols-[1fr_1fr_2fr_auto] lg:items-start">
-                    <input
-                      value={draft.key}
-                      onChange={(event) => updateConfigDraft(config, { key: event.target.value })}
-                      className="rounded-lg border border-gray-300 px-3 py-2 text-sm font-medium text-gray-900 focus:border-purple-500 focus:outline-none focus:ring-2 focus:ring-purple-100"
-                    />
-                    <input
-                      value={draft.description}
-                      onChange={(event) => updateConfigDraft(config, { description: event.target.value })}
-                      placeholder="Description"
-                      className="rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-purple-500 focus:outline-none focus:ring-2 focus:ring-purple-100"
-                    />
-                    <textarea
-                      value={draft.value}
-                      onChange={(event) => updateConfigDraft(config, { value: event.target.value })}
-                      rows={5}
-                      className="rounded-lg border border-gray-300 px-3 py-2 font-mono text-xs text-gray-700 focus:border-purple-500 focus:outline-none focus:ring-2 focus:ring-purple-100"
-                    />
-                    <button
-                      className="rounded-lg border border-gray-300 px-3 py-2 text-xs font-medium text-gray-700 hover:bg-gray-50"
-                      onClick={() => handleSaveConfig(config)}
-                    >
-                      Save
-                    </button>
-                  </div>
+        <div className="mt-5 space-y-3">
+          {configsQuery.isLoading ? <div className="h-24 animate-pulse rounded-xl bg-[var(--shell-hover)]" /> : null}
+          {configs.map((config) => {
+            const draft = getConfigDraft(config);
+            return (
+              <div key={config.id} className="rounded-xl border border-[var(--shell-border)] bg-[var(--shell-subtle)] px-4 py-3">
+                <div className="grid gap-3 lg:grid-cols-[1fr_1fr_2fr_auto] lg:items-start">
+                  <input
+                    value={draft.key}
+                    onChange={(event) => updateConfigDraft(config, { key: event.target.value })}
+                    className={textInputClass}
+                  />
+                  <input
+                    value={draft.description}
+                    onChange={(event) => updateConfigDraft(config, { description: event.target.value })}
+                    placeholder="Description"
+                    className={textInputClass}
+                  />
+                  <textarea
+                    value={draft.value}
+                    onChange={(event) => updateConfigDraft(config, { value: event.target.value })}
+                    rows={5}
+                    className={`${textInputClass} font-mono text-xs`}
+                  />
+                  <button
+                    className="rounded-lg border border-[var(--shell-border)] px-3 py-2 text-xs font-bold text-[var(--shell-text)] hover:bg-[var(--shell-hover)]"
+                    onClick={() => handleSaveConfig(config)}
+                  >
+                    Save
+                  </button>
                 </div>
-              );
-            })}
-            {!configsQuery.isLoading && !configs.length ? (
-              <div className="flex flex-col items-center py-8 text-gray-400">
-                <svg className="h-12 w-12" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4" />
-                </svg>
-                <p className="mt-2 text-sm font-medium text-gray-600">No config entries</p>
-                <p className="text-xs text-gray-500">Create your first config above</p>
               </div>
-            ) : null}
-          </div>
-        </section>
+            );
+          })}
+          {!configsQuery.isLoading && !configs.length ? (
+            <div className="rounded-xl border border-dashed border-[var(--shell-border)] p-6 text-center text-sm text-[var(--shell-muted)]">
+              No config entries found.
+            </div>
+          ) : null}
+        </div>
+      </section>
+    </div>
+  );
+}
+
+function ModuleSettingsTab() {
+  const queryClient = useQueryClient();
+  const [error, setError] = useState('');
+  const flagsQuery = useQuery({
+    queryKey: ['feature-flags'],
+    queryFn: listFeatureFlags,
+    refetchOnWindowFocus: false,
+    staleTime: 60_000,
+  });
+
+  const createMutation = useMutation({
+    mutationFn: createFeatureFlag,
+    onSuccess: () => {
+      setError('');
+      queryClient.invalidateQueries({ queryKey: ['feature-flags'] });
+    },
+    onError: (mutationError) => setError(getApiErrorMessage(mutationError)),
+  });
+  const updateMutation = useMutation({
+    mutationFn: ({ id, status }: { id: string; status: FeatureFlagStatus }) => updateFeatureFlag(id, { status }),
+    onSuccess: () => {
+      setError('');
+      queryClient.invalidateQueries({ queryKey: ['feature-flags'] });
+    },
+    onError: (mutationError) => setError(getApiErrorMessage(mutationError)),
+  });
+
+  const flagsByKey = useMemo(() => new Map((flagsQuery.data ?? []).map((flag) => [flag.key, flag])), [flagsQuery.data]);
+
+  const toggleModule = (module: (typeof moduleCatalog)[number]) => {
+    const flag = flagsByKey.get(module.key);
+    if (!flag) {
+      createMutation.mutate({
+        key: module.key,
+        name: module.label,
+        description: module.description,
+        status: 'ENABLED',
+      });
+      return;
+    }
+    updateMutation.mutate({
+      id: flag.id,
+      status: flag.status === 'ENABLED' ? 'DISABLED' : 'ENABLED',
+    });
+  };
+
+  return (
+    <section className="rounded-2xl border border-[var(--shell-border)] bg-[var(--shell-card)] p-5 shadow-sm">
+      {(createMutation.isPending || updateMutation.isPending) ? <FullPageLoader label="Saving module setting..." /> : null}
+      <div>
+        <h2 className="text-lg font-bold text-[var(--shell-text)]">Module Settings</h2>
+        <p className="mt-1 text-sm text-[var(--shell-muted)]">
+          Module switches are stored as feature flags. Pages that already check these flags will follow the saved state.
+        </p>
       </div>
+      {error ? <p className="mt-3 text-sm font-semibold text-rose-600">{error}</p> : null}
+      <div className="mt-5 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+        {moduleCatalog.map((module) => {
+          const flag = flagsByKey.get(module.key);
+          const enabled = flag?.status === 'ENABLED';
+          const created = Boolean(flag);
+          return (
+            <div key={module.key} className="rounded-xl border border-[var(--shell-border)] bg-[var(--shell-subtle)] p-4">
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <p className="font-bold text-[var(--shell-text)]">{module.label}</p>
+                  <p className="mt-1 text-sm leading-5 text-[var(--shell-muted)]">{module.description}</p>
+                </div>
+                <span
+                  className={`rounded-full px-2.5 py-1 text-xs font-bold ${
+                    enabled ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-600'
+                  }`}
+                >
+                  {enabled ? 'Enabled' : created ? 'Disabled' : 'Not created'}
+                </span>
+              </div>
+              <button
+                type="button"
+                onClick={() => toggleModule(module)}
+                disabled={createMutation.isPending || updateMutation.isPending}
+                className="mt-4 w-full rounded-xl border border-[var(--shell-border)] bg-[var(--shell-card)] px-3 py-2 text-sm font-bold text-[var(--shell-text)] hover:bg-[var(--shell-hover)] disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                {enabled ? 'Disable Module' : 'Enable Module'}
+              </button>
+              <p className="mt-2 text-[11px] font-semibold text-[var(--shell-muted)]">{module.key}</p>
+            </div>
+          );
+        })}
+      </div>
+    </section>
+  );
+}
+
+function SuperAdminAccessTab() {
+  return (
+    <section className="rounded-2xl border border-[var(--shell-border)] bg-[var(--shell-card)] p-5 shadow-sm">
+      <h2 className="text-lg font-bold text-[var(--shell-text)]">Access Control</h2>
+      <p className="mt-1 text-sm leading-6 text-[var(--shell-muted)]">
+        Employee permission assignment is school-scoped. Open a school admin workspace or use Global Users for platform-level account security.
+      </p>
+      <div className="mt-5 grid gap-3 sm:grid-cols-2">
+        <Link
+          href="/dashboard/users"
+          className="rounded-xl border border-[var(--shell-border)] bg-[var(--shell-subtle)] px-4 py-3 text-sm font-bold text-[var(--shell-text)] hover:bg-[var(--shell-hover)]"
+        >
+          Global User Management
+        </Link>
+        <Link
+          href="/dashboard/schools"
+          className="rounded-xl border border-[var(--shell-border)] bg-[var(--shell-subtle)] px-4 py-3 text-sm font-bold text-[var(--shell-text)] hover:bg-[var(--shell-hover)]"
+        >
+          Open School Workspaces
+        </Link>
+      </div>
+    </section>
+  );
+}
+
+function OperationsLinkTab({ type }: { type: 'compliance' | 'backups' }) {
+  const isCompliance = type === 'compliance';
+  return (
+    <section className="rounded-2xl border border-[var(--shell-border)] bg-[var(--shell-card)] p-5 shadow-sm">
+      <h2 className="text-lg font-bold text-[var(--shell-text)]">{isCompliance ? 'Compliance Settings' : 'Backup & Restore Settings'}</h2>
+      <p className="mt-1 text-sm leading-6 text-[var(--shell-muted)]">
+        {isCompliance
+          ? 'Consent records are available here, while operational export/deletion workflows are managed from the Compliance page.'
+          : 'Backup execution and restore operations are managed from the dedicated Backups & Restore page.'}
+      </p>
+      <div className="mt-5 flex flex-wrap gap-3">
+        {isCompliance ? (
+          <>
+            <Link
+              href="/dashboard/compliance"
+              className="rounded-xl bg-blue-600 px-4 py-2 text-sm font-bold text-white hover:bg-blue-700"
+            >
+              Open Compliance Operations
+            </Link>
+            <ConsentPage />
+          </>
+        ) : (
+          <Link
+            href="/dashboard/backups"
+            className="rounded-xl bg-blue-600 px-4 py-2 text-sm font-bold text-white hover:bg-blue-700"
+          >
+            Open Backups & Restore
+          </Link>
+        )}
+      </div>
+    </section>
+  );
+}
+
+export default function SettingsPage() {
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const requestedTab = (searchParams.get('tab') || 'general') as SettingsTabId;
+
+  const { data: session, isLoading } = useQuery({
+    queryKey: ['session'],
+    queryFn: getSession,
+    refetchOnWindowFocus: false,
+    staleTime: 60_000,
+  });
+
+  const role = session?.role ?? null;
+  const availableTabs = useMemo(
+    () => settingsTabs.filter((tab) => (role ? tab.roles.includes(role) : false)),
+    [role],
+  );
+  const activeTab = availableTabs.some((tab) => tab.id === requestedTab) ? requestedTab : availableTabs[0]?.id;
+  const activeTabMeta = availableTabs.find((tab) => tab.id === activeTab);
+
+  useEffect(() => {
+    if (!role || !availableTabs.length) return;
+    if (!activeTab || requestedTab !== activeTab) {
+      router.replace(`/dashboard/settings?tab=${activeTab ?? 'security'}`);
+    }
+  }, [activeTab, availableTabs.length, requestedTab, role, router]);
+
+  if (isLoading) {
+    return <FullPageLoader label="Loading settings..." />;
+  }
+
+  if (!role || !availableTabs.length) {
+    return (
+      <div className="rounded-2xl border border-[var(--shell-border)] bg-[var(--shell-card)] p-8 text-center">
+        <h1 className="text-xl font-bold text-[var(--shell-text)]">Settings Not Available</h1>
+        <p className="mt-2 text-sm text-[var(--shell-muted)]">Your account does not have access to settings.</p>
+      </div>
+    );
+  }
+
+  const renderActiveTab = () => {
+    switch (activeTab) {
+      case 'general':
+        return <GeneralSettingsTab />;
+      case 'branding':
+        return <BrandingPage />;
+      case 'login':
+        return <LoginExperienceSettings />;
+      case 'theme':
+        return <ThemesPage />;
+      case 'security':
+        return <SecurityPage />;
+      case 'messaging':
+        return <SmsPage />;
+      case 'features':
+        return <FeatureConfigSettingsTab />;
+      case 'modules':
+        return <ModuleSettingsTab />;
+      case 'access':
+        return role === 'SUPER_ADMIN' ? <SuperAdminAccessTab /> : <AccessPage />;
+      case 'compliance':
+        return <OperationsLinkTab type="compliance" />;
+      case 'backups':
+        return <OperationsLinkTab type="backups" />;
+      case 'advanced':
+        return <FeatureConfigSettingsTab advancedOnly />;
+      default:
+        return <GeneralSettingsTab />;
+    }
+  };
+
+  return (
+    <div className="space-y-5 pb-12">
+      <PageHeader
+        title="Settings"
+        subtitle="One workspace for platform branding, login experience, security, modules, messaging, and advanced configuration."
+        breadcrumbs={[
+          { label: 'Dashboard', href: '/dashboard' },
+          { label: 'Settings' },
+          ...(activeTabMeta ? [{ label: activeTabMeta.label }] : []),
+        ]}
+      />
+
+      <section className="rounded-2xl border border-[var(--shell-border)] bg-[var(--shell-card)] p-3 shadow-sm">
+        <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-6">
+          {availableTabs.map((tab) => {
+            const active = tab.id === activeTab;
+            return (
+              <button
+                key={tab.id}
+                type="button"
+                onClick={() => router.push(`/dashboard/settings?tab=${tab.id}`)}
+                className={`rounded-xl border px-3 py-3 text-left transition-colors ${
+                  active
+                    ? 'border-blue-500 bg-blue-50 text-blue-800'
+                    : 'border-[var(--shell-border)] bg-[var(--shell-subtle)] text-[var(--shell-text)] hover:bg-[var(--shell-hover)]'
+                }`}
+              >
+                <span className="block text-sm font-bold">{tab.label}</span>
+                <span className={`mt-1 block text-xs leading-4 ${active ? 'text-blue-700' : 'text-[var(--shell-muted)]'}`}>
+                  {tab.description}
+                </span>
+              </button>
+            );
+          })}
+        </div>
+      </section>
+
+      {renderActiveTab()}
     </div>
   );
 }

@@ -3,9 +3,15 @@ import type { CSSProperties } from 'react';
 import { useEffect, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Sidebar } from './Sidebar';
-import { Header, type DashboardThemeMode } from './Header';
+import { Header, type DashboardResolvedThemeMode, type DashboardThemeMode } from './Header';
 import { getSession } from '../services/auth.service';
-import { usePathname, useRouter } from 'next/navigation';
+import { listConfigEntries } from '../services/config.service';
+import {
+  DEFAULT_PLATFORM_GENERAL_SETTINGS,
+  PLATFORM_GENERAL_CONFIG_KEY,
+  normalizePlatformGeneralSettings,
+} from '../services/platform-settings.service';
+import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { EMPLOYEE_MANAGED_ROLES, getRequiredPermissionForPath } from '../config/employee-permissions';
 
 export default function DashboardClientLayout({ 
@@ -18,7 +24,8 @@ export default function DashboardClientLayout({
   email: string | null;
 }) {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
-  const [themeMode, setThemeMode] = useState<DashboardThemeMode>('light');
+  const [themeMode, setThemeMode] = useState<DashboardThemeMode>('system');
+  const [systemThemeMode, setSystemThemeMode] = useState<DashboardResolvedThemeMode>('light');
   const { data: session } = useQuery({
     queryKey: ['session'],
     queryFn: getSession,
@@ -27,6 +34,7 @@ export default function DashboardClientLayout({
   });
   const pathname = usePathname();
   const router = useRouter();
+  const searchParams = useSearchParams();
   const isSubscriptionRestricted = Boolean(session?.subscriptionRestricted);
   const permissionCodes = session?.permissionCodes ?? [];
   const isSuperAdmin = session?.role === 'SUPER_ADMIN';
@@ -49,13 +57,31 @@ export default function DashboardClientLayout({
   const isManagedEmployeeRole = EMPLOYEE_MANAGED_ROLES.includes((session?.role ?? '') as (typeof EMPLOYEE_MANAGED_ROLES)[number]);
   const requiredPermission = getRequiredPermissionForPath(pathname);
   const isSuperAdminLayout = isSuperAdmin || role === 'SUPER_ADMIN';
+  const settingsTab = searchParams.get('tab') ?? '';
+  const isSafeSettingsTab =
+    pathname === '/dashboard/settings' &&
+    (!settingsTab ||
+      settingsTab === 'security' ||
+      (session?.role === 'SCHOOL_ADMIN' && ['branding', 'theme'].includes(settingsTab)));
+  const { data: platformConfigEntries } = useQuery({
+    queryKey: ['config-entries', 'platform-general-shell'],
+    queryFn: listConfigEntries,
+    enabled: isSuperAdminLayout,
+    refetchOnWindowFocus: false,
+    staleTime: 5 * 60_000,
+  });
+  const platformSettings = normalizePlatformGeneralSettings(
+    platformConfigEntries?.find((entry) => entry.key === PLATFORM_GENERAL_CONFIG_KEY)?.value,
+  );
   const canAccessRoute =
-    !isManagedEmployeeRole || (requiredPermission ? permissionCodes.includes(requiredPermission) : false);
+    !isManagedEmployeeRole || isSafeSettingsTab || (requiredPermission ? permissionCodes.includes(requiredPermission) : false);
   const canAccessSuperAdminRoute =
     !isSuperAdmin || superAdminAllowedPaths.some((allowedPath) => pathname === allowedPath || pathname.startsWith(`${allowedPath}/`));
 
+  const resolvedThemeMode: DashboardResolvedThemeMode = themeMode === 'system' ? systemThemeMode : themeMode;
+
   const shellStyle =
-    themeMode === 'dark'
+    resolvedThemeMode === 'dark'
       ? ({
           '--shell-bg': '#0f172a',
           '--shell-header': 'rgba(15, 23, 42, 0.94)',
@@ -101,9 +127,21 @@ export default function DashboardClientLayout({
 
   useEffect(() => {
     const stored = window.localStorage.getItem('dashboard-theme-mode');
-    if (stored === 'dark' || stored === 'light') {
+    if (stored === 'dark' || stored === 'light' || stored === 'system') {
       setThemeMode(stored);
+      return;
     }
+    if (isSuperAdminLayout) {
+      setThemeMode(platformSettings.defaultThemeMode);
+    }
+  }, [isSuperAdminLayout, platformSettings.defaultThemeMode]);
+
+  useEffect(() => {
+    const media = window.matchMedia('(prefers-color-scheme: dark)');
+    const syncSystemTheme = () => setSystemThemeMode(media.matches ? 'dark' : 'light');
+    syncSystemTheme();
+    media.addEventListener('change', syncSystemTheme);
+    return () => media.removeEventListener('change', syncSystemTheme);
   }, []);
 
   const updateThemeMode = (mode: DashboardThemeMode) => {
@@ -112,8 +150,9 @@ export default function DashboardClientLayout({
   };
 
   useEffect(() => {
-    document.documentElement.dataset.dashboardTheme = themeMode;
-  }, [themeMode]);
+    document.documentElement.dataset.dashboardTheme = resolvedThemeMode;
+    document.documentElement.dataset.dashboardThemePreference = themeMode;
+  }, [resolvedThemeMode, themeMode]);
 
   useEffect(() => {
     if (isSubscriptionRestricted && pathname !== '/dashboard/plans') {
@@ -138,7 +177,7 @@ export default function DashboardClientLayout({
   if (isManagedEmployeeRole && !canAccessRoute) {
     return (
       <div
-        className={`dashboard-shell dashboard-shell-${themeMode} flex h-screen bg-[var(--shell-bg)] text-[var(--shell-text)]`}
+        className={`dashboard-shell dashboard-shell-${resolvedThemeMode} flex h-screen bg-[var(--shell-bg)] text-[var(--shell-text)]`}
         style={shellStyle}
       >
         <Sidebar
@@ -147,6 +186,8 @@ export default function DashboardClientLayout({
           onClose={() => setIsSidebarOpen(false)}
           schoolName={session?.schoolName ?? undefined}
           permissionCodes={permissionCodes}
+          platformName={platformSettings.platformName}
+          platformSubtitle={platformSettings.consoleName}
         />
         <div className="flex flex-1 flex-col h-screen">
           <Header
@@ -156,7 +197,9 @@ export default function DashboardClientLayout({
             permissionCodes={permissionCodes}
             onMenuToggle={() => setIsSidebarOpen(!isSidebarOpen)}
             themeMode={themeMode}
+            resolvedThemeMode={resolvedThemeMode}
             onThemeModeChange={updateThemeMode}
+            consoleTitle={platformSettings.consoleName}
           />
           <main className="flex-1 overflow-y-auto bg-[var(--shell-bg)] p-4 transition-all duration-200 sm:p-6">
             <section className="mx-auto max-w-3xl rounded-2xl border border-[var(--shell-border)] bg-[var(--shell-card)] p-8 text-center">
@@ -177,7 +220,7 @@ export default function DashboardClientLayout({
 
   return (
     <div
-      className={`dashboard-shell dashboard-shell-${themeMode} ${isSuperAdminLayout ? 'super-admin-console' : ''} flex h-screen bg-[var(--shell-bg)] text-[var(--shell-text)]`}
+      className={`dashboard-shell dashboard-shell-${resolvedThemeMode} ${isSuperAdminLayout ? 'super-admin-console' : ''} flex h-screen bg-[var(--shell-bg)] text-[var(--shell-text)]`}
       style={shellStyle}
     >
       <Sidebar 
@@ -186,6 +229,8 @@ export default function DashboardClientLayout({
         onClose={() => setIsSidebarOpen(false)}
         schoolName={session?.schoolName ?? undefined}
         permissionCodes={permissionCodes}
+        platformName={platformSettings.platformName}
+        platformSubtitle={platformSettings.consoleName}
       />
       <div className="flex flex-1 flex-col h-screen">
         <Header 
@@ -195,7 +240,9 @@ export default function DashboardClientLayout({
           permissionCodes={permissionCodes}
           onMenuToggle={() => setIsSidebarOpen(!isSidebarOpen)} 
           themeMode={themeMode}
+          resolvedThemeMode={resolvedThemeMode}
           onThemeModeChange={updateThemeMode}
+          consoleTitle={platformSettings.consoleName}
         />
         <main
           className={
@@ -216,7 +263,7 @@ export default function DashboardClientLayout({
           }
         >
           <div className={isSuperAdminLayout ? 'mx-auto max-w-[1500px]' : 'mx-auto max-w-7xl'}>
-            SAAPT - School Management Console
+            {isSuperAdminLayout ? platformSettings.footerText : DEFAULT_PLATFORM_GENERAL_SETTINGS.footerText}
           </div>
         </footer>
       </div>

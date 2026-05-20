@@ -208,6 +208,7 @@ export const createSchoolUserApi = async (req: Request, res: Response) => {
       manualShareRequired: whatsapp.manualShareRequired,
       manualShareText: whatsapp.manualShareText,
       manualShareUrl: whatsapp.manualShareUrl,
+      notificationDeliveries: whatsapp.deliveries,
     });
     return;
   }
@@ -258,17 +259,14 @@ export const createSchoolUserApi = async (req: Request, res: Response) => {
     afterState: { email: user.email, roleName: payload.roleName },
   });
 
-  const whatsapp =
-    payload.roleName === 'SCHOOL_ADMIN'
-      ? await sendAccountCreatedWhatsapp({
-          role: 'SCHOOL_ADMIN',
-          schoolId,
-          email: user.email,
-          mobile: payload.phone ?? null,
-          tempPassword,
-          fullName: payload.email,
-        })
-      : null;
+  const whatsapp = await sendAccountCreatedWhatsapp({
+    role: payload.roleName,
+    schoolId,
+    email: user.email,
+    mobile: payload.phone ?? null,
+    tempPassword,
+    fullName: `${payload.firstName} ${payload.lastName}`.trim() || payload.email,
+  });
 
   const profile = await prisma.teacherProfile.create({
     data: {
@@ -318,6 +316,7 @@ export const createSchoolUserApi = async (req: Request, res: Response) => {
     manualShareRequired: whatsapp?.manualShareRequired ?? false,
     manualShareText: whatsapp?.manualShareText ?? null,
     manualShareUrl: whatsapp?.manualShareUrl ?? null,
+    notificationDeliveries: whatsapp?.deliveries ?? null,
   });
 };
 

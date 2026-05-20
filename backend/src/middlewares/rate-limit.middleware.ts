@@ -264,6 +264,9 @@ export const rateLimit = () => async (req: Request, _res: Response, next: NextFu
   if (env.NODE_ENV === 'test') {
     return next();
   }
+  if (req.path === '/api/v1/auth/login' || req.path === '/api/auth/login') {
+    return next();
+  }
   try {
     await defaultLimiter.consume(keyFor(req));
     return next();

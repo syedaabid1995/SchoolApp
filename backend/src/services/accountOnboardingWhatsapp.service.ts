@@ -9,6 +9,8 @@ const resolveSentTo = (mobile?: string | null) => {
   return trimmed.length > 0 ? trimmed : env.WHATSAPP_FALLBACK_TO;
 };
 
+const isDeliverableEmail = (email: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) && !email.endsWith('.local');
+
 const resolveSchoolName = async (schoolId?: string | null) => {
   if (!schoolId) return null;
   const school = await prisma.school.findUnique({
@@ -19,7 +21,7 @@ const resolveSchoolName = async (schoolId?: string | null) => {
 };
 
 export const sendAccountCreatedWhatsapp = async (params: {
-  role: 'SCHOOL_ADMIN' | 'TEACHER' | 'PARENT';
+  role: 'SCHOOL_ADMIN' | 'TEACHER' | 'PARENT' | 'ACCOUNTANT' | 'LIBRARIAN' | 'STAFF';
   email: string;
   mobile?: string | null;
   tempPassword?: string | null;
@@ -27,6 +29,7 @@ export const sendAccountCreatedWhatsapp = async (params: {
   schoolId?: string | null;
 }) => {
   const sentTo = resolveSentTo(params.mobile);
+  const mobile = (params.mobile ?? '').trim();
   const displayName = params.fullName?.trim() || params.email;
   const schoolName = await resolveSchoolName(params.schoolId);
   const appLabel =
@@ -64,53 +67,84 @@ export const sendAccountCreatedWhatsapp = async (params: {
   ].join('\n');
   const manualShareUrl = `https://wa.me/${sentTo}?text=${encodeURIComponent(manualShareText)}`;
 
-  const gatewayActive = await hasActiveMessagingGateway({
-    schoolId: params.schoolId ?? null,
-    channels: ['WHATSAPP', 'SMS'],
-  });
+  const deliveries: Record<
+    'EMAIL' | 'WHATSAPP' | 'SMS',
+    { attempted: boolean; sent: boolean; logId?: string; error?: string }
+  > = {
+    EMAIL: { attempted: false, sent: false },
+    WHATSAPP: { attempted: false, sent: false },
+    SMS: { attempted: false, sent: false },
+  };
 
-  if (!gatewayActive) {
-    logger.warn(
-      { role: params.role, sentTo, schoolId: params.schoolId ?? null },
-      'no active messaging gateway for school; manual share required',
-    );
-    return {
-      sentTo,
-      queued: false,
-      manualShareRequired: true,
-      manualShareText,
-      manualShareUrl,
-    };
+  const sendIfConfigured = async (channel: 'EMAIL' | 'WHATSAPP' | 'SMS', to: string) => {
+    const gatewayActive = await hasActiveMessagingGateway({
+      schoolId: params.schoolId ?? null,
+      channels: [channel],
+    });
+    if (!gatewayActive) return;
+
+    deliveries[channel].attempted = true;
+    try {
+      logger.info(
+        { role: params.role, channel, to, email: params.email, schoolId: params.schoolId ?? null },
+        'sending account onboarding message',
+      );
+      const result = await sendNotification({
+        schoolId: params.schoolId ?? null,
+        userId: null,
+        channel,
+        data: {
+          to,
+          subject: `${params.role} account created`,
+          body,
+        },
+      });
+      deliveries[channel] = {
+        attempted: true,
+        sent: result.delivery?.status === 'SENT',
+        logId: result.logId,
+        error: result.delivery?.error,
+      };
+    } catch (error) {
+      deliveries[channel] = {
+        attempted: true,
+        sent: false,
+        error: error instanceof Error ? error.message : 'Failed to send onboarding message',
+      };
+      logger.warn(
+        {
+          err: error,
+          role: params.role,
+          channel,
+          to,
+          schoolId: params.schoolId ?? null,
+        },
+        'failed to send account onboarding message',
+      );
+    }
+  };
+
+  if (isDeliverableEmail(params.email)) {
+    await sendIfConfigured('EMAIL', params.email);
+  }
+  if (mobile) {
+    await sendIfConfigured('WHATSAPP', mobile);
+    await sendIfConfigured('SMS', mobile);
   }
 
-  try {
-    logger.info({ role: params.role, sentTo, email: params.email, schoolId: params.schoolId ?? null }, 'queueing whatsapp onboarding message');
-    await sendNotification({
-      schoolId: params.schoolId ?? null,
-      userId: null,
-      channel: 'WHATSAPP',
-      data: {
-        to: sentTo,
-        subject: `${params.role} account created`,
-        body,
-      },
-    });
-    logger.info({ role: params.role, sentTo, email: params.email }, 'whatsapp onboarding message queued');
-  } catch (error) {
+  const queued = Object.values(deliveries).some((delivery) => delivery.sent);
+  if (!queued) {
     logger.warn(
-      {
-        err: error,
-        role: params.role,
-        sentTo,
-      },
-      'failed to queue whatsapp onboarding message',
+      { role: params.role, sentTo, email: params.email, schoolId: params.schoolId ?? null, deliveries },
+      'no active or successful onboarding delivery; manual share required',
     );
   }
 
   return {
     sentTo,
-    queued: true,
-    manualShareRequired: false,
+    queued,
+    deliveries,
+    manualShareRequired: !queued,
     manualShareText,
     manualShareUrl,
   };

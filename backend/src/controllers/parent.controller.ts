@@ -168,6 +168,7 @@ export const createParent = async (req: Request, res: Response) => {
     manualShareRequired: whatsapp.manualShareRequired,
     manualShareText: whatsapp.manualShareText,
     manualShareUrl: whatsapp.manualShareUrl,
+    notificationDeliveries: whatsapp.deliveries,
   });
 };
 

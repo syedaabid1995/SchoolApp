@@ -8,6 +8,7 @@ import { hashToken } from '../utils/token';
 import { hashPassword } from '../utils/password';
 import { buildAuthAuditMetadata, createAuthAuditLog, maskEmailForAudit } from '../utils/audit';
 import type { ForgotPasswordInput, LoginType, ResetPasswordInput } from '../validations/auth.validation';
+import { sendConfiguredEmail, type EmailDeliveryResult } from './email.service';
 
 export const PASSWORD_RESET_PUBLIC_RESPONSE = {
   message: 'If an account exists, password reset instructions have been sent.',
@@ -83,7 +84,7 @@ const logForgotPasswordAudit = async (params: {
   email: string;
   resetTokenId: string;
   expiresAt: Date;
-  delivery: 'development_log' | 'email_not_configured';
+  delivery: EmailDeliveryResult;
 }) => {
   try {
     await createAuthAuditLog({
@@ -218,8 +219,28 @@ const sendPasswordResetInstructions = async (params: {
   schoolId: string | null;
   resetLink: string;
   expiresAt: Date;
-}) => {
-  // A real email adapter is not configured in this codebase yet. The raw token is only logged in development.
+}): Promise<EmailDeliveryResult> => {
+  const delivery = await sendConfiguredEmail({
+    to: params.email,
+    subject: 'Reset your password',
+    body: [
+      'We received a request to reset your password.',
+      `Open this secure link to continue: ${params.resetLink}`,
+      `This link expires at ${params.expiresAt.toISOString()}.`,
+      'If you did not request this, you can ignore this message.',
+    ].join('\n\n'),
+    userId: params.userId,
+    schoolId: params.schoolId,
+    safePayload: {
+      purpose: 'PASSWORD_RESET',
+      expiresAt: params.expiresAt.toISOString(),
+    },
+  });
+
+  if (delivery !== 'email_not_configured') {
+    return delivery;
+  }
+
   if (env.NODE_ENV === 'development') {
     logger.info(
       {
@@ -246,7 +267,19 @@ const sendPasswordChangedNotification = async (params: {
   userId: string;
   schoolId: string | null;
 }) => {
-  // A real email adapter is not configured in this codebase yet.
+  const delivery = await sendConfiguredEmail({
+    to: params.email,
+    subject: 'Your password was changed',
+    body: 'Your password was changed successfully. If this was not you, contact your school administrator immediately.',
+    userId: params.userId,
+    schoolId: params.schoolId,
+    safePayload: { purpose: 'PASSWORD_CHANGED' },
+  });
+
+  if (delivery !== 'email_not_configured') {
+    return;
+  }
+
   if (env.NODE_ENV === 'development') {
     logger.info(
       {

@@ -1,6 +1,7 @@
 import { prisma } from '../config/db';
 import type { Prisma } from '@prisma/client';
 import { dispatchNotification } from './notificationDispatcher.service';
+import type { DeliveryResult } from '../notifications/NotificationAdapter';
 
 export type NotificationPayload = {
   schoolId?: string | null;
@@ -21,6 +22,7 @@ export const sendNotification = async (payload: NotificationPayload) => {
   let templateId: string | undefined;
   let subject = payload.data.subject ? String(payload.data.subject) : undefined;
   let body = payload.data.body ? String(payload.data.body) : undefined;
+  let delivery: DeliveryResult | null = null;
 
   if (payload.templateKey) {
     const template = await prisma.notificationTemplate.findUnique({
@@ -46,7 +48,7 @@ export const sendNotification = async (payload: NotificationPayload) => {
   });
 
   if (body) {
-    await dispatchNotification({
+    delivery = await dispatchNotification({
       logId: log.id,
       to: payload.data.to ? String(payload.data.to) : '',
       channel: payload.channel,
@@ -55,5 +57,5 @@ export const sendNotification = async (payload: NotificationPayload) => {
     });
   }
 
-  return { logId: log.id, subject, body };
+  return { logId: log.id, subject, body, delivery };
 };

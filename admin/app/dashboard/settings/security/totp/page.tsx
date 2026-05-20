@@ -56,7 +56,7 @@ export default function TotpSettingsPage() {
         <div className="mx-auto max-w-5xl space-y-6 pb-12">
           <PageHeader title="Authenticator App" subtitle="Checking two-step verification settings." />
           <div className="mb-5">
-            <Link href="/dashboard/settings/security" className="text-sm font-semibold text-blue-700 hover:text-blue-800">
+            <Link href="/dashboard/settings?tab=security" className="text-sm font-semibold text-blue-700 hover:text-blue-800">
               Back to security sessions
             </Link>
           </div>
@@ -76,7 +76,7 @@ export default function TotpSettingsPage() {
         <div className="mx-auto max-w-5xl space-y-6 pb-12">
           <PageHeader title="Authenticator App" subtitle="Two-step verification is currently disabled." />
           <div className="mb-5">
-            <Link href="/dashboard/settings/security" className="text-sm font-semibold text-blue-700 hover:text-blue-800">
+            <Link href="/dashboard/settings?tab=security" className="text-sm font-semibold text-blue-700 hover:text-blue-800">
               Back to security sessions
             </Link>
           </div>
@@ -157,7 +157,7 @@ export default function TotpSettingsPage() {
         <PageHeader title="Authenticator App" subtitle="Add app-based verification and one-time backup codes." />
 
         <div className="mb-5">
-          <Link href="/dashboard/settings/security" className="text-sm font-semibold text-blue-700 hover:text-blue-800">
+          <Link href="/dashboard/settings?tab=security" className="text-sm font-semibold text-blue-700 hover:text-blue-800">
             Back to security sessions
           </Link>
         </div>

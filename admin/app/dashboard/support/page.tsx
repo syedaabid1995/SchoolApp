@@ -1,7 +1,8 @@
 'use client';
 
 import Link from 'next/link';
-import { useMemo, useState } from 'react';
+import { useSearchParams } from 'next/navigation';
+import { useEffect, useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import PageHeader from '../../../components/PageHeader';
 import Button from '../../../components/Button';
@@ -78,6 +79,7 @@ function EmptyState({ message }: { message: string }) {
 
 export default function SupportPage() {
   const queryClient = useQueryClient();
+  const searchParams = useSearchParams();
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [form, setForm] = useState({
     subject: '',
@@ -102,6 +104,14 @@ export default function SupportPage() {
   });
 
   const isSuperAdmin = session?.role === 'SUPER_ADMIN';
+
+  useEffect(() => {
+    const urlSearch = searchParams.get('search') ?? searchParams.get('query') ?? '';
+    if (urlSearch) {
+      setFilters((current) => ({ ...current, search: urlSearch }));
+    }
+    if (searchParams.get('action') === 'create') setIsCreateModalOpen(true);
+  }, [searchParams]);
 
   const { data: schools } = useQuery({
     queryKey: ['support-schools'],

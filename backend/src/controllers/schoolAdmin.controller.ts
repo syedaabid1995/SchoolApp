@@ -87,6 +87,7 @@ export const createSchoolApi = async (req: Request, res: Response) => {
   let manualShareRequired = false;
   let manualShareText: string | null = null;
   let manualShareUrl: string | null = null;
+  let notificationDeliveries: unknown = null;
   if (result.adminUser) {
     await logAudit(req, {
       schoolId: result.school.id,
@@ -107,6 +108,7 @@ export const createSchoolApi = async (req: Request, res: Response) => {
     manualShareRequired = whatsapp.manualShareRequired;
     manualShareText = whatsapp.manualShareText;
     manualShareUrl = whatsapp.manualShareUrl;
+    notificationDeliveries = whatsapp.deliveries;
   }
   res.status(201).json({
     ...result,
@@ -115,6 +117,7 @@ export const createSchoolApi = async (req: Request, res: Response) => {
     manualShareRequired,
     manualShareText,
     manualShareUrl,
+    notificationDeliveries,
   });
 };
 
@@ -211,6 +214,7 @@ export const createSchoolAdminApi = async (req: Request, res: Response) => {
     manualShareRequired: whatsapp.manualShareRequired,
     manualShareText: whatsapp.manualShareText,
     manualShareUrl: whatsapp.manualShareUrl,
+    notificationDeliveries: whatsapp.deliveries,
   });
 };
 

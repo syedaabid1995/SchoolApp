@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import FullPageLoader from '../../../components/FullPageLoader';
 import PageHeader from '../../../components/PageHeader';
@@ -149,6 +149,7 @@ const initialActionForm = {
 
 export default function SubscriptionsPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const notify = useNotify();
   const queryClient = useQueryClient();
   const [selectedSchoolId, setSelectedSchoolId] = useState<string | null>(null);
@@ -172,6 +173,13 @@ export default function SubscriptionsPage() {
     refetchOnWindowFocus: false,
   });
   const isSuperAdmin = session?.role === 'SUPER_ADMIN';
+
+  useEffect(() => {
+    const urlSearch = searchParams.get('search') ?? searchParams.get('query') ?? '';
+    if (urlSearch) {
+      setFilters((current) => ({ ...current, search: urlSearch, page: 1 }));
+    }
+  }, [searchParams]);
 
   useEffect(() => {
     if (!isSessionLoading && session?.role && !isSuperAdmin) {

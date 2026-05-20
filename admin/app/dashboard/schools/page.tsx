@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import Link from 'next/link';
+import { useSearchParams } from 'next/navigation';
 import {
   listSchools,
   createSchool,
@@ -57,6 +58,7 @@ function ToolbarButton({
 export default function SchoolsPage() {
   const queryClient = useQueryClient();
   const notify = useNotify();
+  const searchParams = useSearchParams();
   const [query, setQuery] = useState('');
   const [form, setForm] = useState({
     name: '',
@@ -81,6 +83,12 @@ export default function SchoolsPage() {
   const [toolbarAction, setToolbarAction] = useState<ToolbarAction>(null);
   const [isMoreOpen, setIsMoreOpen] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<School | null>(null);
+
+  useEffect(() => {
+    const urlQuery = searchParams.get('query') ?? searchParams.get('search') ?? '';
+    if (urlQuery) setQuery(urlQuery);
+    if (searchParams.get('action') === 'create') setIsCreateModalOpen(true);
+  }, [searchParams]);
 
   useEffect(() => {
     const timer = setTimeout(() => setDebouncedQuery(query.trim()), 350);

@@ -1,17 +1,19 @@
 import { api } from '../lib/api';
 
+export type MessagingChannel = 'SMS' | 'WHATSAPP' | 'EMAIL' | 'PUSH';
+
 export type MessagingServiceItem = {
   id: string;
   code: string;
   name: string;
   status: 'ACTIVE' | 'INACTIVE';
-  supportedChannels: Array<'SMS' | 'WHATSAPP' | 'EMAIL' | 'PUSH'>;
+  supportedChannels: MessagingChannel[];
   schoolConfigsCount?: number;
 };
 
 export type SchoolMessagingConfig = {
   id: string;
-  channel: 'SMS' | 'WHATSAPP' | 'EMAIL' | 'PUSH';
+  channel: MessagingChannel;
   isEnabled: boolean;
   serviceId: string;
   serviceCode: string;
@@ -30,9 +32,28 @@ export const updateMessagingServiceStatus = async (id: string, status: 'ACTIVE' 
   return data;
 };
 
-export const listMessagingServicesForSchool = async (channel: 'SMS' | 'WHATSAPP' = 'WHATSAPP') => {
+export const getPlatformEmailConfig = async () => {
+  const { data } = await api.get<{ config: SchoolMessagingConfig | null }>('/admin/messaging-services/platform-email-config');
+  return data.config;
+};
+
+export const upsertPlatformEmailConfig = async (payload: {
+  serviceId: string;
+  isEnabled: boolean;
+  credentials: Record<string, string>;
+}) => {
+  const { data } = await api.put<SchoolMessagingConfig>('/admin/messaging-services/platform-email-config', payload);
+  return data;
+};
+
+export const togglePlatformEmailConfigStatus = async (payload: { isEnabled: boolean }) => {
+  const { data } = await api.patch<SchoolMessagingConfig>('/admin/messaging-services/platform-email-config/status', payload);
+  return data;
+};
+
+export const listMessagingServicesForSchool = async (channel: MessagingChannel = 'WHATSAPP') => {
   const { data } = await api.get<{
-    channel: 'SMS' | 'WHATSAPP' | 'EMAIL' | 'PUSH';
+    channel: MessagingChannel;
     currentServiceId: string | null;
     currentEnabled: boolean;
     services: MessagingServiceItem[];
@@ -40,26 +61,51 @@ export const listMessagingServicesForSchool = async (channel: 'SMS' | 'WHATSAPP'
   return data;
 };
 
-export const getSchoolMessagingConfig = async (channel: 'SMS' | 'WHATSAPP' = 'WHATSAPP') => {
+export const listMessagingServicesForSchoolScope = async (params: {
+  channel?: MessagingChannel;
+  schoolId?: string;
+}) => {
+  const { data } = await api.get<{
+    channel: MessagingChannel;
+    currentServiceId: string | null;
+    currentEnabled: boolean;
+    services: MessagingServiceItem[];
+  }>('/messaging-services/services', { params });
+  return data;
+};
+
+export const getSchoolMessagingConfig = async (channel: MessagingChannel = 'WHATSAPP') => {
   const { data } = await api.get<{ config: SchoolMessagingConfig | null }>('/messaging-services/config', {
     params: { channel },
   });
   return data.config;
 };
 
+export const getSchoolMessagingConfigForScope = async (params: {
+  channel?: MessagingChannel;
+  schoolId?: string;
+}) => {
+  const { data } = await api.get<{ config: SchoolMessagingConfig | null }>('/messaging-services/config', {
+    params,
+  });
+  return data.config;
+};
+
 export const upsertSchoolMessagingConfig = async (payload: {
-  channel: 'SMS' | 'WHATSAPP' | 'EMAIL' | 'PUSH';
+  channel: MessagingChannel;
   serviceId: string;
   isEnabled: boolean;
   credentials: Record<string, string>;
+  schoolId?: string;
 }) => {
   const { data } = await api.put('/messaging-services/config', payload);
   return data;
 };
 
 export const toggleSchoolMessagingConfigStatus = async (payload: {
-  channel: 'SMS' | 'WHATSAPP' | 'EMAIL' | 'PUSH';
+  channel: MessagingChannel;
   isEnabled: boolean;
+  schoolId?: string;
 }) => {
   const { data } = await api.patch('/messaging-services/config/status', payload);
   return data;

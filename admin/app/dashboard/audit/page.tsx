@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
+import { useSearchParams } from 'next/navigation';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import PageHeader from '../../../components/PageHeader';
 import FullPageLoader from '../../../components/FullPageLoader';
@@ -81,6 +82,7 @@ const defaultExportDates = () => {
 };
 
 export default function AuditPage() {
+  const searchParams = useSearchParams();
   const notify = useNotify();
   const queryClient = useQueryClient();
   const [selectedLogId, setSelectedLogId] = useState<string | null>(null);
@@ -116,6 +118,13 @@ export default function AuditPage() {
     staleTime: 60_000,
   });
   const isSuperAdmin = session?.role === 'SUPER_ADMIN';
+
+  useEffect(() => {
+    const urlSearch = searchParams.get('search') ?? searchParams.get('query') ?? '';
+    if (urlSearch) {
+      setFilters((current) => ({ ...current, search: urlSearch, page: 1 }));
+    }
+  }, [searchParams]);
 
   useEffect(() => {
     if (session?.role === 'TEACHER') {
