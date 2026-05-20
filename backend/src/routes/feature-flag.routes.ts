@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import { authMiddleware } from '../middlewares/auth.middleware';
+import { requireSuperAdmin } from '../middlewares/rbac.middleware';
 import {
   createFeatureFlag,
   listFeatureFlags,
@@ -20,6 +21,7 @@ import {
 export const featureFlagRouter = Router();
 
 featureFlagRouter.use(authMiddleware);
+featureFlagRouter.use(requireSuperAdmin);
 
 featureFlagRouter.get('/login-experience', getLoginExperienceSettings);
 featureFlagRouter.put('/login-experience', updateLoginExperienceSettings);

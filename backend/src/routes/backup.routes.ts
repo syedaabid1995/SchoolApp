@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import { authMiddleware } from '../middlewares/auth.middleware';
+import { requireSuperAdmin } from '../middlewares/rbac.middleware';
 import {
   requestBackup,
   requestRestore,
@@ -11,6 +12,7 @@ import {
 export const backupRouter = Router();
 
 backupRouter.use(authMiddleware);
+backupRouter.use(requireSuperAdmin);
 
 backupRouter.post('/backups', requestBackup);
 backupRouter.get('/backups', listBackups);

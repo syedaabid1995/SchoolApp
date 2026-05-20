@@ -4,6 +4,7 @@ import { prisma } from '../config/db';
 import { HttpError } from './error.middleware';
 
 const SUPER_ADMIN_ROLE: RoleName = 'SUPER_ADMIN';
+const SCHOOL_ADMIN_ROLE: RoleName = 'SCHOOL_ADMIN';
 
 export const requireAuth = (req: Request) => {
   if (!req.auth) {
@@ -36,6 +37,31 @@ export const requireRole = (...roles: RoleName[]) => {
       return next(err);
     }
   };
+};
+
+export const requireSuperAdmin = requireRole(SUPER_ADMIN_ROLE);
+
+export const requireSchoolAdminOrSuperAdmin = async (req: Request, _res: Response, next: NextFunction) => {
+  try {
+    const auth = requireAuth(req);
+    const userRoles = await prisma.userRole.findMany({
+      where: { userId: auth.userId },
+      select: { role: { select: { name: true } } },
+    });
+
+    const roleNames = userRoles.map((entry) => entry.role.name);
+    if (roleNames.includes(SUPER_ADMIN_ROLE)) {
+      return next();
+    }
+
+    if (roleNames.includes(SCHOOL_ADMIN_ROLE) && auth.schoolId) {
+      return next();
+    }
+
+    return next(new HttpError(403, 'Forbidden'));
+  } catch (err) {
+    return next(err);
+  }
 };
 
 export const requirePermission = (...permissions: string[]) => {

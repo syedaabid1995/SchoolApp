@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import { authMiddleware } from '../middlewares/auth.middleware';
+import { requireSchoolAdminOrSuperAdmin } from '../middlewares/rbac.middleware';
 import {
   createTheme,
   updateThemeTokens,
@@ -12,6 +13,7 @@ import {
 export const themeRouter = Router();
 
 themeRouter.use(authMiddleware);
+themeRouter.use(requireSchoolAdminOrSuperAdmin);
 
 themeRouter.post('/', createTheme);
 
