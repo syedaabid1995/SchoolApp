@@ -15,14 +15,14 @@ docker rm -f school-backend-test 2>/dev/null || true
 docker run -d --name school-backend-test -p 3001:3000 \
   -e NODE_ENV=production \
   -e PORT=3000 \
-  -e DATABASE_URL='postgresql://dbmasteruser:ftU96iSdTntxFABVyugRAgIINSRLrnrs@ls-3c5e763705e9a8092a52ffa071968d3045936947.c9mca6se4wvj.ap-south-1.rds.amazonaws.com:5432/school_saas' \
-  -e JWT_SECRET='your-super-secret-jwt-key-that-is-at-least-32-characters-long' \
+  -e DATABASE_URL="${DATABASE_URL:?set DATABASE_URL before running}" \
+  -e JWT_SECRET="${JWT_SECRET:?set JWT_SECRET before running}" \
   -e REDIS_URL='redis://localhost:6379' \
-  -e AWS_ACCESS_KEY_ID='AKIA4MUMKFRK2WVGPIWA' \
-  -e AWS_SECRET_ACCESS_KEY='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' \
-  -e AWS_REGION='us-east-1' \
-  -e AWS_S3_BUCKET='school-saas-bucket' \
-  -e CORS_ORIGINS='http://localhost:3000,http://127.0.0.1:3000,http://localhost:3001,http://127.0.0.1:3001,https://school-frontend.techstageit.com' \
+  -e AWS_ACCESS_KEY_ID="${AWS_ACCESS_KEY_ID:?set AWS_ACCESS_KEY_ID before running}" \
+  -e AWS_SECRET_ACCESS_KEY="${AWS_SECRET_ACCESS_KEY:?set AWS_SECRET_ACCESS_KEY before running}" \
+  -e AWS_REGION="${AWS_REGION:-us-east-1}" \
+  -e AWS_S3_BUCKET="${AWS_S3_BUCKET:?set AWS_S3_BUCKET before running}" \
+  -e CORS_ORIGINS="${CORS_ORIGINS:-http://localhost:3000,http://127.0.0.1:3000,http://localhost:3001,http://127.0.0.1:3001}" \
   school-backend-local:latest
 
 # 4) Logs
@@ -36,7 +36,7 @@ docker exec school-backend-test redis-cli ping
 
 # 7) Push to Lightsail
 aws lightsail push-container-image \
-  --service-name school-backend \
-  --label school-backend \
+  --service-name "${LIGHTSAIL_BACKEND_SERVICE:?set LIGHTSAIL_BACKEND_SERVICE before running}" \
+  --label backend \
   --image school-backend-local:latest \
-  --region us-east-1
+  --region "${AWS_REGION:-us-east-1}"

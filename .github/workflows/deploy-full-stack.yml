@@ -39,6 +39,29 @@ jobs:
         curl -o lightsailctl https://s3.us-west-2.amazonaws.com/lightsailctl/latest/linux-amd64/lightsailctl
         chmod +x lightsailctl
         sudo mv lightsailctl /usr/local/bin/
+
+    - name: Validate Backend Lightsail Service
+      if: steps.backend-changes.outputs.backend == 'true' || github.event_name == 'workflow_dispatch'
+      env:
+        SERVICE_NAME: ${{ secrets.LIGHTSAIL_BACKEND_SERVICE }}
+        AWS_REGION: ${{ secrets.AWS_REGION }}
+      run: |
+        if [ -z "$SERVICE_NAME" ]; then
+          echo "::error::GitHub secret LIGHTSAIL_BACKEND_SERVICE is empty."
+          exit 1
+        fi
+
+        if ! aws lightsail get-container-services \
+          --service-name "$SERVICE_NAME" \
+          --region "$AWS_REGION" >/tmp/backend-lightsail-service.json; then
+          echo "::error::Backend Lightsail container service was not found in region '$AWS_REGION'. Create the service or fix LIGHTSAIL_BACKEND_SERVICE/AWS_REGION secrets."
+          echo "Container services visible in this region:"
+          aws lightsail get-container-services \
+            --region "$AWS_REGION" \
+            --query "containerServices[].containerServiceName" \
+            --output table || true
+          exit 1
+        fi
         
     - name: Build and Push Backend
       if: steps.backend-changes.outputs.backend == 'true' || github.event_name == 'workflow_dispatch'
@@ -138,6 +161,29 @@ jobs:
         curl -o lightsailctl https://s3.us-west-2.amazonaws.com/lightsailctl/latest/linux-amd64/lightsailctl
         chmod +x lightsailctl
         sudo mv lightsailctl /usr/local/bin/
+
+    - name: Validate Frontend Lightsail Service
+      if: steps.admin-changes.outputs.admin == 'true' || github.event_name == 'workflow_dispatch'
+      env:
+        SERVICE_NAME: ${{ secrets.LIGHTSAIL_FRONTEND_SERVICE }}
+        AWS_REGION: ${{ secrets.AWS_REGION }}
+      run: |
+        if [ -z "$SERVICE_NAME" ]; then
+          echo "::error::GitHub secret LIGHTSAIL_FRONTEND_SERVICE is empty."
+          exit 1
+        fi
+
+        if ! aws lightsail get-container-services \
+          --service-name "$SERVICE_NAME" \
+          --region "$AWS_REGION" >/tmp/frontend-lightsail-service.json; then
+          echo "::error::Frontend Lightsail container service was not found in region '$AWS_REGION'. Create the service or fix LIGHTSAIL_FRONTEND_SERVICE/AWS_REGION secrets."
+          echo "Container services visible in this region:"
+          aws lightsail get-container-services \
+            --region "$AWS_REGION" \
+            --query "containerServices[].containerServiceName" \
+            --output table || true
+          exit 1
+        fi
         
     - name: Build and Push Frontend
       if: steps.admin-changes.outputs.admin == 'true' || github.event_name == 'workflow_dispatch'
