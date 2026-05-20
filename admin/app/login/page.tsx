@@ -23,6 +23,8 @@ type BrandStyle = CSSProperties & Record<`--brand-${string}`, string>;
 
 const genericLoginError = 'Invalid login details. Please try again.';
 const rememberStorageKey = 'login.remember';
+const lastAccountStorageKey = 'login.lastAccount';
+const demoPassword = process.env.NODE_ENV === 'development' ? 'Password@123' : '';
 const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{12}$/i;
 
 const formCopy = {
@@ -115,6 +117,10 @@ const clearRememberedLogin = () => {
   localStorage.removeItem(rememberStorageKey);
 };
 
+const clearLastAccount = () => {
+  localStorage.removeItem(lastAccountStorageKey);
+};
+
 const safeRememberedLogin = (value: unknown): RememberedLogin | null => {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
   const source = value as Record<string, unknown>;
@@ -127,6 +133,17 @@ const safeRememberedLogin = (value: unknown): RememberedLogin | null => {
   if (typeof source.schoolId === 'string') safe.schoolId = source.schoolId.trim();
 
   return safe;
+};
+
+const safeLastAccount = (value: unknown): RememberedLogin | null => {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+  const source = value as Record<string, unknown>;
+  const safe: RememberedLogin = {};
+  if (typeof source.email === 'string') safe.email = source.email.trim();
+  if (typeof source.username === 'string') safe.username = source.username.trim();
+  if (typeof source.schoolCode === 'string') safe.schoolCode = source.schoolCode.trim();
+  if (typeof source.schoolId === 'string') safe.schoolId = source.schoolId.trim();
+  return safe.email || safe.username ? safe : null;
 };
 
 const readRememberedLogin = () => {
@@ -145,6 +162,24 @@ const readRememberedLogin = () => {
     return safe;
   } catch {
     clearRememberedLogin();
+    return null;
+  }
+};
+
+const readLastAccount = () => {
+  const raw = localStorage.getItem(lastAccountStorageKey);
+  if (!raw) return null;
+
+  try {
+    const safe = safeLastAccount(JSON.parse(raw));
+    if (!safe) {
+      clearLastAccount();
+      return null;
+    }
+    localStorage.setItem(lastAccountStorageKey, JSON.stringify(safe));
+    return safe;
+  } catch {
+    clearLastAccount();
     return null;
   }
 };
@@ -185,7 +220,7 @@ export default function LoginPage() {
   const [brandingLoading, setBrandingLoading] = useState(false);
   const [schoolCode, setSchoolCode] = useState('');
   const [identifier, setIdentifier] = useState('');
-  const [password, setPassword] = useState('');
+  const [password, setPassword] = useState(demoPassword);
   const [rememberMe, setRememberMe] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [forgotOpen, setForgotOpen] = useState(false);
@@ -196,6 +231,7 @@ export default function LoginPage() {
   const [submitting, setSubmitting] = useState(false);
   const [hostSchoolCode, setHostSchoolCode] = useState<string | null>(null);
   const [domainNotFound, setDomainNotFound] = useState(false);
+  const [passwordOnlyMode, setPasswordOnlyMode] = useState(false);
 
   const leftPanelEnabled = branding.leftPanelEnabled !== false;
   const pageShellClassName = leftPanelEnabled
@@ -249,28 +285,28 @@ export default function LoginPage() {
   useEffect(() => {
     const detectedSchoolCode = resolveSchoolSubdomainFromHost(window.location.host);
     const remembered = readRememberedLogin();
+    const lastAccount = remembered ?? readLastAccount();
     if (detectedSchoolCode) {
-      const rememberedIdentifier = remembered?.email || remembered?.username || '';
+      const rememberedIdentifier = lastAccount?.email || lastAccount?.username || '';
       setHostSchoolCode(detectedSchoolCode);
       setSchoolCode(detectedSchoolCode);
       setForgotSchoolCode(detectedSchoolCode);
       setIdentifier(rememberedIdentifier);
       setForgotEmail(rememberedIdentifier);
       setRememberMe(Boolean(remembered?.rememberMe));
+      setPasswordOnlyMode(Boolean(rememberedIdentifier));
       void loadBranding(detectedSchoolCode);
       void validateHostSchoolDomain(detectedSchoolCode);
       return;
     }
 
-    if (remembered) {
-      const rememberedIdentifier = remembered.email || remembered.username || '';
-      const rememberedSchool = remembered.schoolCode || remembered.schoolId || '';
+    if (lastAccount) {
+      const rememberedIdentifier = lastAccount.email || lastAccount.username || '';
       setIdentifier(rememberedIdentifier);
-      setSchoolCode(rememberedSchool);
       setForgotEmail(rememberedIdentifier);
-      setForgotSchoolCode(rememberedSchool);
-      setRememberMe(true);
-      void loadBranding(rememberedSchool || undefined);
+      setRememberMe(Boolean(remembered?.rememberMe));
+      setPasswordOnlyMode(Boolean(rememberedIdentifier));
+      void loadBranding();
       return;
     }
     void loadBranding();
@@ -288,13 +324,23 @@ export default function LoginPage() {
   }, [branding.faviconUrl]);
 
   const persistRememberedLogin = () => {
+    const trimmedIdentifier = identifier.trim();
+    const trimmedSchool = schoolCode.trim();
+    if (trimmedIdentifier) {
+      localStorage.setItem(
+        lastAccountStorageKey,
+        JSON.stringify({
+          ...(isEmail(trimmedIdentifier) ? { email: trimmedIdentifier } : { username: trimmedIdentifier }),
+          ...(uuidPattern.test(trimmedSchool) ? { schoolId: trimmedSchool } : trimmedSchool ? { schoolCode: trimmedSchool } : {}),
+        }),
+      );
+    }
+
     if (!rememberMe) {
       clearRememberedLogin();
       return;
     }
     // Never store passwords or tokens in browser storage. Remember-me keeps only non-secret identifiers.
-    const trimmedIdentifier = identifier.trim();
-    const trimmedSchool = schoolCode.trim();
     localStorage.setItem(
       rememberStorageKey,
       JSON.stringify({
@@ -310,6 +356,18 @@ export default function LoginPage() {
     if (!checked) clearRememberedLogin();
   };
 
+  const handleUseAnotherAccount = () => {
+    clearRememberedLogin();
+    clearLastAccount();
+    setPasswordOnlyMode(false);
+    setRememberMe(false);
+    setIdentifier('');
+    setForgotEmail('');
+    setPassword(demoPassword);
+    setErrors({});
+    setMessage('');
+  };
+
   const handleSchoolBlur = () => {
     if (hostSchoolCode) return;
     const trimmed = schoolCode.trim();
@@ -319,7 +377,7 @@ export default function LoginPage() {
 
   const validateLogin = () => {
     const nextErrors: FieldErrors = {};
-    if (schoolCode.trim() && !isValidSchoolInput(schoolCode)) nextErrors.schoolCode = formCopy.invalidSchool;
+    if (hostSchoolCode && schoolCode.trim() && !isValidSchoolInput(schoolCode)) nextErrors.schoolCode = formCopy.invalidSchool;
     if (!identifier.trim()) nextErrors.identifier = formCopy.identifierRequired;
     if (!password) nextErrors.password = formCopy.passwordRequired;
     else if (password.length < 8) nextErrors.password = formCopy.passwordLength;
@@ -360,8 +418,8 @@ export default function LoginPage() {
       else if (result.mustChangePassword) router.replace('/change-password');
       else if (result.subscriptionRestricted) router.replace('/dashboard/plans');
       else router.replace('/dashboard');
-    } catch {
-      setErrors({ form: genericLoginError });
+    } catch (error) {
+      setErrors({ form: error instanceof Error ? error.message : genericLoginError });
     } finally {
       setSubmitting(false);
     }
@@ -527,35 +585,6 @@ export default function LoginPage() {
                     {fieldError('forgotEmail')}
                   </div>
 
-                  <div>
-                    <label className="block text-sm font-semibold" htmlFor="forgotSchoolCode">
-                      {formCopy.schoolLabel}
-                    </label>
-                    <input
-                      id="forgotSchoolCode"
-                      name="forgotSchoolCode"
-                      type="text"
-                      autoComplete="organization"
-                      value={forgotSchoolCode}
-                      readOnly={Boolean(hostSchoolCode)}
-                      onChange={(event) => {
-                        if (!hostSchoolCode) setForgotSchoolCode(event.target.value);
-                      }}
-                      onBlur={() => {
-                        if (hostSchoolCode) return;
-                        if (isValidSchoolInput(forgotSchoolCode)) void loadBranding(forgotSchoolCode.trim() || undefined);
-                      }}
-                      className={`${inputClassName} mt-2 ${hostSchoolCode ? 'cursor-not-allowed opacity-80' : ''}`}
-                      placeholder={formCopy.schoolPlaceholder}
-                      aria-describedby={errors.forgotSchoolCode ? 'forgotSchoolCode-error' : undefined}
-                      aria-invalid={Boolean(errors.forgotSchoolCode)}
-                    />
-                    {hostSchoolCode ? (
-                      <p className="mt-1 text-xs font-semibold text-[var(--brand-muted)]">Detected from school domain.</p>
-                    ) : null}
-                    {fieldError('forgotSchoolCode')}
-                  </div>
-
                   <div className="flex flex-col gap-3 sm:flex-row">
                     <button
                       type="submit"
@@ -579,55 +608,43 @@ export default function LoginPage() {
                 </>
               ) : (
                 <>
-                  <div>
-                    <label className="block text-sm font-semibold" htmlFor="schoolCode">
-                      {formCopy.schoolLabel}
-                    </label>
-                    <input
-                      id="schoolCode"
-                      name="schoolCode"
-                      type="text"
-                      autoComplete="organization"
-                      value={schoolCode}
-                      readOnly={Boolean(hostSchoolCode)}
-                      onChange={(event) => {
-                        if (hostSchoolCode) return;
-                        setSchoolCode(event.target.value);
-                        setForgotSchoolCode(event.target.value);
-                      }}
-                      onBlur={handleSchoolBlur}
-                      className={`${inputClassName} mt-2 ${hostSchoolCode ? 'cursor-not-allowed opacity-80' : ''}`}
-                      placeholder={formCopy.schoolPlaceholder}
-                      aria-describedby={errors.schoolCode ? 'schoolCode-error' : undefined}
-                      aria-invalid={Boolean(errors.schoolCode)}
-                    />
-                    {hostSchoolCode ? (
-                      <p className="mt-1 text-xs font-semibold text-[var(--brand-muted)]">Detected from school domain.</p>
-                    ) : null}
-                    {fieldError('schoolCode')}
-                  </div>
-
-                  <div>
-                    <label className="block text-sm font-semibold" htmlFor="identifier">
-                      {formCopy.identifierLabel}
-                    </label>
-                    <input
-                      id="identifier"
-                      name="username"
-                      type="text"
-                      autoComplete="username"
-                      value={identifier}
-                      onChange={(event) => {
-                        setIdentifier(event.target.value);
-                        setForgotEmail(event.target.value);
-                      }}
-                      className={`${inputClassName} mt-2`}
-                      placeholder={formCopy.identifierPlaceholder}
-                      aria-describedby={errors.identifier ? 'identifier-error' : undefined}
-                      aria-invalid={Boolean(errors.identifier)}
-                    />
-                    {fieldError('identifier')}
-                  </div>
+                  {passwordOnlyMode ? (
+                    <div className="rounded-[var(--brand-radius-half)] border border-[var(--brand-border)] bg-[var(--brand-bg)] px-4 py-3">
+                      <p className="text-xs font-semibold uppercase tracking-wide text-[var(--brand-muted)]">Signed in as</p>
+                      <div className="mt-2 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                        <p className="min-w-0 truncate text-sm font-bold text-[var(--brand-text)]">{identifier}</p>
+                        <button
+                          type="button"
+                          onClick={handleUseAnotherAccount}
+                          className="w-fit rounded-[var(--brand-radius-small)] border border-[var(--brand-border)] px-3 py-2 text-xs font-bold text-[var(--brand-text)] transition hover:bg-[var(--brand-card)] focus:outline-none focus:ring-4 focus:ring-[var(--brand-focus-soft)]"
+                        >
+                          Use another account
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <div>
+                      <label className="block text-sm font-semibold" htmlFor="identifier">
+                        {formCopy.identifierLabel}
+                      </label>
+                      <input
+                        id="identifier"
+                        name="username"
+                        type="text"
+                        autoComplete="username"
+                        value={identifier}
+                        onChange={(event) => {
+                          setIdentifier(event.target.value);
+                          setForgotEmail(event.target.value);
+                        }}
+                        className={`${inputClassName} mt-2`}
+                        placeholder={formCopy.identifierPlaceholder}
+                        aria-describedby={errors.identifier ? 'identifier-error' : undefined}
+                        aria-invalid={Boolean(errors.identifier)}
+                      />
+                      {fieldError('identifier')}
+                    </div>
+                  )}
 
                   <div>
                     <label className="block text-sm font-semibold" htmlFor="password">

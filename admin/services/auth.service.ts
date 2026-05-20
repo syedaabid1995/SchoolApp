@@ -18,7 +18,12 @@ export const login = async (payload: {
     body: JSON.stringify(payload),
   });
   if (!res.ok) {
-    throw new Error(GENERIC_LOGIN_ERROR);
+    const data = await res.json().catch(() => null);
+    const message =
+      (data as any)?.error?.message ||
+      (data as any)?.message ||
+      (res.status === 429 ? 'Too many attempts. Please try again later.' : GENERIC_LOGIN_ERROR);
+    throw new Error(message);
   }
   return res.json() as Promise<{
     mustChangePassword?: boolean;
