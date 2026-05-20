@@ -80,8 +80,16 @@ export async function POST(req: Request) {
     console.error('Login API error:', error.message);
     
     if (error.response) {
+      const backendMessage =
+        typeof error.response.data?.error?.message === 'string'
+          ? error.response.data.error.message
+          : typeof error.response.data?.message === 'string'
+            ? error.response.data.message
+            : error.response.status === 429
+              ? 'Too many attempts. Please try again later.'
+              : GENERIC_LOGIN_ERROR;
       return new NextResponse(
-        JSON.stringify({ error: { message: GENERIC_LOGIN_ERROR } }),
+        JSON.stringify({ error: { message: backendMessage } }),
         { status: error.response.status, headers: { 'Content-Type': 'application/json' } }
       );
     }

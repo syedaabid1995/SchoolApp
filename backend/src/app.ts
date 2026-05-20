@@ -63,6 +63,7 @@ export const createApp = () => {
   const allowAllOrigins = env.NODE_ENV !== 'production' || allowedOrigins.includes('*');
 
   app.disable('x-powered-by');
+  app.set('trust proxy', 1);
   app.use(
     helmet({
       crossOriginResourcePolicy: { policy: 'cross-origin' },

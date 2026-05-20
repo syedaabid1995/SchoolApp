@@ -25,8 +25,6 @@ const aiLimiter = new RateLimiterMemory({
   duration: 60,
 });
 
-const keyFor = (req: Request) => req.auth?.schoolId ?? req.ip;
-
 type MemoryCounter = {
   count: number;
   expiresAt: number;
@@ -55,6 +53,8 @@ const requestIp = (req: Request) => {
   const realIp = firstHeaderValue(req.headers['x-real-ip']);
   return forwardedFor?.split(',')[0]?.trim() || realIp?.trim() || req.ip || req.socket.remoteAddress || 'unknown';
 };
+
+const keyFor = (req: Request) => req.auth?.schoolId ?? requestIp(req);
 
 export const authLimiterSchoolScope = (body: unknown) => {
   const record = typeof body === 'object' && body !== null ? (body as Record<string, unknown>) : {};
