@@ -425,30 +425,43 @@ export const login = async (req: Request, res: Response) => {
     return rejectLogin(reason, meta);
   };
 
-  const user = await prisma.user.findFirst({
+  const loginUserSelect = {
+    id: true,
+    email: true,
+    passwordHash: true,
+    mustChangePassword: true,
+    mfaEnabled: true,
+    mfaMethod: true,
+    schoolId: true,
+    status: true,
+    teacherProfile: { select: { firstName: true, lastName: true } },
+    parentProfiles: { select: { firstName: true, lastName: true }, take: 1 },
+    totpCredential: {
+      select: {
+        enabledAt: true,
+        disabledAt: true,
+      },
+    },
+  } as const;
+
+  let user = await prisma.user.findFirst({
     where: {
       email: { equals: identifier, mode: 'insensitive' },
       schoolId: selectedSchoolId,
     },
-    select: {
-      id: true,
-      email: true,
-      passwordHash: true,
-      mustChangePassword: true,
-      mfaEnabled: true,
-      mfaMethod: true,
-      schoolId: true,
-      status: true,
-      teacherProfile: { select: { firstName: true, lastName: true } },
-      parentProfiles: { select: { firstName: true, lastName: true }, take: 1 },
-      totpCredential: {
-        select: {
-          enabledAt: true,
-          disabledAt: true,
-        },
-      },
-    },
+    select: loginUserSelect,
   });
+
+  if (!user && selectedSchoolId) {
+    user = await prisma.user.findFirst({
+      where: {
+        email: { equals: identifier, mode: 'insensitive' },
+        schoolId: null,
+        roles: { some: { role: { name: 'SUPER_ADMIN' } } },
+      },
+      select: loginUserSelect,
+    });
+  }
 
   if (!user) {
     await failLogin('user_not_found_or_wrong_school', { selectedSchoolId, loginType: loginType ?? null });

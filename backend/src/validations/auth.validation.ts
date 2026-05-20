@@ -2,13 +2,16 @@ import { z } from 'zod';
 
 export const loginTypeSchema = z.enum(['admin', 'staff', 'teacher', 'student', 'parent']);
 
+const emptyStringToUndefined = (value: unknown) =>
+  typeof value === 'string' && value.trim() === '' ? undefined : value;
+
 export const loginSchema = z
   .object({
     email: z.string().trim().email().optional(),
     username: z.string().trim().min(1).max(255).optional(),
     password: z.string().min(8),
-    schoolId: z.string().trim().uuid().optional(),
-    schoolCode: z.string().trim().min(1).max(64).optional(),
+    schoolId: z.preprocess(emptyStringToUndefined, z.string().trim().uuid().optional()),
+    schoolCode: z.preprocess(emptyStringToUndefined, z.string().trim().min(1).max(64).optional()),
     rememberMe: z.boolean().optional().default(false),
     loginType: loginTypeSchema.optional(),
   })

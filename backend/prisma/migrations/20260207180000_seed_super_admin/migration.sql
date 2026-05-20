@@ -18,7 +18,7 @@ WITH inserted_user AS (
     gen_random_uuid(),
     NULL,
     'techstageit@admin.com',
-    '$2a$12$PeAKVc00eKvwUCduzfI8JuBKdfO8xoyy/XVmCMlzozIWGHVFkNJR.',
+    '$2a$12$cX7C5XfrrhHq2m1dMOP9yumYOQDl33aFbRXcHiojAaluBC7jQsk..',
     false,
     'ACTIVE',
     NOW(),

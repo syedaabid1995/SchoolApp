@@ -9,9 +9,13 @@ const appendBackendSetCookies = (
   setCookieHeader: string | string[] | undefined,
 ) => {
   if (!setCookieHeader) return;
-  const cookies = Array.isArray(setCookieHeader) ? setCookieHeader : [setCookieHeader];
+  const rawCookies = Array.isArray(setCookieHeader) ? setCookieHeader : [setCookieHeader];
+  const cookies = rawCookies.flatMap((cookie) =>
+    cookie.split(/,(?=\s*(?:access_token|refresh_token|accessToken|refreshToken)=)/),
+  );
   for (const cookie of cookies) {
-    if (cookie) response.headers.append('set-cookie', cookie);
+    const trimmed = cookie.trim();
+    if (trimmed) response.headers.append('set-cookie', trimmed);
   }
 };
 
@@ -59,8 +63,6 @@ export async function POST(req: Request) {
       subscriptionRestricted: Boolean(data.subscriptionRestricted),
       user: data.user ?? null,
     });
-    appendBackendSetCookies(nextResponse, response.headers['set-cookie']);
-
     if (data.mustChangePassword) {
       nextResponse.cookies.set('must_change_password', '1', {
         httpOnly: true,
@@ -71,6 +73,7 @@ export async function POST(req: Request) {
     } else {
       nextResponse.cookies.delete('must_change_password');
     }
+    appendBackendSetCookies(nextResponse, response.headers['set-cookie']);
 
     return nextResponse;
   } catch (error: any) {
