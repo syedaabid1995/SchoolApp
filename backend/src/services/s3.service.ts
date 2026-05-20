@@ -40,3 +40,19 @@ export const getSignedUrlForKey = async (params: { key: string; expiresInSeconds
   });
   return getSignedUrl(s3, command, { expiresIn: params.expiresInSeconds ?? 900 });
 };
+
+export const getObjectForKey = async (params: { key: string }) => {
+  const result = await s3.send(
+    new GetObjectCommand({
+      Bucket: env.AWS_S3_BUCKET,
+      Key: params.key,
+    }),
+  );
+
+  return {
+    body: result.Body,
+    contentType: result.ContentType,
+    contentLength: result.ContentLength,
+    cacheControl: result.CacheControl,
+  };
+};

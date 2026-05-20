@@ -14,6 +14,7 @@ import {
   normalizeLoginBranding,
   type LoginBranding,
 } from '../services/branding.service';
+import { isBrandingAssetProxyUrl } from '../utils/brandingAssets';
 import {
   LOGIN_EXPERIENCE_KEY,
   getStoredLoginExperience,
@@ -38,6 +39,7 @@ const safeUrlSchema = z
   .max(2000)
   .refine((value) => {
     if (!value) return true;
+    if (isBrandingAssetProxyUrl(value)) return true;
     try {
       const parsed = new URL(value);
       return ['http:', 'https:'].includes(parsed.protocol);
@@ -45,6 +47,12 @@ const safeUrlSchema = z
       return false;
     }
   }, 'URL must use http or https.');
+
+const brandingAssetUrlSchema = z
+  .string()
+  .trim()
+  .max(2000)
+  .refine((value) => isBrandingAssetProxyUrl(value), 'Upload the image instead of entering an external URL.');
 
 const expandHex = (value: string) => {
   const trimmed = value.trim();
@@ -63,10 +71,10 @@ const hexColorSchema = z
 const loginBrandingSchema = z.object({
   appName: z.string().trim().min(1).max(80),
   schoolName: z.string().trim().max(120).optional(),
-  logoUrl: safeUrlSchema.optional().default(''),
-  darkLogoUrl: safeUrlSchema.optional().default(''),
-  compactLogoUrl: safeUrlSchema.optional().default(''),
-  faviconUrl: safeUrlSchema.optional().default(''),
+  logoUrl: brandingAssetUrlSchema.optional().default(''),
+  darkLogoUrl: brandingAssetUrlSchema.optional().default(''),
+  compactLogoUrl: brandingAssetUrlSchema.optional().default(''),
+  faviconUrl: brandingAssetUrlSchema.optional().default(''),
   loginHeading: z.string().trim().min(1).max(120),
   loginSubtitle: z.string().trim().min(1).max(220),
   leftPanelTitle: z.string().trim().min(1).max(140),

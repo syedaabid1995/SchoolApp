@@ -5,12 +5,10 @@ import { useQuery } from '@tanstack/react-query';
 import { Sidebar } from './Sidebar';
 import { Header, type DashboardResolvedThemeMode, type DashboardThemeMode } from './Header';
 import { getSession } from '../services/auth.service';
-import { listConfigEntries } from '../services/config.service';
 import {
-  DEFAULT_PLATFORM_GENERAL_SETTINGS,
-  PLATFORM_GENERAL_CONFIG_KEY,
-  normalizePlatformGeneralSettings,
-} from '../services/platform-settings.service';
+  defaultLoginBranding,
+  getLoginBrandingSettings,
+} from '../services/branding.service';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { EMPLOYEE_MANAGED_ROLES, getRequiredPermissionForPath } from '../config/employee-permissions';
 
@@ -63,16 +61,19 @@ export default function DashboardClientLayout({
     (!settingsTab ||
       settingsTab === 'security' ||
       (session?.role === 'SCHOOL_ADMIN' && ['branding', 'theme'].includes(settingsTab)));
-  const { data: platformConfigEntries } = useQuery({
-    queryKey: ['config-entries', 'platform-general-shell'],
-    queryFn: listConfigEntries,
+  const { data: shellBranding } = useQuery({
+    queryKey: ['login-branding-settings', 'platform-shell'],
+    queryFn: () => getLoginBrandingSettings(),
     enabled: isSuperAdminLayout,
     refetchOnWindowFocus: false,
     staleTime: 5 * 60_000,
   });
-  const platformSettings = normalizePlatformGeneralSettings(
-    platformConfigEntries?.find((entry) => entry.key === PLATFORM_GENERAL_CONFIG_KEY)?.value,
-  );
+  const platformSettings = {
+    platformName: shellBranding?.appName || defaultLoginBranding.appName,
+    consoleName: shellBranding?.schoolName || defaultLoginBranding.schoolName || 'School Management Console',
+    footerText: shellBranding?.footerText || defaultLoginBranding.footerText,
+    defaultThemeMode: 'system' as DashboardThemeMode,
+  };
   const canAccessRoute =
     !isManagedEmployeeRole || isSafeSettingsTab || (requiredPermission ? permissionCodes.includes(requiredPermission) : false);
   const canAccessSuperAdminRoute =
@@ -263,7 +264,7 @@ export default function DashboardClientLayout({
           }
         >
           <div className={isSuperAdminLayout ? 'mx-auto max-w-[1500px]' : 'mx-auto max-w-7xl'}>
-            {isSuperAdminLayout ? platformSettings.footerText : DEFAULT_PLATFORM_GENERAL_SETTINGS.footerText}
+            {isSuperAdminLayout ? platformSettings.footerText : defaultLoginBranding.footerText}
           </div>
         </footer>
       </div>

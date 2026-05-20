@@ -43,6 +43,27 @@ export type LoginBranding = {
   leftPanelEnabled?: boolean;
 };
 
+export type BrandingAssetType =
+  | 'logo'
+  | 'compactLogo'
+  | 'darkLogo'
+  | 'favicon'
+  | 'background'
+  | 'illustration';
+
+export type BrandingAssetUploadResult = {
+  url: string;
+  key: string;
+  filename: string;
+  assetType: BrandingAssetType;
+  contentType: string;
+  size: number;
+  dimensions?: {
+    width: number;
+    height: number;
+  };
+};
+
 export const defaultLoginBranding: LoginBranding = {
   appName: 'School Management System',
   schoolName: 'School Portal',
@@ -234,6 +255,22 @@ export const resetLoginBranding = async (params?: { schoolId?: string }) => {
     params: cleanParams(params),
   });
   return unwrapData(data);
+};
+
+export const uploadBrandingAsset = async (
+  file: File,
+  assetType: BrandingAssetType,
+  params?: { schoolId?: string },
+) => {
+  const form = new FormData();
+  form.append('file', file);
+  form.append('assetType', assetType);
+  if (params?.schoolId) form.append('schoolId', params.schoolId);
+
+  const { data } = await api.post<BrandingAssetUploadResult>('/uploads/branding', form, {
+    headers: { 'Content-Type': 'multipart/form-data' },
+  });
+  return data;
 };
 
 export const getPublicLoginBranding = getLoginBranding;

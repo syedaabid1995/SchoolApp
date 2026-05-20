@@ -186,18 +186,11 @@ const superAdminSearchItems: GlobalSearchItem[] = [
     keywords: ['audit', 'logs', 'security logs', 'activity', 'export'],
   },
   {
-    title: 'Themes',
-    description: 'Manage theme tokens and publishing',
-    href: '/dashboard/settings?tab=theme',
+    title: 'Branding & Theme',
+    description: 'Manage identity, login branding, colors, publishing, and rollback',
+    href: '/dashboard/settings?tab=brand',
     group: 'Settings',
-    keywords: ['theme', 'themes', 'color', 'publish', 'rollback'],
-  },
-  {
-    title: 'Login Branding',
-    description: 'Customize login page branding',
-    href: '/dashboard/settings?tab=branding',
-    group: 'Settings',
-    keywords: ['branding', 'login branding', 'logo', 'login page'],
+    keywords: ['theme', 'themes', 'color', 'publish', 'rollback', 'branding', 'login branding', 'logo', 'login page', 'general'],
   },
   {
     title: 'System Health',

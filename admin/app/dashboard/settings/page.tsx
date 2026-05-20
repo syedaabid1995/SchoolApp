@@ -17,29 +17,18 @@ import {
   updateConfigEntry,
   updateFeatureFlag,
 } from '../../../services/config.service';
-import {
-  type PlatformGeneralSettings,
-  DEFAULT_PLATFORM_GENERAL_SETTINGS,
-  PLATFORM_GENERAL_CONFIG_KEY,
-  normalizePlatformGeneralSettings,
-} from '../../../services/platform-settings.service';
 import { getSession } from '../../../services/auth.service';
 import FullPageLoader from '../../../components/FullPageLoader';
 import PageHeader from '../../../components/PageHeader';
 import Button from '../../../components/Button';
-import LoginExperienceSettings from '../../../components/LoginExperienceSettings';
 import BrandingPage from './branding/page';
 import SecurityPage from './security/page';
 import SmsPage from './sms/page';
 import ConsentPage from './consent/page';
 import AccessPage from './access/page';
-import ThemesPage from '../themes/page';
 
 type SettingsTabId =
-  | 'general'
-  | 'branding'
-  | 'login'
-  | 'theme'
+  | 'brand'
   | 'security'
   | 'messaging'
   | 'features'
@@ -69,30 +58,16 @@ type ConfigDraft = {
 };
 
 const flagKeyPattern = /^[a-z0-9][a-z0-9_-]*$/;
+const managedConfigKeys = new Set([
+  'platform.general',
+  'login.experience',
+]);
 
 const settingsTabs: SettingsTab[] = [
   {
-    id: 'general',
-    label: 'General',
-    description: 'Platform name, shell text, support details, and default theme.',
-    roles: ['SUPER_ADMIN'],
-  },
-  {
-    id: 'branding',
-    label: 'Branding',
-    description: 'Login logos, colors, school branding, and preview.',
-    roles: ['SUPER_ADMIN', 'SCHOOL_ADMIN'],
-  },
-  {
-    id: 'login',
-    label: 'Login',
-    description: 'Login text, role cards, colors, and authentication options.',
-    roles: ['SUPER_ADMIN'],
-  },
-  {
-    id: 'theme',
-    label: 'Theme',
-    description: 'Theme token publishing and rollback.',
+    id: 'brand',
+    label: 'Branding & Theme',
+    description: 'Platform identity, login branding, colors, publish, rollback, and preview.',
     roles: ['SUPER_ADMIN', 'SCHOOL_ADMIN'],
   },
   {
@@ -184,148 +159,17 @@ const getApiErrorMessage = (error: unknown) => {
   return responseMessage?.error?.message || responseMessage?.message || 'Unable to save settings. Please try again.';
 };
 
-const isValidUrlOrEmpty = (value: string) => {
-  if (!value.trim()) return true;
-  try {
-    const url = new URL(value);
-    return url.protocol === 'http:' || url.protocol === 'https:';
-  } catch {
-    return false;
-  }
-};
-
 const textInputClass =
   'w-full rounded-xl border border-[var(--shell-border)] bg-[var(--shell-card)] px-3 py-2.5 text-sm text-[var(--shell-text)] outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10';
 
 const selectClass =
   'w-full rounded-xl border border-[var(--shell-border)] bg-[var(--shell-card)] px-3 py-2.5 text-sm font-semibold text-[var(--shell-text)] outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10';
 
-function GeneralSettingsTab() {
-  const queryClient = useQueryClient();
-  const [form, setForm] = useState<PlatformGeneralSettings>(DEFAULT_PLATFORM_GENERAL_SETTINGS);
-  const [message, setMessage] = useState('');
-  const [error, setError] = useState('');
-
-  const configsQuery = useQuery({
-    queryKey: ['config-entries'],
-    queryFn: listConfigEntries,
-    refetchOnWindowFocus: false,
-    staleTime: 60_000,
-  });
-
-  const platformConfig = configsQuery.data?.find((entry) => entry.key === PLATFORM_GENERAL_CONFIG_KEY);
-
-  useEffect(() => {
-    setForm(normalizePlatformGeneralSettings(platformConfig?.value));
-  }, [platformConfig?.value]);
-
-  const saveMutation = useMutation({
-    mutationFn: (payload: PlatformGeneralSettings) =>
-      platformConfig
-        ? updateConfigEntry(platformConfig.id, { value: payload, description: 'Platform shell and general console settings.' })
-        : createConfigEntry({
-            key: PLATFORM_GENERAL_CONFIG_KEY,
-            description: 'Platform shell and general console settings.',
-            value: payload,
-          }),
-    onSuccess: () => {
-      setError('');
-      setMessage('General settings saved. Header, sidebar, and footer will use these values.');
-      queryClient.invalidateQueries({ queryKey: ['config-entries'] });
-    },
-    onError: (mutationError) => {
-      setMessage('');
-      setError(getApiErrorMessage(mutationError));
-    },
-  });
-
-  const updateForm = <K extends keyof PlatformGeneralSettings>(key: K, value: PlatformGeneralSettings[K]) => {
-    setForm((current) => ({ ...current, [key]: value }));
-    setMessage('');
-    setError('');
-  };
-
-  const save = () => {
-    if (!form.platformName.trim()) {
-      setError('Platform name is required.');
-      return;
-    }
-    if (!form.consoleName.trim()) {
-      setError('Console name is required.');
-      return;
-    }
-    if (!isValidUrlOrEmpty(form.supportUrl)) {
-      setError('Support URL must be a valid http or https URL.');
-      return;
-    }
-    saveMutation.mutate(form);
-  };
-
+function BrandThemeSettingsTab() {
   return (
-    <section className="rounded-2xl border border-[var(--shell-border)] bg-[var(--shell-card)] p-5 shadow-sm">
-      {saveMutation.isPending ? <FullPageLoader label="Saving settings..." /> : null}
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <h2 className="text-lg font-bold text-[var(--shell-text)]">General Platform Settings</h2>
-          <p className="mt-1 text-sm text-[var(--shell-muted)]">
-            These values drive the Super Admin header, sidebar brand, footer text, and default theme preference.
-          </p>
-        </div>
-        <Button variant="primary" size="sm" onClick={save} disabled={saveMutation.isPending} loading={saveMutation.isPending}>
-          Save General Settings
-        </Button>
-      </div>
-
-      <div className="mt-5 grid gap-4 lg:grid-cols-2">
-        <label className="space-y-2">
-          <span className="text-sm font-semibold text-[var(--shell-text)]">Platform Name</span>
-          <input className={textInputClass} value={form.platformName} onChange={(event) => updateForm('platformName', event.target.value)} />
-        </label>
-        <label className="space-y-2">
-          <span className="text-sm font-semibold text-[var(--shell-text)]">Console Name</span>
-          <input className={textInputClass} value={form.consoleName} onChange={(event) => updateForm('consoleName', event.target.value)} />
-        </label>
-        <label className="space-y-2">
-          <span className="text-sm font-semibold text-[var(--shell-text)]">Support Email</span>
-          <input className={textInputClass} value={form.supportEmail} onChange={(event) => updateForm('supportEmail', event.target.value)} />
-        </label>
-        <label className="space-y-2">
-          <span className="text-sm font-semibold text-[var(--shell-text)]">Support URL</span>
-          <input className={textInputClass} value={form.supportUrl} onChange={(event) => updateForm('supportUrl', event.target.value)} placeholder="https://..." />
-        </label>
-        <label className="space-y-2">
-          <span className="text-sm font-semibold text-[var(--shell-text)]">Default Theme</span>
-          <select
-            className={selectClass}
-            value={form.defaultThemeMode}
-            onChange={(event) => updateForm('defaultThemeMode', event.target.value as PlatformGeneralSettings['defaultThemeMode'])}
-          >
-            <option value="system">System</option>
-            <option value="light">Light</option>
-            <option value="dark">Dark</option>
-          </select>
-        </label>
-        <label className="flex items-center justify-between gap-3 rounded-xl border border-[var(--shell-border)] bg-[var(--shell-subtle)] px-4 py-3">
-          <span>
-            <span className="block text-sm font-semibold text-[var(--shell-text)]">Maintenance Mode Flag</span>
-            <span className="block text-xs text-[var(--shell-muted)]">Saved as a platform setting for operational use.</span>
-          </span>
-          <input
-            type="checkbox"
-            checked={form.maintenanceMode}
-            onChange={(event) => updateForm('maintenanceMode', event.target.checked)}
-            className="h-5 w-5"
-          />
-        </label>
-        <label className="space-y-2 lg:col-span-2">
-          <span className="text-sm font-semibold text-[var(--shell-text)]">Footer Text</span>
-          <input className={textInputClass} value={form.footerText} onChange={(event) => updateForm('footerText', event.target.value)} />
-        </label>
-      </div>
-
-      {error ? <p className="mt-4 text-sm font-semibold text-rose-600">{error}</p> : null}
-      {message ? <p className="mt-4 text-sm font-semibold text-emerald-600">{message}</p> : null}
-    </section>
+    <div className="space-y-5">
+      <BrandingPage embedded />
+    </div>
   );
 }
 
@@ -414,7 +258,7 @@ function FeatureConfigSettingsTab({ advancedOnly = false }: { advancedOnly?: boo
     updateConfigMutation.isPending;
 
   const flags = flagsQuery.data ?? [];
-  const configs = configsQuery.data ?? [];
+  const configs = (configsQuery.data ?? []).filter((config) => !managedConfigKeys.has(config.key));
 
   const getFlagDraft = (flag: FeatureFlag): FlagDraft =>
     flagDrafts[flag.id] ?? {
@@ -885,7 +729,8 @@ function OperationsLinkTab({ type }: { type: 'compliance' | 'backups' }) {
 export default function SettingsPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const requestedTab = (searchParams.get('tab') || 'general') as SettingsTabId;
+  const requestedTabParam = searchParams.get('tab') || 'brand';
+  const requestedTab = (['general', 'branding', 'login', 'theme'].includes(requestedTabParam) ? 'brand' : requestedTabParam) as SettingsTabId;
 
   const { data: session, isLoading } = useQuery({
     queryKey: ['session'],
@@ -924,14 +769,8 @@ export default function SettingsPage() {
 
   const renderActiveTab = () => {
     switch (activeTab) {
-      case 'general':
-        return <GeneralSettingsTab />;
-      case 'branding':
-        return <BrandingPage />;
-      case 'login':
-        return <LoginExperienceSettings />;
-      case 'theme':
-        return <ThemesPage />;
+      case 'brand':
+        return <BrandThemeSettingsTab />;
       case 'security':
         return <SecurityPage />;
       case 'messaging':
@@ -949,7 +788,7 @@ export default function SettingsPage() {
       case 'advanced':
         return <FeatureConfigSettingsTab advancedOnly />;
       default:
-        return <GeneralSettingsTab />;
+        return <BrandThemeSettingsTab />;
     }
   };
 
@@ -957,7 +796,7 @@ export default function SettingsPage() {
     <div className="space-y-5 pb-12">
       <PageHeader
         title="Settings"
-        subtitle="One workspace for platform branding, login experience, security, modules, messaging, and advanced configuration."
+        subtitle="One workspace for branding, theme, security, modules, messaging, and advanced configuration."
         breadcrumbs={[
           { label: 'Dashboard', href: '/dashboard' },
           { label: 'Settings' },

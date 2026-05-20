@@ -51,6 +51,7 @@ import { uploadRouter } from './routes/upload.routes';
 import { messagingAdminRouter } from './routes/messagingAdmin.routes';
 import { messagingSettingsRouter } from './routes/messagingSettings.routes';
 import { publicBrandingRouter } from './routes/publicBranding.routes';
+import { publicAssetRouter } from './routes/publicAsset.routes';
 import { schoolDomainRouter } from './routes/schoolDomain.routes';
 import { rateLimit } from './middlewares/rate-limit.middleware';
 import { apiVersionMiddleware } from './middlewares/version.middleware';
@@ -133,6 +134,7 @@ export const createApp = () => {
   app.use('/docs', swaggerUi.serve, swaggerUi.setup(openapiSpec));
 
   app.use('/api/v1/public/branding', publicBrandingRouter);
+  app.use('/api/v1/public/assets', publicAssetRouter);
   app.use('/api/v1/public/school-domain', schoolDomainRouter);
 
   const isWriteMethod = (method: string) => ['POST', 'PUT', 'PATCH', 'DELETE'].includes(method);

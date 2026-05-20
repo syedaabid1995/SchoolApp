@@ -1,6 +1,6 @@
 'use client';
 
-import type { CSSProperties } from 'react';
+import type { ChangeEvent } from 'react';
 import { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
@@ -16,6 +16,8 @@ import {
   resetLoginBranding,
   rollbackLoginBranding,
   updateLoginBranding,
+  uploadBrandingAsset,
+  type BrandingAssetType,
   type LoginBranding,
 } from '../../../../services/branding.service';
 
@@ -46,6 +48,25 @@ const colorFields: Array<{ key: keyof LoginBranding; label: string }> = [
 const fieldClass =
   'w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100';
 
+const acceptedImageTypes = ['image/png', 'image/jpeg', 'image/webp'];
+const acceptedExtensions = ['png', 'jpg', 'jpeg', 'webp'];
+const assetLimits: Record<
+  BrandingAssetType,
+  { maxBytes: number; minWidth: number; minHeight: number; maxWidth: number; maxHeight: number }
+> = {
+  logo: { maxBytes: 1 * 1024 * 1024, minWidth: 32, minHeight: 32, maxWidth: 1600, maxHeight: 1600 },
+  compactLogo: { maxBytes: 1 * 1024 * 1024, minWidth: 32, minHeight: 32, maxWidth: 1200, maxHeight: 1200 },
+  darkLogo: { maxBytes: 1 * 1024 * 1024, minWidth: 32, minHeight: 32, maxWidth: 1600, maxHeight: 1600 },
+  favicon: { maxBytes: 512 * 1024, minWidth: 16, minHeight: 16, maxWidth: 512, maxHeight: 512 },
+  background: { maxBytes: 3 * 1024 * 1024, minWidth: 320, minHeight: 160, maxWidth: 3840, maxHeight: 2160 },
+  illustration: { maxBytes: 2 * 1024 * 1024, minWidth: 120, minHeight: 120, maxWidth: 2400, maxHeight: 2400 },
+};
+
+const formatBytes = (value: number) => {
+  if (value >= 1024 * 1024) return `${value / 1024 / 1024} MB`;
+  return `${Math.round(value / 1024)} KB`;
+};
+
 const normalizeBranding = (value: LoginBranding): LoginBranding => ({
   ...defaultLoginBranding,
   ...value,
@@ -55,18 +76,11 @@ const normalizeBranding = (value: LoginBranding): LoginBranding => ({
   successColor: value.successColor || '#16a34a',
 });
 
-const initials = (branding: LoginBranding) => {
-  const source = branding.schoolName || branding.appName || 'School';
-  return source
-    .split(/\s+/)
-    .filter(Boolean)
-    .slice(0, 2)
-    .map((part) => part[0]?.toUpperCase())
-    .join('');
-};
-
 const isSafeUrl = (value?: string) => {
   if (!value?.trim()) return true;
+  if (value.startsWith('/api/proxy/public/assets/branding?') || value.startsWith('/api/v1/public/assets/branding?')) {
+    return true;
+  }
   try {
     const parsed = new URL(value);
     return ['http:', 'https:'].includes(parsed.protocol);
@@ -75,19 +89,9 @@ const isSafeUrl = (value?: string) => {
   }
 };
 
-const previewBackground = (branding: LoginBranding): CSSProperties => {
-  if (branding.backgroundType === 'gradient') {
-    return { background: `linear-gradient(135deg, ${branding.gradientFrom || branding.backgroundColor}, ${branding.gradientTo || branding.cardBackgroundColor})` };
-  }
-  if ((branding.backgroundType === 'image' || branding.backgroundType === 'pattern') && branding.backgroundImageUrl) {
-    return {
-      backgroundColor: branding.backgroundColor,
-      backgroundImage: `linear-gradient(rgba(248, 250, 252, 0.72), rgba(248, 250, 252, 0.9)), url(${branding.backgroundImageUrl})`,
-      backgroundSize: branding.backgroundType === 'pattern' ? '280px' : 'cover',
-      backgroundPosition: 'center',
-    };
-  }
-  return { backgroundColor: branding.backgroundColor };
+const isUploadedBrandingAssetUrl = (value?: string) => {
+  if (!value?.trim()) return true;
+  return value.startsWith('/api/proxy/public/assets/branding?') || value.startsWith('/api/v1/public/assets/branding?');
 };
 
 function TextField({
@@ -132,125 +136,119 @@ function ColorField({ label, value, onChange }: { label: string; value: string; 
   );
 }
 
-function PreviewLogo({ branding }: { branding: LoginBranding }) {
-  const [failed, setFailed] = useState(false);
-  if (branding.logoUrl && !failed) {
-    return (
-      // eslint-disable-next-line @next/next/no-img-element
-      <img
-        src={branding.logoUrl}
-        alt={`${branding.schoolName || branding.appName} logo`}
-        onError={() => setFailed(true)}
-        className="h-[var(--brand-logo-size)] w-[var(--brand-logo-size)] rounded-[var(--brand-radius-half)] object-cover"
-      />
-    );
-  }
+const loadImageDimensions = (file: File) =>
+  new Promise<{ width: number; height: number }>((resolve, reject) => {
+    const url = URL.createObjectURL(file);
+    const image = new Image();
+    image.onload = () => {
+      URL.revokeObjectURL(url);
+      resolve({ width: image.naturalWidth, height: image.naturalHeight });
+    };
+    image.onerror = () => {
+      URL.revokeObjectURL(url);
+      reject(new Error('Unable to read image dimensions.'));
+    };
+    image.src = url;
+  });
+
+function AssetUploadField({
+  label,
+  value,
+  assetType,
+  onUpload,
+  onClear,
+}: {
+  label: string;
+  value?: string;
+  assetType: BrandingAssetType;
+  onUpload: (file: File) => Promise<void>;
+  onClear: () => void;
+}) {
+  const [uploading, setUploading] = useState(false);
+  const [localError, setLocalError] = useState('');
+  const limit = assetLimits[assetType];
+
+  const validateAndUpload = async (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    event.target.value = '';
+    setLocalError('');
+    if (!file) return;
+
+    const extension = file.name.split('.').pop()?.toLowerCase();
+    if (!acceptedImageTypes.includes(file.type) || !extension || !acceptedExtensions.includes(extension)) {
+      setLocalError('Upload PNG, JPG, or WebP only. SVG and external links are not allowed.');
+      return;
+    }
+
+    if (file.size > limit.maxBytes) {
+      setLocalError(`${label} must be ${formatBytes(limit.maxBytes)} or smaller.`);
+      return;
+    }
+
+    try {
+      const dimensions = await loadImageDimensions(file);
+      if (
+        dimensions.width < limit.minWidth ||
+        dimensions.height < limit.minHeight ||
+        dimensions.width > limit.maxWidth ||
+        dimensions.height > limit.maxHeight
+      ) {
+        setLocalError(`${label} must be between ${limit.minWidth}x${limit.minHeight} and ${limit.maxWidth}x${limit.maxHeight}px.`);
+        return;
+      }
+
+      setUploading(true);
+      await onUpload(file);
+    } catch (err: any) {
+      setLocalError(err?.response?.data?.error?.message || err?.message || 'Unable to upload image.');
+    } finally {
+      setUploading(false);
+    }
+  };
 
   return (
-    <span className="flex h-[var(--brand-logo-size)] w-[var(--brand-logo-size)] items-center justify-center rounded-[var(--brand-radius-half)] bg-[var(--brand-primary)] text-sm font-bold text-[var(--brand-button-text)]">
-      {initials(branding)}
-    </span>
-  );
-}
-
-function LoginPreview({ branding }: { branding: LoginBranding }) {
-  const style = {
-    '--brand-primary': branding.primaryColor,
-    '--brand-secondary': branding.secondaryColor,
-    '--brand-accent': branding.accentColor,
-    '--brand-bg': branding.backgroundColor,
-    '--brand-card': branding.cardBackgroundColor,
-    '--brand-text': branding.textColor,
-    '--brand-muted': branding.mutedTextColor,
-    '--brand-border': branding.borderColor,
-    '--brand-button': branding.buttonBackgroundColor || branding.primaryColor,
-    '--brand-button-text': branding.buttonTextColor,
-    '--brand-link': branding.linkColor,
-    '--brand-error': branding.errorColor,
-    '--brand-radius': branding.borderRadius || '24px',
-    '--brand-radius-half': `calc(${branding.borderRadius || '24px'} / 2)`,
-    '--brand-logo-size': branding.logoSize || '56px',
-    '--brand-shadow': branding.cardShadow || '0 20px 45px rgba(15, 23, 42, 0.12)',
-    ...previewBackground(branding),
-  } as CSSProperties;
-
-  return (
-    <section className="sticky top-24 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-      <div className="mb-4 flex items-center justify-between">
-        <div>
-          <h2 className="text-lg font-bold text-slate-950">Live Preview</h2>
-          <p className="text-sm text-slate-500">Preview updates as fields change.</p>
-        </div>
-      </div>
-      <div className="overflow-hidden rounded-[var(--brand-radius)] border border-[var(--brand-border)] text-[var(--brand-text)]" style={style}>
-        <div className="grid min-h-[560px] gap-0 lg:grid-cols-[1fr_390px]">
-          {branding.leftPanelEnabled !== false ? (
-            <aside className="hidden flex-col justify-between bg-[var(--brand-secondary)] p-7 text-[var(--brand-button-text)] lg:flex">
-              <div className="flex items-center gap-3">
-                <PreviewLogo branding={branding} />
-                <div className="min-w-0">
-                  <p className="truncate font-bold">{branding.schoolName || branding.appName}</p>
-                  <p className="text-xs opacity-75">{branding.appName}</p>
-                </div>
-              </div>
-              <div>
-                <h3 className="text-3xl font-bold leading-tight">{branding.leftPanelTitle}</h3>
-                <p className="mt-4 text-sm leading-6 opacity-80">{branding.leftPanelDescription}</p>
-                {branding.illustrationUrl ? (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img src={branding.illustrationUrl} alt={`${branding.appName} preview`} className="mt-5 max-h-36 w-full rounded-[var(--brand-radius-half)] object-cover" />
-                ) : null}
-              </div>
-              <div className="space-y-2">
-                {branding.features.map((feature) => (
-                  <div key={feature} className="flex items-center gap-2 rounded-[var(--brand-radius-half)] border border-white/15 bg-white/10 px-3 py-2 text-xs font-semibold">
-                    <span className="h-2 w-2 rounded-full bg-[var(--brand-accent)]" />
-                    {feature}
-                  </div>
-                ))}
-                <p className="pt-1 text-xs opacity-75">{branding.securityNote}</p>
-              </div>
-            </aside>
+    <div className="space-y-2">
+      <span className="text-sm font-semibold text-slate-700">{label}</span>
+      <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
+        <div className="flex items-center gap-3">
+          <div className="flex h-16 w-16 shrink-0 items-center justify-center overflow-hidden rounded-xl border border-slate-200 bg-white text-xs font-bold text-slate-400">
+            {value ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img src={value} alt={`${label} preview`} className="h-full w-full object-contain" />
+            ) : (
+              'No image'
+            )}
+          </div>
+          <div className="min-w-0 flex-1">
+            <input
+              type="file"
+              accept="image/png,image/jpeg,image/webp"
+              onChange={validateAndUpload}
+              disabled={uploading}
+              className="block w-full text-sm text-slate-600 file:mr-3 file:rounded-lg file:border-0 file:bg-blue-600 file:px-3 file:py-2 file:text-sm file:font-semibold file:text-white hover:file:bg-blue-700"
+            />
+            <p className="mt-2 text-xs text-slate-500">
+              PNG, JPG, or WebP. Max {formatBytes(limit.maxBytes)}. {limit.minWidth}x{limit.minHeight} to {limit.maxWidth}x{limit.maxHeight}px.
+            </p>
+          </div>
+          {value ? (
+            <button
+              type="button"
+              onClick={onClear}
+              className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-100"
+            >
+              Remove
+            </button>
           ) : null}
-          <main className="flex items-center justify-center p-5">
-            <div className="w-full max-w-sm rounded-[var(--brand-radius)] border border-[var(--brand-border)] bg-[var(--brand-card)] p-5 shadow-[var(--brand-shadow)]">
-              <div className="mb-5 flex items-center gap-3">
-                <PreviewLogo branding={branding} />
-                <div className="min-w-0">
-                  <p className="truncate font-bold">{branding.schoolName || branding.appName}</p>
-                  <p className="text-xs text-[var(--brand-muted)]">{branding.appName}</p>
-                </div>
-              </div>
-              <h3 className="text-2xl font-bold">{branding.loginHeading}</h3>
-              <p className="mt-2 text-sm leading-6 text-[var(--brand-muted)]">{branding.loginSubtitle}</p>
-              <div className="mt-5 space-y-3">
-                {['School Code / School ID', 'Email or Username', 'Password'].map((label) => (
-                  <div key={label}>
-                    <p className="mb-1 text-xs font-semibold">{label}</p>
-                    <div className="h-10 rounded-[var(--brand-radius-half)] border border-[var(--brand-border)] bg-[var(--brand-bg)]" />
-                  </div>
-                ))}
-                <div className="flex justify-between text-xs">
-                  <span className="text-[var(--brand-muted)]">Remember me</span>
-                  <span className="font-semibold text-[var(--brand-link)]">{branding.forgotPasswordText}</span>
-                </div>
-                <button className="w-full rounded-[var(--brand-radius-half)] bg-[var(--brand-button)] px-4 py-3 text-sm font-bold text-[var(--brand-button-text)]">
-                  {branding.loginButtonText}
-                </button>
-              </div>
-              <div className="mt-5 border-t border-[var(--brand-border)] pt-4 text-center">
-                <p className="text-xs text-[var(--brand-muted)]">{branding.supportText}</p>
-                <p className="mt-1 text-[11px] text-[var(--brand-muted)]">{branding.footerText}</p>
-              </div>
-            </div>
-          </main>
         </div>
+        {uploading ? <p className="mt-2 text-xs font-semibold text-blue-700">Uploading...</p> : null}
+        {localError ? <p className="mt-2 text-xs font-semibold text-rose-700">{localError}</p> : null}
       </div>
-    </section>
+    </div>
   );
 }
 
-export default function LoginBrandingSettingsPage() {
+export default function LoginBrandingSettingsPage({ embedded = false }: { embedded?: boolean }) {
   const router = useRouter();
   const queryClient = useQueryClient();
   const [selectedSchoolId, setSelectedSchoolId] = useState('');
@@ -347,6 +345,14 @@ export default function LoginBrandingSettingsPage() {
     setMessage('');
   };
 
+  const uploadAsset = async (field: keyof LoginBranding, assetType: BrandingAssetType, file: File) => {
+    setError('');
+    setMessage('');
+    const result = await uploadBrandingAsset(file, assetType, params);
+    setForm((current) => ({ ...current, [field]: result.url }));
+    setMessage(`${file.name} uploaded successfully.`);
+  };
+
   const validationError = useMemo(() => {
     if (!form.appName.trim()) return 'App name is required.';
     if (!form.loginHeading.trim()) return 'Login heading is required.';
@@ -354,7 +360,9 @@ export default function LoginBrandingSettingsPage() {
     if (!form.features.filter((feature) => feature.trim()).length) return 'At least one feature is required.';
     const invalidColor = colorFields.find((field) => !hexPattern.test(String(form[field.key] ?? '')));
     if (invalidColor) return `${invalidColor.label}: Enter a valid hex color.`;
-    const urlFields: Array<keyof LoginBranding> = ['logoUrl', 'darkLogoUrl', 'compactLogoUrl', 'faviconUrl', 'backgroundImageUrl', 'illustrationUrl'];
+    const logoFields: Array<keyof LoginBranding> = ['logoUrl', 'darkLogoUrl', 'compactLogoUrl', 'faviconUrl'];
+    if (logoFields.some((field) => !isUploadedBrandingAssetUrl(String(form[field] ?? '')))) return 'Logo and favicon images must be uploaded. External links are not allowed.';
+    const urlFields: Array<keyof LoginBranding> = ['backgroundImageUrl', 'illustrationUrl'];
     if (urlFields.some((field) => !isSafeUrl(String(form[field] ?? '')))) return 'Image URLs must use http or https.';
     if ((form.footerText ?? '').length > 180) return 'Footer text is too long.';
     if ((form.supportText ?? '').length > 180) return 'Support text is too long.';
@@ -373,7 +381,7 @@ export default function LoginBrandingSettingsPage() {
   return (
     <div className="space-y-6">
       {isBusy ? <FullPageLoader label="Updating branding..." /> : null}
-      <PageHeader title="Login Branding" subtitle="Customize the login experience for your school or platform." />
+      {!embedded ? <PageHeader title="Branding & Theme" subtitle="Customize platform identity, login branding, colors, and published theme values." /> : null}
 
       <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
         <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
@@ -394,9 +402,6 @@ export default function LoginBrandingSettingsPage() {
                 ))}
               </select>
             ) : null}
-            <Button variant="outline" onClick={() => window.open('/login', '_blank', 'noopener,noreferrer')}>
-              Preview Login
-            </Button>
             <Button onClick={save} disabled={Boolean(validationError)} loading={saveMutation.isPending}>
               Save Draft
             </Button>
@@ -415,19 +420,44 @@ export default function LoginBrandingSettingsPage() {
         {(error || validationError) ? <p className="mt-4 rounded-xl bg-rose-50 px-4 py-3 text-sm font-semibold text-rose-700">{error || validationError}</p> : null}
       </section>
 
-      <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_520px]">
-        <div className="space-y-6">
+      <div className="space-y-6">
           <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
             <h2 className="text-lg font-bold text-slate-950">Basic Identity</h2>
             <div className="mt-5 grid gap-4 md:grid-cols-2">
               <TextField label="App name" value={form.appName} onChange={(value) => updateField('appName', value)} />
               <TextField label="School name" value={form.schoolName ?? ''} onChange={(value) => updateField('schoolName', value)} />
-              <TextField label="Logo URL" value={form.logoUrl ?? ''} onChange={(value) => updateField('logoUrl', value)} placeholder="https://..." />
-              <TextField label="Compact logo URL" value={form.compactLogoUrl ?? ''} onChange={(value) => updateField('compactLogoUrl', value)} placeholder="https://..." />
-              <TextField label="Dark logo URL" value={form.darkLogoUrl ?? ''} onChange={(value) => updateField('darkLogoUrl', value)} placeholder="https://..." />
-              <TextField label="Favicon URL" value={form.faviconUrl ?? ''} onChange={(value) => updateField('faviconUrl', value)} placeholder="https://..." />
+              <AssetUploadField
+                label="Primary logo"
+                value={form.logoUrl}
+                assetType="logo"
+                onUpload={(file) => uploadAsset('logoUrl', 'logo', file)}
+                onClear={() => updateField('logoUrl', '')}
+              />
+              <AssetUploadField
+                label="Compact logo"
+                value={form.compactLogoUrl}
+                assetType="compactLogo"
+                onUpload={(file) => uploadAsset('compactLogoUrl', 'compactLogo', file)}
+                onClear={() => updateField('compactLogoUrl', '')}
+              />
+              <AssetUploadField
+                label="Dark logo"
+                value={form.darkLogoUrl}
+                assetType="darkLogo"
+                onUpload={(file) => uploadAsset('darkLogoUrl', 'darkLogo', file)}
+                onClear={() => updateField('darkLogoUrl', '')}
+              />
+              <AssetUploadField
+                label="Favicon"
+                value={form.faviconUrl}
+                assetType="favicon"
+                onUpload={(file) => uploadAsset('faviconUrl', 'favicon', file)}
+                onClear={() => updateField('faviconUrl', '')}
+              />
             </div>
-            <p className="mt-3 text-xs text-slate-500">Upload support is not wired yet. Use hosted image URLs for now.</p>
+            <p className="mt-3 text-xs text-slate-500">
+              External logo links and SVG uploads are blocked. Uploaded files are renamed before storage.
+            </p>
           </section>
 
           <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
@@ -513,8 +543,20 @@ export default function LoginBrandingSettingsPage() {
               </label>
               <ColorField label="Gradient from" value={form.gradientFrom ?? '#eff6ff'} onChange={(value) => updateField('gradientFrom', value)} />
               <ColorField label="Gradient to" value={form.gradientTo ?? '#ffffff'} onChange={(value) => updateField('gradientTo', value)} />
-              <TextField label="Background image URL" value={form.backgroundImageUrl ?? ''} onChange={(value) => updateField('backgroundImageUrl', value)} placeholder="https://..." />
-              <TextField label="Illustration image URL" value={form.illustrationUrl ?? ''} onChange={(value) => updateField('illustrationUrl', value)} placeholder="https://..." />
+              <AssetUploadField
+                label="Background image"
+                value={form.backgroundImageUrl}
+                assetType="background"
+                onUpload={(file) => uploadAsset('backgroundImageUrl', 'background', file)}
+                onClear={() => updateField('backgroundImageUrl', '')}
+              />
+              <AssetUploadField
+                label="Illustration image"
+                value={form.illustrationUrl}
+                assetType="illustration"
+                onUpload={(file) => uploadAsset('illustrationUrl', 'illustration', file)}
+                onClear={() => updateField('illustrationUrl', '')}
+              />
               <TextField label="Border radius" value={form.borderRadius ?? '24px'} onChange={(value) => updateField('borderRadius', value)} />
               <TextField label="Card shadow" value={form.cardShadow ?? ''} onChange={(value) => updateField('cardShadow', value)} />
               <label className="flex items-center gap-3 rounded-xl border border-slate-200 px-4 py-3 text-sm font-semibold text-slate-700">
@@ -523,9 +565,6 @@ export default function LoginBrandingSettingsPage() {
               </label>
             </div>
           </section>
-        </div>
-
-        <LoginPreview branding={normalizeBranding(form)} />
       </div>
     </div>
   );
