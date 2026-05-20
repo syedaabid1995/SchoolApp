@@ -3,6 +3,7 @@ import { Prisma } from '@prisma/client';
 import { prisma } from '../config/db';
 import { HttpError } from '../middlewares/error.middleware';
 import { hashPassword } from '../utils/password';
+import { buildSchoolDomainUrl, normalizeSchoolSubdomain } from '../utils/schoolDomain';
 import { upsertSubscription } from './subscription.service';
 
 export type SchoolCreateInput = {
@@ -214,10 +215,17 @@ export const setSchoolAdminStatus = async (
 export const createSchool = async (payload: SchoolCreateInput) => {
   try {
     return await prisma.$transaction(async (tx) => {
+      const subdomain = normalizeSchoolSubdomain(payload.code);
+      if (!subdomain) {
+        throw new HttpError(400, 'School code cannot be used as a subdomain');
+      }
+
       const school = await tx.school.create({
         data: {
           name: payload.name,
           code: payload.code,
+          subdomain,
+          domainUrl: buildSchoolDomainUrl(subdomain),
           subscriptionPlan: payload.subscriptionPlan,
           status: payload.status ?? 'ACTIVE',
         },
@@ -331,6 +339,14 @@ export const createSchool = async (payload: SchoolCreateInput) => {
       error.meta?.target.includes('code')
     ) {
       throw new HttpError(409, 'School code already exists');
+    }
+    if (
+      error instanceof Prisma.PrismaClientKnownRequestError &&
+      error.code === 'P2002' &&
+      Array.isArray(error.meta?.target) &&
+      error.meta?.target.includes('subdomain')
+    ) {
+      throw new HttpError(409, 'School subdomain already exists');
     }
     throw error;
   }

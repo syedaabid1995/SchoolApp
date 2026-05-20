@@ -1,4 +1,5 @@
 import { prisma } from '../config/db';
+import { resolveSchoolSubdomainFromHost, schoolIdentifierWhere } from '../utils/schoolDomain';
 import { LOGIN_EXPERIENCE_KEY } from './loginExperience.service';
 
 export type LoginBranding = {
@@ -85,7 +86,7 @@ export const defaultLoginBranding: LoginBranding = {
 };
 
 const HEX_PATTERN = /^#[0-9a-fA-F]{6}$/;
-const SCHOOL_CODE_PATTERN = /^[a-zA-Z0-9_-]{2,64}$/;
+const SCHOOL_CODE_PATTERN = /^[a-zA-Z0-9_-]{1,64}$/;
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   Boolean(value) && typeof value === 'object' && !Array.isArray(value);
@@ -119,16 +120,6 @@ const pickBackgroundType = (value: unknown, fallback: LoginBranding['backgroundT
 const firstHexFromCss = (value: unknown): string | null => {
   if (typeof value !== 'string') return null;
   return value.match(/#[0-9a-fA-F]{6}/)?.[0] ?? null;
-};
-
-const resolveSchoolCodeFromHost = (host?: string | null) => {
-  const hostname = host?.split(':')[0]?.toLowerCase();
-  if (!hostname || hostname === 'localhost' || hostname === '127.0.0.1') return undefined;
-  const parts = hostname.split('.');
-  if (parts.length < 3) return undefined;
-  const subdomain = parts[0];
-  if (['www', 'admin', 'app'].includes(subdomain)) return undefined;
-  return SCHOOL_CODE_PATTERN.test(subdomain) ? subdomain : undefined;
 };
 
 export const normalizeLoginBranding = (
@@ -195,15 +186,15 @@ export const normalizeLoginBranding = (
 };
 
 export const getLoginBranding = async (params: { schoolCode?: string; host?: string | null }) => {
-  const requestedCode = params.schoolCode?.trim() || resolveSchoolCodeFromHost(params.host);
+  const requestedCode = params.schoolCode?.trim() || resolveSchoolSubdomainFromHost(params.host) || undefined;
   const validCode = requestedCode && SCHOOL_CODE_PATTERN.test(requestedCode) ? requestedCode : undefined;
 
   const [config, school] = await Promise.all([
     prisma.configEntry.findUnique({ where: { key: LOGIN_EXPERIENCE_KEY } }),
     validCode
       ? prisma.school.findFirst({
-          where: { code: { equals: validCode, mode: 'insensitive' } },
-          select: { id: true, name: true, code: true },
+          where: schoolIdentifierWhere(validCode),
+          select: { id: true, name: true, code: true, subdomain: true, domainUrl: true },
         })
       : Promise.resolve(null),
   ]);

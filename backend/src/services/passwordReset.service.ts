@@ -7,6 +7,7 @@ import { HttpError } from '../middlewares/error.middleware';
 import { hashToken } from '../utils/token';
 import { hashPassword } from '../utils/password';
 import { buildAuthAuditMetadata, createAuthAuditLog, maskEmailForAudit } from '../utils/audit';
+import { schoolIdentifierWhere } from '../utils/schoolDomain';
 import type { ForgotPasswordInput, LoginType, ResetPasswordInput } from '../validations/auth.validation';
 import { sendConfiguredEmail, type EmailDeliveryResult } from './email.service';
 
@@ -62,12 +63,11 @@ const resolvePasswordResetSchoolId = async (input: Pick<ForgotPasswordInput, 'sc
   if (!schoolId && !schoolCode) return null;
 
   const school = await prisma.school.findFirst({
-    where: schoolId ? { id: schoolId } : { code: schoolCode },
-    select: { id: true, code: true },
+    where: schoolId ? { id: schoolId } : schoolIdentifierWhere(schoolCode),
+    select: { id: true },
   });
 
   if (!school) return undefined;
-  if (schoolCode && school.code !== schoolCode) return undefined;
   return school.id;
 };
 

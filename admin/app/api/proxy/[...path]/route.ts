@@ -12,8 +12,10 @@ const forward = async (req: Request, method: string, path: string[]) => {
 
   const headers: Record<string, string> = {};
   const contentType = req.headers.get('content-type');
+  const forwardedHost = req.headers.get('x-forwarded-host') ?? req.headers.get('host');
   if (contentType) headers['Content-Type'] = contentType;
   if (accessToken) headers.Authorization = `Bearer ${accessToken}`;
+  if (forwardedHost) headers['X-Forwarded-Host'] = forwardedHost;
 
   let body: BodyInit | undefined;
   if (method !== 'GET' && method !== 'DELETE') {

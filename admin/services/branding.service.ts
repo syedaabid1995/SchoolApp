@@ -1,4 +1,5 @@
 import { api } from '../lib/api';
+import { resolveSchoolSubdomainFromHost } from '../lib/school-domain';
 
 export type LoginBranding = {
   appName: string;
@@ -162,13 +163,7 @@ const normalizeBranding = (value: unknown): LoginBranding => {
 
 const schoolCodeFromHost = () => {
   if (typeof window === 'undefined') return undefined;
-  const hostname = window.location.hostname.toLowerCase();
-  if (hostname === 'localhost' || hostname === '127.0.0.1') return undefined;
-  const parts = hostname.split('.');
-  if (parts.length < 3) return undefined;
-  const subdomain = parts[0];
-  if (['www', 'admin', 'app'].includes(subdomain)) return undefined;
-  return /^[a-zA-Z0-9_-]{2,64}$/.test(subdomain) ? subdomain : undefined;
+  return resolveSchoolSubdomainFromHost(window.location.host) ?? undefined;
 };
 
 export const getLoginBranding = async (schoolCode?: string): Promise<LoginBranding> => {

@@ -47,6 +47,7 @@ import { isAuthenticatorAppVerificationEnabled } from '../services/authSecurity.
 import { buildAuthAuditMetadata, createAuthAuditLog, maskEmailForAudit } from '../utils/audit';
 import { getEffectivePermissionCodesForUser } from '../utils/employeePermissions';
 import { hashPassword, verifyPassword } from '../utils/password';
+import { schoolIdentifierWhere } from '../utils/schoolDomain';
 import { hashToken } from '../utils/token';
 import {
   changePasswordSchema,
@@ -189,11 +190,11 @@ const resolveLoginSchoolId = async (params: { schoolId?: string; schoolCode?: st
   if (!schoolId && !schoolCode) return null;
 
   const school = await prisma.school.findFirst({
-    where: schoolId ? { id: schoolId } : { code: schoolCode },
-    select: { id: true, code: true },
+    where: schoolId ? { id: schoolId } : schoolIdentifierWhere(schoolCode),
+    select: { id: true },
   });
 
-  if (!school || (schoolCode && school.code !== schoolCode)) {
+  if (!school) {
     rejectLogin('school_not_found_or_mismatch', { schoolId: schoolId ?? null, schoolCode: schoolCode ?? null });
   }
 
@@ -206,7 +207,7 @@ const resolveLoginSchoolIdSilently = async (params: { schoolId?: string; schoolC
   if (!schoolId && !schoolCode) return null;
 
   const school = await prisma.school.findFirst({
-    where: schoolId ? { id: schoolId } : { code: schoolCode },
+    where: schoolId ? { id: schoolId } : schoolIdentifierWhere(schoolCode),
     select: { id: true },
   });
 

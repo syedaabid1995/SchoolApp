@@ -10,6 +10,7 @@ import { logger } from './config/logger';
 import { env } from './config/env';
 import { errorMiddleware, notFoundMiddleware } from './middlewares/error.middleware';
 import { authMiddleware } from './middlewares/auth.middleware';
+import { schoolDomainMiddleware } from './middlewares/schoolDomain.middleware';
 import { writeOperationGuard } from './middlewares/subscriptionGuard.middleware';
 import { authRouter } from './routes/auth.routes';
 import { academicRouter } from './routes/academic.routes';
@@ -50,6 +51,7 @@ import { uploadRouter } from './routes/upload.routes';
 import { messagingAdminRouter } from './routes/messagingAdmin.routes';
 import { messagingSettingsRouter } from './routes/messagingSettings.routes';
 import { publicBrandingRouter } from './routes/publicBranding.routes';
+import { schoolDomainRouter } from './routes/schoolDomain.routes';
 import { rateLimit } from './middlewares/rate-limit.middleware';
 import { apiVersionMiddleware } from './middlewares/version.middleware';
 
@@ -98,6 +100,7 @@ export const createApp = () => {
   app.use(express.urlencoded({ extended: false, limit: '10mb' }));
   app.use(rateLimit());
   app.use(apiVersionMiddleware);
+  app.use(schoolDomainMiddleware);
 
   app.get('/health', async (_req: Request, res: Response) => {
     try {
@@ -130,6 +133,7 @@ export const createApp = () => {
   app.use('/docs', swaggerUi.serve, swaggerUi.setup(openapiSpec));
 
   app.use('/api/v1/public/branding', publicBrandingRouter);
+  app.use('/api/v1/public/school-domain', schoolDomainRouter);
 
   const isWriteMethod = (method: string) => ['POST', 'PUT', 'PATCH', 'DELETE'].includes(method);
   const skipWriteGuard = (pathName: string) =>

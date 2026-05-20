@@ -6,6 +6,7 @@ import { env } from '../config/env';
 import { logger } from '../config/logger';
 import { prisma } from '../config/db';
 import { buildAuthAuditMetadata, createAuthAuditLog, maskEmailForAudit } from '../utils/audit';
+import { schoolIdentifierWhere } from '../utils/schoolDomain';
 import { HttpError } from './error.middleware';
 
 export const AUTH_RATE_LIMIT_MESSAGE = 'Too many attempts. Please try again later.';
@@ -106,7 +107,7 @@ const schoolIdFromBody = async (body: unknown) => {
   if (!schoolCode) return null;
 
   const school = await prisma.school.findFirst({
-    where: { code: schoolCode },
+    where: schoolIdentifierWhere(schoolCode),
     select: { id: true },
   });
   return school?.id ?? null;

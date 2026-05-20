@@ -9,6 +9,7 @@ import {
   getLoginBranding,
   type LoginBranding,
 } from '../../services/branding.service';
+import { resolveSchoolSubdomainFromHost } from '../../lib/school-domain';
 
 type FieldErrors = Partial<Record<'schoolCode' | 'identifier' | 'password' | 'forgotEmail' | 'forgotSchoolCode' | 'form', string>>;
 type RememberedLogin = {
@@ -193,6 +194,8 @@ export default function LoginPage() {
   const [errors, setErrors] = useState<FieldErrors>({});
   const [message, setMessage] = useState('');
   const [submitting, setSubmitting] = useState(false);
+  const [hostSchoolCode, setHostSchoolCode] = useState<string | null>(null);
+  const [domainNotFound, setDomainNotFound] = useState(false);
 
   const leftPanelEnabled = branding.leftPanelEnabled !== false;
   const pageShellClassName = leftPanelEnabled
@@ -232,8 +235,33 @@ export default function LoginPage() {
     }
   };
 
+  const validateHostSchoolDomain = async (nextSchoolCode: string) => {
+    try {
+      const res = await fetch(`/api/proxy/public/school-domain?subdomain=${encodeURIComponent(nextSchoolCode)}`, {
+        cache: 'no-store',
+      });
+      setDomainNotFound(!res.ok);
+    } catch {
+      setDomainNotFound(true);
+    }
+  };
+
   useEffect(() => {
+    const detectedSchoolCode = resolveSchoolSubdomainFromHost(window.location.host);
     const remembered = readRememberedLogin();
+    if (detectedSchoolCode) {
+      const rememberedIdentifier = remembered?.email || remembered?.username || '';
+      setHostSchoolCode(detectedSchoolCode);
+      setSchoolCode(detectedSchoolCode);
+      setForgotSchoolCode(detectedSchoolCode);
+      setIdentifier(rememberedIdentifier);
+      setForgotEmail(rememberedIdentifier);
+      setRememberMe(Boolean(remembered?.rememberMe));
+      void loadBranding(detectedSchoolCode);
+      void validateHostSchoolDomain(detectedSchoolCode);
+      return;
+    }
+
     if (remembered) {
       const rememberedIdentifier = remembered.email || remembered.username || '';
       const rememberedSchool = remembered.schoolCode || remembered.schoolId || '';
@@ -283,6 +311,7 @@ export default function LoginPage() {
   };
 
   const handleSchoolBlur = () => {
+    if (hostSchoolCode) return;
     const trimmed = schoolCode.trim();
     if (!trimmed || !isValidSchoolInput(trimmed)) return;
     void loadBranding(trimmed);
@@ -372,6 +401,32 @@ export default function LoginPage() {
         {errors[key]}
       </p>
     ) : null;
+
+  if (domainNotFound) {
+    const mainLoginHref = typeof window !== 'undefined' && window.location.hostname.endsWith('.localhost')
+      ? 'http://localhost:3001/login'
+      : 'https://akademify.techstageit.com/login';
+
+    return (
+      <main className="min-h-screen w-full overflow-x-hidden text-[var(--brand-text)]" style={brandStyle}>
+        <div className="mx-auto flex min-h-screen w-full max-w-xl items-center justify-center px-4 py-6 sm:px-6">
+          <section className="w-full rounded-[var(--brand-radius)] border border-[var(--brand-border)] bg-[var(--brand-card)] p-7 text-center shadow-[var(--brand-shadow)]">
+            <BrandLogo branding={branding} className="mx-auto h-14 w-14" />
+            <h1 className="mt-6 text-2xl font-bold">School domain not found</h1>
+            <p className="mt-3 text-sm leading-6 text-[var(--brand-muted)]">
+              This school login URL is not active. Check the subdomain or open the main platform login.
+            </p>
+            <a
+              href={mainLoginHref}
+              className="mt-6 inline-flex items-center justify-center rounded-[var(--brand-radius-half)] bg-[var(--brand-button)] px-5 py-3 text-sm font-bold text-[var(--brand-button-text)] shadow-lg transition hover:opacity-95 focus:outline-none focus:ring-4 focus:ring-[var(--brand-focus-soft)]"
+            >
+              Open main login
+            </a>
+          </section>
+        </div>
+      </main>
+    );
+  }
 
   return (
     <main className="min-h-screen w-full overflow-x-hidden text-[var(--brand-text)]" style={brandStyle}>
@@ -482,15 +537,22 @@ export default function LoginPage() {
                       type="text"
                       autoComplete="organization"
                       value={forgotSchoolCode}
-                      onChange={(event) => setForgotSchoolCode(event.target.value)}
+                      readOnly={Boolean(hostSchoolCode)}
+                      onChange={(event) => {
+                        if (!hostSchoolCode) setForgotSchoolCode(event.target.value);
+                      }}
                       onBlur={() => {
+                        if (hostSchoolCode) return;
                         if (isValidSchoolInput(forgotSchoolCode)) void loadBranding(forgotSchoolCode.trim() || undefined);
                       }}
-                      className={`${inputClassName} mt-2`}
+                      className={`${inputClassName} mt-2 ${hostSchoolCode ? 'cursor-not-allowed opacity-80' : ''}`}
                       placeholder={formCopy.schoolPlaceholder}
                       aria-describedby={errors.forgotSchoolCode ? 'forgotSchoolCode-error' : undefined}
                       aria-invalid={Boolean(errors.forgotSchoolCode)}
                     />
+                    {hostSchoolCode ? (
+                      <p className="mt-1 text-xs font-semibold text-[var(--brand-muted)]">Detected from school domain.</p>
+                    ) : null}
                     {fieldError('forgotSchoolCode')}
                   </div>
 
@@ -527,16 +589,21 @@ export default function LoginPage() {
                       type="text"
                       autoComplete="organization"
                       value={schoolCode}
+                      readOnly={Boolean(hostSchoolCode)}
                       onChange={(event) => {
+                        if (hostSchoolCode) return;
                         setSchoolCode(event.target.value);
                         setForgotSchoolCode(event.target.value);
                       }}
                       onBlur={handleSchoolBlur}
-                      className={`${inputClassName} mt-2`}
+                      className={`${inputClassName} mt-2 ${hostSchoolCode ? 'cursor-not-allowed opacity-80' : ''}`}
                       placeholder={formCopy.schoolPlaceholder}
                       aria-describedby={errors.schoolCode ? 'schoolCode-error' : undefined}
                       aria-invalid={Boolean(errors.schoolCode)}
                     />
+                    {hostSchoolCode ? (
+                      <p className="mt-1 text-xs font-semibold text-[var(--brand-muted)]">Detected from school domain.</p>
+                    ) : null}
                     {fieldError('schoolCode')}
                   </div>
 

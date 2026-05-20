@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { getApiBase } from '../../../../lib/getApiBase';
 import axios from 'axios';
+import { resolveSchoolSubdomainFromHost } from '../../../../lib/school-domain';
 
 const GENERIC_LOGIN_ERROR = 'Invalid login details. Please try again.';
 
@@ -30,8 +31,18 @@ export async function POST(req: Request) {
       { status: 400, headers: { 'Content-Type': 'application/json' } },
     );
   }
+  if (payload && typeof payload === 'object' && !Array.isArray(payload)) {
+    const record = payload as Record<string, unknown>;
+    const hostSubdomain = resolveSchoolSubdomainFromHost(
+      req.headers.get('x-forwarded-host') ?? req.headers.get('host'),
+    );
+    if (hostSubdomain && typeof record.schoolId !== 'string' && typeof record.schoolCode !== 'string') {
+      payload = { ...record, schoolCode: hostSubdomain };
+    }
+  }
   const userAgent = req.headers.get('user-agent') ?? 'SchoolApp-Admin/1.0';
   const forwardedFor = req.headers.get('x-forwarded-for') ?? req.headers.get('x-real-ip');
+  const forwardedHost = req.headers.get('x-forwarded-host') ?? req.headers.get('host');
   
   try {
     const headers: Record<string, string> = {
@@ -41,6 +52,9 @@ export async function POST(req: Request) {
     };
     if (forwardedFor) {
       headers['X-Forwarded-For'] = forwardedFor;
+    }
+    if (forwardedHost) {
+      headers['X-Forwarded-Host'] = forwardedHost;
     }
 
     const response = await axios.post(`${API_BASE}/auth/login`, payload, {

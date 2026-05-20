@@ -22,6 +22,8 @@ model School {
   id               String           @id @default(uuid()) @db.Uuid
   name             String
   code             String           @unique
+  subdomain        String?          @unique
+  domainUrl        String?          @map("domain_url")
   status           SchoolStatus     @default(ACTIVE)
   subscriptionPlan SubscriptionPlan @map("subscription_plan")
   lastLoginAt      DateTime?        @map("last_login_at")
