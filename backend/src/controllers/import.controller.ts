@@ -12,6 +12,14 @@ import { enforceLimits } from '../services/subscription.service';
 
 const uploadRoot = path.join(process.cwd(), 'uploads', 'imports');
 
+const requireSchoolAdmin = (req: Request) => {
+  if (!req.auth?.userId) throw new HttpError(401, 'Unauthorized');
+  if (req.auth.role !== 'SCHOOL_ADMIN' || !req.auth.schoolId) {
+    throw new HttpError(403, 'Only School Admin can manage imports');
+  }
+  return req.auth;
+};
+
 const storage = multer.diskStorage({
   destination: (_req, _file, cb) => {
     fs.mkdirSync(uploadRoot, { recursive: true });
@@ -36,6 +44,7 @@ const fileFilter: multer.Options['fileFilter'] = (_req, file, cb) => {
 export const uploadMiddleware = multer({ storage, fileFilter }).single('file');
 
 export const createImport = async (req: Request, res: Response) => {
+  requireSchoolAdmin(req);
   const payload = importRequestSchema.parse(req.body);
   if (!req.file) {
     throw new HttpError(400, 'file is required');
@@ -77,6 +86,7 @@ export const createImport = async (req: Request, res: Response) => {
 };
 
 export const listImports = async (req: Request, res: Response) => {
+  requireSchoolAdmin(req);
   const schoolId = resolveSchoolId(req, req.query.schoolId as string | undefined);
 
   const imports = await prisma.importJob.findMany({
@@ -88,6 +98,7 @@ export const listImports = async (req: Request, res: Response) => {
 };
 
 export const getImport = async (req: Request, res: Response) => {
+  requireSchoolAdmin(req);
   const schoolId = resolveSchoolId(req, req.query.schoolId as string | undefined);
   const { id } = req.params;
 
@@ -104,6 +115,7 @@ export const getImport = async (req: Request, res: Response) => {
 };
 
 export const listImportErrors = async (req: Request, res: Response) => {
+  requireSchoolAdmin(req);
   const schoolId = resolveSchoolId(req, req.query.schoolId as string | undefined);
   const { id } = req.params;
 

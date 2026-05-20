@@ -14,6 +14,7 @@ import { schoolDomainMiddleware } from './middlewares/schoolDomain.middleware';
 import { writeOperationGuard } from './middlewares/subscriptionGuard.middleware';
 import { authRouter } from './routes/auth.routes';
 import { academicRouter } from './routes/academic.routes';
+import { academicSetupRouter } from './routes/academicSetup.routes';
 import { studentRouter } from './routes/student.routes';
 import { importRouter } from './routes/import.routes';
 import { faceRouter } from './routes/face.routes';
@@ -159,6 +160,7 @@ export const createApp = () => {
   // Backward-compatible auth routes for clients still calling /api/auth/*
   app.use('/api/auth', authRouter);
   app.use('/api/v1/academics', academicRouter);
+  app.use('/api/v1/academic-setup', academicSetupRouter);
   app.use('/api/v1/students', studentRouter);
   app.use('/api/v1/imports', importRouter);
   app.use('/api/v1/faces', faceRouter);

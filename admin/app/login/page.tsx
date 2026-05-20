@@ -284,19 +284,29 @@ export default function LoginPage() {
 
   useEffect(() => {
     const detectedSchoolCode = resolveSchoolSubdomainFromHost(window.location.host);
+    const isLocalSubdomainHost = window.location.hostname.endsWith('.localhost');
+    const pathParts = window.location.pathname.split('/').filter(Boolean);
+    const pathSchoolCode = pathParts.length >= 2 && pathParts[1] === 'login'
+      ? decodeURIComponent(pathParts[0] ?? '').trim()
+      : '';
+    const routeSchoolCode = pathSchoolCode && isValidSchoolInput(pathSchoolCode) ? pathSchoolCode : '';
+    const effectiveSchoolCode = detectedSchoolCode || routeSchoolCode;
     const remembered = readRememberedLogin();
     const lastAccount = remembered ?? readLastAccount();
-    if (detectedSchoolCode) {
+    if (effectiveSchoolCode) {
       const rememberedIdentifier = lastAccount?.email || lastAccount?.username || '';
-      setHostSchoolCode(detectedSchoolCode);
-      setSchoolCode(detectedSchoolCode);
-      setForgotSchoolCode(detectedSchoolCode);
+      setDomainNotFound(false);
+      setHostSchoolCode(effectiveSchoolCode);
+      setSchoolCode(effectiveSchoolCode);
+      setForgotSchoolCode(effectiveSchoolCode);
       setIdentifier(rememberedIdentifier);
       setForgotEmail(rememberedIdentifier);
       setRememberMe(Boolean(remembered?.rememberMe));
       setPasswordOnlyMode(Boolean(rememberedIdentifier));
-      void loadBranding(detectedSchoolCode);
-      void validateHostSchoolDomain(detectedSchoolCode);
+      void loadBranding(effectiveSchoolCode);
+      if (detectedSchoolCode && !isLocalSubdomainHost) {
+        void validateHostSchoolDomain(detectedSchoolCode);
+      }
       return;
     }
 

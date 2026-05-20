@@ -8,6 +8,7 @@ import { logAudit } from '../utils/audit';
 const createSchema = z.object({
   name: z.string().min(1),
   code: z.string().min(1).optional(),
+  type: z.enum(['THEORY', 'PRACTICAL']).optional(),
   classId: z.string().uuid().optional().nullable(),
   academicYearId: z.string().uuid().optional().nullable(),
   schoolId: z.string().uuid().optional(),
@@ -16,6 +17,7 @@ const createSchema = z.object({
 const updateSchema = z.object({
   name: z.string().min(1).optional(),
   code: z.string().min(1).optional().nullable(),
+  type: z.enum(['THEORY', 'PRACTICAL']).optional(),
   classId: z.string().uuid().optional().nullable(),
   academicYearId: z.string().uuid().optional().nullable(),
   schoolId: z.string().uuid().optional(),
@@ -49,6 +51,7 @@ export const createSubject = async (req: Request, res: Response) => {
     data: {
       name: payload.name,
       code: payload.code ?? null,
+      type: payload.type ?? 'THEORY',
       schoolId,
       classId: payload.classId ?? null,
       academicYearId: payload.academicYearId ?? null,
@@ -111,6 +114,7 @@ export const updateSubject = async (req: Request, res: Response) => {
     data: {
       name: payload.name ?? undefined,
       code: payload.code === undefined ? undefined : payload.code,
+      type: payload.type ?? undefined,
       classId: payload.classId === undefined ? undefined : payload.classId,
       academicYearId: payload.academicYearId === undefined ? undefined : payload.academicYearId,
     },
@@ -125,11 +129,31 @@ export const deleteSubject = async (req: Request, res: Response) => {
 
   const existing = await prisma.subject.findFirst({
     where: { id, schoolId },
-    select: { id: true },
+    include: {
+      _count: {
+        select: {
+          assignSubjects: true,
+          classRoutines: true,
+          examPapers: true,
+          teacherAssignments: true,
+          timetableEntries: true,
+        },
+      },
+    },
   });
 
   if (!existing) {
     throw new HttpError(404, 'Subject not found');
+  }
+
+  const blockers =
+    existing._count.assignSubjects +
+    existing._count.classRoutines +
+    existing._count.examPapers +
+    existing._count.teacherAssignments +
+    existing._count.timetableEntries;
+  if (blockers > 0) {
+    throw new HttpError(409, 'Cannot delete subject while exams, routine, or assignments exist');
   }
 
   await prisma.subject.delete({ where: { id } });

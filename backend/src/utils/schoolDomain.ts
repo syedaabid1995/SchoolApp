@@ -62,10 +62,21 @@ export const resolveSchoolSubdomainFromHost = (host?: string | null) => {
 export const schoolIdentifierWhere = (identifier?: string | null) => {
   const value = identifier?.trim() ?? '';
   const subdomain = normalizeSchoolSubdomain(value) ?? value;
+  const codeCandidates = Array.from(
+    new Set(
+      [value, subdomain, value.replace(/-/g, '_'), subdomain.replace(/-/g, '_')]
+        .map((candidate) => candidate.trim())
+        .filter(Boolean),
+    ),
+  );
+  const subdomainCandidates = Array.from(
+    new Set([subdomain].map((candidate) => candidate.trim()).filter(Boolean)),
+  );
+
   return {
     OR: [
-      { code: { equals: value, mode: 'insensitive' as const } },
-      { subdomain: { equals: subdomain, mode: 'insensitive' as const } },
+      ...codeCandidates.map((candidate) => ({ code: { equals: candidate, mode: 'insensitive' as const } })),
+      ...subdomainCandidates.map((candidate) => ({ subdomain: { equals: candidate, mode: 'insensitive' as const } })),
     ],
   };
 };

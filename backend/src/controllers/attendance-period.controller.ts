@@ -29,6 +29,9 @@ const updateSchema = z.object({
 export const createAttendancePeriod = async (req: Request, res: Response) => {
   const payload = createSchema.parse(req.body);
   const schoolId = resolveSchoolId(req, payload.schoolId);
+  if (payload.endTime <= payload.startTime) {
+    throw new HttpError(400, 'End time must be after start time');
+  }
 
   const period = await prisma.attendancePeriod.create({
     data: {
@@ -79,11 +82,15 @@ export const updateAttendancePeriod = async (req: Request, res: Response) => {
 
   const existing = await prisma.attendancePeriod.findFirst({
     where: { id, schoolId },
-    select: { id: true },
+    select: { id: true, startTime: true, endTime: true },
   });
 
   if (!existing) {
     throw new HttpError(404, 'Attendance period not found');
+  }
+
+  if ((payload.endTime ?? existing.endTime) <= (payload.startTime ?? existing.startTime)) {
+    throw new HttpError(400, 'End time must be after start time');
   }
 
   const period = await prisma.attendancePeriod.update({
@@ -108,11 +115,15 @@ export const deleteAttendancePeriod = async (req: Request, res: Response) => {
 
   const existing = await prisma.attendancePeriod.findFirst({
     where: { id, schoolId },
-    select: { id: true },
+    include: { _count: { select: { timetableEntries: true, sessions: true } } },
   });
 
   if (!existing) {
     throw new HttpError(404, 'Attendance period not found');
+  }
+
+  if (existing._count.timetableEntries > 0 || existing._count.sessions > 0) {
+    throw new HttpError(409, 'Cannot delete period while timetable or attendance records exist');
   }
 
   await prisma.attendancePeriod.delete({ where: { id } });

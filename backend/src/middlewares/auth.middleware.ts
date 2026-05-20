@@ -145,6 +145,7 @@ const resolvePermissionForPath = (path: string) => {
     { prefix: '/api/v1/academics/timetable/teacher', code: 'attendance.view' },
     { prefix: '/api/v1/teachers', code: 'teachers.list' },
     { prefix: '/api/v1/teacher-assignments', code: 'teachers.list' },
+    { prefix: '/api/v1/academic-setup', code: 'academics.setup' },
     { prefix: '/api/v1/students', code: 'students.list' },
     { prefix: '/api/v1/attendance', code: 'attendance.view' },
     { prefix: '/api/v1/attendance-summary', code: 'attendance.view' },

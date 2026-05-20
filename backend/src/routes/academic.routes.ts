@@ -1,4 +1,4 @@
-import { Router } from 'express';
+import { Router, type NextFunction, type Request, type Response } from 'express';
 import {
   createAcademicYear,
   listAcademicYears,
@@ -51,55 +51,63 @@ import {
   publishTimetableVersionApi,
 } from '../controllers/timetable.controller';
 import { authMiddleware } from '../middlewares/auth.middleware';
+import { HttpError } from '../middlewares/error.middleware';
 
 export const academicRouter = Router();
 
 academicRouter.use(authMiddleware);
 
-academicRouter.post('/academic-years', createAcademicYear);
+const schoolAdminOnly = (req: Request, _res: Response, next: NextFunction) => {
+  if (req.auth?.role !== 'SCHOOL_ADMIN' || !req.auth.schoolId) {
+    return next(new HttpError(403, 'Only School Admin can manage academic setup'));
+  }
+  return next();
+};
+
+academicRouter.post('/academic-years', schoolAdminOnly, createAcademicYear);
 academicRouter.get('/academic-years', listAcademicYears);
 academicRouter.get('/academic-years/:id', getAcademicYear);
-academicRouter.patch('/academic-years/:id', updateAcademicYear);
-academicRouter.delete('/academic-years/:id', deleteAcademicYear);
+academicRouter.patch('/academic-years/:id', schoolAdminOnly, updateAcademicYear);
+academicRouter.delete('/academic-years/:id', schoolAdminOnly, deleteAcademicYear);
 
-academicRouter.post('/terms', createTerm);
+academicRouter.post('/terms', schoolAdminOnly, createTerm);
 academicRouter.get('/terms', listTerms);
 academicRouter.get('/terms/:id', getTerm);
-academicRouter.patch('/terms/:id', updateTerm);
-academicRouter.delete('/terms/:id', deleteTerm);
+academicRouter.patch('/terms/:id', schoolAdminOnly, updateTerm);
+academicRouter.delete('/terms/:id', schoolAdminOnly, deleteTerm);
 
-academicRouter.post('/classes', createClass);
+academicRouter.post('/classes', schoolAdminOnly, createClass);
 academicRouter.get('/classes', listClasses);
 academicRouter.get('/classes/:id', getClass);
-academicRouter.patch('/classes/:id', updateClass);
-academicRouter.delete('/classes/:id', deleteClass);
+academicRouter.patch('/classes/:id', schoolAdminOnly, updateClass);
+academicRouter.delete('/classes/:id', schoolAdminOnly, deleteClass);
 
-academicRouter.post('/sections', createSection);
+academicRouter.post('/sections', schoolAdminOnly, createSection);
 academicRouter.get('/sections', listSections);
 academicRouter.get('/sections/:id', getSection);
-academicRouter.patch('/sections/:id', updateSection);
-academicRouter.delete('/sections/:id', deleteSection);
+academicRouter.patch('/sections/:id', schoolAdminOnly, updateSection);
+academicRouter.delete('/sections/:id', schoolAdminOnly, deleteSection);
 
-academicRouter.post('/subjects', createSubject);
+academicRouter.post('/subjects', schoolAdminOnly, createSubject);
 academicRouter.get('/subjects', listSubjects);
 academicRouter.get('/subjects/:id', getSubject);
-academicRouter.patch('/subjects/:id', updateSubject);
-academicRouter.delete('/subjects/:id', deleteSubject);
+academicRouter.patch('/subjects/:id', schoolAdminOnly, updateSubject);
+academicRouter.delete('/subjects/:id', schoolAdminOnly, deleteSubject);
 
 academicRouter.get('/exam-types', listExamTypes);
-academicRouter.post('/exam-types', createExamType);
-academicRouter.patch('/exam-types/:id', updateExamType);
-academicRouter.post('/attendance-periods', createAttendancePeriod);
+academicRouter.post('/exam-types', schoolAdminOnly, createExamType);
+academicRouter.patch('/exam-types/:id', schoolAdminOnly, updateExamType);
+academicRouter.post('/attendance-periods', schoolAdminOnly, createAttendancePeriod);
 academicRouter.get('/attendance-periods', listAttendancePeriods);
-academicRouter.delete('/attendance-periods/:id', deleteAttendancePeriod);
+academicRouter.delete('/attendance-periods/:id', schoolAdminOnly, deleteAttendancePeriod);
 
 academicRouter.get('/attendance-mode', getAttendanceMode);
-academicRouter.put('/attendance-mode', updateAttendanceMode);
+academicRouter.put('/attendance-mode', schoolAdminOnly, updateAttendanceMode);
 
-academicRouter.post('/timetable/versions', createTimetableVersionApi);
+academicRouter.post('/timetable/versions', schoolAdminOnly, createTimetableVersionApi);
 academicRouter.get('/timetable/versions', listTimetableVersionsApi);
-academicRouter.post('/timetable/entries/bulk', bulkUpsertTimetableEntriesApi);
+academicRouter.post('/timetable/entries/bulk', schoolAdminOnly, bulkUpsertTimetableEntriesApi);
 academicRouter.get('/timetable/entries', listTimetableEntriesApi);
 academicRouter.get('/timetable/teachers', listTimetableTeachersApi);
-academicRouter.post('/timetable/versions/:id/publish', publishTimetableVersionApi);
+academicRouter.post('/timetable/versions/:id/publish', schoolAdminOnly, publishTimetableVersionApi);
 academicRouter.get('/timetable/teacher', getTeacherTimetableApi);

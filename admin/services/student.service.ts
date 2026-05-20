@@ -4,19 +4,38 @@ import { env } from '../lib/env';
 export type Student = {
   id: string;
   admissionNo: string;
+  rollNo?: string | null;
+  academicSessionId?: string | null;
   firstName: string;
   lastName: string;
   fullName?: string;
   dob: string | null;
   gender?: string | null;
   bloodGroup?: string | null;
+  religion?: string | null;
+  caste?: string | null;
+  email?: string | null;
+  phone?: string | null;
+  admissionDate?: string | null;
+  category?: string | null;
+  height?: number | string | null;
+  weight?: number | string | null;
   photoUrl?: string | null;
   fatherName?: string | null;
+  fatherOccupation?: string | null;
+  fatherPhone?: string | null;
+  fatherPhotoUrl?: string | null;
   motherName?: string | null;
+  motherOccupation?: string | null;
+  motherPhone?: string | null;
+  motherPhotoUrl?: string | null;
   guardianName?: string | null;
   guardianRelationship?: string | null;
+  guardianPhotoUrl?: string | null;
   parentPhone?: string | null;
   parentEmail?: string | null;
+  presentAddress?: string | null;
+  permanentAddress?: string | null;
   addressLine1?: string | null;
   addressLine2?: string | null;
   city?: string | null;
@@ -33,8 +52,44 @@ export type Student = {
   status: string;
   classId: string | null;
   sectionId: string | null;
+  academicSession?: { id: string; name: string; isActive?: boolean } | null;
   class?: { id: string; name: string } | null;
   section?: { id: string; name: string } | null;
+  guardians?: Array<{
+    id: string;
+    type: string;
+    name: string;
+    occupation?: string | null;
+    phone?: string | null;
+    email?: string | null;
+    photoUrl?: string | null;
+    relation?: string | null;
+    isPrimary?: boolean;
+  }>;
+  enrollments?: Array<{
+    id: string;
+    rollNo?: string | null;
+    status: string;
+    enrolledAt: string;
+    academicSession?: { id: string; name: string; isActive?: boolean };
+    class?: { id: string; name: string };
+    section?: { id: string; name: string };
+  }>;
+  documents?: StudentDocument[];
+  timelines?: StudentTimeline[];
+  marks?: Array<{
+    id: string;
+    marks: number;
+    grade?: string | null;
+    status?: string | null;
+    examPaper?: {
+      maxMarks?: number;
+      passMarks?: number;
+      subject?: { id: string; name: string; code?: string | null };
+      exam?: { id: string; name: string; type?: string; status?: string };
+    };
+  }>;
+  siblings?: Array<{ sibling: Pick<Student, 'id' | 'admissionNo' | 'rollNo' | 'fullName' | 'class' | 'section'> }>;
   photos?: Array<{ id: string; url: string; createdAt: string }>;
   parentLinks?: Array<{
     parentId: string;
@@ -42,6 +97,24 @@ export type Student = {
   }>;
   createdAt: string;
   updatedAt: string;
+};
+
+export type StudentDocument = {
+  id: string;
+  title: string;
+  url: string;
+  fileName?: string | null;
+  mimeType?: string | null;
+  sizeBytes?: number | null;
+  createdAt: string;
+};
+
+export type StudentTimeline = {
+  id: string;
+  title: string;
+  description?: string | null;
+  timelineDate: string;
+  createdAt: string;
 };
 
 export type TransferTarget = { id: string; name: string; code: string };
@@ -58,7 +131,14 @@ export type TransferRequest = {
   fromSchool: { id: string; name: string; code: string };
 };
 
-export const listStudents = async (params?: { status?: string; schoolId?: string }) => {
+export const listStudents = async (params?: {
+  status?: string;
+  schoolId?: string;
+  search?: string;
+  classId?: string;
+  sectionId?: string;
+  academicSessionId?: string;
+}) => {
   const sanitized = params && (params as any).queryKey ? undefined : params;
   const { data } = await api.get<Student[]>('/students/students', { params: sanitized });
   return data;
@@ -71,17 +151,36 @@ export const getStudent = async (id: string, params?: { schoolId?: string }) => 
 
 export const createStudent = async (payload: {
   admissionNo: string;
+  rollNo?: string;
+  academicSessionId?: string | null;
   fullName: string;
   dob?: string;
   gender?: string;
   bloodGroup?: string;
+  religion?: string;
+  caste?: string;
+  email?: string;
+  phone?: string;
+  admissionDate?: string;
+  category?: string;
+  height?: number;
+  weight?: number;
   photoUrl?: string;
   fatherName?: string;
+  fatherOccupation?: string;
+  fatherPhone?: string;
+  fatherPhotoUrl?: string;
   motherName?: string;
+  motherOccupation?: string;
+  motherPhone?: string;
+  motherPhotoUrl?: string;
   guardianName?: string;
   guardianRelationship?: string;
+  guardianPhotoUrl?: string;
   parentPhone?: string;
   parentEmail?: string;
+  presentAddress?: string;
+  permanentAddress?: string;
   addressLine1?: string;
   addressLine2?: string;
   city?: string;
@@ -98,6 +197,7 @@ export const createStudent = async (payload: {
   classId?: string | null;
   sectionId?: string | null;
   schoolId?: string;
+  siblingIds?: string[];
 }) => {
   const { data } = await api.post('/students/students', payload);
   return data;
@@ -107,17 +207,36 @@ export const updateStudent = async (
   id: string,
   payload: Partial<{
     admissionNo: string;
+    rollNo: string | null;
+    academicSessionId: string | null;
     fullName: string;
     dob: string | null;
     gender: string | null;
     bloodGroup: string | null;
+    religion: string | null;
+    caste: string | null;
+    email: string | null;
+    phone: string | null;
+    admissionDate: string | null;
+    category: string | null;
+    height: number | null;
+    weight: number | null;
     photoUrl: string | null;
     fatherName: string | null;
+    fatherOccupation: string | null;
+    fatherPhone: string | null;
+    fatherPhotoUrl: string | null;
     motherName: string | null;
+    motherOccupation: string | null;
+    motherPhone: string | null;
+    motherPhotoUrl: string | null;
     guardianName: string | null;
     guardianRelationship: string | null;
+    guardianPhotoUrl: string | null;
     parentPhone: string | null;
     parentEmail: string | null;
+    presentAddress: string | null;
+    permanentAddress: string | null;
     addressLine1: string | null;
     addressLine2: string | null;
     city: string | null;
@@ -133,11 +252,40 @@ export const updateStudent = async (
     docReportCard: string | null;
     classId: string | null;
     sectionId: string | null;
+    siblingIds: string[];
   }>,
   params?: { schoolId?: string },
 ) => {
   const { data } = await api.patch(`/students/students/${id}`, payload, { params });
   return data;
+};
+
+export const downloadStudentImportSample = async () => {
+  const { data } = await api.get('/students/students/import/sample', { responseType: 'blob' });
+  return data as Blob;
+};
+
+export const importStudents = async (payload: {
+  academicSessionId: string;
+  classId: string;
+  sectionId: string;
+  file: File;
+}) => {
+  const form = new FormData();
+  form.append('academicSessionId', payload.academicSessionId);
+  form.append('classId', payload.classId);
+  form.append('sectionId', payload.sectionId);
+  form.append('file', payload.file);
+  const { data } = await api.post('/students/students/import', form, {
+    headers: { 'Content-Type': 'multipart/form-data' },
+  });
+  return data as {
+    success: boolean;
+    totalRows: number;
+    successCount: number;
+    failedCount: number;
+    errors: Array<{ rowNumber: number; field?: string; message: string; rawData?: Record<string, string> }>;
+  };
 };
 
 export const deleteStudent = async (id: string) => {
@@ -171,6 +319,30 @@ export const uploadStudentDocument = async (file: File, studentId: string, param
     },
   });
   return data as { url: string; filename: string };
+};
+
+export const addStudentDocument = async (
+  studentId: string,
+  payload: { title: string; url: string; fileName?: string | null; mimeType?: string | null; sizeBytes?: number | null },
+) => {
+  const { data } = await api.post<StudentDocument>(`/students/students/${studentId}/documents`, payload);
+  return data;
+};
+
+export const deleteStudentDocument = async (studentId: string, documentId: string) => {
+  await api.delete(`/students/students/${studentId}/documents/${documentId}`);
+};
+
+export const addStudentTimeline = async (
+  studentId: string,
+  payload: { title: string; description?: string | null; timelineDate: string },
+) => {
+  const { data } = await api.post<StudentTimeline>(`/students/students/${studentId}/timeline`, payload);
+  return data;
+};
+
+export const deleteStudentTimeline = async (studentId: string, timelineId: string) => {
+  await api.delete(`/students/students/${studentId}/timeline/${timelineId}`);
 };
 
 export const resolveUploadUrl = (value?: string | null) => {

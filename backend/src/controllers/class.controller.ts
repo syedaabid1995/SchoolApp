@@ -108,11 +108,33 @@ export const deleteClass = async (req: Request, res: Response) => {
 
   const existing = await prisma.class.findFirst({
     where: { id, schoolId },
-    select: { id: true },
+    include: {
+      _count: {
+        select: {
+          students: true,
+          subjects: true,
+          timetableEntries: true,
+          assignSubjects: true,
+          classTeachers: true,
+          classRoutines: true,
+        },
+      },
+    },
   });
 
   if (!existing) {
     throw new HttpError(404, 'Class not found');
+  }
+
+  const blockers =
+    existing._count.students +
+    existing._count.subjects +
+    existing._count.timetableEntries +
+    existing._count.assignSubjects +
+    existing._count.classTeachers +
+    existing._count.classRoutines;
+  if (blockers > 0) {
+    throw new HttpError(409, 'Cannot delete class while students, routine, subjects, or assignments exist');
   }
 
   await prisma.class.delete({ where: { id } });

@@ -1,910 +1,356 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { useParams } from 'next/navigation';
 import Link from 'next/link';
-import { getStudent, updateStudent, uploadStudentPhoto, uploadStudentDocument, resolveUploadUrl, addStudentPhoto, deleteStudentPhoto } from '../../../../services/student.service';
-import { City, State } from 'country-state-city';
+import { useEffect, useState } from 'react';
+import { useParams, useRouter, useSearchParams } from 'next/navigation';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import PageHeader from '../../../../components/PageHeader';
 import FullPageLoader from '../../../../components/FullPageLoader';
-import { getSession } from '../../../../services/auth.service';
 import { useNotify } from '../../../../components/NotificationProvider';
+import { getSession } from '../../../../services/auth.service';
+import {
+  addStudentDocument,
+  addStudentTimeline,
+  deleteStudentDocument,
+  deleteStudentTimeline,
+  getStudent,
+  resolveUploadUrl,
+  updateStudent,
+  uploadStudentDocument,
+} from '../../../../services/student.service';
 
-type Step = 1 | 2 | 3 | 4 | 5 | 6;
+type TabKey = 'profile' | 'fees' | 'exam' | 'documents' | 'timeline';
 
-const steps: Array<{ id: Step; title: string }> = [
-  { id: 1, title: 'Academic' },
-  { id: 2, title: 'Student' },
-  { id: 3, title: 'Parent' },
-  { id: 4, title: 'Address' },
-  { id: 5, title: 'Medical' },
-  { id: 6, title: 'Documents' },
+const tabs: Array<{ key: TabKey; label: string }> = [
+  { key: 'profile', label: 'Profile' },
+  { key: 'fees', label: 'Fees' },
+  { key: 'exam', label: 'Exam' },
+  { key: 'documents', label: 'Documents' },
+  { key: 'timeline', label: 'Timeline' },
 ];
+
+const formatDate = (value?: string | null) => {
+  if (!value) return '-';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return '-';
+  return date.toLocaleDateString();
+};
+
+const Icon = ({ path }: { path: string }) => (
+  <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d={path} />
+  </svg>
+);
+
+const InfoRow = ({ label, value }: { label: string; value?: string | number | null }) => (
+  <div className="rounded-xl border border-slate-100 bg-slate-50 px-4 py-3">
+    <p className="text-xs font-bold uppercase tracking-wide text-slate-500">{label}</p>
+    <p className="mt-1 text-sm font-semibold text-slate-900">{value || '-'}</p>
+  </div>
+);
 
 export default function StudentDetailPage() {
   const params = useParams();
+  const router = useRouter();
+  const searchParams = useSearchParams();
   const queryClient = useQueryClient();
   const notify = useNotify();
-  const { data: session } = useQuery({ queryKey: ['session'], queryFn: getSession });
-  const schoolId = session?.schoolId ?? undefined;
-  const [step, setStep] = useState<Step>(1);
-  const [isEditing, setIsEditing] = useState(false);
-  const [photoPreview, setPhotoPreview] = useState<string | null>(null);
-  const [editData, setEditData] = useState({
-    // Academic
-    admissionNo: '',
-    classId: '',
-    sectionId: '',
-    // Student
-    fullName: '',
-    dob: '',
-    gender: '',
-    bloodGroup: '',
-    photoUrl: '',
-    // Parent
-    fatherName: '',
-    motherName: '',
-    guardianName: '',
-    guardianRelationship: '',
-    parentPhone: '',
-    parentEmail: '',
-    // Address
-    addressLine1: '',
-    addressLine2: '',
-    city: '',
-    state: '',
-    pincode: '',
-    emergencyContact: '',
-    // Medical
-    medicalConditions: '',
-    allergies: '',
-    doctorContact: '',
-    // Documents
-    docBirthCert: '',
-    docTransferCert: '',
-    docAadhaar: '',
-    docReportCard: '',
-  });
   const studentId = params.id as string;
+  const [tab, setTab] = useState<TabKey>('profile');
+  const [editMode, setEditMode] = useState(searchParams.get('edit') === '1');
+  const [editForm, setEditForm] = useState({ fullName: '', phone: '', email: '', category: '', presentAddress: '', permanentAddress: '' });
+  const [documentForm, setDocumentForm] = useState({ title: '', file: null as File | null });
+  const [timelineForm, setTimelineForm] = useState({ title: '', description: '', timelineDate: new Date().toISOString().slice(0, 10) });
 
-  const { data: student, isLoading } = useQuery({
+  const { data: session, isLoading: isSessionLoading } = useQuery({ queryKey: ['session'], queryFn: getSession });
+  const isSchoolAdmin = session?.role === 'SCHOOL_ADMIN';
+
+  useEffect(() => {
+    if (!isSessionLoading && session?.role && !isSchoolAdmin) {
+      router.replace('/dashboard');
+    }
+  }, [isSchoolAdmin, isSessionLoading, router, session?.role]);
+
+  const studentQuery = useQuery({
     queryKey: ['student', studentId],
-    queryFn: () => getStudent(studentId, { schoolId }),
-    enabled: Boolean(studentId),
+    queryFn: () => getStudent(studentId),
+    enabled: Boolean(studentId) && isSchoolAdmin,
   });
+  const student = studentQuery.data;
+  const displayName = student ? student.fullName ?? `${student.firstName} ${student.lastName}`.trim() : '';
+
+  useEffect(() => {
+    if (!student) return;
+    setEditForm({
+      fullName: displayName,
+      phone: student.phone ?? '',
+      email: student.email ?? '',
+      category: student.category ?? '',
+      presentAddress: student.presentAddress ?? student.addressLine1 ?? '',
+      permanentAddress: student.permanentAddress ?? student.addressLine2 ?? '',
+    });
+  }, [student, displayName]);
 
   const updateMutation = useMutation({
-    mutationFn: (payload: Parameters<typeof updateStudent>[1]) => updateStudent(studentId, payload, { schoolId }),
+    mutationFn: () => updateStudent(studentId, editForm),
     onSuccess: () => {
+      notify.success('Student updated', 'Profile changes were saved.');
+      setEditMode(false);
       queryClient.invalidateQueries({ queryKey: ['student', studentId] });
-      setIsEditing(false);
+      queryClient.invalidateQueries({ queryKey: ['students'] });
     },
+    onError: (error: any) => notify.error('Update failed', error?.response?.data?.error?.message ?? 'Unable to update student.'),
   });
 
-  const saveAll = () =>
-    updateMutation.mutate({
-      admissionNo: editData.admissionNo,
-      fullName: editData.fullName,
-      dob: editData.dob || null,
-      gender: editData.gender || null,
-      bloodGroup: editData.bloodGroup || null,
-      photoUrl: editData.photoUrl || null,
-      fatherName: editData.fatherName || null,
-      motherName: editData.motherName || null,
-      guardianName: editData.guardianName || null,
-      guardianRelationship: editData.guardianRelationship || null,
-      parentPhone: editData.parentPhone || null,
-      parentEmail: editData.parentEmail || null,
-      addressLine1: editData.addressLine1 || null,
-      addressLine2: editData.addressLine2 || null,
-      city: editData.city || null,
-      state: editData.state || null,
-      pincode: editData.pincode || null,
-      emergencyContact: editData.emergencyContact || null,
-      medicalConditions: editData.medicalConditions || null,
-      allergies: editData.allergies || null,
-      doctorContact: editData.doctorContact || null,
-      docBirthCert: editData.docBirthCert || null,
-      docTransferCert: editData.docTransferCert || null,
-      docAadhaar: editData.docAadhaar || null,
-      docReportCard: editData.docReportCard || null,
-      classId: editData.classId || null,
-      sectionId: editData.sectionId || null,
-    });
-
-  const quickUpdateMutation = useMutation({
-    mutationFn: (payload: Parameters<typeof updateStudent>[1]) => updateStudent(studentId, payload, { schoolId }),
+  const documentMutation = useMutation({
+    mutationFn: async () => {
+      if (!documentForm.file) throw new Error('Select a document.');
+      if (!documentForm.title.trim()) throw new Error('Document title is required.');
+      const uploaded = await uploadStudentDocument(documentForm.file, studentId);
+      return addStudentDocument(studentId, {
+        title: documentForm.title.trim(),
+        url: uploaded.url,
+        fileName: uploaded.filename,
+        mimeType: documentForm.file.type,
+        sizeBytes: documentForm.file.size,
+      });
+    },
     onSuccess: () => {
+      notify.success('Document uploaded', 'Student document was added.');
+      setDocumentForm({ title: '', file: null });
       queryClient.invalidateQueries({ queryKey: ['student', studentId] });
     },
+    onError: (error: any) => notify.error('Upload failed', error?.response?.data?.error?.message ?? error.message ?? 'Unable to upload document.'),
   });
 
-  const addPhotoMutation = useMutation({
-    mutationFn: (url: string) => addStudentPhoto(studentId, url),
+  const timelineMutation = useMutation({
+    mutationFn: () => {
+      if (!timelineForm.title.trim()) throw new Error('Timeline title is required.');
+      return addStudentTimeline(studentId, {
+        title: timelineForm.title.trim(),
+        description: timelineForm.description.trim() || null,
+        timelineDate: timelineForm.timelineDate,
+      });
+    },
     onSuccess: () => {
+      notify.success('Timeline added', 'Timeline item was saved.');
+      setTimelineForm({ title: '', description: '', timelineDate: new Date().toISOString().slice(0, 10) });
       queryClient.invalidateQueries({ queryKey: ['student', studentId] });
     },
+    onError: (error: any) => notify.error('Timeline failed', error?.response?.data?.error?.message ?? error.message ?? 'Unable to save timeline.'),
   });
 
-  const deletePhotoMutation = useMutation({
-    mutationFn: (photoId: string) => deleteStudentPhoto(studentId, photoId),
+  const deleteDocumentMutation = useMutation({
+    mutationFn: (documentId: string) => deleteStudentDocument(studentId, documentId),
     onSuccess: () => {
+      notify.success('Document deleted', 'Student document was removed.');
       queryClient.invalidateQueries({ queryKey: ['student', studentId] });
     },
   });
 
-  useEffect(() => {
-    if (!isEditing || !student) return;
-    setEditData({
-      admissionNo: student.admissionNo,
-      classId: student.classId || '',
-      sectionId: student.sectionId || '',
-      fullName: student.fullName ?? `${student.firstName} ${student.lastName}`.trim(),
-      dob: student.dob ? new Date(student.dob).toISOString().slice(0, 10) : '',
-      gender: student.gender ?? '',
-      bloodGroup: student.bloodGroup ?? '',
-      photoUrl: student.photoUrl ?? '',
-      fatherName: student.fatherName ?? '',
-      motherName: student.motherName ?? '',
-      guardianName: student.guardianName ?? '',
-      guardianRelationship: student.guardianRelationship ?? '',
-      parentPhone: student.parentPhone ?? '',
-      parentEmail: student.parentEmail ?? '',
-      addressLine1: student.addressLine1 ?? '',
-      addressLine2: student.addressLine2 ?? '',
-      city: student.city ?? '',
-      state: student.state ?? '',
-      pincode: student.pincode ?? '',
-      emergencyContact: student.emergencyContact ?? '',
-      medicalConditions: student.medicalConditions ?? '',
-      allergies: student.allergies ?? '',
-      doctorContact: student.doctorContact ?? '',
-      docBirthCert: student.docBirthCert ?? '',
-      docTransferCert: student.docTransferCert ?? '',
-      docAadhaar: student.docAadhaar ?? '',
-      docReportCard: student.docReportCard ?? '',
-    });
-  }, [isEditing, student]);
+  const deleteTimelineMutation = useMutation({
+    mutationFn: (timelineId: string) => deleteStudentTimeline(studentId, timelineId),
+    onSuccess: () => {
+      notify.success('Timeline deleted', 'Timeline item was removed.');
+      queryClient.invalidateQueries({ queryKey: ['student', studentId] });
+    },
+  });
 
-  useEffect(() => {
-    if (!student?.photoUrl) return;
-    setPhotoPreview(resolveUploadUrl(student.photoUrl));
-  }, [student?.photoUrl]);
-
-  const stateOptions = useMemo(() => State.getStatesOfCountry('IN'), []);
-  const selectedStateCode = useMemo(() => {
-    const match = stateOptions.find((state) => state.name === editData.state);
-    return match?.isoCode ?? '';
-  }, [stateOptions, editData.state]);
-  const cityOptions = useMemo(() => {
-    if (!selectedStateCode) return [];
-    return City.getCitiesOfState('IN', selectedStateCode);
-  }, [selectedStateCode]);
-
-  if (isLoading) {
+  if (isSessionLoading || !session?.role || !isSchoolAdmin || studentQuery.isLoading) {
     return <FullPageLoader label="Loading student details..." />;
   }
 
   if (!student) {
     return (
-      <div className="space-y-6">
-        <header>
-          <h1 className="text-2xl font-semibold text-ink">Student Not Found</h1>
-          <p className="text-sm text-slate">The requested student could not be found.</p>
-        </header>
+      <div className="p-6">
+        <PageHeader title="Student Not Found" breadcrumbs={[{ label: 'Dashboard', href: '/dashboard' }, { label: 'Students', href: '/dashboard/students' }, { label: 'Not Found' }]} />
       </div>
     );
   }
 
-  const displayName = student.fullName ?? `${student.firstName} ${student.lastName}`.trim();
+  const photo = resolveUploadUrl(student.photoUrl);
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-emerald-50/30 to-green-50/40">
-      {/* Hero Section */}
-      <div className="relative overflow-hidden bg-gradient-to-r from-emerald-600 via-green-600 to-teal-700 px-6 py-16 text-white">
-        <div className="absolute inset-0 bg-black/10"></div>
-        <div className="relative mx-auto max-w-6xl">
-          <div className="flex items-center justify-between">
-            <div>
-              <div className="mb-4 inline-flex items-center rounded-full bg-white/20 px-4 py-2 text-sm font-medium backdrop-blur-sm">
-                <svg className="mr-2 h-4 w-4" fill="currentColor" viewBox="0 0 20 20">
-                  <path d="M10 9a3 3 0 100-6 3 3 0 000 6zm-7 9a7 7 0 1114 0H3z" />
-                </svg>
-                Student Profile
+    <div className="min-h-screen bg-slate-100 pb-10">
+      <div className="mx-auto w-full max-w-[1500px] px-4 py-6 lg:px-8">
+        <PageHeader
+          title={displayName}
+          subtitle="View profile, fees, exam results, documents, and timeline."
+          breadcrumbs={[{ label: 'Dashboard', href: '/dashboard' }, { label: 'Students', href: '/dashboard/students' }, { label: displayName }]}
+        />
+
+        <div className="grid gap-5 lg:grid-cols-[320px_1fr]">
+          <aside className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+            <div className="h-28 bg-gradient-to-r from-violet-600 to-indigo-600" />
+            <div className="-mt-12 px-5 pb-5">
+              <div className="grid h-24 w-24 place-items-center overflow-hidden rounded-2xl border-4 border-white bg-violet-100 text-2xl font-bold text-violet-700 shadow">
+                {photo ? <img src={photo} alt={displayName} className="h-full w-full object-cover" /> : displayName.slice(0, 2).toUpperCase()}
               </div>
-              <h1 className="mb-4 text-4xl font-bold tracking-tight sm:text-5xl">
-                {displayName}
-              </h1>
-              <p className="max-w-2xl text-lg text-emerald-100">
-                View and manage comprehensive student information, academic records, and personal details.
-              </p>
+              <h2 className="mt-4 text-xl font-bold text-slate-950">{displayName}</h2>
+              <p className="text-sm text-slate-500">Admission: {student.admissionNo}</p>
+              <div className="mt-4 space-y-2 text-sm">
+                <InfoRow label="Roll number" value={student.rollNo} />
+                <InfoRow label="Class" value={`${student.class?.name ?? '-'}${student.section?.name ? ` - ${student.section.name}` : ''}`} />
+                <InfoRow label="Gender" value={student.gender} />
+                <InfoRow label="Status" value={student.status} />
+              </div>
+              <div className="mt-5 flex gap-2">
+                <button onClick={() => setEditMode(true)} className="flex-1 rounded-xl bg-[var(--theme-button-bg)] px-4 py-2 text-sm font-bold text-[var(--theme-button-text)]">Edit</button>
+                <Link href="/dashboard/students" className="rounded-xl border border-slate-200 px-4 py-2 text-sm font-bold text-slate-700">Back</Link>
+              </div>
             </div>
-            
-            <div className="hidden sm:flex gap-3">
-              {isEditing ? (
-                <>
+          </aside>
+
+          <main className="space-y-5">
+            <div className="rounded-2xl border border-slate-200 bg-white p-2 shadow-sm">
+              <div className="flex flex-wrap gap-2">
+                {tabs.map((item) => (
                   <button
-                    onClick={() => setIsEditing(false)}
-                    className="rounded-xl border border-white/30 px-6 py-3 font-semibold text-white backdrop-blur-sm transition-all hover:bg-white/10"
+                    key={item.key}
+                    onClick={() => setTab(item.key)}
+                    className={`rounded-xl px-4 py-2 text-sm font-bold ${tab === item.key ? 'bg-violet-600 text-white shadow-sm' : 'text-slate-600 hover:bg-slate-50'}`}
                   >
-                    Cancel
+                    {item.label}
                   </button>
-                  <button
-                    onClick={saveAll}
-                    disabled={updateMutation.isPending}
-                    className="rounded-xl bg-white/20 px-6 py-3 font-semibold text-white backdrop-blur-sm transition-all hover:bg-white/30 hover:scale-105 disabled:opacity-50"
-                  >
-                    {updateMutation.isPending ? 'Saving...' : 'Save Changes'}
-                  </button>
-                </>
-              ) : (
-                <button
-                  onClick={() => setIsEditing(true)}
-                  className="rounded-xl bg-white/20 px-6 py-3 font-semibold text-white backdrop-blur-sm transition-all hover:bg-white/30 hover:scale-105"
-                >
-                  <svg className="mr-2 inline h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-                  </svg>
-                  Edit Profile
-                </button>
-              )}
-              <Link
-                href="/dashboard/students"
-                className="rounded-xl border border-white/30 px-6 py-3 font-semibold text-white backdrop-blur-sm transition-all hover:bg-white/10"
-              >
-                <svg className="mr-2 inline h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
-                </svg>
-                Back to List
-              </Link>
-            </div>
-          </div>
-        </div>
-        
-        {/* Animated background elements */}
-        <div className="absolute -top-10 -left-10 h-40 w-40 rounded-full bg-white/10 animate-pulse"></div>
-        <div className="absolute -bottom-10 -right-10 h-32 w-32 rounded-full bg-white/10 animate-bounce"></div>
-        <div className="absolute top-1/2 left-1/3 h-6 w-6 rounded-full bg-white/20 animate-ping"></div>
-      </div>
-
-      <div className="mx-auto max-w-4xl px-6 py-12">
-        {/* Enhanced Stepper */}
-        <div className="mb-8 rounded-2xl bg-white p-6 shadow-lg ring-1 ring-gray-200">
-          <div className="flex items-center justify-between overflow-x-auto pb-2">
-            {steps.map((item, index) => {
-              const isActive = step === item.id;
-              const stepIcons = {
-                1: <svg className="h-4 w-4" fill="currentColor" viewBox="0 0 20 20"><path d="M10.394 2.08a1 1 0 00-.788 0l-7 3a1 1 0 000 1.84L5.25 8.051a.999.999 0 01.356-.257l4-1.714a1 1 0 11.788 1.838L7.667 9.088l1.94.831a1 1 0 00.787 0l7-3a1 1 0 000-1.838l-7-3z" /></svg>,
-                2: <svg className="h-4 w-4" fill="currentColor" viewBox="0 0 20 20"><path d="M10 9a3 3 0 100-6 3 3 0 000 6zm-7 9a7 7 0 1114 0H3z" /></svg>,
-                3: <svg className="h-4 w-4" fill="currentColor" viewBox="0 0 20 20"><path d="M13 6a3 3 0 11-6 0 3 3 0 016 0zM18 8a2 2 0 11-4 0 2 2 0 014 0zM14 15a4 4 0 00-8 0v3h8v-3z" /></svg>,
-                4: <svg className="h-4 w-4" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M5.05 4.05a7 7 0 119.9 9.9L10 18.9l-4.95-4.95a7 7 0 010-9.9zM10 11a2 2 0 100-4 2 2 0 000 4z" clipRule="evenodd" /></svg>,
-                5: <svg className="h-4 w-4" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M3.172 5.172a4 4 0 015.656 0L10 6.343l1.172-1.171a4 4 0 115.656 5.656L10 17.657l-6.828-6.829a4 4 0 010-5.656z" clipRule="evenodd" /></svg>,
-                6: <svg className="h-4 w-4" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M4 4a2 2 0 00-2 2v8a2 2 0 002 2h12a2 2 0 002-2V6a2 2 0 00-2-2H4zm3 5a1 1 0 011-1h4a1 1 0 110 2H8a1 1 0 01-1-1zm0 3a1 1 0 011-1h4a1 1 0 110 2H8a1 1 0 01-1-1z" clipRule="evenodd" /></svg>
-              };
-              
-              return (
-                <div key={item.id} className="flex items-center">
-                  <div className="flex flex-col items-center">
-                    <button
-                      onClick={() => setStep(item.id)}
-                      className={`flex h-10 w-10 items-center justify-center rounded-full border-2 transition-all ${
-                        isActive 
-                          ? 'border-emerald-500 bg-emerald-500 text-white' 
-                          : 'border-gray-300 bg-white text-gray-400 hover:border-emerald-300 hover:text-emerald-500'
-                      }`}
-                    >
-                      {stepIcons[item.id as keyof typeof stepIcons] || item.id}
-                    </button>
-                    <span className={`mt-2 text-xs font-medium ${
-                      isActive ? 'text-emerald-600' : 'text-gray-500'
-                    }`}>
-                      {item.title}
-                    </span>
-                  </div>
-                  {index < steps.length - 1 && (
-                    <div className="mx-4 h-0.5 w-12 bg-gray-300" />
-                  )}
-                </div>
-              );
-            })}
-          </div>
-        </div>
-
-        {/* Content Sections */}
-        <div className="rounded-2xl bg-white p-8 shadow-lg ring-1 ring-gray-200">
-          {step === 1 && (
-            <div>
-              <div className="mb-6">
-                <h2 className="text-2xl font-bold text-gray-900">Academic Information</h2>
-                <p className="mt-2 text-sm text-gray-600">Student's academic details and class assignment information.</p>
-              </div>
-              <div className="grid gap-6 md:grid-cols-2">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Admission Number</label>
-                  {isEditing ? (
-                    <input
-                      value={editData.admissionNo}
-                      onChange={(e) => setEditData({ ...editData, admissionNo: e.target.value })}
-                      className="w-full rounded-xl border border-gray-300 px-4 py-3 text-sm focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-200 transition-colors"
-                    />
-                  ) : (
-                    <div className="rounded-xl border border-gray-200 bg-gray-50 px-4 py-3 text-sm">
-                      {student.admissionNo}
-                    </div>
-                  )}
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Class</label>
-                  <div className="rounded-xl border border-gray-200 bg-gray-50 px-4 py-3 text-sm">
-                    {student.class?.name || '—'}
-                  </div>
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Section</label>
-                  <div className="rounded-xl border border-gray-200 bg-gray-50 px-4 py-3 text-sm">
-                    {student.section?.name || '—'}
-                  </div>
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Status</label>
-                  <div className="rounded-xl border border-gray-200 bg-gray-50 px-4 py-3 text-sm">
-                    <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ${
-                      student.status === 'ACTIVE' ? 'bg-emerald-100 text-emerald-800' : 'bg-gray-100 text-gray-800'
-                    }`}>
-                      {student.status}
-                    </span>
-                  </div>
-                </div>
-              </div>
-            </div>
-          )}
-
-          {step === 2 && (
-            <div>
-              <div className="mb-6">
-                <h2 className="text-2xl font-bold text-gray-900">Student Profile</h2>
-                <p className="mt-2 text-sm text-gray-600">Personal information and student photo management.</p>
-              </div>
-              <div className="grid gap-6 md:grid-cols-2">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Full Name</label>
-                  {isEditing ? (
-                    <input
-                      value={editData.fullName}
-                      onChange={(e) => setEditData({ ...editData, fullName: e.target.value })}
-                      className="w-full rounded-xl border border-gray-300 px-4 py-3 text-sm focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-200 transition-colors"
-                    />
-                  ) : (
-                    <div className="rounded-xl border border-gray-200 bg-gray-50 px-4 py-3 text-sm">
-                      {displayName}
-                    </div>
-                  )}
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Date of Birth</label>
-                  {isEditing ? (
-                    <input
-                      type="date"
-                      value={editData.dob}
-                      onChange={(e) => setEditData({ ...editData, dob: e.target.value })}
-                      className="w-full rounded-xl border border-gray-300 px-4 py-3 text-sm focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-200 transition-colors"
-                    />
-                  ) : (
-                    <div className="rounded-xl border border-gray-200 bg-gray-50 px-4 py-3 text-sm">
-                      {student.dob ? new Date(student.dob).toLocaleDateString() : '—'}
-                    </div>
-                  )}
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Gender</label>
-                  {isEditing ? (
-                    <select
-                      value={editData.gender}
-                      onChange={(e) => setEditData({ ...editData, gender: e.target.value })}
-                      className="w-full rounded-xl border border-gray-300 px-4 py-3 text-sm focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-200 transition-colors"
-                    >
-                      <option value="">Select Gender</option>
-                      <option value="MALE">Male</option>
-                      <option value="FEMALE">Female</option>
-                      <option value="OTHER">Other</option>
-                    </select>
-                  ) : (
-                    <div className="rounded-xl border border-gray-200 bg-gray-50 px-4 py-3 text-sm">
-                      {editData.gender || student.gender || '—'}
-                    </div>
-                  )}
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Blood Group</label>
-                  {isEditing ? (
-                    <select
-                      value={editData.bloodGroup}
-                      onChange={(e) => setEditData({ ...editData, bloodGroup: e.target.value })}
-                      className="w-full rounded-xl border border-gray-300 px-4 py-3 text-sm focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-200 transition-colors"
-                    >
-                      <option value="">Select Blood Group</option>
-                      <option value="A+">A+</option>
-                      <option value="A-">A-</option>
-                      <option value="B+">B+</option>
-                      <option value="B-">B-</option>
-                      <option value="AB+">AB+</option>
-                      <option value="AB-">AB-</option>
-                      <option value="O+">O+</option>
-                      <option value="O-">O-</option>
-                    </select>
-                  ) : (
-                    <div className="rounded-xl border border-gray-200 bg-gray-50 px-4 py-3 text-sm">
-                      {editData.bloodGroup || '—'}
-                    </div>
-                  )}
-                </div>
-                <div className="md:col-span-2">
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Student Photo</label>
-                  <p className="text-xs text-gray-500 mb-3">Upload a clear photo of the student (Max 10MB, JPG/PNG format)</p>
-                  {isEditing ? (
-                    <div className="space-y-4">
-                      <input
-                        type="file"
-                        accept="image/*"
-                        onChange={async (e) => {
-                          const file = e.target.files?.[0];
-                          if (!file) return;
-                          setPhotoPreview(URL.createObjectURL(file));
-                          try {
-                            const uploaded = await uploadStudentPhoto(file, { schoolId, studentId: student.id });
-                            const resolved = resolveUploadUrl(uploaded.url) ?? uploaded.url;
-                            setEditData({ ...editData, photoUrl: uploaded.url });
-                            setPhotoPreview(resolved);
-                            quickUpdateMutation.mutate({ photoUrl: uploaded.url });
-                            notify.success('Photo uploaded', 'Student photo updated.');
-                          } catch (err) {
-                            const message = err instanceof Error ? err.message : 'Photo upload failed';
-                            notify.error('Photo upload failed', message);
-                          }
-                        }}
-                        className="w-full rounded-xl border border-gray-300 px-4 py-3 text-sm focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-200 transition-colors"
-                      />
-                      {photoPreview && (
-                        <div className="relative inline-block">
-                          <img src={photoPreview} alt="Student preview" className="h-24 w-24 rounded-xl object-cover ring-2 ring-emerald-200" />
-                          <div className="absolute -top-2 -right-2 rounded-full bg-emerald-500 p-1">
-                            <svg className="h-3 w-3 text-white" fill="currentColor" viewBox="0 0 20 20">
-                              <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
-                            </svg>
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                  ) : (
-                    <div className="rounded-xl border border-gray-200 bg-gray-50 p-4">
-                      {photoPreview ? (
-                        <img
-                          src={photoPreview}
-                          alt="Student photo"
-                          className="h-24 w-24 rounded-xl object-cover ring-2 ring-emerald-200"
-                        />
-                      ) : (
-                        <div className="flex items-center justify-center h-24 w-24 rounded-xl bg-gray-200 text-gray-400">
-                          <svg className="h-8 w-8" fill="currentColor" viewBox="0 0 20 20">
-                            <path fillRule="evenodd" d="M4 3a2 2 0 00-2 2v10a2 2 0 002 2h12a2 2 0 002-2V5a2 2 0 00-2-2H4zm12 12H4l4-8 3 6 2-4 3 6z" clipRule="evenodd" />
-                          </svg>
-                        </div>
-                      )}
-                    </div>
-                  )}
-                </div>
-                <div className="md:col-span-2">
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Additional Photos</label>
-                  <p className="text-xs text-gray-500 mb-3">Upload up to 5 additional photos (Max 10MB each, JPG/PNG format)</p>
-                  <div className="space-y-4">
-                    <div className="flex flex-wrap gap-3">
-                      {(student.photos ?? []).map((photo) => (
-                        <div key={photo.id} className="relative">
-                          <img
-                            src={resolveUploadUrl(photo.url) ?? ''}
-                            alt="Student"
-                            className="h-20 w-20 rounded-xl object-cover ring-2 ring-emerald-200"
-                          />
-                          {isEditing && (
-                            <button
-                              type="button"
-                              onClick={() => deletePhotoMutation.mutate(photo.id)}
-                              className="absolute -right-2 -top-2 flex h-6 w-6 items-center justify-center rounded-full bg-red-500 text-white shadow-lg hover:bg-red-600 transition-colors"
-                              aria-label="Remove photo"
-                            >
-                              <svg className="h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                              </svg>
-                            </button>
-                          )}
-                        </div>
-                      ))}
-                    </div>
-                    {isEditing && (
-                      <input
-                        type="file"
-                        accept="image/*"
-                        multiple
-                        onChange={async (e) => {
-                          const files = Array.from(e.target.files ?? []);
-                          if (!files.length) return;
-                          const existing = student.photos?.length ?? 0;
-                          const remaining = Math.max(0, 5 - existing);
-                          const toUpload = files.slice(0, remaining);
-                          let successCount = 0;
-                          for (const file of toUpload) {
-                            try {
-                              const uploaded = await uploadStudentPhoto(file, { schoolId, studentId: student.id });
-                              await addPhotoMutation.mutateAsync(uploaded.url);
-                              successCount += 1;
-                            } catch (err) {
-                              const message = err instanceof Error ? err.message : 'Additional photo upload failed';
-                              notify.error('Additional photo failed', message);
-                            }
-                          }
-                          if (successCount > 0) {
-                            notify.success('Additional photos uploaded', `${successCount} photo(s) added.`);
-                          }
-                        }}
-                        className="w-full rounded-xl border border-gray-300 px-4 py-3 text-sm focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-200 transition-colors"
-                      />
-                    )}
-                  </div>
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Created Date</label>
-                  <div className="rounded-xl border border-gray-200 bg-gray-50 px-4 py-3 text-sm">
-                    {new Date(student.createdAt).toLocaleDateString()}
-                  </div>
-                </div>
-              </div>
-            </div>
-          )}
-
-          {step === 3 && (
-            <div>
-              <div className="mb-6">
-                <h2 className="text-2xl font-bold text-gray-900">Parent Information</h2>
-                <p className="mt-2 text-sm text-gray-600">Guardian and parent contact details for communication and emergencies.</p>
-              </div>
-              <div className="grid gap-6 md:grid-cols-2">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Father Name</label>
-                  {isEditing ? (
-                    <input
-                      value={editData.fatherName}
-                      onChange={(e) => setEditData({ ...editData, fatherName: e.target.value })}
-                      className="w-full rounded-xl border border-gray-300 px-4 py-3 text-sm focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-200 transition-colors"
-                    />
-                  ) : (
-                    <div className="rounded-xl border border-gray-200 bg-gray-50 px-4 py-3 text-sm">
-                      {student.fatherName ?? '—'}
-                    </div>
-                  )}
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Mother Name</label>
-                  {isEditing ? (
-                    <input
-                      value={editData.motherName}
-                      onChange={(e) => setEditData({ ...editData, motherName: e.target.value })}
-                      className="w-full rounded-xl border border-gray-300 px-4 py-3 text-sm focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-200 transition-colors"
-                    />
-                  ) : (
-                    <div className="rounded-xl border border-gray-200 bg-gray-50 px-4 py-3 text-sm">
-                      {student.motherName ?? '—'}
-                    </div>
-                  )}
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Guardian Name</label>
-                  {isEditing ? (
-                    <input
-                      value={editData.guardianName}
-                      onChange={(e) => setEditData({ ...editData, guardianName: e.target.value })}
-                      className="w-full rounded-xl border border-gray-300 px-4 py-3 text-sm focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-200 transition-colors"
-                    />
-                  ) : (
-                    <div className="rounded-xl border border-gray-200 bg-gray-50 px-4 py-3 text-sm">
-                      {student.guardianName ?? '—'}
-                    </div>
-                  )}
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Relationship</label>
-                  {isEditing ? (
-                    <select
-                      value={editData.guardianRelationship}
-                      onChange={(e) => setEditData({ ...editData, guardianRelationship: e.target.value })}
-                      className="w-full rounded-xl border border-gray-300 px-4 py-3 text-sm focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-200 transition-colors"
-                    >
-                      <option value="">Select relationship</option>
-                      <option value="FATHER">Father</option>
-                      <option value="MOTHER">Mother</option>
-                      <option value="GUARDIAN">Guardian</option>
-                      <option value="OTHER">Other</option>
-                    </select>
-                  ) : (
-                    <div className="rounded-xl border border-gray-200 bg-gray-50 px-4 py-3 text-sm">
-                      {student.guardianRelationship ?? '—'}
-                    </div>
-                  )}
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Phone Number</label>
-                  {isEditing ? (
-                    <input
-                      value={editData.parentPhone}
-                      onChange={(e) => setEditData({ ...editData, parentPhone: e.target.value })}
-                      className="w-full rounded-xl border border-gray-300 px-4 py-3 text-sm focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-200 transition-colors"
-                    />
-                  ) : (
-                    <div className="rounded-xl border border-gray-200 bg-gray-50 px-4 py-3 text-sm">
-                      {student.parentPhone ?? '—'}
-                    </div>
-                  )}
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Email Address</label>
-                  {isEditing ? (
-                    <input
-                      type="email"
-                      value={editData.parentEmail}
-                      onChange={(e) => setEditData({ ...editData, parentEmail: e.target.value })}
-                      className="w-full rounded-xl border border-gray-300 px-4 py-3 text-sm focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-200 transition-colors"
-                    />
-                  ) : (
-                    <div className="rounded-xl border border-gray-200 bg-gray-50 px-4 py-3 text-sm">
-                      {student.parentEmail ?? '—'}
-                    </div>
-                  )}
-                </div>
-              </div>
-            </div>
-          )}
-
-          {step === 4 && (
-            <div>
-              <h3 className="text-lg font-semibold mb-4">Address Information</h3>
-              <div className="grid gap-4 md:grid-cols-2">
-                <div className="md:col-span-2">
-                  <label className="block text-sm font-medium text-slate mb-1">Address Line 1</label>
-                  {isEditing ? (
-                    <input
-                      value={editData.addressLine1}
-                      onChange={(e) => setEditData({ ...editData, addressLine1: e.target.value })}
-                      className="w-full rounded-lg border border-slate/20 px-3 py-2 text-sm"
-                    />
-                  ) : (
-                    <div className="rounded-lg border border-slate/20 px-3 py-2 text-sm bg-slate/5">
-                      {student.addressLine1 ?? '—'}
-                    </div>
-                  )}
-                </div>
-                <div className="md:col-span-2">
-                  <label className="block text-sm font-medium text-slate mb-1">Address Line 2</label>
-                  {isEditing ? (
-                    <input
-                      value={editData.addressLine2}
-                      onChange={(e) => setEditData({ ...editData, addressLine2: e.target.value })}
-                      className="w-full rounded-lg border border-slate/20 px-3 py-2 text-sm"
-                    />
-                  ) : (
-                    <div className="rounded-lg border border-slate/20 px-3 py-2 text-sm bg-slate/5">
-                      {student.addressLine2 ?? '—'}
-                    </div>
-                  )}
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-slate mb-1">City</label>
-                  {isEditing ? (
-                    <select
-                      value={editData.city}
-                      onChange={(e) => setEditData({ ...editData, city: e.target.value })}
-                      className="w-full rounded-lg border border-slate/20 px-3 py-2 text-sm"
-                      disabled={!editData.state || cityOptions.length === 0}
-                    >
-                      <option value="">
-                        {!editData.state
-                          ? 'Select state first'
-                          : cityOptions.length
-                            ? 'Select city'
-                            : 'No cities available'}
-                      </option>
-                      {cityOptions.map((city) => (
-                        <option key={`${city.name}-${city.latitude}-${city.longitude}`} value={city.name}>
-                          {city.name}
-                        </option>
-                      ))}
-                    </select>
-                  ) : (
-                    <div className="rounded-lg border border-slate/20 px-3 py-2 text-sm bg-slate/5">
-                      {student.city ?? '—'}
-                    </div>
-                  )}
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-slate mb-1">State</label>
-                  {isEditing ? (
-                    <select
-                      value={editData.state}
-                      onChange={(e) => setEditData({ ...editData, state: e.target.value, city: '' })}
-                      className="w-full rounded-lg border border-slate/20 px-3 py-2 text-sm"
-                    >
-                      <option value="">Select state</option>
-                      {stateOptions.map((state) => (
-                        <option key={state.isoCode} value={state.name}>
-                          {state.name}
-                        </option>
-                      ))}
-                    </select>
-                  ) : (
-                    <div className="rounded-lg border border-slate/20 px-3 py-2 text-sm bg-slate/5">
-                      {student.state ?? '—'}
-                    </div>
-                  )}
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-slate mb-1">Pincode</label>
-                  {isEditing ? (
-                    <input
-                      value={editData.pincode}
-                      onChange={(e) => setEditData({ ...editData, pincode: e.target.value })}
-                      className="w-full rounded-lg border border-slate/20 px-3 py-2 text-sm"
-                    />
-                  ) : (
-                    <div className="rounded-lg border border-slate/20 px-3 py-2 text-sm bg-slate/5">
-                      {student.pincode ?? '—'}
-                    </div>
-                  )}
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-slate mb-1">Emergency Contact</label>
-                  {isEditing ? (
-                    <input
-                      value={editData.emergencyContact}
-                      onChange={(e) => setEditData({ ...editData, emergencyContact: e.target.value })}
-                      className="w-full rounded-lg border border-slate/20 px-3 py-2 text-sm"
-                    />
-                  ) : (
-                    <div className="rounded-lg border border-slate/20 px-3 py-2 text-sm bg-slate/5">
-                      {student.emergencyContact ?? '—'}
-                    </div>
-                  )}
-                </div>
-              </div>
-            </div>
-          )}
-
-          {step === 5 && (
-            <div>
-              <h3 className="text-lg font-semibold mb-4">Medical Information</h3>
-              <div className="grid gap-4 md:grid-cols-2">
-                <div className="md:col-span-2">
-                  <label className="block text-sm font-medium text-slate mb-1">Medical Conditions</label>
-                  {isEditing ? (
-                    <textarea
-                      value={editData.medicalConditions}
-                      onChange={(e) => setEditData({ ...editData, medicalConditions: e.target.value })}
-                      className="w-full rounded-lg border border-slate/20 px-3 py-2 text-sm"
-                      rows={3}
-                    />
-                  ) : (
-                    <div className="rounded-lg border border-slate/20 px-3 py-2 text-sm bg-slate/5 min-h-[80px]">
-                      {student.medicalConditions ?? '—'}
-                    </div>
-                  )}
-                </div>
-                <div className="md:col-span-2">
-                  <label className="block text-sm font-medium text-slate mb-1">Allergies</label>
-                  {isEditing ? (
-                    <textarea
-                      value={editData.allergies}
-                      onChange={(e) => setEditData({ ...editData, allergies: e.target.value })}
-                      className="w-full rounded-lg border border-slate/20 px-3 py-2 text-sm"
-                      rows={3}
-                    />
-                  ) : (
-                    <div className="rounded-lg border border-slate/20 px-3 py-2 text-sm bg-slate/5 min-h-[80px]">
-                      {student.allergies ?? '—'}
-                    </div>
-                  )}
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-slate mb-1">Doctor Name</label>
-                  {isEditing ? (
-                    <input
-                      value={editData.doctorContact}
-                      onChange={(e) => setEditData({ ...editData, doctorContact: e.target.value })}
-                      className="w-full rounded-lg border border-slate/20 px-3 py-2 text-sm"
-                    />
-                  ) : (
-                    <div className="rounded-lg border border-slate/20 px-3 py-2 text-sm bg-slate/5">
-                      {student.doctorContact ?? '—'}
-                    </div>
-                  )}
-                </div>
-              </div>
-            </div>
-          )}
-
-          {step === 6 && (
-            <div>
-              <h3 className="text-lg font-semibold mb-4">Documents</h3>
-              <p className="text-xs text-slate/70 -mt-3 mb-4">Max 20MB per file (PDF/DOC/DOCX/Images).</p>
-              <div className="grid gap-4 md:grid-cols-2">
-                {[
-                  { key: 'docBirthCert', label: 'Birth Certificate' },
-                  { key: 'docTransferCert', label: 'Transfer Certificate' },
-                  { key: 'docAadhaar', label: 'Aadhaar Card' },
-                  { key: 'docReportCard', label: 'Report Card' },
-                ].map((item) => (
-                  <div key={item.key} className="flex flex-col gap-2 rounded-lg border border-slate/20 px-3 py-2">
-                    <label className="text-sm font-medium text-slate">{item.label}</label>
-                    {isEditing ? (
-                      <input
-                        type="file"
-                        accept=".pdf,.doc,.docx,image/*"
-                        onChange={async (e) => {
-                          const file = e.target.files?.[0];
-                          if (!file) return;
-                          try {
-                            const uploaded = await uploadStudentDocument(file, student.id, { schoolId });
-                            setEditData({ ...editData, [item.key]: uploaded.url });
-                            quickUpdateMutation.mutate({ [item.key]: uploaded.url } as any);
-                            notify.success('Document uploaded', `${item.label} uploaded.`);
-                          } catch (err) {
-                            const message = err instanceof Error ? err.message : 'Document upload failed';
-                            notify.error('Document upload failed', message);
-                          }
-                        }}
-                        className="text-xs"
-                      />
-                    ) : (
-                      <div className="text-sm bg-slate/5 px-2 py-1 rounded">
-                        {(student as any)[item.key] ? (
-                          <a
-                            className="text-ink underline"
-                            href={resolveUploadUrl((student as any)[item.key]) ?? undefined}
-                            target="_blank"
-                            rel="noreferrer"
-                          >
-                            View document
-                          </a>
-                        ) : (
-                          'No file uploaded'
-                        )}
-                      </div>
-                    )}
-                  </div>
                 ))}
               </div>
             </div>
-          )}
 
-          {/* Navigation */}
-          <div className="flex justify-between mt-8 pt-6 border-t border-gray-200">
-            <button
-              onClick={() => setStep((prev) => (prev > 1 ? ((prev - 1) as Step) : prev))}
-              disabled={step === 1}
-              className="rounded-xl border border-gray-300 px-6 py-3 font-medium text-gray-700 transition-colors hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              <svg className="mr-2 inline h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
-              </svg>
-              Previous
-            </button>
-            <button
-              onClick={() => setStep((prev) => (prev < 6 ? ((prev + 1) as Step) : prev))}
-              disabled={step === 6}
-              className="rounded-xl bg-gradient-to-r from-emerald-600 to-green-600 px-8 py-3 font-semibold text-white shadow-lg transition-all hover:from-emerald-700 hover:to-green-700 hover:shadow-xl hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100"
-            >
-              Next
-              <svg className="ml-2 inline h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-              </svg>
-            </button>
-          </div>
+            {editMode && (
+              <section className="rounded-2xl border border-violet-100 bg-white p-5 shadow-sm">
+                <div className="mb-4 flex items-center justify-between">
+                  <h2 className="text-lg font-bold text-slate-950">Edit Basic Profile</h2>
+                  <button onClick={() => setEditMode(false)} className="text-sm font-semibold text-slate-500">Cancel</button>
+                </div>
+                <div className="grid gap-4 md:grid-cols-2">
+                  <input value={editForm.fullName} onChange={(event) => setEditForm({ ...editForm, fullName: event.target.value })} placeholder="Full name" className="rounded-xl border border-slate-200 px-3 py-2 text-sm" />
+                  <input value={editForm.category} onChange={(event) => setEditForm({ ...editForm, category: event.target.value })} placeholder="Type / category" className="rounded-xl border border-slate-200 px-3 py-2 text-sm" />
+                  <input value={editForm.phone} onChange={(event) => setEditForm({ ...editForm, phone: event.target.value })} placeholder="Phone" className="rounded-xl border border-slate-200 px-3 py-2 text-sm" />
+                  <input value={editForm.email} onChange={(event) => setEditForm({ ...editForm, email: event.target.value })} placeholder="Email" className="rounded-xl border border-slate-200 px-3 py-2 text-sm" />
+                  <textarea value={editForm.presentAddress} onChange={(event) => setEditForm({ ...editForm, presentAddress: event.target.value })} placeholder="Present address" className="rounded-xl border border-slate-200 px-3 py-2 text-sm md:col-span-2" />
+                  <textarea value={editForm.permanentAddress} onChange={(event) => setEditForm({ ...editForm, permanentAddress: event.target.value })} placeholder="Permanent address" className="rounded-xl border border-slate-200 px-3 py-2 text-sm md:col-span-2" />
+                </div>
+                <button onClick={() => updateMutation.mutate()} disabled={updateMutation.isPending} className="mt-4 rounded-xl bg-violet-600 px-5 py-2 text-sm font-bold text-white disabled:opacity-50">
+                  {updateMutation.isPending ? 'Saving...' : 'Save changes'}
+                </button>
+              </section>
+            )}
+
+            {tab === 'profile' && (
+              <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+                <h2 className="mb-4 text-lg font-bold text-slate-950">Profile</h2>
+                <div className="grid gap-4 md:grid-cols-3">
+                  <InfoRow label="Admission date" value={formatDate(student.admissionDate)} />
+                  <InfoRow label="Date of birth" value={formatDate(student.dob)} />
+                  <InfoRow label="Type" value={student.category ?? 'Regular'} />
+                  <InfoRow label="Religion" value={student.religion} />
+                  <InfoRow label="Phone number" value={student.phone ?? student.parentPhone} />
+                  <InfoRow label="Email address" value={student.email ?? student.parentEmail} />
+                </div>
+                <div className="mt-4 grid gap-4 md:grid-cols-2">
+                  <InfoRow label="Present address" value={student.presentAddress ?? student.addressLine1} />
+                  <InfoRow label="Permanent address" value={student.permanentAddress ?? student.addressLine2} />
+                </div>
+                <h3 className="mt-6 text-base font-bold text-slate-950">Sibling Information</h3>
+                <div className="mt-3 grid gap-3 md:grid-cols-2">
+                  {student.siblings?.length ? student.siblings.map((item) => (
+                    <div key={item.sibling.id} className="rounded-xl border border-slate-100 p-3">
+                      <p className="font-semibold text-slate-900">{item.sibling.fullName}</p>
+                      <p className="text-sm text-slate-500">{item.sibling.class?.name ?? '-'} {item.sibling.section?.name ?? ''}</p>
+                    </div>
+                  )) : <p className="text-sm text-slate-500">No sibling linked.</p>}
+                </div>
+              </section>
+            )}
+
+            {tab === 'fees' && (
+              <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+                <h2 className="mb-4 text-lg font-bold text-slate-950">Fees</h2>
+                <div className="rounded-xl border border-dashed border-slate-200 p-8 text-center text-sm text-slate-500">
+                  Fee groups, payments, discounts, fines, paid amount, balance, and grand total will appear here when the fees module is connected.
+                </div>
+              </section>
+            )}
+
+            {tab === 'exam' && (
+              <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+                <h2 className="mb-4 text-lg font-bold text-slate-950">Exam</h2>
+                <div className="overflow-x-auto">
+                  <table className="min-w-full text-left text-sm">
+                    <thead className="bg-slate-50 text-xs uppercase text-slate-500">
+                      <tr><th className="px-3 py-2">Exam</th><th className="px-3 py-2">Subject</th><th className="px-3 py-2">Marks</th><th className="px-3 py-2">Grade</th><th className="px-3 py-2">Status</th></tr>
+                    </thead>
+                    <tbody>
+                      {student.marks?.length ? student.marks.map((mark) => (
+                        <tr key={mark.id} className="border-b border-slate-100">
+                          <td className="px-3 py-2">{mark.examPaper?.exam?.name ?? '-'}</td>
+                          <td className="px-3 py-2">{mark.examPaper?.subject?.name ?? '-'}</td>
+                          <td className="px-3 py-2">{mark.marks} / {mark.examPaper?.maxMarks ?? '-'}</td>
+                          <td className="px-3 py-2">{mark.grade ?? '-'}</td>
+                          <td className="px-3 py-2">{mark.status ?? '-'}</td>
+                        </tr>
+                      )) : (
+                        <tr><td colSpan={5} className="px-3 py-8 text-center text-slate-500">No exam results found.</td></tr>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </section>
+            )}
+
+            {tab === 'documents' && (
+              <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+                <h2 className="mb-4 text-lg font-bold text-slate-950">Documents</h2>
+                <div className="mb-5 grid gap-3 md:grid-cols-[1fr_1fr_auto]">
+                  <input value={documentForm.title} onChange={(event) => setDocumentForm({ ...documentForm, title: event.target.value })} placeholder="Document title" className="rounded-xl border border-slate-200 px-3 py-2 text-sm" />
+                  <input type="file" accept=".pdf,.doc,.docx,image/*" onChange={(event) => setDocumentForm({ ...documentForm, file: event.target.files?.[0] ?? null })} className="rounded-xl border border-slate-200 px-3 py-2 text-sm" />
+                  <button onClick={() => documentMutation.mutate()} disabled={documentMutation.isPending} className="rounded-xl bg-violet-600 px-4 py-2 text-sm font-bold text-white disabled:opacity-50">Upload</button>
+                </div>
+                <div className="grid gap-3">
+                  {student.documents?.length ? student.documents.map((document) => (
+                    <div key={document.id} className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-slate-100 p-3">
+                      <div>
+                        <p className="font-semibold text-slate-900">{document.title}</p>
+                        <p className="text-xs text-slate-500">{formatDate(document.createdAt)}</p>
+                      </div>
+                      <div className="flex gap-2">
+                        <a href={resolveUploadUrl(document.url) ?? undefined} target="_blank" rel="noreferrer" className="rounded-lg border border-slate-200 px-3 py-2 text-sm font-semibold text-slate-700">Download</a>
+                        <button onClick={() => window.confirm('Delete this document?') && deleteDocumentMutation.mutate(document.id)} className="rounded-lg border border-red-200 px-3 py-2 text-sm font-semibold text-red-600">Delete</button>
+                      </div>
+                    </div>
+                  )) : <p className="rounded-xl border border-dashed border-slate-200 p-8 text-center text-sm text-slate-500">No documents uploaded.</p>}
+                </div>
+              </section>
+            )}
+
+            {tab === 'timeline' && (
+              <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+                <h2 className="mb-4 text-lg font-bold text-slate-950">Timeline</h2>
+                <div className="mb-5 grid gap-3 md:grid-cols-[1fr_160px_auto]">
+                  <input value={timelineForm.title} onChange={(event) => setTimelineForm({ ...timelineForm, title: event.target.value })} placeholder="Title" className="rounded-xl border border-slate-200 px-3 py-2 text-sm" />
+                  <input type="date" value={timelineForm.timelineDate} onChange={(event) => setTimelineForm({ ...timelineForm, timelineDate: event.target.value })} className="rounded-xl border border-slate-200 px-3 py-2 text-sm" />
+                  <button onClick={() => timelineMutation.mutate()} disabled={timelineMutation.isPending} className="rounded-xl bg-violet-600 px-4 py-2 text-sm font-bold text-white disabled:opacity-50">Add</button>
+                  <textarea value={timelineForm.description} onChange={(event) => setTimelineForm({ ...timelineForm, description: event.target.value })} placeholder="Description" className="rounded-xl border border-slate-200 px-3 py-2 text-sm md:col-span-3" />
+                </div>
+                <div className="space-y-3">
+                  {student.timelines?.length ? student.timelines.map((item) => (
+                    <div key={item.id} className="rounded-xl border border-slate-100 p-4">
+                      <div className="flex items-start justify-between gap-4">
+                        <div>
+                          <p className="font-bold text-slate-950">{item.title}</p>
+                          <p className="text-xs font-semibold uppercase text-violet-600">{formatDate(item.timelineDate)}</p>
+                          <p className="mt-2 text-sm text-slate-600">{item.description || '-'}</p>
+                        </div>
+                        <button onClick={() => window.confirm('Delete this timeline item?') && deleteTimelineMutation.mutate(item.id)} className="rounded-lg border border-red-200 px-3 py-2 text-sm font-semibold text-red-600">
+                          <Icon path="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6M9 7h6" />
+                        </button>
+                      </div>
+                    </div>
+                  )) : <p className="rounded-xl border border-dashed border-slate-200 p-8 text-center text-sm text-slate-500">No timeline items found.</p>}
+                </div>
+              </section>
+            )}
+          </main>
         </div>
       </div>
     </div>
