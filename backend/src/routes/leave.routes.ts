@@ -1,18 +1,53 @@
 import { Router } from 'express';
 import { authMiddleware } from '../middlewares/auth.middleware';
-import { requireRole } from '../middlewares/rbac.middleware';
 import {
-  approveLeaveRequestApi,
-  createLeaveRequestApi,
-  listLeaveRequestsApi,
-  rejectLeaveRequestApi,
-} from '../controllers/leaveP1.controller';
+  approveLeaveApplication,
+  createLeaveApplication,
+  createLeaveDefine,
+  createLeaveType,
+  deleteLeaveApplication,
+  deleteLeaveDefine,
+  deleteLeaveType,
+  getLeaveApplication,
+  leaveAttachmentUploadMiddleware,
+  listLeaveApplications,
+  listLeaveDefines,
+  listLeaveTypes,
+  listMyLeaveBalances,
+  rejectLeaveApplication,
+  updateLeaveApplication,
+  updateLeaveDefine,
+  updateLeaveStatus,
+  updateLeaveType,
+} from '../controllers/leave.controller';
 
 export const leaveRouter = Router();
 
 leaveRouter.use(authMiddleware);
 
-leaveRouter.post('/requests', requireRole('TEACHER', 'SCHOOL_ADMIN'), createLeaveRequestApi);
-leaveRouter.get('/requests', requireRole('TEACHER', 'SCHOOL_ADMIN'), listLeaveRequestsApi);
-leaveRouter.patch('/requests/:id/approve', requireRole('SCHOOL_ADMIN'), approveLeaveRequestApi);
-leaveRouter.patch('/requests/:id/reject', requireRole('SCHOOL_ADMIN'), rejectLeaveRequestApi);
+leaveRouter.get('/types', listLeaveTypes);
+leaveRouter.post('/types', createLeaveType);
+leaveRouter.patch('/types/:id', updateLeaveType);
+leaveRouter.delete('/types/:id', deleteLeaveType);
+
+leaveRouter.get('/defines', listLeaveDefines);
+leaveRouter.post('/defines', createLeaveDefine);
+leaveRouter.patch('/defines/:id', updateLeaveDefine);
+leaveRouter.delete('/defines/:id', deleteLeaveDefine);
+
+leaveRouter.get('/balances/me', listMyLeaveBalances);
+
+leaveRouter.get('/applications', listLeaveApplications);
+leaveRouter.post('/applications', leaveAttachmentUploadMiddleware, createLeaveApplication);
+leaveRouter.get('/applications/:id', getLeaveApplication);
+leaveRouter.patch('/applications/:id', leaveAttachmentUploadMiddleware, updateLeaveApplication);
+leaveRouter.delete('/applications/:id', deleteLeaveApplication);
+leaveRouter.patch('/applications/:id/status', updateLeaveStatus);
+
+// Backward-compatible aliases for the earlier P1 leave request UI/service.
+leaveRouter.get('/requests', listLeaveApplications);
+leaveRouter.post('/requests', leaveAttachmentUploadMiddleware, createLeaveApplication);
+leaveRouter.patch('/requests/:id', leaveAttachmentUploadMiddleware, updateLeaveApplication);
+leaveRouter.delete('/requests/:id', deleteLeaveApplication);
+leaveRouter.patch('/requests/:id/approve', approveLeaveApplication);
+leaveRouter.patch('/requests/:id/reject', rejectLeaveApplication);

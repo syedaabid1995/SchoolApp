@@ -5,7 +5,7 @@ export type PermissionCatalogItem = {
   code: string;
   label: string;
   path: string;
-  group: 'Overview' | 'Plans' | 'Employees' | 'Academics' | 'Students' | 'Attendance' | 'Support' | 'Audit' | 'Utilities';
+  group: 'Overview' | 'Plans' | 'Employees' | 'Academics' | 'Students' | 'Attendance' | 'Payroll' | 'Support' | 'Audit' | 'Utilities';
 };
 
 export const EMPLOYEE_PERMISSION_CATALOG: PermissionCatalogItem[] = [
@@ -15,6 +15,16 @@ export const EMPLOYEE_PERMISSION_CATALOG: PermissionCatalogItem[] = [
   { code: 'settings.access', label: 'Settings / Access Control', path: '/dashboard/settings', group: 'Utilities' },
   { code: 'teachers.list', label: 'Employees - List', path: '/dashboard/teachers', group: 'Employees' },
   { code: 'teachers.add', label: 'Employees - Add', path: '/dashboard/teachers/add', group: 'Employees' },
+  { code: 'staff.view', label: 'Staff Directory - View', path: '/dashboard/staff', group: 'Employees' },
+  { code: 'staff.create', label: 'Staff Directory - Create', path: '/dashboard/staff/add', group: 'Employees' },
+  { code: 'staff.edit', label: 'Staff Directory - Edit', path: '/dashboard/staff', group: 'Employees' },
+  { code: 'staff.delete', label: 'Staff Directory - Delete', path: '/dashboard/staff', group: 'Employees' },
+  { code: 'staff.document.view', label: 'Staff Documents - View', path: '/dashboard/staff', group: 'Employees' },
+  { code: 'staff.document.create', label: 'Staff Documents - Create', path: '/dashboard/staff', group: 'Employees' },
+  { code: 'staff.document.delete', label: 'Staff Documents - Delete', path: '/dashboard/staff', group: 'Employees' },
+  { code: 'staff.timeline.view', label: 'Staff Timeline - View', path: '/dashboard/staff', group: 'Employees' },
+  { code: 'staff.timeline.create', label: 'Staff Timeline - Create', path: '/dashboard/staff', group: 'Employees' },
+  { code: 'staff.timeline.delete', label: 'Staff Timeline - Delete', path: '/dashboard/staff', group: 'Employees' },
   { code: 'attendance.substitute.manage', label: 'Attendance Substitutions', path: '/dashboard/teachers/assign', group: 'Attendance' },
   { code: 'academics.setup', label: 'Academic Setup', path: '/dashboard/academics', group: 'Academics' },
   { code: 'academic.class.view', label: 'Academic Classes - View', path: '/dashboard/academics', group: 'Academics' },
@@ -69,6 +79,30 @@ export const EMPLOYEE_PERMISSION_CATALOG: PermissionCatalogItem[] = [
   { code: 'attendance.create', label: 'Student Attendance - Create', path: '/dashboard/students/attendance', group: 'Attendance' },
   { code: 'attendance.edit', label: 'Student Attendance - Edit', path: '/dashboard/students/attendance', group: 'Attendance' },
   { code: 'attendance.report', label: 'Student Attendance - Report', path: '/dashboard/students/attendance', group: 'Attendance' },
+  { code: 'staff.attendance.view', label: 'Staff Attendance - View', path: '/dashboard/staff/attendance', group: 'Attendance' },
+  { code: 'staff.attendance.create', label: 'Staff Attendance - Create', path: '/dashboard/staff/attendance', group: 'Attendance' },
+  { code: 'staff.attendance.edit', label: 'Staff Attendance - Edit', path: '/dashboard/staff/attendance', group: 'Attendance' },
+  { code: 'staff.attendance.report', label: 'Staff Attendance - Report', path: '/dashboard/staff/attendance', group: 'Attendance' },
+  { code: 'leave.type.view', label: 'Leave Types - View', path: '/dashboard/leave/requests', group: 'Attendance' },
+  { code: 'leave.type.create', label: 'Leave Types - Create', path: '/dashboard/leave/requests', group: 'Attendance' },
+  { code: 'leave.type.edit', label: 'Leave Types - Edit', path: '/dashboard/leave/requests', group: 'Attendance' },
+  { code: 'leave.type.delete', label: 'Leave Types - Delete', path: '/dashboard/leave/requests', group: 'Attendance' },
+  { code: 'leave.define.view', label: 'Leave Define - View', path: '/dashboard/leave/requests', group: 'Attendance' },
+  { code: 'leave.define.create', label: 'Leave Define - Create', path: '/dashboard/leave/requests', group: 'Attendance' },
+  { code: 'leave.define.edit', label: 'Leave Define - Edit', path: '/dashboard/leave/requests', group: 'Attendance' },
+  { code: 'leave.define.delete', label: 'Leave Define - Delete', path: '/dashboard/leave/requests', group: 'Attendance' },
+  { code: 'leave.apply.view', label: 'Apply Leave - View', path: '/dashboard/leave/my', group: 'Attendance' },
+  { code: 'leave.apply.create', label: 'Apply Leave - Create', path: '/dashboard/leave/my', group: 'Attendance' },
+  { code: 'leave.apply.edit', label: 'Apply Leave - Edit', path: '/dashboard/leave/my', group: 'Attendance' },
+  { code: 'leave.apply.delete', label: 'Apply Leave - Delete', path: '/dashboard/leave/my', group: 'Attendance' },
+  { code: 'leave.approve.view', label: 'Leave Approval - View', path: '/dashboard/leave/requests', group: 'Attendance' },
+  { code: 'leave.approve.edit', label: 'Leave Approval - Edit', path: '/dashboard/leave/requests', group: 'Attendance' },
+  { code: 'leave.approve.delete', label: 'Leave Approval - Delete', path: '/dashboard/leave/requests', group: 'Attendance' },
+  { code: 'leave.balance.view', label: 'Leave Balance - View', path: '/dashboard/leave/my', group: 'Attendance' },
+  { code: 'payroll.view', label: 'Payroll - View', path: '/dashboard/payroll', group: 'Payroll' },
+  { code: 'payroll.generate', label: 'Payroll - Generate', path: '/dashboard/payroll', group: 'Payroll' },
+  { code: 'payroll.pay', label: 'Payroll - Pay', path: '/dashboard/payroll', group: 'Payroll' },
+  { code: 'payroll.report', label: 'Payroll Report', path: '/dashboard/payroll/report', group: 'Payroll' },
   { code: 'student.group.view', label: 'Student Groups - View', path: '/dashboard/students/groups', group: 'Students' },
   { code: 'student.group.create', label: 'Student Groups - Create', path: '/dashboard/students/groups', group: 'Students' },
   { code: 'student.group.edit', label: 'Student Groups - Edit', path: '/dashboard/students/groups', group: 'Students' },
@@ -102,6 +136,13 @@ export const getRequiredPermissionForPath = (pathname: string) => {
 
   if (pathname.startsWith('/dashboard/teachers/add')) return 'teachers.add';
   if (pathname.startsWith('/dashboard/teachers')) return 'teachers.list';
+  if (pathname.startsWith('/dashboard/staff/add')) return 'staff.create';
+  if (pathname.startsWith('/dashboard/staff/attendance')) return 'staff.attendance.view';
+  if (pathname.startsWith('/dashboard/staff')) return 'staff.view';
+  if (pathname.startsWith('/dashboard/leave/requests')) return 'leave.approve.view';
+  if (pathname.startsWith('/dashboard/leave/my')) return 'leave.apply.view';
+  if (pathname.startsWith('/dashboard/payroll/report')) return 'payroll.report';
+  if (pathname.startsWith('/dashboard/payroll')) return 'payroll.view';
 
   if (pathname.startsWith('/dashboard/academics/exams')) return 'academics.exams';
   if (pathname.startsWith('/dashboard/academics/marks')) return 'academics.marks';

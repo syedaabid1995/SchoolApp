@@ -21,6 +21,9 @@ export const TEST_EXPORT_ID = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
 export const TEST_ACADEMIC_YEAR_A_ID = 'abababab-abab-4aba-8aba-abababababab';
 export const TEST_CLASS_A_ID = 'cdcdcdcd-cdcd-4cdc-8cdc-cdcdcdcdcdcd';
 export const TEST_SECTION_A_ID = 'efefefef-efef-4efe-8efe-efefefefefef';
+export const TEST_STAFF_PROFILE_A_ID = '12121212-1212-4121-8121-121212121212';
+export const TEST_LEAVE_TYPE_ID = '34343434-3434-4343-8343-343434343434';
+export const TEST_LEAVE_APPLICATION_ID = '56565656-5656-4565-8565-565656565656';
 
 type TestRole = 'SUPER_ADMIN' | 'SCHOOL_ADMIN' | 'TEACHER' | 'PARENT' | 'STUDENT' | 'ACCOUNTANT' | 'LIBRARIAN' | 'STAFF';
 
@@ -101,6 +104,40 @@ const defaultPermissionCodes = [
   'academics.marks',
   'students.list',
   'students.add',
+  'staff.view',
+  'staff.create',
+  'staff.edit',
+  'staff.delete',
+  'staff.document.view',
+  'staff.document.create',
+  'staff.document.delete',
+  'staff.timeline.view',
+  'staff.timeline.create',
+  'staff.timeline.delete',
+  'staff.attendance.view',
+  'staff.attendance.create',
+  'staff.attendance.edit',
+  'staff.attendance.report',
+  'payroll.view',
+  'payroll.generate',
+  'payroll.pay',
+  'payroll.report',
+  'leave.type.view',
+  'leave.type.create',
+  'leave.type.edit',
+  'leave.type.delete',
+  'leave.define.view',
+  'leave.define.create',
+  'leave.define.edit',
+  'leave.define.delete',
+  'leave.apply.view',
+  'leave.apply.create',
+  'leave.apply.edit',
+  'leave.apply.delete',
+  'leave.approve.view',
+  'leave.approve.edit',
+  'leave.approve.delete',
+  'leave.balance.view',
   'student.view',
   'student.create',
   'student.edit',
@@ -282,6 +319,7 @@ const makeRecord = (data: any = {}) => ({
 const patchDefaultDelegate = (delegate: any, name: string) => {
   if (!delegate) return;
   if ('count' in delegate) patchMethod(delegate, 'count', async () => 0);
+  if ('aggregate' in delegate) patchMethod(delegate, 'aggregate', async () => ({ _sum: {}, _count: 0 }));
   if ('groupBy' in delegate) patchMethod(delegate, 'groupBy', async () => []);
   if ('findMany' in delegate) patchMethod(delegate, 'findMany', async () => []);
   if ('findFirst' in delegate) patchMethod(delegate, 'findFirst', async () => null);
@@ -319,10 +357,18 @@ export const patchSecurityTestDependencies = () => {
     'consentRecord',
     'dataDeletionJob',
     'dataExportJob',
+    'department',
+    'designation',
     'employeeRolePermission',
     'employeeUserPermission',
     'featureFlag',
     'featureFlagOverride',
+    'leaveApplication',
+    'leaveAttachment',
+    'leaveBalance',
+    'leaveDefine',
+    'leaveStatusHistory',
+    'leaveType',
     'messagingService',
     'parentProfile',
     'refreshSession',
@@ -330,6 +376,12 @@ export const patchSecurityTestDependencies = () => {
     'school',
     'schoolMessagingConfig',
     'section',
+    'staffAttendance',
+    'staffAttendanceHoliday',
+    'staffDocument',
+    'staffPayrollInfo',
+    'staffSocialLink',
+    'staffTimeline',
     'student',
     'attendanceHoliday',
     'disabledStudentLog',
@@ -350,6 +402,10 @@ export const patchSecurityTestDependencies = () => {
     'subscriptionPlanPermission',
     'supportTicket',
     'teacherProfile',
+    'payroll',
+    'payrollDeduction',
+    'payrollEarning',
+    'payrollPayment',
     'timePeriod',
     'tenantConfigOverride',
     'theme',
@@ -474,9 +530,33 @@ export const patchSecurityTestDependencies = () => {
     return users.size;
   });
 
-  patchMethod(prisma.teacherProfile as any, 'findFirst', async ({ where }: any) =>
-    where?.userId === TEACHER_A_ID ? { id: 'teacher-profile-a', userId: TEACHER_A_ID, schoolId: SCHOOL_A_ID, isActive: true } : null,
-  );
+  const testStaffProfile = {
+    id: TEST_STAFF_PROFILE_A_ID,
+    userId: TEACHER_A_ID,
+    schoolId: SCHOOL_A_ID,
+    employeeNo: 'T-001',
+    firstName: 'Teacher',
+    lastName: 'A',
+    roleName: 'TEACHER',
+    phone: '9999999999',
+    department: null,
+    designation: null,
+    isActive: true,
+    user: { id: TEACHER_A_ID, email: 'teacher-a@test.local', status: 'ACTIVE', roles: roleRowsFor(TEACHER_A_ID) },
+    payrolls: [],
+  };
+  patchMethod(prisma.teacherProfile as any, 'findFirst', async ({ where }: any = {}) => {
+    if (where?.schoolId && where.schoolId !== SCHOOL_A_ID) return null;
+    if (where?.id && where.id !== TEST_STAFF_PROFILE_A_ID) return null;
+    if (where?.userId && where.userId !== TEACHER_A_ID) return null;
+    if (where?.isActive === true) return testStaffProfile;
+    if (where?.id === TEST_STAFF_PROFILE_A_ID || where?.userId === TEACHER_A_ID) return testStaffProfile;
+    return null;
+  });
+  patchMethod(prisma.teacherProfile as any, 'findMany', async ({ where }: any = {}) => {
+    if (where?.schoolId && where.schoolId !== SCHOOL_A_ID) return [];
+    return [testStaffProfile];
+  });
   patchMethod(prisma.teacherProfile as any, 'count', async () => 0);
   patchMethod(prisma.parentProfile as any, 'findMany', async ({ where }: any = {}) =>
     where?.userId === PARENT_A_ID ? [{ id: 'parent-profile-a', userId: PARENT_A_ID }] : [],
@@ -524,6 +604,72 @@ export const patchSecurityTestDependencies = () => {
   patchMethod(prisma.auditLog as any, 'count', async () => 1);
   patchMethod(prisma.auditLog as any, 'groupBy', async () => [{ action: 'LOGIN_FAILED', _count: { action: 1 } }]);
   patchMethod(prisma.auditLog as any, 'create', async ({ data }: any) => makeRecord(data));
+
+  const leaveType = {
+    id: TEST_LEAVE_TYPE_ID,
+    schoolId: SCHOOL_A_ID,
+    name: 'Casual Leave',
+    totalDays: 12,
+    isActive: true,
+    createdAt: new Date('2026-05-20T00:00:00.000Z'),
+    updatedAt: new Date('2026-05-20T00:00:00.000Z'),
+  };
+  const leaveApplication = {
+    id: TEST_LEAVE_APPLICATION_ID,
+    schoolId: SCHOOL_A_ID,
+    staffId: TEST_STAFF_PROFILE_A_ID,
+    leaveTypeId: TEST_LEAVE_TYPE_ID,
+    appliedAt: new Date('2026-05-20T00:00:00.000Z'),
+    fromDate: new Date('2026-05-21T00:00:00.000Z'),
+    toDate: new Date('2026-05-22T00:00:00.000Z'),
+    durationDays: 2,
+    reason: 'Family function',
+    status: 'PENDING',
+    reviewedById: null,
+    reviewedAt: null,
+    reviewNote: null,
+    createdAt: new Date('2026-05-20T00:00:00.000Z'),
+    updatedAt: new Date('2026-05-20T00:00:00.000Z'),
+    leaveType,
+    staff: testStaffProfile,
+    attachments: [],
+    histories: [],
+    reviewedBy: null,
+  };
+  patchMethod(prisma.leaveType as any, 'findFirst', async ({ where }: any = {}) => {
+    if (where?.schoolId && where.schoolId !== SCHOOL_A_ID) return null;
+    if (where?.id && where.id !== TEST_LEAVE_TYPE_ID) return null;
+    if (where?.isActive === false) return null;
+    return leaveType;
+  });
+  patchMethod(prisma.leaveType as any, 'findMany', async ({ where }: any = {}) => {
+    if (where?.schoolId && where.schoolId !== SCHOOL_A_ID) return [];
+    return [leaveType];
+  });
+  patchMethod(prisma.leaveDefine as any, 'findMany', async ({ where }: any = {}) => {
+    if (where?.schoolId && where.schoolId !== SCHOOL_A_ID) return [];
+    return [];
+  });
+  patchMethod(prisma.leaveDefine as any, 'findFirst', async ({ where }: any = {}) => {
+    if (where?.id === 'leave-define-a') return { id: 'leave-define-a', schoolId: SCHOOL_A_ID, roleName: 'TEACHER', leaveTypeId: TEST_LEAVE_TYPE_ID, days: 10, leaveType };
+    return null;
+  });
+  patchMethod(prisma.leaveApplication as any, 'findMany', async ({ where }: any = {}) => {
+    if (where?.schoolId && where.schoolId !== SCHOOL_A_ID) return [];
+    if (where?.staffId && where.staffId !== TEST_STAFF_PROFILE_A_ID) return [];
+    if (where?.status && where.status !== leaveApplication.status) return [];
+    return [leaveApplication];
+  });
+  patchMethod(prisma.leaveApplication as any, 'findFirst', async ({ where }: any = {}) => {
+    if (where?.status === 'APPROVED') return null;
+    if (where?.id) {
+      if (where.id === TEST_LEAVE_APPLICATION_ID) return leaveApplication;
+      return null;
+    }
+    return null;
+  });
+  patchMethod(prisma.leaveApplication as any, 'update', async ({ where, data }: any) => makeRecord({ ...leaveApplication, id: where.id, ...data }));
+  patchMethod(prisma.leaveApplication as any, 'aggregate', async () => ({ _sum: { durationDays: 0 } }));
 
   auditExports = [];
   patchMethod(prisma.auditExport as any, 'create', async ({ data }: any) => {

@@ -150,6 +150,7 @@ const iconForItem = (item: NavItem): IconName => {
   if (key.includes('backup')) return 'backup';
   if (key.includes('compliance')) return 'scale';
   if (key.includes('security') || key.includes('access')) return 'lock';
+  if (key.includes('leave')) return 'calendar';
   if (key.includes('sms')) return 'message';
   if (key.includes('academic')) return 'book';
   if (key.includes('timetable')) return 'calendar';
@@ -182,6 +183,11 @@ const studentItems: NavItem[] = [
 ];
 
 const employeeItems: NavItem[] = [
+  { href: '/dashboard/staff/add', label: 'Add Staff', icon: 'AS' },
+  { href: '/dashboard/staff', label: 'Staff Directory', icon: 'SD' },
+  { href: '/dashboard/staff/attendance', label: 'Staff Attendance', icon: 'SA' },
+  { href: '/dashboard/payroll', label: 'Payroll', icon: 'PY' },
+  { href: '/dashboard/payroll/report', label: 'Payroll Report', icon: 'PR' },
   { href: '/dashboard/teachers/add', label: 'Add User', icon: 'AU' },
   { href: '/dashboard/teachers/assign', label: 'Assign Classes', icon: 'AC' },
   { href: '/dashboard/teachers', label: 'List Users', icon: 'LU' },
@@ -313,6 +319,8 @@ export const Sidebar = ({
         label: 'Operations',
         items: [
           { href: '/dashboard/attendance', label: 'Attendance', icon: 'AT' },
+          { href: '/dashboard/leave/my', label: 'Apply Leave', icon: 'LV' },
+          ...(isSchoolAdmin ? [{ href: '/dashboard/leave/requests', label: 'Leave Management', icon: 'LM' }] : []),
           { href: '/dashboard/support', label: 'Support', icon: 'SP' },
           ...(isSchoolAdmin ? [{ href: '/dashboard/audit', label: 'Audit Logs', icon: 'LG' }] : []),
         ],

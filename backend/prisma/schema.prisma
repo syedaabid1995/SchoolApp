@@ -59,6 +59,14 @@ model School {
   studentSiblings                StudentSibling[]
   studentImportLogs              StudentImportLog[]
   teachers                       TeacherProfile[]
+  departments                    Department[]
+  designations                   Designation[]
+  staffDocuments                 StaffDocument[]
+  staffTimelines                 StaffTimeline[]
+  staffAttendances               StaffAttendance[]
+  staffAttendanceHolidays        StaffAttendanceHoliday[]
+  payrolls                       Payroll[]
+  payrollPayments                PayrollPayment[]
   importJobs                     ImportJob[]
   faceProfiles                   FaceProfile[]
   attendancePeriods              AttendancePeriod[]
@@ -66,6 +74,11 @@ model School {
   studentAttendanceSessions      StudentAttendanceSession[]
   teacherSelfAttendances         TeacherSelfAttendance[]
   teacherLeaveRequests           TeacherLeaveRequest[]
+  leaveTypes                     LeaveType[]
+  leaveDefines                   LeaveDefine[]
+  leaveApplications              LeaveApplication[]
+  leaveBalances                  LeaveBalance[]
+  leaveStatusHistories           LeaveStatusHistory[]
   teacherAttendanceSubstitutions TeacherAttendanceSubstitution[]
   timetableVersions              TimetableVersion[]
   timetableEntries               TimetableEntry[]
@@ -160,6 +173,9 @@ model User {
   teacherSelfAttendancesCreated          TeacherSelfAttendance[]         @relation("TeacherSelfAttendanceCreatedBy")
   teacherSelfAttendancesOverridden       TeacherSelfAttendance[]         @relation("TeacherSelfAttendanceOverriddenBy")
   teacherLeaveRequestsReviewed           TeacherLeaveRequest[]           @relation("TeacherLeaveRequestReviewedBy")
+  leaveApplicationsReviewed              LeaveApplication[]              @relation("LeaveApplicationReviewedBy")
+  leaveAttachmentsUploaded               LeaveAttachment[]               @relation("LeaveAttachmentUploadedBy")
+  leaveStatusHistoriesChanged            LeaveStatusHistory[]            @relation("LeaveStatusHistoryChangedBy")
   teacherAttendanceSubstitutionsCreated  TeacherAttendanceSubstitution[] @relation("TeacherAttendanceSubstitutionCreatedBy")
   teacherAttendanceSubstitutionsCanceled TeacherAttendanceSubstitution[] @relation("TeacherAttendanceSubstitutionCanceledBy")
   timetableVersionsCreated               TimetableVersion[]
@@ -172,6 +188,12 @@ model User {
   studentDocumentsUploaded               StudentDocument[]               @relation("StudentDocumentUploadedBy")
   studentTimelinesCreated                StudentTimeline[]               @relation("StudentTimelineCreatedBy")
   studentImportLogsCreated               StudentImportLog[]              @relation("StudentImportLogCreatedBy")
+  staffDocumentsUploaded                 StaffDocument[]                 @relation("StaffDocumentUploadedBy")
+  staffTimelinesCreated                  StaffTimeline[]                 @relation("StaffTimelineCreatedBy")
+  staffAttendancesMarked                 StaffAttendance[]               @relation("StaffAttendanceMarkedBy")
+  staffAttendanceHolidaysCreated         StaffAttendanceHoliday[]        @relation("StaffAttendanceHolidayCreatedBy")
+  payrollsGenerated                      Payroll[]                       @relation("PayrollGeneratedBy")
+  payrollPaymentsRecorded                PayrollPayment[]                @relation("PayrollPaymentRecordedBy")
 
   @@unique([schoolId, email])
   @@index([schoolId])
@@ -1111,13 +1133,37 @@ model TeacherProfile {
   lastName   String   @map("last_name")
   phone      String?
   address    String?
+  roleName   RoleName @default(TEACHER) @map("role_name")
+  departmentId String? @map("department_id") @db.Uuid
+  designationId String? @map("designation_id") @db.Uuid
+  fatherName String? @map("father_name")
+  motherName String? @map("mother_name")
+  gender String?
+  dateOfBirth DateTime? @map("date_of_birth")
+  dateOfJoining DateTime? @map("date_of_joining")
+  emergencyMobile String? @map("emergency_mobile")
+  photoUrl String? @map("photo_url")
+  drivingLicense String? @map("driving_license")
+  currentAddress String? @map("current_address")
+  permanentAddress String? @map("permanent_address")
+  qualifications String?
+  experience String?
+  maritalStatus String? @map("marital_status")
   isActive   Boolean  @default(true) @map("is_active")
   createdAt  DateTime @default(now()) @map("created_at")
   updatedAt  DateTime @updatedAt @map("updated_at")
 
   school                              School                          @relation(fields: [schoolId], references: [id], onDelete: Cascade)
   user                                User                            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  department                          Department?                     @relation(fields: [departmentId], references: [id], onDelete: SetNull)
+  designation                         Designation?                    @relation(fields: [designationId], references: [id], onDelete: SetNull)
   bankDetails                         TeacherBankDetails?
+  payrollInfo                         StaffPayrollInfo?
+  socialLinks                         StaffSocialLink[]
+  documents                           StaffDocument[]
+  timelines                           StaffTimeline[]
+  staffAttendances                    StaffAttendance[]
+  payrolls                            Payroll[]
   classAssignments                    TeacherClassAssignment[]
   subjectAssignments                  TeacherSubjectAssignment[]
   assignedSubjects                    AssignSubject[]
@@ -1125,12 +1171,17 @@ model TeacherProfile {
   classRoutines                       ClassRoutine[]
   teacherSelfAttendances              TeacherSelfAttendance[]
   teacherLeaveRequests                TeacherLeaveRequest[]
+  leaveApplications                   LeaveApplication[]
+  leaveBalances                       LeaveBalance[]
   attendanceSubstitutionsAsOriginal   TeacherAttendanceSubstitution[] @relation("TeacherAttendanceSubstitutionOriginal")
   attendanceSubstitutionsAsSubstitute TeacherAttendanceSubstitution[] @relation("TeacherAttendanceSubstitutionSubstitute")
   timetableEntries                    TimetableEntry[]
 
   @@unique([schoolId, employeeNo])
   @@index([schoolId])
+  @@index([schoolId, roleName])
+  @@index([departmentId])
+  @@index([designationId])
   @@map("employee_profiles")
 }
 
@@ -1151,6 +1202,109 @@ model TeacherBankDetails {
 
   @@index([teacherId])
   @@map("teacher_bank_details")
+}
+
+model Department {
+  id        String   @id @default(uuid()) @db.Uuid
+  schoolId  String   @map("school_id") @db.Uuid
+  name      String
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  school School           @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  staff  TeacherProfile[]
+
+  @@unique([schoolId, name])
+  @@index([schoolId])
+  @@map("departments")
+}
+
+model Designation {
+  id        String   @id @default(uuid()) @db.Uuid
+  schoolId  String   @map("school_id") @db.Uuid
+  name      String
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  school School           @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  staff  TeacherProfile[]
+
+  @@unique([schoolId, name])
+  @@index([schoolId])
+  @@map("designations")
+}
+
+model StaffPayrollInfo {
+  id            String   @id @default(uuid()) @db.Uuid
+  staffId       String   @unique @map("staff_id") @db.Uuid
+  epfNo         String?  @map("epf_no")
+  basicSalary   Decimal? @map("basic_salary") @db.Decimal(12, 2)
+  contractType  String?  @map("contract_type")
+  paymentMode   String?  @map("payment_mode")
+  createdAt     DateTime @default(now()) @map("created_at")
+  updatedAt     DateTime @updatedAt @map("updated_at")
+
+  staff TeacherProfile @relation(fields: [staffId], references: [id], onDelete: Cascade)
+
+  @@index([staffId])
+  @@map("staff_payroll_info")
+}
+
+model StaffSocialLink {
+  id        String   @id @default(uuid()) @db.Uuid
+  staffId   String   @map("staff_id") @db.Uuid
+  platform  String
+  url       String
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  staff TeacherProfile @relation(fields: [staffId], references: [id], onDelete: Cascade)
+
+  @@index([staffId])
+  @@map("staff_social_links")
+}
+
+model StaffDocument {
+  id           String   @id @default(uuid()) @db.Uuid
+  schoolId     String   @map("school_id") @db.Uuid
+  staffId      String   @map("staff_id") @db.Uuid
+  title        String
+  fileUrl      String   @map("file_url")
+  fileName     String?  @map("file_name")
+  fileType     String?  @map("file_type")
+  uploadedById String   @map("uploaded_by_id") @db.Uuid
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  school     School         @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  staff      TeacherProfile @relation(fields: [staffId], references: [id], onDelete: Cascade)
+  uploadedBy User           @relation("StaffDocumentUploadedBy", fields: [uploadedById], references: [id], onDelete: Restrict)
+
+  @@index([schoolId])
+  @@index([staffId])
+  @@index([uploadedById])
+  @@map("staff_documents")
+}
+
+model StaffTimeline {
+  id          String   @id @default(uuid()) @db.Uuid
+  schoolId    String   @map("school_id") @db.Uuid
+  staffId     String   @map("staff_id") @db.Uuid
+  title       String
+  description String?
+  timelineAt  DateTime @map("timeline_at")
+  createdById String   @map("created_by_id") @db.Uuid
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  school    School         @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  staff     TeacherProfile @relation(fields: [staffId], references: [id], onDelete: Cascade)
+  createdBy User           @relation("StaffTimelineCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+
+  @@index([schoolId])
+  @@index([staffId])
+  @@index([createdById])
+  @@map("staff_timelines")
 }
 
 model UserBankDetails {
@@ -1369,10 +1523,38 @@ enum TeacherSelfAttendanceStatus {
   LEAVE
 }
 
+enum StaffAttendanceStatus {
+  PRESENT
+  LATE
+  ABSENT
+  HOLIDAY
+  HALF_DAY
+  LEAVE
+}
+
+enum PayrollStatus {
+  GENERATED
+  PAID
+  CANCELLED
+}
+
+enum PayrollPaymentStatus {
+  PENDING
+  PAID
+  FAILED
+}
+
 enum LeaveRequestStatus {
   PENDING
   APPROVED
   REJECTED
+}
+
+enum LeaveApplicationStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  CANCELLED
 }
 
 model StudentAttendanceSession {
@@ -1445,6 +1627,131 @@ model TeacherLeaveRequest {
   @@map("teacher_leave_requests")
 }
 
+model LeaveType {
+  id        String   @id @default(uuid()) @db.Uuid
+  schoolId  String   @map("school_id") @db.Uuid
+  name      String
+  totalDays Int      @map("total_days")
+  isActive  Boolean  @default(true) @map("is_active")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  school       School             @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  defines      LeaveDefine[]
+  applications LeaveApplication[]
+  balances     LeaveBalance[]
+
+  @@unique([schoolId, name])
+  @@index([schoolId])
+  @@map("leave_types")
+}
+
+model LeaveDefine {
+  id          String   @id @default(uuid()) @db.Uuid
+  schoolId    String   @map("school_id") @db.Uuid
+  roleName    RoleName @map("role_name")
+  leaveTypeId String   @map("leave_type_id") @db.Uuid
+  days        Int
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  school    School    @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  leaveType LeaveType @relation(fields: [leaveTypeId], references: [id], onDelete: Cascade)
+
+  @@unique([schoolId, roleName, leaveTypeId])
+  @@index([schoolId, roleName])
+  @@index([leaveTypeId])
+  @@map("leave_defines")
+}
+
+model LeaveApplication {
+  id           String                 @id @default(uuid()) @db.Uuid
+  schoolId     String                 @map("school_id") @db.Uuid
+  staffId      String                 @map("staff_id") @db.Uuid
+  leaveTypeId  String                 @map("leave_type_id") @db.Uuid
+  appliedAt    DateTime               @default(now()) @map("applied_at")
+  fromDate     DateTime               @map("from_date")
+  toDate       DateTime               @map("to_date")
+  durationDays Int                    @map("duration_days")
+  reason       String
+  status       LeaveApplicationStatus @default(PENDING)
+  reviewedById String?                @map("reviewed_by_id") @db.Uuid
+  reviewedAt   DateTime?              @map("reviewed_at")
+  reviewNote   String?                @map("review_note")
+  createdAt    DateTime               @default(now()) @map("created_at")
+  updatedAt    DateTime               @updatedAt @map("updated_at")
+
+  school      School               @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  staff       TeacherProfile       @relation(fields: [staffId], references: [id], onDelete: Cascade)
+  leaveType   LeaveType            @relation(fields: [leaveTypeId], references: [id], onDelete: Restrict)
+  reviewedBy  User?                @relation("LeaveApplicationReviewedBy", fields: [reviewedById], references: [id], onDelete: SetNull)
+  attachments LeaveAttachment[]
+  histories   LeaveStatusHistory[]
+
+  @@index([schoolId, status, appliedAt])
+  @@index([staffId, status, fromDate])
+  @@index([leaveTypeId])
+  @@map("leave_applications")
+}
+
+model LeaveAttachment {
+  id                 String   @id @default(uuid()) @db.Uuid
+  leaveApplicationId String   @map("leave_application_id") @db.Uuid
+  fileUrl            String   @map("file_url")
+  fileName           String?  @map("file_name")
+  fileType           String?  @map("file_type")
+  sizeBytes          Int?     @map("size_bytes")
+  uploadedById       String   @map("uploaded_by_id") @db.Uuid
+  createdAt          DateTime @default(now()) @map("created_at")
+
+  leaveApplication LeaveApplication @relation(fields: [leaveApplicationId], references: [id], onDelete: Cascade)
+  uploadedBy       User             @relation("LeaveAttachmentUploadedBy", fields: [uploadedById], references: [id], onDelete: Restrict)
+
+  @@index([leaveApplicationId])
+  @@index([uploadedById])
+  @@map("leave_attachments")
+}
+
+model LeaveBalance {
+  id             String   @id @default(uuid()) @db.Uuid
+  schoolId       String   @map("school_id") @db.Uuid
+  staffId        String   @map("staff_id") @db.Uuid
+  leaveTypeId    String   @map("leave_type_id") @db.Uuid
+  totalDays      Int      @map("total_days")
+  usedDays       Int      @default(0) @map("used_days")
+  extraTakenDays Int      @default(0) @map("extra_taken_days")
+  updatedAt      DateTime @updatedAt @map("updated_at")
+
+  school    School         @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  staff     TeacherProfile @relation(fields: [staffId], references: [id], onDelete: Cascade)
+  leaveType LeaveType      @relation(fields: [leaveTypeId], references: [id], onDelete: Cascade)
+
+  @@unique([schoolId, staffId, leaveTypeId])
+  @@index([schoolId, staffId])
+  @@index([leaveTypeId])
+  @@map("leave_balances")
+}
+
+model LeaveStatusHistory {
+  id                 String                  @id @default(uuid()) @db.Uuid
+  schoolId           String                  @map("school_id") @db.Uuid
+  leaveApplicationId String                  @map("leave_application_id") @db.Uuid
+  fromStatus         LeaveApplicationStatus? @map("from_status")
+  toStatus           LeaveApplicationStatus  @map("to_status")
+  note               String?
+  changedById        String                  @map("changed_by_id") @db.Uuid
+  createdAt          DateTime                @default(now()) @map("created_at")
+
+  school           School           @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  leaveApplication LeaveApplication @relation(fields: [leaveApplicationId], references: [id], onDelete: Cascade)
+  changedBy        User             @relation("LeaveStatusHistoryChangedBy", fields: [changedById], references: [id], onDelete: Restrict)
+
+  @@index([schoolId])
+  @@index([leaveApplicationId])
+  @@index([changedById])
+  @@map("leave_status_history")
+}
+
 model TeacherSelfAttendance {
   id             String                      @id @default(uuid()) @db.Uuid
   schoolId       String                      @map("school_id") @db.Uuid
@@ -1468,6 +1775,129 @@ model TeacherSelfAttendance {
   @@index([schoolId, date])
   @@index([teacherId, date])
   @@map("teacher_self_attendances")
+}
+
+model StaffAttendance {
+  id             String                @id @default(uuid()) @db.Uuid
+  schoolId       String                @map("school_id") @db.Uuid
+  staffId        String                @map("staff_id") @db.Uuid
+  attendanceDate DateTime              @map("attendance_date")
+  status         StaffAttendanceStatus
+  note           String?
+  markedById     String                @map("marked_by_id") @db.Uuid
+  createdAt      DateTime              @default(now()) @map("created_at")
+  updatedAt      DateTime              @updatedAt @map("updated_at")
+
+  school   School         @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  staff    TeacherProfile @relation(fields: [staffId], references: [id], onDelete: Cascade)
+  markedBy User           @relation("StaffAttendanceMarkedBy", fields: [markedById], references: [id], onDelete: Restrict)
+
+  @@unique([schoolId, staffId, attendanceDate])
+  @@index([schoolId, attendanceDate])
+  @@index([staffId, attendanceDate])
+  @@map("staff_attendances")
+}
+
+model StaffAttendanceHoliday {
+  id          String   @id @default(uuid()) @db.Uuid
+  schoolId    String   @map("school_id") @db.Uuid
+  roleName    RoleName? @map("role_name")
+  holidayDate DateTime @map("holiday_date")
+  reason      String?
+  createdById String   @map("created_by_id") @db.Uuid
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  school    School @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  createdBy User   @relation("StaffAttendanceHolidayCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+
+  @@unique([schoolId, roleName, holidayDate])
+  @@index([schoolId, holidayDate])
+  @@map("staff_attendance_holidays")
+}
+
+model Payroll {
+  id          String        @id @default(uuid()) @db.Uuid
+  schoolId    String        @map("school_id") @db.Uuid
+  staffId     String        @map("staff_id") @db.Uuid
+  month       Int
+  year        Int
+  payslipNo   String        @map("payslip_no")
+  basicSalary Decimal       @map("basic_salary") @db.Decimal(12, 2)
+  earnings    Decimal       @default(0) @db.Decimal(12, 2)
+  deductions  Decimal       @default(0) @db.Decimal(12, 2)
+  grossSalary Decimal       @map("gross_salary") @db.Decimal(12, 2)
+  tax         Decimal       @default(0) @db.Decimal(12, 2)
+  netSalary   Decimal       @map("net_salary") @db.Decimal(12, 2)
+  paymentMode String?       @map("payment_mode")
+  status      PayrollStatus @default(GENERATED)
+  generatedById String      @map("generated_by_id") @db.Uuid
+  generatedAt DateTime      @default(now()) @map("generated_at")
+  paidAt      DateTime?     @map("paid_at")
+  createdAt   DateTime      @default(now()) @map("created_at")
+  updatedAt   DateTime      @updatedAt @map("updated_at")
+
+  school      School             @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  staff       TeacherProfile     @relation(fields: [staffId], references: [id], onDelete: Cascade)
+  generatedBy User               @relation("PayrollGeneratedBy", fields: [generatedById], references: [id], onDelete: Restrict)
+  earningRows PayrollEarning[]
+  deductionRows PayrollDeduction[]
+  payments    PayrollPayment[]
+
+  @@unique([schoolId, staffId, month, year])
+  @@unique([schoolId, payslipNo])
+  @@index([schoolId, month, year])
+  @@index([staffId])
+  @@map("payrolls")
+}
+
+model PayrollEarning {
+  id        String   @id @default(uuid()) @db.Uuid
+  payrollId String   @map("payroll_id") @db.Uuid
+  title     String
+  amount    Decimal  @db.Decimal(12, 2)
+  createdAt DateTime @default(now()) @map("created_at")
+
+  payroll Payroll @relation(fields: [payrollId], references: [id], onDelete: Cascade)
+
+  @@index([payrollId])
+  @@map("payroll_earnings")
+}
+
+model PayrollDeduction {
+  id        String   @id @default(uuid()) @db.Uuid
+  payrollId String   @map("payroll_id") @db.Uuid
+  title     String
+  amount    Decimal  @db.Decimal(12, 2)
+  createdAt DateTime @default(now()) @map("created_at")
+
+  payroll Payroll @relation(fields: [payrollId], references: [id], onDelete: Cascade)
+
+  @@index([payrollId])
+  @@map("payroll_deductions")
+}
+
+model PayrollPayment {
+  id           String               @id @default(uuid()) @db.Uuid
+  schoolId     String               @map("school_id") @db.Uuid
+  payrollId    String               @map("payroll_id") @db.Uuid
+  amount       Decimal              @db.Decimal(12, 2)
+  method       String?
+  reference    String?
+  status       PayrollPaymentStatus @default(PAID)
+  paidAt       DateTime             @map("paid_at")
+  recordedById String               @map("recorded_by_id") @db.Uuid
+  createdAt    DateTime             @default(now()) @map("created_at")
+  updatedAt    DateTime             @updatedAt @map("updated_at")
+
+  school     School  @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  payroll    Payroll @relation(fields: [payrollId], references: [id], onDelete: Cascade)
+  recordedBy User    @relation("PayrollPaymentRecordedBy", fields: [recordedById], references: [id], onDelete: Restrict)
+
+  @@index([schoolId])
+  @@index([payrollId])
+  @@index([recordedById])
+  @@map("payroll_payments")
 }
 
 model TeacherAttendanceSubstitution {

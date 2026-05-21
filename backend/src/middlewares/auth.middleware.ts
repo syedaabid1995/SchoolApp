@@ -187,6 +187,50 @@ const resolvePermissionForPath = (path: string, method = 'GET') => {
     return 'student.view';
   }
 
+  if (pathOnly.startsWith('/api/v1/staff/attendance/report')) return 'staff.attendance.report';
+  if (pathOnly.startsWith('/api/v1/staff/attendance')) return verb === 'POST' ? 'staff.attendance.create' : 'staff.attendance.view';
+  if (pathOnly.startsWith('/api/v1/staff/payroll/report')) return 'payroll.report';
+  if (/^\/api\/v1\/staff\/payroll\/[^/]+\/pay$/.test(pathOnly)) return 'payroll.pay';
+  if (pathOnly.startsWith('/api/v1/staff/payroll/generate')) return 'payroll.generate';
+  if (pathOnly.startsWith('/api/v1/staff/payroll')) return 'payroll.view';
+  if (/^\/api\/v1\/staff\/[^/]+\/documents/.test(pathOnly)) {
+    if (verb === 'POST') return 'staff.document.create';
+    if (verb === 'DELETE') return 'staff.document.delete';
+    return 'staff.document.view';
+  }
+  if (/^\/api\/v1\/staff\/[^/]+\/timeline/.test(pathOnly)) {
+    if (verb === 'POST') return 'staff.timeline.create';
+    if (verb === 'DELETE') return 'staff.timeline.delete';
+    return 'staff.timeline.view';
+  }
+  if (pathOnly.startsWith('/api/v1/staff')) {
+    if (verb === 'POST') return 'staff.create';
+    if (verb === 'PATCH' || verb === 'PUT') return 'staff.edit';
+    if (verb === 'DELETE') return 'staff.delete';
+    return 'staff.view';
+  }
+
+  if (pathOnly.startsWith('/api/v1/leave/types')) {
+    if (verb === 'POST') return 'leave.type.create';
+    if (verb === 'PATCH' || verb === 'PUT') return 'leave.type.edit';
+    if (verb === 'DELETE') return 'leave.type.delete';
+    return 'leave.type.view';
+  }
+  if (pathOnly.startsWith('/api/v1/leave/defines')) {
+    if (verb === 'POST') return 'leave.define.create';
+    if (verb === 'PATCH' || verb === 'PUT') return 'leave.define.edit';
+    if (verb === 'DELETE') return 'leave.define.delete';
+    return 'leave.define.view';
+  }
+  if (pathOnly.startsWith('/api/v1/leave/balances')) return 'leave.balance.view';
+  if (/^\/api\/v1\/leave\/(applications|requests)\/[^/]+\/(status|approve|reject)$/.test(pathOnly)) return 'leave.approve.edit';
+  if (/^\/api\/v1\/leave\/(applications|requests)/.test(pathOnly)) {
+    if (verb === 'POST') return 'leave.apply.create';
+    if (verb === 'PATCH' || verb === 'PUT') return 'leave.apply.edit';
+    if (verb === 'DELETE') return 'leave.apply.delete';
+    return 'leave.apply.view';
+  }
+
   const targets: Array<{ prefix: string; code: string }> = [
     { prefix: '/api/v1/academics/timetable/teacher', code: 'attendance.view' },
     { prefix: '/api/v1/teachers', code: 'teachers.list' },
@@ -196,7 +240,7 @@ const resolvePermissionForPath = (path: string, method = 'GET') => {
     { prefix: '/api/v1/attendance', code: 'attendance.view' },
     { prefix: '/api/v1/attendance-summary', code: 'attendance.view' },
     { prefix: '/api/v1/attendance-approval', code: 'attendance.view' },
-    { prefix: '/api/v1/leave', code: 'attendance.view' },
+    { prefix: '/api/v1/leave', code: 'leave.apply.view' },
     { prefix: '/api/v1/academics', code: 'academics.setup' },
     { prefix: '/api/v1/exams', code: 'academics.exams' },
     { prefix: '/api/v1/reports', code: 'academics.marks' },

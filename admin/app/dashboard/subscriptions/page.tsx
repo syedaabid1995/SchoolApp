@@ -6,6 +6,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import FullPageLoader from '../../../components/FullPageLoader';
 import PageHeader from '../../../components/PageHeader';
 import { useNotify } from '../../../components/NotificationProvider';
+import { buildPlanPermissionGroups, formatPlanPermissionAction } from '../../../config/plan-module-permissions';
 import { getSession } from '../../../services/auth.service';
 import {
   assignSchoolPlan,
@@ -15,6 +16,7 @@ import {
   getSchoolSubscriptionDetail,
   getSchoolSubscriptions,
   getSubscriptionSummary,
+  getPlanPermissions,
   listSubscriptionPlans,
   pauseSubscription,
   recordManualPayment,
@@ -22,7 +24,9 @@ import {
   resumeSubscription,
   startTrial,
   updateSubscriptionLimits,
+  updatePlanPermissions,
   upgradeSubscription,
+  type PlanPermissionItem,
   type SchoolSubscriptionListItem,
   type SubscriptionPlan,
 } from '../../../services/subscription.service';
@@ -154,6 +158,8 @@ export default function SubscriptionsPage() {
   const queryClient = useQueryClient();
   const [selectedSchoolId, setSelectedSchoolId] = useState<string | null>(null);
   const [actionState, setActionState] = useState<{ action: LifecycleAction; item: SchoolSubscriptionListItem } | null>(null);
+  const [modulePlanId, setModulePlanId] = useState<string | null>(null);
+  const [editedPermissionCodes, setEditedPermissionCodes] = useState<string[]>([]);
   const [actionForm, setActionForm] = useState(initialActionForm);
   const [filters, setFilters] = useState({
     page: 1,
@@ -237,6 +243,18 @@ export default function SubscriptionsPage() {
     enabled: Boolean(selectedSchoolId) && isSuperAdmin,
     staleTime: 15_000,
   });
+
+  const { data: modulePermissions, isLoading: isModulePermissionsLoading } = useQuery({
+    queryKey: ['subscription-plan-modules', modulePlanId],
+    queryFn: () => getPlanPermissions(modulePlanId as string),
+    enabled: Boolean(modulePlanId) && isSuperAdmin,
+    staleTime: 15_000,
+  });
+
+  useEffect(() => {
+    if (!modulePermissions) return;
+    setEditedPermissionCodes(modulePermissions.permissions.filter((permission) => permission.enabled).map((permission) => permission.code));
+  }, [modulePermissions]);
 
   const lifecycleMutation = useMutation({
     mutationFn: async () => {
@@ -327,6 +345,21 @@ export default function SubscriptionsPage() {
     },
   });
 
+  const modulePermissionMutation = useMutation({
+    mutationFn: async () => {
+      if (!modulePlanId) throw new Error('Select a plan.');
+      return updatePlanPermissions(modulePlanId, editedPermissionCodes);
+    },
+    onSuccess: () => {
+      notify.success('Plan modules updated', 'Sidebar modules and permissions were saved for this plan.');
+      queryClient.invalidateQueries({ queryKey: ['subscription-plan-modules', modulePlanId] });
+    },
+    onError: (error: any) => {
+      const message = error?.response?.data?.error?.message || error?.message || 'Unable to update plan modules.';
+      notify.error('Save failed', message);
+    },
+  });
+
   const setFilter = (key: keyof typeof filters, value: string | number) => {
     setFilters((current) => ({
       ...current,
@@ -347,6 +380,7 @@ export default function SubscriptionsPage() {
   };
 
   const activePlans = plans?.filter((plan) => plan.status === 'ACTIVE') ?? [];
+  const selectedModulePlan = plans?.find((plan) => plan.id === modulePlanId) ?? null;
   const rows = subscriptions?.items ?? [];
   const pagination = subscriptions?.pagination;
   const totalPages = pagination?.totalPages ?? 1;
@@ -535,8 +569,15 @@ export default function SubscriptionsPage() {
       </section>
 
       <section className="rounded-2xl border border-[var(--shell-border)] bg-[var(--shell-card)] p-5 shadow-sm">
-        <h2 className="text-lg font-semibold text-[var(--shell-text)]">Plan Catalog</h2>
-        <p className="mt-1 text-sm text-[var(--shell-muted)]">Existing subscription plans used for lifecycle actions.</p>
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+          <div>
+            <h2 className="text-lg font-semibold text-[var(--shell-text)]">Plan Catalog & Modules</h2>
+            <p className="mt-1 text-sm text-[var(--shell-muted)]">Set plan limits and control which school sidebar modules each plan unlocks.</p>
+          </div>
+          <p className="rounded-xl border border-blue-200 bg-blue-50 px-3 py-2 text-xs font-semibold text-blue-800">
+            Modules follow the School Admin sidebar parent and child names.
+          </p>
+        </div>
         <div className="mt-4 grid gap-3 md:grid-cols-3">
           {(plans ?? []).map((plan) => (
             <div key={plan.id} className="rounded-xl border border-[var(--shell-border)] bg-[var(--shell-subtle)] p-4">
@@ -546,6 +587,13 @@ export default function SubscriptionsPage() {
               </div>
               <p className="mt-2 text-xl font-bold text-[var(--shell-text)]">{formatCurrency(plan.priceCents / 100)}</p>
               <p className="text-xs text-[var(--shell-muted)]">Students {plan.studentLimit} - Teachers {plan.teacherLimit}</p>
+              <button
+                type="button"
+                onClick={() => setModulePlanId(plan.id)}
+                className="mt-4 w-full rounded-xl border border-[var(--shell-border)] bg-[var(--shell-card)] px-3 py-2 text-sm font-semibold text-[var(--shell-text)] hover:bg-[var(--shell-hover)]"
+              >
+                Modules & Sidebar
+              </button>
             </div>
           ))}
         </div>
@@ -581,6 +629,19 @@ export default function SubscriptionsPage() {
             if (actionState.action === 'manual-payment' && !window.confirm('Record this manual payment? This does not charge a real payment gateway.')) return;
             lifecycleMutation.mutate();
           }}
+        />
+      ) : null}
+
+      {modulePlanId ? (
+        <PlanModulesModal
+          plan={selectedModulePlan}
+          permissions={modulePermissions?.permissions ?? []}
+          editedCodes={editedPermissionCodes}
+          loading={isModulePermissionsLoading}
+          saving={modulePermissionMutation.isPending}
+          onChange={setEditedPermissionCodes}
+          onClose={() => setModulePlanId(null)}
+          onSubmit={() => modulePermissionMutation.mutate()}
         />
       ) : null}
     </div>
@@ -625,6 +686,189 @@ function ActionButton({ children, onClick, danger = false }: { children: ReactNo
     >
       {children}
     </button>
+  );
+}
+
+function PlanModulesModal({
+  plan,
+  permissions,
+  editedCodes,
+  loading,
+  saving,
+  onChange,
+  onClose,
+  onSubmit,
+}: {
+  plan: SubscriptionPlan | null;
+  permissions: PlanPermissionItem[];
+  editedCodes: string[];
+  loading: boolean;
+  saving: boolean;
+  onChange: (codes: string[]) => void;
+  onClose: () => void;
+  onSubmit: () => void;
+}) {
+  const groups = useMemo(() => buildPlanPermissionGroups(permissions), [permissions]);
+  const enabledSet = useMemo(() => new Set(editedCodes), [editedCodes]);
+  const allCodes = permissions.map((permission) => permission.code);
+
+  const setCodes = (codes: string[]) => onChange(Array.from(new Set(codes)));
+  const toggleCode = (code: string) => {
+    setCodes(enabledSet.has(code) ? editedCodes.filter((item) => item !== code) : [...editedCodes, code]);
+  };
+  const toggleCodes = (codes: string[], enabled: boolean) => {
+    const next = new Set(editedCodes);
+    codes.forEach((code) => {
+      if (enabled) next.add(code);
+      else next.delete(code);
+    });
+    onChange(Array.from(next));
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/45 px-4 py-6">
+      <section className="flex max-h-[92vh] w-full max-w-6xl flex-col overflow-hidden rounded-2xl border border-[var(--shell-border)] bg-[var(--shell-card)] shadow-2xl">
+        <div className="flex flex-col gap-4 border-b border-[var(--shell-border)] p-5 lg:flex-row lg:items-start lg:justify-between">
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-[0.16em] text-[var(--shell-muted)]">Plan modules and sidebar access</p>
+            <h2 className="mt-1 text-2xl font-bold text-[var(--shell-text)]">{plan?.name ?? 'Subscription Plan'}</h2>
+            <p className="mt-1 text-sm text-[var(--shell-muted)]">
+              Choose which School Admin sidebar parents and child modules are available for schools on this plan.
+            </p>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <button
+              type="button"
+              onClick={() => setCodes(allCodes)}
+              disabled={loading}
+              className="rounded-xl border border-[var(--shell-border)] px-3 py-2 text-sm font-semibold text-[var(--shell-text)] disabled:opacity-50"
+            >
+              Enable All
+            </button>
+            <button
+              type="button"
+              onClick={() => onChange([])}
+              disabled={loading}
+              className="rounded-xl border border-[var(--shell-border)] px-3 py-2 text-sm font-semibold text-[var(--shell-text)] disabled:opacity-50"
+            >
+              Disable All
+            </button>
+            <button type="button" onClick={onClose} className="rounded-xl border border-[var(--shell-border)] px-3 py-2 text-sm font-semibold text-[var(--shell-text)]">
+              Close
+            </button>
+          </div>
+        </div>
+
+        <div className="overflow-y-auto p-5">
+          {loading ? (
+            <div className="space-y-3">
+              {Array.from({ length: 5 }).map((_, index) => (
+                <div key={index} className="h-28 animate-pulse rounded-2xl bg-[var(--shell-subtle)]" />
+              ))}
+            </div>
+          ) : groups.length ? (
+            <div className="space-y-5">
+              {groups.map((group) => {
+                const groupCodes = group.modules.flatMap((module) => module.permissions.map((permission) => permission.code));
+                const groupEnabled = groupCodes.filter((code) => enabledSet.has(code)).length;
+                const allGroupEnabled = groupEnabled === groupCodes.length;
+                return (
+                  <div key={group.parent} className="overflow-hidden rounded-2xl border border-[var(--shell-border)]">
+                    <div className="flex flex-col gap-3 border-b border-[var(--shell-border)] bg-[var(--shell-subtle)] px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
+                      <div>
+                        <h3 className="text-base font-bold text-[var(--shell-text)]">{group.parent}</h3>
+                        <p className="text-xs text-[var(--shell-muted)]">{groupEnabled}/{groupCodes.length} permissions enabled</p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => toggleCodes(groupCodes, !allGroupEnabled)}
+                        className="rounded-xl border border-[var(--shell-border)] bg-[var(--shell-card)] px-3 py-2 text-xs font-semibold text-[var(--shell-text)]"
+                      >
+                        {allGroupEnabled ? 'Disable Parent' : 'Enable Parent'}
+                      </button>
+                    </div>
+                    <div className="grid gap-3 p-4 xl:grid-cols-2">
+                      {group.modules.map((module) => {
+                        const moduleCodes = module.permissions.map((permission) => permission.code);
+                        const moduleEnabled = moduleCodes.filter((code) => enabledSet.has(code)).length;
+                        const allModuleEnabled = moduleEnabled === moduleCodes.length;
+                        return (
+                          <article key={`${group.parent}-${module.module}`} className="rounded-2xl border border-[var(--shell-border)] bg-[var(--shell-card)] p-4">
+                            <div className="flex items-start justify-between gap-3">
+                              <div className="min-w-0">
+                                <h4 className="font-bold text-[var(--shell-text)]">{module.module}</h4>
+                                <p className="mt-1 text-xs text-[var(--shell-muted)]">{module.description}</p>
+                                <p className="mt-2 truncate rounded-lg bg-[var(--shell-subtle)] px-2 py-1 font-mono text-[11px] text-[var(--shell-muted)]">{module.path}</p>
+                              </div>
+                              <button
+                                type="button"
+                                onClick={() => toggleCodes(moduleCodes, !allModuleEnabled)}
+                                className={`shrink-0 rounded-full px-3 py-1 text-xs font-semibold ${
+                                  allModuleEnabled
+                                    ? 'bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200'
+                                    : moduleEnabled
+                                      ? 'bg-amber-50 text-amber-700 ring-1 ring-amber-200'
+                                      : 'bg-slate-100 text-slate-600 ring-1 ring-slate-200'
+                                }`}
+                              >
+                                {moduleEnabled}/{moduleCodes.length}
+                              </button>
+                            </div>
+                            <div className="mt-4 flex flex-wrap gap-2">
+                              {module.permissions.map((permission) => {
+                                const enabled = enabledSet.has(permission.code);
+                                return (
+                                  <button
+                                    key={permission.code}
+                                    type="button"
+                                    onClick={() => toggleCode(permission.code)}
+                                    title={permission.code}
+                                    className={`rounded-full px-3 py-1.5 text-xs font-semibold transition ${
+                                      enabled
+                                        ? 'bg-blue-600 text-white shadow-sm'
+                                        : 'border border-[var(--shell-border)] bg-[var(--shell-subtle)] text-[var(--shell-muted)] hover:text-[var(--shell-text)]'
+                                    }`}
+                                  >
+                                    {formatPlanPermissionAction(permission)}
+                                  </button>
+                                );
+                              })}
+                            </div>
+                          </article>
+                        );
+                      })}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          ) : (
+            <div className="rounded-2xl border border-dashed border-[var(--shell-border)] p-10 text-center text-sm text-[var(--shell-muted)]">
+              No module permissions found for this plan.
+            </div>
+          )}
+        </div>
+
+        <div className="flex flex-col gap-3 border-t border-[var(--shell-border)] p-5 sm:flex-row sm:items-center sm:justify-between">
+          <p className="text-sm text-[var(--shell-muted)]">
+            {editedCodes.length} of {permissions.length} permissions enabled
+          </p>
+          <div className="flex justify-end gap-2">
+            <button type="button" onClick={onClose} className="rounded-xl border border-[var(--shell-border)] px-4 py-2 text-sm font-semibold text-[var(--shell-text)]">
+              Cancel
+            </button>
+            <button
+              type="button"
+              disabled={saving || loading}
+              onClick={onSubmit}
+              className="rounded-xl bg-blue-600 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50"
+            >
+              {saving ? 'Saving...' : 'Save Modules'}
+            </button>
+          </div>
+        </div>
+      </section>
+    </div>
   );
 }
 

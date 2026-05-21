@@ -1,6 +1,7 @@
 'use client';
 
 import Link from 'next/link';
+import type { ReactNode } from 'react';
 
 interface PageHeaderProps {
   title: string;
@@ -9,9 +10,10 @@ interface PageHeaderProps {
     label: string;
     href?: string;
   }>;
+  actions?: ReactNode;
 }
 
-export default function PageHeader({ title, subtitle, breadcrumbs }: PageHeaderProps) {
+export default function PageHeader({ title, subtitle, breadcrumbs, actions }: PageHeaderProps) {
   const items = breadcrumbs?.length
     ? breadcrumbs
     : [
@@ -26,26 +28,29 @@ export default function PageHeader({ title, subtitle, breadcrumbs }: PageHeaderP
           <h1 className="text-xl font-bold tracking-tight text-[var(--shell-text)] md:text-2xl">{title}</h1>
           {subtitle ? <p className="mt-1 max-w-4xl text-sm leading-5 text-[var(--shell-muted)]">{subtitle}</p> : null}
         </div>
-        <nav
-          aria-label="Breadcrumb"
-          className="flex shrink-0 flex-wrap items-center gap-1 text-xs font-semibold text-[var(--shell-muted)] lg:justify-end lg:pt-1"
-        >
-          {items.map((item, index) => {
-            const isLast = index === items.length - 1;
-            return (
-              <span key={`${item.label}-${index}`} className="inline-flex items-center gap-1">
-                {item.href && !isLast ? (
-                  <Link href={item.href} className="hover:text-[var(--shell-text)]">
-                    {item.label}
-                  </Link>
-                ) : (
-                  <span className={isLast ? 'text-[var(--shell-text)]' : undefined}>{item.label}</span>
-                )}
-                {!isLast ? <span className="text-[var(--shell-muted)]">/</span> : null}
-              </span>
-            );
-          })}
-        </nav>
+        <div className="flex shrink-0 flex-col items-start gap-2 lg:items-end">
+          <nav
+            aria-label="Breadcrumb"
+            className="flex flex-wrap items-center gap-1 text-xs font-semibold text-[var(--shell-muted)] lg:justify-end lg:pt-1"
+          >
+            {items.map((item, index) => {
+              const isLast = index === items.length - 1;
+              return (
+                <span key={`${item.label}-${index}`} className="inline-flex items-center gap-1">
+                  {item.href && !isLast ? (
+                    <Link href={item.href} className="hover:text-[var(--shell-text)]">
+                      {item.label}
+                    </Link>
+                  ) : (
+                    <span className={isLast ? 'text-[var(--shell-text)]' : undefined}>{item.label}</span>
+                  )}
+                  {!isLast ? <span className="text-[var(--shell-muted)]">/</span> : null}
+                </span>
+              );
+            })}
+          </nav>
+          {actions ? <div className="flex flex-wrap items-center justify-end gap-2">{actions}</div> : null}
+        </div>
       </div>
     </header>
   );

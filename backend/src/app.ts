@@ -41,6 +41,7 @@ import { schoolAdminRouter } from './routes/schoolAdmin.routes';
 import { subscriptionMetricsRouter } from './routes/subscriptionMetrics.routes';
 import { subscriptionPlanRouter } from './routes/subscriptionPlan.routes';
 import { teacherRouter } from './routes/teacher.routes';
+import { staffRouter } from './routes/staff.routes';
 import { attendanceSummaryRouter } from './routes/attendanceSummary.routes';
 import { adminDashboardRouter } from './routes/adminDashboard.routes';
 import { adminSystemRouter } from './routes/adminSystem.routes';
@@ -192,6 +193,7 @@ export const createApp = () => {
   app.use('/api/v1/admin/subscription-metrics', subscriptionMetricsRouter);
   app.use('/api/v1/admin', backupRouter);
   app.use('/api/v1/teachers', teacherRouter);
+  app.use('/api/v1/staff', staffRouter);
   app.use('/api/v1/attendance-summary', attendanceSummaryRouter);
   app.use('/api/v1/admin/dashboard', adminDashboardRouter);
   app.use('/api/v1/admin/users', adminUserRouter);
