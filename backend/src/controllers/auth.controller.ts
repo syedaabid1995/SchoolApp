@@ -453,17 +453,6 @@ export const login = async (req: Request, res: Response) => {
     select: loginUserSelect,
   });
 
-  if (!user && selectedSchoolId) {
-    user = await prisma.user.findFirst({
-      where: {
-        email: { equals: identifier, mode: 'insensitive' },
-        schoolId: null,
-        roles: { some: { role: { name: 'SUPER_ADMIN' } } },
-      },
-      select: loginUserSelect,
-    });
-  }
-
   if (!user) {
     await failLogin('user_not_found_or_wrong_school', { selectedSchoolId, loginType: loginType ?? null });
   }

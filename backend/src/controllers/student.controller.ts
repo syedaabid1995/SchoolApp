@@ -203,7 +203,7 @@ const linkParentSchema = z.object({
 });
 
 const statusSchema = z.object({
-  status: z.enum(['TRANSFERRED', 'EXITED']),
+  status: z.enum(['ENROLLED', 'TRANSFERRED', 'EXITED', 'DISABLED']),
   reason: z.string().min(1).optional(),
   schoolId: z.string().uuid().optional(),
 });
@@ -557,7 +557,7 @@ export const listStudents = async (req: Request, res: Response) => {
           ...(classId ? { classId } : {}),
           ...(sectionId ? { sectionId } : {}),
           ...(academicSessionId ? { academicSessionId } : {}),
-          ...(status ? { status: status as 'ENROLLED' | 'TRANSFERRED' | 'EXITED' } : {}),
+          ...(status ? { status: status as 'ENROLLED' | 'TRANSFERRED' | 'EXITED' | 'DISABLED' } : { status: { not: 'DISABLED' as const } }),
           ...(search
             ? {
                 OR: [
@@ -575,6 +575,8 @@ export const listStudents = async (req: Request, res: Response) => {
           academicSession: { select: { id: true, name: true, isActive: true } },
           class: { select: { id: true, name: true } },
           section: { select: { id: true, name: true } },
+          studentGroup: { select: { id: true, name: true } },
+          studentCategory: { select: { id: true, name: true } },
           enrollments: {
             include: {
               academicSession: { select: { id: true, name: true, isActive: true } },
@@ -613,6 +615,8 @@ export const getStudent = async (req: Request, res: Response) => {
           academicSession: { select: { id: true, name: true, isActive: true } },
           class: { select: { id: true, name: true } },
           section: { select: { id: true, name: true } },
+          studentGroup: { select: { id: true, name: true } },
+          studentCategory: { select: { id: true, name: true } },
           guardians: { orderBy: [{ isPrimary: 'desc' }, { createdAt: 'asc' }] },
           enrollments: {
             include: {

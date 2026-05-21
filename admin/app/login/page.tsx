@@ -294,7 +294,9 @@ export default function LoginPage() {
     const remembered = readRememberedLogin();
     const lastAccount = remembered ?? readLastAccount();
     if (effectiveSchoolCode) {
-      const rememberedIdentifier = lastAccount?.email || lastAccount?.username || '';
+      const rememberedSchool = (lastAccount?.schoolCode || lastAccount?.schoolId || '').trim();
+      const canReuseRememberedAccount = rememberedSchool.toLowerCase() === effectiveSchoolCode.toLowerCase();
+      const rememberedIdentifier = canReuseRememberedAccount ? lastAccount?.email || lastAccount?.username || '' : '';
       setDomainNotFound(false);
       setHostSchoolCode(effectiveSchoolCode);
       setSchoolCode(effectiveSchoolCode);

@@ -173,6 +173,10 @@ const academicItems: NavItem[] = [
 const studentItems: NavItem[] = [
   { href: '/dashboard/students/add', label: 'Add Student', icon: 'AD' },
   { href: '/dashboard/students', label: 'Student List', icon: 'SL' },
+  { href: '/dashboard/students/attendance', label: 'Attendance', icon: 'AT', permissionPath: '/dashboard/attendance' },
+  { href: '/dashboard/students/groups', label: 'Groups & Categories', icon: 'GR', permissionPath: '/dashboard/students' },
+  { href: '/dashboard/students/promotion', label: 'Promotion', icon: 'PR', permissionPath: '/dashboard/students' },
+  { href: '/dashboard/students/disabled', label: 'Disabled Students', icon: 'DS', permissionPath: '/dashboard/students' },
   { href: '/dashboard/id-cards', label: 'ID Cards', icon: 'ID' },
   { href: '/dashboard/students/transfers', label: 'Transfer Requests', icon: 'TR' },
 ];

@@ -32,6 +32,25 @@ import {
   updateParent,
   deleteParent,
 } from '../controllers/parent.controller';
+import {
+  createStudentCategory,
+  createStudentGroup,
+  deleteDisabledStudent,
+  deleteStudentCategory,
+  deleteStudentGroup,
+  disableStudent,
+  getStudentAttendanceReport,
+  listDisabledStudents,
+  listStudentCategories,
+  listStudentGroups,
+  loadStudentAttendance,
+  previewStudentPromotion,
+  promoteStudents,
+  restoreDisabledStudent,
+  saveStudentAttendance,
+  updateStudentCategory,
+  updateStudentGroup,
+} from '../controllers/studentOperations.controller';
 import { authMiddleware } from '../middlewares/auth.middleware';
 import { HttpError } from '../middlewares/error.middleware';
 
@@ -47,6 +66,23 @@ studentRouter.use((req: Request, _res: Response, next: NextFunction) => {
 
 studentRouter.get('/students/import/sample', downloadStudentImportSample);
 studentRouter.post('/students/import', uploadStudentImportMiddleware, importStudents);
+studentRouter.get('/attendance', loadStudentAttendance);
+studentRouter.post('/attendance', saveStudentAttendance);
+studentRouter.get('/attendance/report', getStudentAttendanceReport);
+studentRouter.get('/groups', listStudentGroups);
+studentRouter.post('/groups', createStudentGroup);
+studentRouter.patch('/groups/:id', updateStudentGroup);
+studentRouter.delete('/groups/:id', deleteStudentGroup);
+studentRouter.get('/categories', listStudentCategories);
+studentRouter.post('/categories', createStudentCategory);
+studentRouter.patch('/categories/:id', updateStudentCategory);
+studentRouter.delete('/categories/:id', deleteStudentCategory);
+studentRouter.get('/promotions/preview', previewStudentPromotion);
+studentRouter.post('/promotions', promoteStudents);
+studentRouter.get('/disabled', listDisabledStudents);
+studentRouter.post('/students/:id/disable', disableStudent);
+studentRouter.post('/disabled/:id/restore', restoreDisabledStudent);
+studentRouter.delete('/disabled/:id', deleteDisabledStudent);
 studentRouter.post('/students', createStudent);
 studentRouter.get('/students', listStudents);
 studentRouter.get('/students/:id', getStudent);

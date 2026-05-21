@@ -18,6 +18,9 @@ export const STUDENT_A_ID = '88888888-8888-4888-8888-888888888888';
 export const TEST_TICKET_B_ID = '99999999-9999-4999-8999-999999999999';
 export const TEST_AUDIT_LOG_ID = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
 export const TEST_EXPORT_ID = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
+export const TEST_ACADEMIC_YEAR_A_ID = 'abababab-abab-4aba-8aba-abababababab';
+export const TEST_CLASS_A_ID = 'cdcdcdcd-cdcd-4cdc-8cdc-cdcdcdcdcdcd';
+export const TEST_SECTION_A_ID = 'efefefef-efef-4efe-8efe-efefefefefef';
 
 type TestRole = 'SUPER_ADMIN' | 'SCHOOL_ADMIN' | 'TEACHER' | 'PARENT' | 'STUDENT' | 'ACCOUNTANT' | 'LIBRARIAN' | 'STAFF';
 
@@ -112,7 +115,24 @@ const defaultPermissionCodes = [
   'idcards.view',
   'students.transfers',
   'attendance.view',
+  'attendance.create',
+  'attendance.edit',
+  'attendance.report',
   'attendance.substitute.manage',
+  'student.group.view',
+  'student.group.create',
+  'student.group.edit',
+  'student.group.delete',
+  'student.category.view',
+  'student.category.create',
+  'student.category.edit',
+  'student.category.delete',
+  'student.promote.view',
+  'student.promote.create',
+  'student.disabled.view',
+  'student.disabled.edit',
+  'student.disabled.delete',
+  'student.disabled.restore',
   'support.view',
   'audit.view',
 ];
@@ -270,12 +290,14 @@ const patchDefaultDelegate = (delegate: any, name: string) => {
   if ('update' in delegate) {
     patchMethod(delegate, 'update', async ({ where, data }: any) => makeRecord({ id: where?.id ?? where?.schoolId, ...data }));
   }
+  if ('updateMany' in delegate) patchMethod(delegate, 'updateMany', async () => ({ count: 0 }));
   if ('upsert' in delegate) {
     patchMethod(delegate, 'upsert', async ({ where, update, create }: any) =>
       makeRecord({ id: where?.id ?? 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee', ...create, ...update }),
     );
   }
   if ('delete' in delegate) patchMethod(delegate, 'delete', async ({ where }: any) => makeRecord({ id: where?.id }));
+  if ('deleteMany' in delegate) patchMethod(delegate, 'deleteMany', async () => ({ count: 0 }));
   void name;
 };
 
@@ -284,6 +306,7 @@ export const patchSecurityTestDependencies = () => {
   env.NODE_ENV = 'test';
 
   const delegateNames = [
+    'academicYear',
     'auditExport',
     'auditLog',
     'backupJob',
@@ -308,13 +331,20 @@ export const patchSecurityTestDependencies = () => {
     'schoolMessagingConfig',
     'section',
     'student',
+    'attendanceHoliday',
+    'disabledStudentLog',
     'parentGuardian',
+    'studentAttendance',
     'studentEnrollment',
     'studentDocument',
+    'studentGroup',
+    'studentCategory',
     'studentTimeline',
     'studentSibling',
     'studentImportLog',
     'studentParent',
+    'studentPromotion',
+    'studentPromotionHistory',
     'subscription',
     'subscriptionPlanDef',
     'subscriptionPlanPermission',
@@ -343,6 +373,36 @@ export const patchSecurityTestDependencies = () => {
   patchMethod(prisma.school as any, 'count', async ({ where }: any = {}) => {
     if (where?.status === 'ACTIVE') return 2;
     return 2;
+  });
+
+  patchMethod(prisma.academicYear as any, 'findFirst', async ({ where }: any = {}) => {
+    if (where?.schoolId && where.schoolId !== SCHOOL_A_ID) return null;
+    if (where?.id && where.id !== TEST_ACADEMIC_YEAR_A_ID && where.id?.not !== TEST_ACADEMIC_YEAR_A_ID) return null;
+    return {
+      id: TEST_ACADEMIC_YEAR_A_ID,
+      schoolId: SCHOOL_A_ID,
+      name: '2026-2027',
+      startDate: new Date('2026-04-01T00:00:00.000Z'),
+      endDate: new Date('2027-03-31T00:00:00.000Z'),
+      isActive: true,
+    };
+  });
+  patchMethod(prisma.class as any, 'findFirst', async ({ where }: any = {}) => {
+    if (where?.schoolId && where.schoolId !== SCHOOL_A_ID) return null;
+    if (where?.id && where.id !== TEST_CLASS_A_ID) return null;
+    return { id: TEST_CLASS_A_ID, schoolId: SCHOOL_A_ID, name: 'Class 1' };
+  });
+  patchMethod(prisma.section as any, 'findFirst', async ({ where }: any = {}) => {
+    if (where?.schoolId && where.schoolId !== SCHOOL_A_ID) return null;
+    if (!where?.id) return null;
+    if (where.id !== TEST_SECTION_A_ID) return null;
+    return { id: TEST_SECTION_A_ID, schoolId: SCHOOL_A_ID, name: 'A' };
+  });
+  patchMethod(prisma.classSection as any, 'findFirst', async ({ where }: any = {}) => {
+    if (where?.schoolId && where.schoolId !== SCHOOL_A_ID) return null;
+    if (where?.classId && where.classId !== TEST_CLASS_A_ID) return null;
+    if (where?.sectionId && where.sectionId !== TEST_SECTION_A_ID) return null;
+    return { id: 'class-section-a', schoolId: SCHOOL_A_ID, classId: TEST_CLASS_A_ID, sectionId: TEST_SECTION_A_ID };
   });
 
   patchMethod(prisma.userRole as any, 'findMany', async ({ where }: any) => roleRowsFor(where?.userId));

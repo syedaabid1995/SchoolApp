@@ -127,7 +127,7 @@ export const authMiddleware = async (req: Request, _res: Response, next: NextFun
   };
 
   if (schoolId && role && ['SCHOOL_ADMIN', 'TEACHER', 'ACCOUNTANT', 'LIBRARIAN', 'STAFF'].includes(role)) {
-    const permissionCode = resolvePermissionForPath(req.originalUrl);
+    const permissionCode = resolvePermissionForPath(req.originalUrl, req.method);
     if (permissionCode) {
       const permissionCodes = await getEffectivePermissionCodesForUser(schoolId, decoded.sub, role);
       if (!permissionCodes.includes(permissionCode)) {
@@ -140,7 +140,53 @@ export const authMiddleware = async (req: Request, _res: Response, next: NextFun
   next();
 };
 
-const resolvePermissionForPath = (path: string) => {
+const resolvePermissionForPath = (path: string, method = 'GET') => {
+  const pathOnly = path.split('?')[0] ?? path;
+  const verb = method.toUpperCase();
+
+  if (pathOnly.startsWith('/api/v1/students/attendance/report')) return 'attendance.report';
+  if (pathOnly.startsWith('/api/v1/students/attendance')) return verb === 'POST' ? 'attendance.create' : 'attendance.view';
+
+  if (pathOnly.startsWith('/api/v1/students/groups')) {
+    if (verb === 'POST') return 'student.group.create';
+    if (verb === 'PATCH' || verb === 'PUT') return 'student.group.edit';
+    if (verb === 'DELETE') return 'student.group.delete';
+    return 'student.group.view';
+  }
+
+  if (pathOnly.startsWith('/api/v1/students/categories')) {
+    if (verb === 'POST') return 'student.category.create';
+    if (verb === 'PATCH' || verb === 'PUT') return 'student.category.edit';
+    if (verb === 'DELETE') return 'student.category.delete';
+    return 'student.category.view';
+  }
+
+  if (pathOnly.startsWith('/api/v1/students/promotions')) {
+    return verb === 'POST' ? 'student.promote.create' : 'student.promote.view';
+  }
+
+  if (/^\/api\/v1\/students\/students\/[^/]+\/disable$/.test(pathOnly)) return 'student.disabled.edit';
+  if (/^\/api\/v1\/students\/disabled\/[^/]+\/restore$/.test(pathOnly)) return 'student.disabled.restore';
+  if (pathOnly.startsWith('/api/v1/students/disabled')) return verb === 'DELETE' ? 'student.disabled.delete' : 'student.disabled.view';
+
+  if (pathOnly.startsWith('/api/v1/students/students/import')) return 'student.import';
+  if (/^\/api\/v1\/students\/students\/[^/]+\/documents/.test(pathOnly)) {
+    if (verb === 'POST') return 'student.document.create';
+    if (verb === 'DELETE') return 'student.document.delete';
+    return 'student.document.view';
+  }
+  if (/^\/api\/v1\/students\/students\/[^/]+\/timeline/.test(pathOnly)) {
+    if (verb === 'POST') return 'student.timeline.create';
+    if (verb === 'DELETE') return 'student.timeline.delete';
+    return 'student.timeline.view';
+  }
+  if (pathOnly.startsWith('/api/v1/students/students')) {
+    if (verb === 'POST') return 'student.create';
+    if (verb === 'PATCH' || verb === 'PUT') return 'student.edit';
+    if (verb === 'DELETE') return 'student.delete';
+    return 'student.view';
+  }
+
   const targets: Array<{ prefix: string; code: string }> = [
     { prefix: '/api/v1/academics/timetable/teacher', code: 'attendance.view' },
     { prefix: '/api/v1/teachers', code: 'teachers.list' },

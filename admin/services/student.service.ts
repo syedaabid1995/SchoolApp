@@ -55,6 +55,8 @@ export type Student = {
   academicSession?: { id: string; name: string; isActive?: boolean } | null;
   class?: { id: string; name: string } | null;
   section?: { id: string; name: string } | null;
+  studentGroup?: { id: string; name: string } | null;
+  studentCategory?: { id: string; name: string } | null;
   guardians?: Array<{
     id: string;
     type: string;

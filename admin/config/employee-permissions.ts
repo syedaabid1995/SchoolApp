@@ -65,6 +65,24 @@ export const EMPLOYEE_PERMISSION_CATALOG: PermissionCatalogItem[] = [
   { code: 'student.timeline.view', label: 'Student Timeline - View', path: '/dashboard/students', group: 'Students' },
   { code: 'student.timeline.create', label: 'Student Timeline - Create', path: '/dashboard/students', group: 'Students' },
   { code: 'student.timeline.delete', label: 'Student Timeline - Delete', path: '/dashboard/students', group: 'Students' },
+  { code: 'attendance.view', label: 'Student Attendance - View', path: '/dashboard/students/attendance', group: 'Attendance' },
+  { code: 'attendance.create', label: 'Student Attendance - Create', path: '/dashboard/students/attendance', group: 'Attendance' },
+  { code: 'attendance.edit', label: 'Student Attendance - Edit', path: '/dashboard/students/attendance', group: 'Attendance' },
+  { code: 'attendance.report', label: 'Student Attendance - Report', path: '/dashboard/students/attendance', group: 'Attendance' },
+  { code: 'student.group.view', label: 'Student Groups - View', path: '/dashboard/students/groups', group: 'Students' },
+  { code: 'student.group.create', label: 'Student Groups - Create', path: '/dashboard/students/groups', group: 'Students' },
+  { code: 'student.group.edit', label: 'Student Groups - Edit', path: '/dashboard/students/groups', group: 'Students' },
+  { code: 'student.group.delete', label: 'Student Groups - Delete', path: '/dashboard/students/groups', group: 'Students' },
+  { code: 'student.category.view', label: 'Student Categories - View', path: '/dashboard/students/groups', group: 'Students' },
+  { code: 'student.category.create', label: 'Student Categories - Create', path: '/dashboard/students/groups', group: 'Students' },
+  { code: 'student.category.edit', label: 'Student Categories - Edit', path: '/dashboard/students/groups', group: 'Students' },
+  { code: 'student.category.delete', label: 'Student Categories - Delete', path: '/dashboard/students/groups', group: 'Students' },
+  { code: 'student.promote.view', label: 'Student Promotion - View', path: '/dashboard/students/promotion', group: 'Students' },
+  { code: 'student.promote.create', label: 'Student Promotion - Create', path: '/dashboard/students/promotion', group: 'Students' },
+  { code: 'student.disabled.view', label: 'Disabled Students - View', path: '/dashboard/students/disabled', group: 'Students' },
+  { code: 'student.disabled.edit', label: 'Disabled Students - Edit', path: '/dashboard/students/disabled', group: 'Students' },
+  { code: 'student.disabled.delete', label: 'Disabled Students - Delete', path: '/dashboard/students/disabled', group: 'Students' },
+  { code: 'student.disabled.restore', label: 'Disabled Students - Restore', path: '/dashboard/students/disabled', group: 'Students' },
   { code: 'idcards.view', label: 'ID Cards', path: '/dashboard/id-cards', group: 'Utilities' },
   {
     code: 'students.transfers',
@@ -90,6 +108,10 @@ export const getRequiredPermissionForPath = (pathname: string) => {
   if (pathname.startsWith('/dashboard/academics')) return 'academics.setup';
 
   if (pathname.startsWith('/dashboard/students/add')) return 'students.add';
+  if (pathname.startsWith('/dashboard/students/attendance')) return 'attendance.view';
+  if (pathname.startsWith('/dashboard/students/groups')) return 'students.list';
+  if (pathname.startsWith('/dashboard/students/promotion')) return 'students.list';
+  if (pathname.startsWith('/dashboard/students/disabled')) return 'students.list';
   if (pathname.startsWith('/dashboard/students/transfers')) return 'students.transfers';
   if (pathname.startsWith('/dashboard/students')) return 'students.list';
   if (pathname.startsWith('/dashboard/id-cards')) return 'idcards.view';
