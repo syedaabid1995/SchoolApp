@@ -34,7 +34,7 @@ export const deleteClass = async (id: string) => {
   return data;
 };
 
-export const listSections = async (params?: { schoolId?: string }) => {
+export const listSections = async (params?: { schoolId?: string; classId?: string }) => {
   const sanitized =
     params && (params as any).queryKey ? undefined : params;
   const { data } = await api.get('/academics/sections', { params: sanitized });

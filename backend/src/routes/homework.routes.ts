@@ -1,0 +1,27 @@
+import { Router } from 'express';
+import {
+  createHomework,
+  deleteHomework,
+  getHomeworkEvaluation,
+  getHomeworkEvaluationReport,
+  homeworkAttachmentUpload,
+  listHomeworks,
+  saveHomeworkEvaluation,
+  updateHomework,
+  uploadHomeworkAttachment,
+} from '../controllers/homework.controller';
+import { authMiddleware } from '../middlewares/auth.middleware';
+
+export const homeworkRouter = Router();
+
+homeworkRouter.use(authMiddleware);
+
+homeworkRouter.post('/attachments', homeworkAttachmentUpload.single('file'), uploadHomeworkAttachment);
+homeworkRouter.get('/evaluation-report', getHomeworkEvaluationReport);
+
+homeworkRouter.get('/', listHomeworks);
+homeworkRouter.post('/', createHomework);
+homeworkRouter.patch('/:id', updateHomework);
+homeworkRouter.delete('/:id', deleteHomework);
+homeworkRouter.get('/:id/evaluations', getHomeworkEvaluation);
+homeworkRouter.post('/:id/evaluations', saveHomeworkEvaluation);

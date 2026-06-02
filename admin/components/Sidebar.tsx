@@ -124,11 +124,23 @@ const Icon = ({ name, className = 'h-4 w-4' }: { name: IconName; className?: str
 const iconForSection = (label: string): IconName => {
   const key = label.toLowerCase();
   if (key.includes('overview')) return 'grid';
+  if (key === 'dashboard') return 'grid';
+  if (key.includes('admin')) return 'briefcase';
   if (key.includes('management')) return 'briefcase';
   if (key.includes('system')) return 'shield';
   if (key.includes('health')) return 'activity';
   if (key.includes('people')) return 'users';
+  if (key.includes('student')) return 'users';
+  if (key.includes('teacher') || key.includes('human')) return 'briefcase';
   if (key.includes('academic')) return 'book';
+  if (key.includes('examination')) return 'clipboard';
+  if (key.includes('leave')) return 'calendar';
+  if (key.includes('account') || key.includes('fee')) return 'card';
+  if (key.includes('communicate')) return 'message';
+  if (key.includes('library') || key.includes('homework')) return 'book';
+  if (key.includes('transport')) return 'transfer';
+  if (key.includes('inventory') || key.includes('dormitory')) return 'building';
+  if (key.includes('report')) return 'file';
   if (key.includes('operation')) return 'clipboard';
   if (key.includes('setting')) return 'settings';
   return 'grid';
@@ -137,6 +149,10 @@ const iconForSection = (label: string): IconName => {
 const iconForItem = (item: NavItem): IconName => {
   const key = `${item.label} ${item.href}`.toLowerCase();
   if (key.includes('dashboard')) return 'grid';
+  if (key.includes('system requirement') || key.includes('getting started') || key.includes('installation')) return 'activity';
+  if (key.includes('admission') || key.includes('visitor') || key.includes('postal') || key.includes('phone call')) return 'clipboard';
+  if (key.includes('complaint')) return 'support';
+  if (key.includes('certificate')) return 'file';
   if (key.includes('analytics')) return 'analytics';
   if (key.includes('report')) return 'file';
   if (key.includes('school')) return 'building';
@@ -165,32 +181,10 @@ const iconForItem = (item: NavItem): IconName => {
 };
 
 const academicItems: NavItem[] = [
-  { href: '/dashboard/academics', label: 'Academic Setup', icon: 'AS' },
+  { href: '/dashboard/academics', label: 'Classes', icon: 'CL' },
   { href: '/dashboard/academics/timetable', label: 'Timetable', icon: 'TT' },
   { href: '/dashboard/academics/exams', label: 'Exams', icon: 'EX' },
   { href: '/dashboard/academics/marks', label: 'Upload Marks', icon: 'MK' },
-];
-
-const studentItems: NavItem[] = [
-  { href: '/dashboard/students/add', label: 'Add Student', icon: 'AD' },
-  { href: '/dashboard/students', label: 'Student List', icon: 'SL' },
-  { href: '/dashboard/students/attendance', label: 'Attendance', icon: 'AT', permissionPath: '/dashboard/attendance' },
-  { href: '/dashboard/students/groups', label: 'Groups & Categories', icon: 'GR', permissionPath: '/dashboard/students' },
-  { href: '/dashboard/students/promotion', label: 'Promotion', icon: 'PR', permissionPath: '/dashboard/students' },
-  { href: '/dashboard/students/disabled', label: 'Disabled Students', icon: 'DS', permissionPath: '/dashboard/students' },
-  { href: '/dashboard/id-cards', label: 'ID Cards', icon: 'ID' },
-  { href: '/dashboard/students/transfers', label: 'Transfer Requests', icon: 'TR' },
-];
-
-const employeeItems: NavItem[] = [
-  { href: '/dashboard/staff/add', label: 'Add Staff', icon: 'AS' },
-  { href: '/dashboard/staff', label: 'Staff Directory', icon: 'SD' },
-  { href: '/dashboard/staff/attendance', label: 'Staff Attendance', icon: 'SA' },
-  { href: '/dashboard/payroll', label: 'Payroll', icon: 'PY' },
-  { href: '/dashboard/payroll/report', label: 'Payroll Report', icon: 'PR' },
-  { href: '/dashboard/teachers/add', label: 'Add User', icon: 'AU' },
-  { href: '/dashboard/teachers/assign', label: 'Assign Classes', icon: 'AC' },
-  { href: '/dashboard/teachers', label: 'List Users', icon: 'LU' },
 ];
 
 const platformSections: NavSection[] = [
@@ -204,20 +198,30 @@ const platformSections: NavSection[] = [
     ],
   },
   {
-    id: 'platform-management',
-    label: 'Management',
+    id: 'platform-schools',
+    label: 'Schools & Users',
     items: [
       { href: '/dashboard/schools', label: 'Schools', icon: 'SC' },
       { href: '/dashboard/users', label: 'Users', icon: 'US' },
       { href: '/dashboard/subscriptions', label: 'Subscriptions', icon: 'SB' },
-      { href: '/dashboard/support', label: 'Support Tickets', icon: 'SP' },
-      { href: '/dashboard/logs', label: 'Audit Logs', icon: 'LG' },
     ],
   },
   {
-    id: 'platform-health',
-    label: 'Health',
+    id: 'platform-modules',
+    label: 'School Modules',
     items: [
+      { href: '/dashboard/dormitory', label: 'Dormitory', icon: 'DR' },
+      { href: '/dashboard/transport', label: 'Transport', icon: 'TR' },
+      { href: '/dashboard/homework', label: 'Homework', icon: 'HW' },
+      { href: '/dashboard/library', label: 'Library', icon: 'LB' },
+    ],
+  },
+  {
+    id: 'platform-operations',
+    label: 'Operations',
+    items: [
+      { href: '/dashboard/support', label: 'Support Tickets', icon: 'SP' },
+      { href: '/dashboard/logs', label: 'Audit Logs', icon: 'LG' },
       { href: '/dashboard/system-health', label: 'System Health', icon: 'SH' },
     ],
   },
@@ -292,44 +296,72 @@ export const Sidebar = ({
   const schoolSections = useMemo<NavSection[]>(() => {
     const sections: NavSection[] = [
       {
-        id: 'school-overview',
-        label: 'Overview',
+        id: 'workspace',
+        label: 'Workspace',
         items: [
           { href: '/dashboard', label: 'Dashboard', icon: 'DB' },
           { href: '/dashboard/reports', label: 'Reports', icon: 'RP' },
-          ...(isSchoolAdmin ? [{ href: '/dashboard/plans', label: 'Plans', icon: 'PL' }] : []),
         ],
       },
-      ...(isSchoolAdmin
-        ? [
-            {
-              id: 'people',
-              label: 'People',
-              items: [...employeeItems, ...studentItems],
-            },
-          ]
-        : []),
       {
         id: 'academics',
         label: 'Academics',
         items: academicItems,
       },
       {
-        id: 'operations',
-        label: 'Operations',
+        id: 'students',
+        label: 'Students',
         items: [
-          { href: '/dashboard/attendance', label: 'Attendance', icon: 'AT' },
-          { href: '/dashboard/leave/my', label: 'Apply Leave', icon: 'LV' },
-          ...(isSchoolAdmin ? [{ href: '/dashboard/leave/requests', label: 'Leave Management', icon: 'LM' }] : []),
-          { href: '/dashboard/support', label: 'Support', icon: 'SP' },
-          ...(isSchoolAdmin ? [{ href: '/dashboard/audit', label: 'Audit Logs', icon: 'LG' }] : []),
+          { href: '/dashboard/students', label: 'Student List', icon: 'SL' },
+          { href: '/dashboard/students/add', label: 'Add Student', icon: 'AD' },
+          { href: '/dashboard/students/attendance', label: 'Student Attendance', icon: 'AT', permissionPath: '/dashboard/attendance' },
+          { href: '/dashboard/students/groups', label: 'Groups & Categories', icon: 'GR', permissionPath: '/dashboard/students' },
+          { href: '/dashboard/students/promotion', label: 'Promotion', icon: 'PR', permissionPath: '/dashboard/students' },
+          { href: '/dashboard/students/disabled', label: 'Disabled Students', icon: 'DS', permissionPath: '/dashboard/students' },
+          { href: '/dashboard/students/transfers', label: 'Transfer Requests', icon: 'TR' },
+          { href: '/dashboard/id-cards', label: 'ID Cards', icon: 'ID' },
+          { href: '/dashboard/id-cards/editor', label: 'Generate ID Card', icon: 'GI', permissionPath: '/dashboard/id-cards' },
         ],
       },
       {
-        id: 'school-settings',
-        label: 'Settings',
+        id: 'staff',
+        label: 'Staff & Teachers',
         items: [
-          { href: '/dashboard/settings', label: 'Settings', icon: 'ST' },
+          { href: '/dashboard/staff', label: 'Staff Directory', icon: 'SD' },
+          { href: '/dashboard/staff/add', label: 'Add Staff', icon: 'AS' },
+          { href: '/dashboard/staff/attendance', label: 'Staff Attendance', icon: 'SA' },
+          { href: '/dashboard/teachers', label: 'Users', icon: 'LU' },
+          { href: '/dashboard/teachers/add', label: 'Add User', icon: 'AU' },
+          { href: '/dashboard/teachers/assign', label: 'Assign Classes', icon: 'AC' },
+          { href: '/dashboard/payroll', label: 'Payroll', icon: 'PY' },
+          { href: '/dashboard/payroll/report', label: 'Payroll Report', icon: 'PR' },
+        ],
+      },
+      {
+        id: 'operations',
+        label: 'Operations',
+        items: [
+          { href: '/dashboard/dormitory', label: 'Dormitory', icon: 'DR', permissionPath: '/dashboard/students' },
+          { href: '/dashboard/transport', label: 'Transport', icon: 'TR', permissionPath: '/dashboard/students' },
+          { href: '/dashboard/homework', label: 'Homework', icon: 'HW', permissionPath: '/dashboard/students' },
+          { href: '/dashboard/library', label: 'Library', icon: 'LB', permissionPath: '/dashboard/students' },
+          { href: '/dashboard/leave/my', label: 'Apply Leave', icon: 'LV' },
+          ...(isSchoolAdmin ? [{ href: '/dashboard/leave/requests', label: 'Leave Management', icon: 'LM' }] : []),
+        ],
+      },
+      {
+        id: 'administration',
+        label: 'Administration',
+        items: [
+          { href: '/dashboard/support', label: 'Complaint / Support', icon: 'CP' },
+          ...(isSchoolAdmin
+            ? [
+                { href: '/dashboard/audit', label: 'Audit Logs', icon: 'LG' },
+                { href: '/dashboard/plans', label: 'Plans', icon: 'PL' },
+                { href: '/dashboard/settings', label: 'System Setting', icon: 'SS' },
+                { href: '/parent/login', label: 'Parent Portal', icon: 'PP' },
+              ]
+            : []),
         ],
       },
     ];
@@ -343,16 +375,22 @@ export const Sidebar = ({
 
   useEffect(() => {
     const activeSection = sections.find((section) => sectionHasActiveItem(section));
-    setOpenSections(
-      Object.fromEntries(sections.map((section) => [section.id, activeSection ? section.id === activeSection.id : false])),
+    setOpenSections((current) =>
+      Object.fromEntries(
+        sections.map((section) => {
+          const hasStoredState = Object.prototype.hasOwnProperty.call(current, section.id);
+          return [
+            section.id,
+            section.id === activeSection?.id ? true : hasStoredState ? current[section.id] : section.items.length <= 3,
+          ];
+        }),
+      ),
     );
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pathname, isPlatform, sections.length]);
 
   const toggleSection = (id: string) => {
-    setOpenSections((current) =>
-      Object.fromEntries(sections.map((section) => [section.id, section.id === id ? !current[id] : false])),
-    );
+    setOpenSections((current) => ({ ...current, [id]: !(current[id] ?? true) }));
   };
 
   const renderItem = (item: NavItem) => {
@@ -362,7 +400,7 @@ export const Sidebar = ({
         key={item.href}
         href={item.href}
         prefetch={false}
-        className={`group relative flex min-h-10 items-center gap-3 rounded-xl px-3 py-2 text-sm font-semibold transition-all duration-200 ${
+        className={`group relative flex min-h-9 items-center gap-2 rounded-lg px-2.5 py-2 text-sm font-semibold transition-all duration-200 ${
           active
             ? 'bg-[var(--shell-sidebar-active)] text-[var(--shell-sidebar-active-text)] shadow-sm'
             : 'text-[var(--shell-sidebar-muted)] hover:bg-[var(--shell-sidebar-hover)] hover:text-[var(--shell-sidebar-text)]'
@@ -370,14 +408,14 @@ export const Sidebar = ({
         onClick={onClose}
       >
         <span
-          className={`absolute -left-[17px] top-1/2 h-2 w-2 -translate-y-1/2 rounded-full border ${
+          className={`absolute left-0 top-2 bottom-2 w-0.5 rounded-full transition-opacity ${
             active
-              ? 'border-[var(--shell-sidebar-active)] bg-[var(--shell-sidebar-active)]'
-              : 'border-[var(--shell-sidebar-border)] bg-[var(--shell-sidebar)] group-hover:border-[var(--shell-sidebar-text)]'
+              ? 'bg-[var(--shell-sidebar-active-text)] opacity-100'
+              : 'bg-[var(--shell-sidebar-text)] opacity-0 group-hover:opacity-40'
           }`}
         />
         <span
-          className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-lg ${
+          className={`ml-1 flex h-7 w-7 shrink-0 items-center justify-center rounded-md ${
             active
               ? 'bg-[var(--shell-sidebar-icon-active)] text-[var(--shell-sidebar-active-text)]'
               : 'bg-[var(--shell-sidebar-icon)] text-[var(--shell-sidebar-muted)] group-hover:text-[var(--shell-sidebar-text)]'
@@ -400,21 +438,21 @@ export const Sidebar = ({
       ) : null}
 
       <aside
-        className={`fixed left-0 top-0 z-50 flex h-screen w-72 transform flex-col border-r border-[var(--shell-sidebar-border)] bg-[var(--shell-sidebar)] px-4 py-4 text-[var(--shell-sidebar-text)] shadow-2xl shadow-slate-950/10 transition-transform duration-300 ease-in-out lg:static lg:translate-x-0 ${
+        className={`fixed left-0 top-0 z-50 flex h-screen w-[18.5rem] transform flex-col border-r border-[var(--shell-sidebar-border)] bg-[var(--shell-sidebar)] px-3 py-3 text-[var(--shell-sidebar-text)] shadow-2xl shadow-slate-950/10 transition-transform duration-300 ease-in-out lg:static lg:translate-x-0 ${
           isOpen ? 'translate-x-0' : '-translate-x-full'
         }`}
       >
-        <div className="mb-4 flex shrink-0 items-center gap-3 rounded-2xl border border-[var(--shell-sidebar-border)] bg-[var(--shell-sidebar-card)] p-3">
+        <div className="mb-3 flex shrink-0 items-center gap-3 rounded-xl border border-[var(--shell-sidebar-border)] bg-[var(--shell-sidebar-card)] p-3">
           {logoUrl ? (
             // eslint-disable-next-line @next/next/no-img-element
-            <img src={logoUrl} alt="School logo" className="h-9 w-9 rounded-lg object-cover" />
+            <img src={logoUrl} alt="School logo" className="h-10 w-10 rounded-lg object-cover" />
           ) : (
             // eslint-disable-next-line @next/next/no-img-element
-            <img src="/icon.png" alt="SchoolApp" className="h-9 w-9 rounded-lg object-cover" />
+            <img src="/icon.png" alt="SchoolApp" className="h-10 w-10 rounded-lg object-cover" />
           )}
           <div className="min-w-0 flex-1">
             <p className="truncate text-sm font-bold">{isPlatform ? platformName : schoolName || 'School Console'}</p>
-            <p className="text-xs uppercase tracking-wide text-[var(--shell-sidebar-muted)]">
+            <p className="text-xs text-[var(--shell-sidebar-muted)]">
               {isPlatform ? platformSubtitle : 'School Workspace'}
             </p>
           </div>
@@ -428,14 +466,14 @@ export const Sidebar = ({
           </button>
         </div>
 
-        <nav className="flex flex-1 flex-col gap-2 overflow-y-auto pr-1">
+        <nav className="flex flex-1 flex-col gap-1.5 overflow-y-auto pr-1">
           {sections.map((section) => {
             const isOpenSection = openSections[section.id] ?? false;
             const activeSection = sectionHasActiveItem(section);
             return (
               <div
                 key={section.id}
-                className={`rounded-2xl border transition-colors ${
+                className={`rounded-xl border transition-colors ${
                   activeSection
                     ? 'border-[var(--shell-sidebar-border)] bg-[var(--shell-sidebar-card)]'
                     : 'border-transparent'
@@ -444,7 +482,7 @@ export const Sidebar = ({
                 <button
                   type="button"
                   onClick={() => toggleSection(section.id)}
-                  className={`flex w-full items-center gap-3 rounded-xl px-3 py-2 text-xs font-bold uppercase tracking-[0.14em] transition-colors ${
+                  className={`flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-xs font-bold transition-colors ${
                     activeSection
                       ? 'text-[var(--shell-sidebar-text)]'
                       : 'text-[var(--shell-sidebar-muted)] hover:bg-[var(--shell-sidebar-hover)] hover:text-[var(--shell-sidebar-text)]'
@@ -452,7 +490,7 @@ export const Sidebar = ({
                   aria-expanded={isOpenSection}
                 >
                   <span
-                    className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-lg ${
+                    className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-md ${
                       activeSection
                         ? 'bg-[var(--shell-sidebar-active)] text-[var(--shell-sidebar-active-text)]'
                         : 'bg-[var(--shell-sidebar-icon)] text-[var(--shell-sidebar-muted)]'
@@ -461,7 +499,7 @@ export const Sidebar = ({
                     <Icon name={iconForSection(section.label)} className="h-4 w-4" />
                   </span>
                   <span className="min-w-0 flex-1 truncate text-left">{section.label}</span>
-                  <span className="rounded-full border border-[var(--shell-sidebar-border)] px-2 py-0.5 text-[10px] tracking-normal text-[var(--shell-sidebar-muted)]">
+                  <span className="rounded-full border border-[var(--shell-sidebar-border)] px-2 py-0.5 text-[10px] text-[var(--shell-sidebar-muted)]">
                     {section.items.length}
                   </span>
                   <span className={`transition-transform ${isOpenSection ? 'rotate-90' : ''}`}>
@@ -469,27 +507,13 @@ export const Sidebar = ({
                   </span>
                 </button>
                 <div className={`overflow-hidden transition-all duration-200 ${isOpenSection ? 'max-h-[720px] opacity-100' : 'max-h-0 opacity-0'}`}>
-                  <div className="relative ml-7 mt-1 space-y-1 border-l border-[var(--shell-sidebar-border)] py-1 pl-4 pr-1">
+                  <div className="space-y-1 px-1 pb-2">
                     {section.items.map(renderItem)}
                   </div>
                 </div>
               </div>
             );
           })}
-
-          <div className="mt-auto border-t border-[var(--shell-sidebar-border)] pt-3">
-            <a
-              href="/parent/login"
-              className="flex min-h-10 items-center gap-3 rounded-xl px-3 py-2 text-sm font-semibold text-[var(--shell-sidebar-muted)] hover:bg-[var(--shell-sidebar-hover)] hover:text-[var(--shell-sidebar-text)]"
-              target="_blank"
-              rel="noreferrer"
-            >
-              <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-[var(--shell-sidebar-icon)]">
-                <Icon name="portal" className="h-4 w-4" />
-              </span>
-              Parent Portal
-            </a>
-          </div>
         </nav>
       </aside>
     </>

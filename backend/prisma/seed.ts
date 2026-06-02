@@ -632,15 +632,26 @@ const seedAcademics = async (schoolId: string) => {
     },
   });
 
-  const gradeTen = await prisma.class.upsert({
-    where: { schoolId_name: { schoolId, name: 'Grade 10' } },
-    update: { academicYearId: academicYear.id },
-    create: {
+  const existingGradeTen = await prisma.class.findFirst({
+    where: {
       schoolId,
-      academicYearId: academicYear.id,
       name: 'Grade 10',
+      OR: [{ academicYearId: academicYear.id }, { academicYearId: null }],
     },
   });
+
+  const gradeTen = existingGradeTen
+    ? await prisma.class.update({
+        where: { id: existingGradeTen.id },
+        data: { academicYearId: academicYear.id },
+      })
+    : await prisma.class.create({
+        data: {
+          schoolId,
+          academicYearId: academicYear.id,
+          name: 'Grade 10',
+        },
+      });
 
   const sectionA = await prisma.section.upsert({
     where: { classId_name: { classId: gradeTen.id, name: 'A' } },

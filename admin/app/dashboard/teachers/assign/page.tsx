@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { getSession } from '../../../../services/auth.service';
 import { listSchools } from '../../../../services/school.service';
@@ -20,9 +20,27 @@ import {
 import PageHeader from '../../../../components/PageHeader';
 import DashboardPageContainer from '../../../../components/DashboardPageContainer';
 import Button from '../../../../components/Button';
+import { resolveSchoolSubdomainFromHost } from '../../../../lib/school-domain';
+
+type TenantSchool = {
+  id: string;
+  name: string;
+  code: string;
+  subdomain?: string | null;
+};
+
+type SchoolDomainResponse = {
+  isMainDomain: boolean;
+  school: TenantSchool | null;
+};
 
 export default function AssignTeacherPage() {
   const queryClient = useQueryClient();
+  const [tenantSubdomain] = useState(() =>
+    typeof window === 'undefined' ? null : resolveSchoolSubdomainFromHost(window.location.host),
+  );
+  const [tenantSchool, setTenantSchool] = useState<TenantSchool | null>(null);
+  const [tenantLookupError, setTenantLookupError] = useState('');
   const [schoolId, setSchoolId] = useState('');
   const [teacherId, setTeacherId] = useState('');
   const [classId, setClassId] = useState('');
@@ -40,12 +58,43 @@ export default function AssignTeacherPage() {
 
   const { data: session } = useQuery({ queryKey: ['session'], queryFn: getSession });
   const isSuperAdmin = session?.role === 'SUPER_ADMIN';
-  const effectiveSchoolId = isSuperAdmin ? schoolId : session?.schoolId ?? undefined;
+  const isTenantSchoolMode = Boolean(tenantSubdomain);
+  const effectiveSchoolId = tenantSchool?.id ?? (isSuperAdmin && !isTenantSchoolMode ? schoolId : session?.schoolId ?? undefined);
+  const showSchoolSelector = isSuperAdmin && !isTenantSchoolMode;
+  const superAdminSchoolScope = isSuperAdmin && effectiveSchoolId ? { schoolId: effectiveSchoolId } : {};
+
+  useEffect(() => {
+    if (!tenantSubdomain) return;
+
+    let cancelled = false;
+    setTenantLookupError('');
+    fetch(`/api/proxy/public/school-domain?subdomain=${encodeURIComponent(tenantSubdomain)}`, {
+      cache: 'no-store',
+    })
+      .then(async (res) => {
+        if (!res.ok) throw new Error('School domain not found');
+        return (await res.json()) as SchoolDomainResponse;
+      })
+      .then((data) => {
+        if (cancelled) return;
+        setTenantSchool(data.school ?? null);
+        if (!data.school) setTenantLookupError('School domain not found');
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setTenantSchool(null);
+        setTenantLookupError('School domain not found');
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [tenantSubdomain]);
 
   const { data: schools } = useQuery({
     queryKey: ['schools', 'all'],
     queryFn: () => listSchools({ limit: 100 }),
-    enabled: isSuperAdmin,
+    enabled: showSchoolSelector,
   });
 
   const { data: teachers } = useQuery({
@@ -154,9 +203,14 @@ export default function AssignTeacherPage() {
           subtitle="Assign classes and subjects to teachers. This controls who can submit attendance and marks."
         />
         <div className="mx-auto mt-8 max-w-6xl rounded-3xl bg-white/80 p-8 shadow-xl ring-1 ring-slate-200">
+          {tenantLookupError ? (
+            <div className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm font-medium text-rose-700">
+              {tenantLookupError}
+            </div>
+          ) : null}
 
           <div className="mt-6 grid gap-4 md:grid-cols-3">
-            {isSuperAdmin && (
+            {showSchoolSelector && (
               <div className="md:col-span-1">
                 <label className="text-xs font-semibold text-slate-600">School</label>
                 <select
@@ -164,6 +218,9 @@ export default function AssignTeacherPage() {
                   onChange={(e) => {
                     setSchoolId(e.target.value);
                     setTeacherId('');
+                    setClassId('');
+                    setSectionId('');
+                    setSubjectId('');
                   }}
                   className="mt-2 w-full rounded-xl border border-slate-200 px-4 py-2 text-sm focus:border-purple-500 focus:outline-none focus:ring-2 focus:ring-purple-200"
                 >
@@ -177,7 +234,7 @@ export default function AssignTeacherPage() {
               </div>
             )}
 
-            <div className={isSuperAdmin ? 'md:col-span-2' : 'md:col-span-3'}>
+            <div className={showSchoolSelector ? 'md:col-span-2' : 'md:col-span-3'}>
               <label className="text-xs font-semibold text-slate-600">Teacher</label>
               <select
                 value={teacherId}
@@ -238,7 +295,7 @@ export default function AssignTeacherPage() {
                   onClick={() => {
                     if (!teacherId || !classId) return;
                     if (sectionRequired && !sectionId) return;
-                    assignClassMutation.mutate({ teacherId, classId, sectionId: sectionId || undefined });
+                    assignClassMutation.mutate({ teacherId, classId, sectionId: sectionId || undefined, ...superAdminSchoolScope });
                     setClassId('');
                     setSectionId('');
                   }}
@@ -269,6 +326,7 @@ export default function AssignTeacherPage() {
                             teacherId,
                             classId: assignment.class.id,
                             sectionId: assignment.section?.id,
+                            ...superAdminSchoolScope,
                           })
                         }
                         className="text-xs font-semibold text-rose-500 hover:text-rose-600"
@@ -304,7 +362,7 @@ export default function AssignTeacherPage() {
                   size="sm"
                   onClick={() => {
                     if (!teacherId || !subjectId) return;
-                    assignSubjectMutation.mutate({ teacherId, subjectId });
+                    assignSubjectMutation.mutate({ teacherId, subjectId, ...superAdminSchoolScope });
                     setSubjectId('');
                   }}
                 >
@@ -326,7 +384,7 @@ export default function AssignTeacherPage() {
                       <span className="text-sm text-slate-700">{assignment.subject.name}</span>
                       <button
                         type="button"
-                        onClick={() => unassignSubjectMutation.mutate({ teacherId, subjectId: assignment.subject.id })}
+                        onClick={() => unassignSubjectMutation.mutate({ teacherId, subjectId: assignment.subject.id, ...superAdminSchoolScope })}
                         className="text-xs font-semibold text-rose-500 hover:text-rose-600"
                       >
                         Remove

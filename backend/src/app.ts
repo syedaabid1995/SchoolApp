@@ -55,6 +55,10 @@ import { messagingSettingsRouter } from './routes/messagingSettings.routes';
 import { publicBrandingRouter } from './routes/publicBranding.routes';
 import { publicAssetRouter } from './routes/publicAsset.routes';
 import { schoolDomainRouter } from './routes/schoolDomain.routes';
+import { dormitoryRouter } from './routes/dormitory.routes';
+import { transportRouter } from './routes/transport.routes';
+import { homeworkRouter } from './routes/homework.routes';
+import { libraryRouter } from './routes/library.routes';
 import { rateLimit } from './middlewares/rate-limit.middleware';
 import { apiVersionMiddleware } from './middlewares/version.middleware';
 
@@ -162,6 +166,10 @@ export const createApp = () => {
   app.use('/api/auth', authRouter);
   app.use('/api/v1/academics', academicRouter);
   app.use('/api/v1/academic-setup', academicSetupRouter);
+  app.use('/api/v1/dormitories', dormitoryRouter);
+  app.use('/api/v1/transport', transportRouter);
+  app.use('/api/v1/homework', homeworkRouter);
+  app.use('/api/v1/library', libraryRouter);
   app.use('/api/v1/students', studentRouter);
   app.use('/api/v1/imports', importRouter);
   app.use('/api/v1/faces', faceRouter);

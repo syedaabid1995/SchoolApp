@@ -103,22 +103,22 @@ export const setTeacherStatus = async (teacherId: string, isActive: boolean) => 
   return data;
 };
 
-export const assignClass = async (payload: { teacherId: string; classId: string; sectionId?: string }) => {
+export const assignClass = async (payload: { teacherId: string; classId: string; sectionId?: string; schoolId?: string }) => {
   const { data } = await api.post('/teacher-assignments/classes/assign', payload);
   return data;
 };
 
-export const unassignClass = async (payload: { teacherId: string; classId: string; sectionId?: string }) => {
+export const unassignClass = async (payload: { teacherId: string; classId: string; sectionId?: string; schoolId?: string }) => {
   const { data } = await api.post('/teacher-assignments/classes/unassign', payload);
   return data;
 };
 
-export const assignSubject = async (payload: { teacherId: string; subjectId: string }) => {
+export const assignSubject = async (payload: { teacherId: string; subjectId: string; schoolId?: string }) => {
   const { data } = await api.post('/teacher-assignments/subjects/assign', payload);
   return data;
 };
 
-export const unassignSubject = async (payload: { teacherId: string; subjectId: string }) => {
+export const unassignSubject = async (payload: { teacherId: string; subjectId: string; schoolId?: string }) => {
   const { data } = await api.post('/teacher-assignments/subjects/unassign', payload);
   return data;
 };

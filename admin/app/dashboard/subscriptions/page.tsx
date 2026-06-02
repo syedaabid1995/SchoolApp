@@ -24,6 +24,7 @@ import {
   resumeSubscription,
   startTrial,
   updateSubscriptionLimits,
+  updateSubscriptionPlan,
   updatePlanPermissions,
   upgradeSubscription,
   type PlanPermissionItem,
@@ -151,6 +152,18 @@ const initialActionForm = {
   reason: '',
 };
 
+const initialPlanForm = {
+  name: '',
+  status: 'ACTIVE',
+  price: '0',
+  studentLimit: '',
+  teacherLimit: '',
+  features: '',
+};
+
+type PlanFormState = typeof initialPlanForm;
+type PlanModalMode = 'modules' | 'edit';
+
 export default function SubscriptionsPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -159,8 +172,10 @@ export default function SubscriptionsPage() {
   const [selectedSchoolId, setSelectedSchoolId] = useState<string | null>(null);
   const [actionState, setActionState] = useState<{ action: LifecycleAction; item: SchoolSubscriptionListItem } | null>(null);
   const [modulePlanId, setModulePlanId] = useState<string | null>(null);
+  const [planModalMode, setPlanModalMode] = useState<PlanModalMode | null>(null);
   const [editedPermissionCodes, setEditedPermissionCodes] = useState<string[]>([]);
   const [actionForm, setActionForm] = useState(initialActionForm);
+  const [planForm, setPlanForm] = useState<PlanFormState>(initialPlanForm);
   const [filters, setFilters] = useState({
     page: 1,
     limit: 20,
@@ -360,6 +375,48 @@ export default function SubscriptionsPage() {
     },
   });
 
+  const planEditMutation = useMutation({
+    mutationFn: async () => {
+      if (!modulePlanId) throw new Error('Select a plan.');
+      const price = Number(planForm.price);
+      const studentLimit = Number(planForm.studentLimit);
+      const teacherLimit = Number(planForm.teacherLimit);
+      const features = planForm.features
+        .split('\n')
+        .map((feature) => feature.trim())
+        .filter(Boolean);
+
+      if (!planForm.name.trim()) throw new Error('Plan name is required.');
+      if (!Number.isFinite(price) || price < 0) throw new Error('Enter a valid plan price.');
+      if (!Number.isInteger(studentLimit) || studentLimit < 1) throw new Error('Student limit must be at least 1.');
+      if (!Number.isInteger(teacherLimit) || teacherLimit < 1) throw new Error('Teacher limit must be at least 1.');
+
+      await updateSubscriptionPlan(modulePlanId, {
+        name: planForm.name.trim(),
+        status: planForm.status,
+        priceCents: Math.round(price * 100),
+        studentLimit,
+        teacherLimit,
+        features,
+      });
+
+      return updatePlanPermissions(modulePlanId, editedPermissionCodes);
+    },
+    onSuccess: () => {
+      notify.success('Plan updated', 'Plan details and module access were saved.');
+      queryClient.invalidateQueries({ queryKey: ['subscription-plans'] });
+      queryClient.invalidateQueries({ queryKey: ['active-plans'] });
+      queryClient.invalidateQueries({ queryKey: ['subscription-plan-modules', modulePlanId] });
+      queryClient.invalidateQueries({ queryKey: ['school-subscriptions'] });
+      queryClient.invalidateQueries({ queryKey: ['subscription-lifecycle-summary'] });
+      closePlanModal();
+    },
+    onError: (error: any) => {
+      const message = error?.response?.data?.error?.message || error?.message || 'Unable to update plan.';
+      notify.error('Plan update failed', message);
+    },
+  });
+
   const setFilter = (key: keyof typeof filters, value: string | number) => {
     setFilters((current) => ({
       ...current,
@@ -377,6 +434,31 @@ export default function SubscriptionsPage() {
       studentLimit: item.studentLimit ? String(item.studentLimit) : '',
       teacherLimit: item.teacherLimit ? String(item.teacherLimit) : '',
     });
+  };
+
+  const openPlanModules = (plan: SubscriptionPlan) => {
+    setModulePlanId(plan.id);
+    setPlanModalMode('modules');
+  };
+
+  const openPlanEditor = (plan: SubscriptionPlan) => {
+    setPlanForm({
+      name: plan.name,
+      status: plan.status === 'INACTIVE' ? 'INACTIVE' : 'ACTIVE',
+      price: String(plan.priceCents / 100),
+      studentLimit: String(plan.studentLimit),
+      teacherLimit: String(plan.teacherLimit),
+      features: (plan.features ?? []).join('\n'),
+    });
+    setModulePlanId(plan.id);
+    setPlanModalMode('edit');
+  };
+
+  const closePlanModal = () => {
+    setPlanModalMode(null);
+    setModulePlanId(null);
+    setEditedPermissionCodes([]);
+    setPlanForm(initialPlanForm);
   };
 
   const activePlans = plans?.filter((plan) => plan.status === 'ACTIVE') ?? [];
@@ -587,13 +669,22 @@ export default function SubscriptionsPage() {
               </div>
               <p className="mt-2 text-xl font-bold text-[var(--shell-text)]">{formatCurrency(plan.priceCents / 100)}</p>
               <p className="text-xs text-[var(--shell-muted)]">Students {plan.studentLimit} - Teachers {plan.teacherLimit}</p>
-              <button
-                type="button"
-                onClick={() => setModulePlanId(plan.id)}
-                className="mt-4 w-full rounded-xl border border-[var(--shell-border)] bg-[var(--shell-card)] px-3 py-2 text-sm font-semibold text-[var(--shell-text)] hover:bg-[var(--shell-hover)]"
-              >
-                Modules & Sidebar
-              </button>
+              <div className="mt-4 grid gap-2 sm:grid-cols-2 md:grid-cols-1 xl:grid-cols-2">
+                <button
+                  type="button"
+                  onClick={() => openPlanEditor(plan)}
+                  className="rounded-xl bg-blue-600 px-3 py-2 text-sm font-semibold text-white hover:bg-blue-700"
+                >
+                  Edit Plan
+                </button>
+                <button
+                  type="button"
+                  onClick={() => openPlanModules(plan)}
+                  className="rounded-xl border border-[var(--shell-border)] bg-[var(--shell-card)] px-3 py-2 text-sm font-semibold text-[var(--shell-text)] hover:bg-[var(--shell-hover)]"
+                >
+                  Modules
+                </button>
+              </div>
             </div>
           ))}
         </div>
@@ -632,7 +723,7 @@ export default function SubscriptionsPage() {
         />
       ) : null}
 
-      {modulePlanId ? (
+      {modulePlanId && planModalMode === 'modules' ? (
         <PlanModulesModal
           plan={selectedModulePlan}
           permissions={modulePermissions?.permissions ?? []}
@@ -640,8 +731,23 @@ export default function SubscriptionsPage() {
           loading={isModulePermissionsLoading}
           saving={modulePermissionMutation.isPending}
           onChange={setEditedPermissionCodes}
-          onClose={() => setModulePlanId(null)}
+          onClose={closePlanModal}
           onSubmit={() => modulePermissionMutation.mutate()}
+        />
+      ) : null}
+
+      {modulePlanId && planModalMode === 'edit' ? (
+        <PlanEditModal
+          plan={selectedModulePlan}
+          form={planForm}
+          permissions={modulePermissions?.permissions ?? []}
+          editedCodes={editedPermissionCodes}
+          loading={isModulePermissionsLoading}
+          saving={planEditMutation.isPending}
+          onFormChange={(patch) => setPlanForm((current) => ({ ...current, ...patch }))}
+          onPermissionChange={setEditedPermissionCodes}
+          onClose={closePlanModal}
+          onSubmit={() => planEditMutation.mutate()}
         />
       ) : null}
     </div>
@@ -686,6 +792,272 @@ function ActionButton({ children, onClick, danger = false }: { children: ReactNo
     >
       {children}
     </button>
+  );
+}
+
+function PlanEditModal({
+  plan,
+  form,
+  permissions,
+  editedCodes,
+  loading,
+  saving,
+  onFormChange,
+  onPermissionChange,
+  onClose,
+  onSubmit,
+}: {
+  plan: SubscriptionPlan | null;
+  form: PlanFormState;
+  permissions: PlanPermissionItem[];
+  editedCodes: string[];
+  loading: boolean;
+  saving: boolean;
+  onFormChange: (patch: Partial<PlanFormState>) => void;
+  onPermissionChange: (codes: string[]) => void;
+  onClose: () => void;
+  onSubmit: () => void;
+}) {
+  const groups = useMemo(() => buildPlanPermissionGroups(permissions), [permissions]);
+  const enabledSet = useMemo(() => new Set(editedCodes), [editedCodes]);
+  const allCodes = useMemo(() => Array.from(new Set(permissions.map((permission) => permission.code))), [permissions]);
+
+  const setCodes = (codes: string[]) => onPermissionChange(Array.from(new Set(codes)));
+  const toggleCode = (code: string) => {
+    setCodes(enabledSet.has(code) ? editedCodes.filter((item) => item !== code) : [...editedCodes, code]);
+  };
+  const toggleCodes = (codes: string[], enabled: boolean) => {
+    const next = new Set(editedCodes);
+    codes.forEach((code) => {
+      if (enabled) next.add(code);
+      else next.delete(code);
+    });
+    onPermissionChange(Array.from(next));
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/45 px-4 py-6">
+      <form
+        onSubmit={(event) => {
+          event.preventDefault();
+          onSubmit();
+        }}
+        className="flex max-h-[92vh] w-full max-w-6xl flex-col overflow-hidden rounded-2xl border border-[var(--shell-border)] bg-[var(--shell-card)] shadow-2xl"
+      >
+        <div className="flex flex-col gap-4 border-b border-[var(--shell-border)] p-5 lg:flex-row lg:items-start lg:justify-between">
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-[0.16em] text-[var(--shell-muted)]">Edit plan and modules</p>
+            <h2 className="mt-1 text-2xl font-bold text-[var(--shell-text)]">{plan?.name ?? 'Subscription Plan'}</h2>
+            <p className="mt-1 text-sm text-[var(--shell-muted)]">
+              Update plan pricing, limits, features, and the School Admin sidebar modules unlocked by this plan.
+            </p>
+          </div>
+          <button type="button" onClick={onClose} className="rounded-xl border border-[var(--shell-border)] px-3 py-2 text-sm font-semibold text-[var(--shell-text)]">
+            Close
+          </button>
+        </div>
+
+        <div className="overflow-y-auto p-5">
+          <section className="grid gap-4 lg:grid-cols-5">
+            <div className="rounded-2xl border border-[var(--shell-border)] bg-[var(--shell-subtle)] p-4 lg:col-span-2">
+              <h3 className="text-base font-bold text-[var(--shell-text)]">Plan Details</h3>
+              <div className="mt-4 space-y-4">
+                <label className="block">
+                  <span className="text-xs font-semibold uppercase tracking-[0.14em] text-[var(--shell-muted)]">Plan Name</span>
+                  <input
+                    value={form.name}
+                    onChange={(event) => onFormChange({ name: event.target.value })}
+                    className="mt-1 w-full rounded-xl border border-[var(--shell-border)] bg-[var(--shell-card)] px-3 py-2 text-sm text-[var(--shell-text)] outline-none focus:ring-2 focus:ring-blue-500"
+                    placeholder="Premium"
+                  />
+                </label>
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <label className="block">
+                    <span className="text-xs font-semibold uppercase tracking-[0.14em] text-[var(--shell-muted)]">Status</span>
+                    <select
+                      value={form.status}
+                      onChange={(event) => onFormChange({ status: event.target.value })}
+                      className="mt-1 w-full rounded-xl border border-[var(--shell-border)] bg-[var(--shell-card)] px-3 py-2 text-sm text-[var(--shell-text)] outline-none focus:ring-2 focus:ring-blue-500"
+                    >
+                      <option value="ACTIVE">Active</option>
+                      <option value="INACTIVE">Inactive</option>
+                    </select>
+                  </label>
+                  <label className="block">
+                    <span className="text-xs font-semibold uppercase tracking-[0.14em] text-[var(--shell-muted)]">Monthly Price</span>
+                    <input
+                      type="number"
+                      min="0"
+                      step="1"
+                      value={form.price}
+                      onChange={(event) => onFormChange({ price: event.target.value })}
+                      className="mt-1 w-full rounded-xl border border-[var(--shell-border)] bg-[var(--shell-card)] px-3 py-2 text-sm text-[var(--shell-text)] outline-none focus:ring-2 focus:ring-blue-500"
+                    />
+                  </label>
+                </div>
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <label className="block">
+                    <span className="text-xs font-semibold uppercase tracking-[0.14em] text-[var(--shell-muted)]">Student Limit</span>
+                    <input
+                      type="number"
+                      min="1"
+                      step="1"
+                      value={form.studentLimit}
+                      onChange={(event) => onFormChange({ studentLimit: event.target.value })}
+                      className="mt-1 w-full rounded-xl border border-[var(--shell-border)] bg-[var(--shell-card)] px-3 py-2 text-sm text-[var(--shell-text)] outline-none focus:ring-2 focus:ring-blue-500"
+                    />
+                  </label>
+                  <label className="block">
+                    <span className="text-xs font-semibold uppercase tracking-[0.14em] text-[var(--shell-muted)]">Teacher Limit</span>
+                    <input
+                      type="number"
+                      min="1"
+                      step="1"
+                      value={form.teacherLimit}
+                      onChange={(event) => onFormChange({ teacherLimit: event.target.value })}
+                      className="mt-1 w-full rounded-xl border border-[var(--shell-border)] bg-[var(--shell-card)] px-3 py-2 text-sm text-[var(--shell-text)] outline-none focus:ring-2 focus:ring-blue-500"
+                    />
+                  </label>
+                </div>
+                <label className="block">
+                  <span className="text-xs font-semibold uppercase tracking-[0.14em] text-[var(--shell-muted)]">Feature Lines</span>
+                  <textarea
+                    value={form.features}
+                    onChange={(event) => onFormChange({ features: event.target.value })}
+                    rows={8}
+                    className="mt-1 w-full rounded-xl border border-[var(--shell-border)] bg-[var(--shell-card)] px-3 py-2 text-sm text-[var(--shell-text)] outline-none focus:ring-2 focus:ring-blue-500"
+                    placeholder="One feature per line"
+                  />
+                </label>
+              </div>
+            </div>
+
+            <div className="rounded-2xl border border-[var(--shell-border)] p-4 lg:col-span-3">
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                <div>
+                  <h3 className="text-base font-bold text-[var(--shell-text)]">Modules & Sidebar</h3>
+                  <p className="text-sm text-[var(--shell-muted)]">Enable the parent/child sidebar modules included in this plan.</p>
+                </div>
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    disabled={loading}
+                    onClick={() => setCodes(allCodes)}
+                    className="rounded-xl border border-[var(--shell-border)] px-3 py-2 text-xs font-semibold text-[var(--shell-text)] disabled:opacity-50"
+                  >
+                    Enable All
+                  </button>
+                  <button
+                    type="button"
+                    disabled={loading}
+                    onClick={() => onPermissionChange([])}
+                    className="rounded-xl border border-[var(--shell-border)] px-3 py-2 text-xs font-semibold text-[var(--shell-text)] disabled:opacity-50"
+                  >
+                    Disable All
+                  </button>
+                </div>
+              </div>
+
+              <div className="mt-4 max-h-[58vh] overflow-y-auto pr-1">
+                {loading ? (
+                  <div className="space-y-3">
+                    {Array.from({ length: 4 }).map((_, index) => (
+                      <div key={index} className="h-24 animate-pulse rounded-2xl bg-[var(--shell-subtle)]" />
+                    ))}
+                  </div>
+                ) : groups.length ? (
+                  <div className="space-y-4">
+                    {groups.map((group) => {
+                      const groupCodes = Array.from(new Set(group.modules.flatMap((module) => module.permissions.map((permission) => permission.code))));
+                      const groupEnabled = groupCodes.filter((code) => enabledSet.has(code)).length;
+                      const allGroupEnabled = groupEnabled === groupCodes.length;
+                      return (
+                        <div key={group.parent} className="rounded-2xl border border-[var(--shell-border)]">
+                          <div className="flex flex-col gap-2 border-b border-[var(--shell-border)] bg-[var(--shell-subtle)] px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+                            <div>
+                              <p className="font-bold text-[var(--shell-text)]">{group.parent}</p>
+                              <p className="text-xs text-[var(--shell-muted)]">{groupEnabled}/{groupCodes.length} permissions enabled</p>
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => toggleCodes(groupCodes, !allGroupEnabled)}
+                              className="rounded-xl border border-[var(--shell-border)] bg-[var(--shell-card)] px-3 py-1.5 text-xs font-semibold text-[var(--shell-text)]"
+                            >
+                              {allGroupEnabled ? 'Disable Parent' : 'Enable Parent'}
+                            </button>
+                          </div>
+                          <div className="grid gap-3 p-3">
+                            {group.modules.map((module) => {
+                              const moduleCodes = module.permissions.map((permission) => permission.code);
+                              const moduleEnabled = moduleCodes.filter((code) => enabledSet.has(code)).length;
+                              return (
+                                <div key={`${group.parent}-${module.module}`} className="rounded-xl border border-[var(--shell-border)] bg-[var(--shell-card)] p-3">
+                                  <div className="flex items-start justify-between gap-3">
+                                    <div className="min-w-0">
+                                      <p className="font-semibold text-[var(--shell-text)]">{module.module}</p>
+                                      <p className="mt-1 truncate font-mono text-[11px] text-[var(--shell-muted)]">{module.path}</p>
+                                    </div>
+                                    <span className="rounded-full bg-[var(--shell-subtle)] px-2 py-1 text-xs font-semibold text-[var(--shell-muted)]">
+                                      {moduleEnabled}/{moduleCodes.length}
+                                    </span>
+                                  </div>
+                                  <div className="mt-3 flex flex-wrap gap-2">
+                                    {module.permissions.map((permission) => {
+                                      const enabled = enabledSet.has(permission.code);
+                                      return (
+                                        <button
+                                          key={permission.code}
+                                          type="button"
+                                          onClick={() => toggleCode(permission.code)}
+                                          title={permission.code}
+                                          className={`rounded-full px-3 py-1.5 text-xs font-semibold ${
+                                            enabled
+                                              ? 'bg-blue-600 text-white'
+                                              : 'border border-[var(--shell-border)] bg-[var(--shell-subtle)] text-[var(--shell-muted)]'
+                                          }`}
+                                        >
+                                          {formatPlanPermissionAction(permission)}
+                                        </button>
+                                      );
+                                    })}
+                                  </div>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                ) : (
+                  <div className="rounded-2xl border border-dashed border-[var(--shell-border)] p-8 text-center text-sm text-[var(--shell-muted)]">
+                    No module permissions found for this plan.
+                  </div>
+                )}
+              </div>
+            </div>
+          </section>
+        </div>
+
+        <div className="flex flex-col gap-3 border-t border-[var(--shell-border)] p-5 sm:flex-row sm:items-center sm:justify-between">
+          <p className="text-sm text-[var(--shell-muted)]">
+            {editedCodes.length} of {permissions.length} permissions enabled
+          </p>
+          <div className="flex justify-end gap-2">
+            <button type="button" onClick={onClose} className="rounded-xl border border-[var(--shell-border)] px-4 py-2 text-sm font-semibold text-[var(--shell-text)]">
+              Cancel
+            </button>
+            <button
+              type="submit"
+              disabled={saving || loading}
+              className="rounded-xl bg-blue-600 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50"
+            >
+              {saving ? 'Saving...' : 'Save Plan & Modules'}
+            </button>
+          </div>
+        </div>
+      </form>
+    </div>
   );
 }
 
@@ -769,7 +1141,7 @@ function PlanModulesModal({
           ) : groups.length ? (
             <div className="space-y-5">
               {groups.map((group) => {
-                const groupCodes = group.modules.flatMap((module) => module.permissions.map((permission) => permission.code));
+                const groupCodes = Array.from(new Set(group.modules.flatMap((module) => module.permissions.map((permission) => permission.code))));
                 const groupEnabled = groupCodes.filter((code) => enabledSet.has(code)).length;
                 const allGroupEnabled = groupEnabled === groupCodes.length;
                 return (

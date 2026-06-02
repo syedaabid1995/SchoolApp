@@ -141,6 +141,7 @@ const moduleCatalog = [
   { key: 'module_fees', label: 'Fees', description: 'Fee collection and finance workflows.' },
   { key: 'module_library', label: 'Library', description: 'Library and book issue workflows.' },
   { key: 'module_transport', label: 'Transport', description: 'Routes, vehicles, and transport assignment.' },
+  { key: 'module_homework', label: 'Homework', description: 'Homework creation, evaluation, and reporting workflows.' },
   { key: 'module_support', label: 'Support', description: 'School support tickets and replies.' },
   { key: 'module_reports', label: 'Reports', description: 'Report landing pages and exports.' },
   { key: 'module_messaging', label: 'Messaging', description: 'SMS, notifications, and provider integrations.' },
