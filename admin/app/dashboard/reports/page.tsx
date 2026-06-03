@@ -438,7 +438,7 @@ const statusLabels: Record<ReportStatus, string> = {
 
 const statusClasses: Record<ReportStatus, string> = {
   available: 'bg-emerald-50 text-emerald-700 ring-emerald-200',
-  coming_soon: 'bg-slate-100 text-slate-600 ring-slate-200',
+  coming_soon: 'bg-[var(--shell-subtle)] text-[var(--shell-muted)] ring-[var(--shell-border)]',
   requires_module: 'bg-amber-50 text-amber-700 ring-amber-200',
 };
 
@@ -449,16 +449,16 @@ const formatNumber = (value: unknown) => {
 
 function StatCard({ label, value, helper }: { label: string; value: string; helper: string }) {
   return (
-    <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-      <p className="text-sm font-medium text-slate-500">{label}</p>
-      <p className="mt-2 text-2xl font-bold text-slate-950">{value}</p>
-      <p className="mt-2 text-xs leading-5 text-slate-500">{helper}</p>
+    <div className="rounded-xl border border-[var(--shell-border)] bg-[var(--shell-card)] p-4 shadow-sm">
+      <p className="text-xs font-bold uppercase text-[var(--shell-muted)]">{label}</p>
+      <p className="mt-2 text-2xl font-bold text-[var(--shell-text)]">{value}</p>
+      <p className="mt-2 text-xs leading-5 text-[var(--shell-muted)]">{helper}</p>
     </div>
   );
 }
 
 function SkeletonCard() {
-  return <div className="h-32 animate-pulse rounded-2xl bg-slate-100" />;
+  return <div className="h-32 animate-pulse rounded-xl bg-[var(--shell-hover)]" />;
 }
 
 function ReportStatusBadge({ status }: { status: ReportStatus }) {
@@ -473,24 +473,24 @@ function ReportCard({ report }: { report: ReportCardItem }) {
   const canNavigate = report.status === 'available' && reportExists(report.href);
 
   return (
-    <article className="flex h-full flex-col rounded-2xl border border-slate-200 bg-white p-5 shadow-sm transition hover:border-sky-200 hover:shadow-md">
-      <div className="flex items-start justify-between gap-4">
-        <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-sky-50 text-sm font-bold text-sky-700 ring-1 ring-sky-100">
+    <article className="group flex h-full flex-col rounded-xl border border-[var(--shell-border)] bg-[var(--shell-card)] p-4 shadow-sm transition hover:-translate-y-0.5 hover:border-blue-200 hover:shadow-md">
+      <div className="flex items-start justify-between gap-3">
+        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-blue-50 text-xs font-bold text-blue-700 ring-1 ring-blue-100">
           {report.icon}
         </div>
         <ReportStatusBadge status={report.status} />
       </div>
       <div className="mt-4 flex-1">
-        <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">{report.category}</p>
-        <h2 className="mt-2 text-lg font-semibold text-slate-950">{report.title}</h2>
-        <p className="mt-2 text-sm leading-6 text-slate-600">{report.description}</p>
+        <p className="text-xs font-bold uppercase text-[var(--shell-muted)]">{report.category}</p>
+        <h2 className="mt-2 text-base font-bold text-[var(--shell-text)] group-hover:text-blue-700">{report.title}</h2>
+        <p className="mt-2 text-sm leading-6 text-[var(--shell-muted)]">{report.description}</p>
       </div>
       <div className="mt-5">
         {canNavigate ? (
           <Link
             href={report.href!}
             prefetch={false}
-            className="inline-flex w-full items-center justify-center rounded-xl bg-slate-950 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-slate-800"
+            className="inline-flex w-full items-center justify-center rounded-lg bg-slate-950 px-4 py-2.5 text-sm font-bold text-white transition hover:bg-slate-800"
           >
             {report.actionLabel ?? 'View'}
           </Link>
@@ -498,7 +498,7 @@ function ReportCard({ report }: { report: ReportCardItem }) {
           <button
             type="button"
             disabled
-            className="inline-flex w-full cursor-not-allowed items-center justify-center rounded-xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm font-semibold text-slate-500"
+            className="inline-flex w-full cursor-not-allowed items-center justify-center rounded-lg border border-[var(--shell-border)] bg-[var(--shell-subtle)] px-4 py-2.5 text-sm font-bold text-[var(--shell-muted)]"
           >
             {report.status === 'requires_module' ? 'Requires module' : 'Coming soon'}
           </button>
@@ -510,7 +510,7 @@ function ReportCard({ report }: { report: ReportCardItem }) {
 
 function EmptyState({ message }: { message: string }) {
   return (
-    <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 p-8 text-center text-sm text-slate-500">
+    <div className="rounded-xl border border-dashed border-[var(--shell-border)] bg-[var(--shell-subtle)] p-8 text-center text-sm text-[var(--shell-muted)]">
       {message}
     </div>
   );
@@ -673,15 +673,18 @@ export default function ReportsPage() {
   const isStatsLoading =
     (isSuperAdmin && (summaryQuery.isLoading || supportQuery.isLoading)) ||
     (isSchoolAdmin && analyticsQuery.isLoading);
+  const roleReports = reportCards.filter((report) => report.roles.includes(role));
+  const availableReports = roleReports.filter((report) => report.status === 'available').length;
+  const pendingReports = roleReports.length - availableReports;
 
   return (
     <div className="space-y-6">
-      <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm md:p-6">
-        <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-          <div>
-            <p className="text-sm font-semibold uppercase tracking-wide text-slate-500">Reports Center</p>
-            <h1 className="mt-1 text-2xl font-bold tracking-tight text-slate-950 md:text-3xl">Reports</h1>
-            <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-600">
+      <section className="rounded-xl border border-[var(--shell-border)] bg-[var(--shell-card)] shadow-sm">
+        <div className="grid gap-5 border-b border-[var(--shell-border)] bg-[linear-gradient(135deg,rgba(15,23,42,0.04),rgba(37,99,235,0.10),rgba(16,185,129,0.08))] p-5 lg:grid-cols-[1fr_auto] lg:items-center">
+          <div className="min-w-0">
+            <p className="text-xs font-bold uppercase text-[var(--shell-muted)]">Reports Center</p>
+            <h1 className="mt-2 text-2xl font-bold tracking-tight text-[var(--shell-text)] md:text-3xl">Reports</h1>
+            <p className="mt-2 max-w-3xl text-sm leading-6 text-[var(--shell-muted)]">
               {roleSubtitle[role] ?? 'Available reports for your account.'}
             </p>
           </div>
@@ -689,7 +692,7 @@ export default function ReportsPage() {
             <select
               value={dateRange}
               onChange={(event) => setDateRange(event.target.value)}
-              className="rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm font-medium text-slate-700 outline-none focus:border-sky-500 focus:ring-2 focus:ring-sky-100"
+              className="rounded-lg border border-[var(--shell-border)] bg-[var(--shell-card)] px-3 py-2.5 text-sm font-bold text-[var(--shell-text)] outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/10"
               aria-label="Date range"
             >
               <option value="7d">Last 7 days</option>
@@ -707,10 +710,27 @@ export default function ReportsPage() {
             </Button>
           </div>
         </div>
+        <div className="grid gap-3 p-5 sm:grid-cols-3">
+          <div className="rounded-xl border border-[var(--shell-border)] bg-[var(--shell-subtle)] p-4">
+            <p className="text-xs font-bold uppercase text-[var(--shell-muted)]">Catalog</p>
+            <p className="mt-1 text-2xl font-bold text-[var(--shell-text)]">{roleReports.length}</p>
+            <p className="mt-1 text-xs text-[var(--shell-muted)]">Reports mapped to your role.</p>
+          </div>
+          <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-4">
+            <p className="text-xs font-bold uppercase text-emerald-700">Available</p>
+            <p className="mt-1 text-2xl font-bold text-emerald-800">{availableReports}</p>
+            <p className="mt-1 text-xs text-emerald-700">Ready to open now.</p>
+          </div>
+          <div className="rounded-xl border border-amber-200 bg-amber-50 p-4">
+            <p className="text-xs font-bold uppercase text-amber-700">Pending</p>
+            <p className="mt-1 text-2xl font-bold text-amber-800">{pendingReports}</p>
+            <p className="mt-1 text-xs text-amber-700">Coming soon or module-gated.</p>
+          </div>
+        </div>
       </section>
 
       {quickStats.length ? (
-        <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
           {isStatsLoading
             ? Array.from({ length: 4 }, (_, index) => <SkeletonCard key={index} />)
             : quickStats.map((stat) => <StatCard key={stat.label} {...stat} />)}
@@ -719,10 +739,19 @@ export default function ReportsPage() {
         <EmptyState message="Quick stats are not available for this role yet." />
       )}
 
-      <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-        <div className="grid gap-4 lg:grid-cols-[1fr_220px_220px_auto] lg:items-end">
+      <section className="rounded-xl border border-[var(--shell-border)] bg-[var(--shell-card)] p-5 shadow-sm">
+        <div className="flex flex-col gap-2 border-b border-[var(--shell-border)] pb-4 md:flex-row md:items-end md:justify-between">
           <div>
-            <label htmlFor="report-search" className="mb-2 block text-sm font-medium text-slate-700">
+            <h2 className="text-lg font-bold text-[var(--shell-text)]">Find a Report</h2>
+            <p className="mt-1 text-sm text-[var(--shell-muted)]">Filter the report catalog without leaving this page.</p>
+          </div>
+          <span className="rounded-full bg-[var(--shell-subtle)] px-3 py-1 text-xs font-bold text-[var(--shell-muted)]">
+            {visibleReports.length} visible
+          </span>
+        </div>
+        <div className="mt-4 grid gap-4 lg:grid-cols-[1fr_220px_220px_auto] lg:items-end">
+          <div>
+            <label htmlFor="report-search" className="mb-2 block text-sm font-bold text-[var(--shell-text)]">
               Search reports
             </label>
             <input
@@ -730,18 +759,18 @@ export default function ReportsPage() {
               value={search}
               onChange={(event) => setSearch(event.target.value)}
               placeholder="Search by report name"
-              className="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm outline-none focus:border-sky-500 focus:ring-2 focus:ring-sky-100"
+              className="w-full rounded-lg border border-[var(--shell-border)] bg-[var(--shell-card)] px-3 py-2.5 text-sm text-[var(--shell-text)] outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/10"
             />
           </div>
           <div>
-            <label htmlFor="report-category" className="mb-2 block text-sm font-medium text-slate-700">
+            <label htmlFor="report-category" className="mb-2 block text-sm font-bold text-[var(--shell-text)]">
               Category
             </label>
             <select
               id="report-category"
               value={category}
               onChange={(event) => setCategory(event.target.value)}
-              className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm outline-none focus:border-sky-500 focus:ring-2 focus:ring-sky-100"
+              className="w-full rounded-lg border border-[var(--shell-border)] bg-[var(--shell-card)] px-3 py-2.5 text-sm text-[var(--shell-text)] outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/10"
             >
               <option value="all">All categories</option>
               {categories.map((item) => (
@@ -752,14 +781,14 @@ export default function ReportsPage() {
             </select>
           </div>
           <div>
-            <label htmlFor="report-status" className="mb-2 block text-sm font-medium text-slate-700">
+            <label htmlFor="report-status" className="mb-2 block text-sm font-bold text-[var(--shell-text)]">
               Status
             </label>
             <select
               id="report-status"
               value={status}
               onChange={(event) => setStatus(event.target.value as 'all' | ReportStatus)}
-              className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm outline-none focus:border-sky-500 focus:ring-2 focus:ring-sky-100"
+              className="w-full rounded-lg border border-[var(--shell-border)] bg-[var(--shell-card)] px-3 py-2.5 text-sm text-[var(--shell-text)] outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/10"
             >
               <option value="all">All statuses</option>
               <option value="available">Available</option>
@@ -781,15 +810,43 @@ export default function ReportsPage() {
         </div>
       </section>
 
-      <section className="space-y-6">
+      <section className="grid gap-6 xl:grid-cols-[260px_1fr]">
+        <aside className="rounded-xl border border-[var(--shell-border)] bg-[var(--shell-card)] p-4 shadow-sm">
+          <h2 className="text-base font-bold text-[var(--shell-text)]">Categories</h2>
+          <div className="mt-4 space-y-2">
+            <button
+              type="button"
+              onClick={() => setCategory('all')}
+              className={`flex w-full items-center justify-between rounded-lg px-3 py-2 text-sm font-bold ${category === 'all' ? 'bg-slate-950 text-white' : 'text-[var(--shell-muted)] hover:bg-[var(--shell-hover)] hover:text-[var(--shell-text)]'}`}
+            >
+              <span>All categories</span>
+              <span>{roleReports.length}</span>
+            </button>
+            {categories.map((item) => {
+              const count = roleReports.filter((report) => report.category === item).length;
+              return (
+                <button
+                  key={item}
+                  type="button"
+                  onClick={() => setCategory(item)}
+                  className={`flex w-full items-center justify-between rounded-lg px-3 py-2 text-sm font-bold ${category === item ? 'bg-slate-950 text-white' : 'text-[var(--shell-muted)] hover:bg-[var(--shell-hover)] hover:text-[var(--shell-text)]'}`}
+                >
+                  <span>{item}</span>
+                  <span>{count}</span>
+                </button>
+              );
+            })}
+          </div>
+        </aside>
+        <div className="space-y-6">
         {Object.keys(groupedReports).length ? (
           Object.entries(groupedReports).map(([group, reports]) => (
-            <div key={group} className="space-y-3">
-              <div className="flex items-center justify-between">
-                <h2 className="text-lg font-semibold text-slate-950">{group}</h2>
-                <span className="text-sm text-slate-500">{reports.length} reports</span>
+            <div key={group} className="rounded-xl border border-[var(--shell-border)] bg-[var(--shell-card)] p-4 shadow-sm">
+              <div className="flex items-center justify-between border-b border-[var(--shell-border)] pb-3">
+                <h2 className="text-lg font-bold text-[var(--shell-text)]">{group}</h2>
+                <span className="rounded-full bg-[var(--shell-subtle)] px-3 py-1 text-xs font-bold text-[var(--shell-muted)]">{reports.length} reports</span>
               </div>
-              <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+              <div className="mt-4 grid gap-4 md:grid-cols-2 2xl:grid-cols-3">
                 {reports.map((report) => (
                   <ReportCard key={report.id} report={report} />
                 ))}
@@ -799,17 +856,18 @@ export default function ReportsPage() {
         ) : (
           <EmptyState message="No reports available for the selected filters." />
         )}
+        </div>
       </section>
 
-      <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+      <section className="rounded-xl border border-[var(--shell-border)] bg-[var(--shell-card)] p-5 shadow-sm">
         <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <h2 className="text-lg font-semibold text-slate-950">Recent Generated Reports</h2>
-            <p className="mt-1 text-sm text-slate-500">
+            <h2 className="text-lg font-bold text-[var(--shell-text)]">Recent Generated Reports</h2>
+            <p className="mt-1 text-sm text-[var(--shell-muted)]">
               Report history will appear here when a generated-report history API is available.
             </p>
           </div>
-          <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-600">
+          <span className="rounded-full bg-[var(--shell-subtle)] px-3 py-1 text-xs font-bold text-[var(--shell-muted)]">
             {dateRange}
           </span>
         </div>

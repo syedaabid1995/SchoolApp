@@ -26,6 +26,7 @@ import SecurityPage from './security/page';
 import SmsPage from './sms/page';
 import ConsentPage from './consent/page';
 import AccessPage from './access/page';
+import SystemSetupTab from './system-setup';
 import {
   getExamGradingSettings,
   updateExamGradingSettings,
@@ -35,6 +36,7 @@ import {
 
 type SettingsTabId =
   | 'brand'
+  | 'system-setup'
   | 'marks-grading'
   | 'security'
   | 'messaging'
@@ -75,6 +77,12 @@ const settingsTabs: SettingsTab[] = [
     id: 'brand',
     label: 'Branding & Theme',
     description: 'Platform identity, login branding, colors, publish, rollback, and preview.',
+    roles: ['SUPER_ADMIN', 'SCHOOL_ADMIN'],
+  },
+  {
+    id: 'system-setup',
+    label: 'Institution Setup',
+    description: 'General settings, payments, roles, base setup, sessions, holidays, SMS, and weekends.',
     roles: ['SUPER_ADMIN', 'SCHOOL_ADMIN'],
   },
   {
@@ -995,8 +1003,14 @@ function OperationsLinkTab({ type }: { type: 'compliance' | 'backups' }) {
 export default function SettingsPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const requestedTabParam = searchParams.get('tab') || 'brand';
-  const requestedTab = (['general', 'branding', 'login', 'theme'].includes(requestedTabParam) ? 'brand' : requestedTabParam) as SettingsTabId;
+  const requestedTabParam = searchParams.get('tab') || 'system-setup';
+  const requestedTab = (
+    ['branding', 'login', 'theme'].includes(requestedTabParam)
+      ? 'brand'
+      : ['general', 'payment', 'payments', 'roles', 'base', 'session', 'holiday', 'sms', 'weekend'].includes(requestedTabParam)
+        ? 'system-setup'
+        : requestedTabParam
+  ) as SettingsTabId;
 
   const { data: session, isLoading } = useQuery({
     queryKey: ['session'],
@@ -1037,6 +1051,8 @@ export default function SettingsPage() {
     switch (activeTab) {
       case 'brand':
         return <BrandThemeSettingsTab />;
+      case 'system-setup':
+        return <SystemSetupTab />;
       case 'marks-grading':
         return <MarksGradingSettingsTab />;
       case 'security':
@@ -1064,7 +1080,7 @@ export default function SettingsPage() {
     <div className="space-y-5 pb-12">
       <PageHeader
         title="Settings"
-        subtitle="One workspace for branding, theme, security, modules, messaging, and advanced configuration."
+        subtitle="One workspace for institution setup, branding, theme, security, modules, messaging, and advanced configuration."
         breadcrumbs={[
           { label: 'Dashboard', href: '/dashboard' },
           { label: 'Settings' },

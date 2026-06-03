@@ -60,11 +60,12 @@ export default function DashboardClientLayout({
   const requiredPermission = getRequiredPermissionForPath(pathname);
   const isSuperAdminLayout = isSuperAdmin || role === 'SUPER_ADMIN';
   const settingsTab = searchParams.get('tab') ?? '';
+  const isAccountRoute = pathname === '/change-password';
   const isSafeSettingsTab =
     pathname === '/dashboard/settings' &&
     (!settingsTab ||
       settingsTab === 'security' ||
-      (session?.role === 'SCHOOL_ADMIN' && ['branding', 'theme'].includes(settingsTab)));
+      (session?.role === 'SCHOOL_ADMIN' && ['branding', 'theme', 'general', 'system-setup'].includes(settingsTab)));
   const { data: shellBranding } = useQuery({
     queryKey: ['login-branding-settings', 'platform-shell'],
     queryFn: () => getLoginBrandingSettings(),
@@ -79,9 +80,14 @@ export default function DashboardClientLayout({
     defaultThemeMode: 'system' as DashboardThemeMode,
   };
   const canAccessRoute =
-    !isManagedEmployeeRole || isSafeSettingsTab || (requiredPermission ? permissionCodes.includes(requiredPermission) : false);
+    isAccountRoute ||
+    !isManagedEmployeeRole ||
+    isSafeSettingsTab ||
+    (requiredPermission ? permissionCodes.includes(requiredPermission) : false);
   const canAccessSuperAdminRoute =
-    !isSuperAdmin || superAdminAllowedPaths.some((allowedPath) => pathname === allowedPath || pathname.startsWith(`${allowedPath}/`));
+    isAccountRoute ||
+    !isSuperAdmin ||
+    superAdminAllowedPaths.some((allowedPath) => pathname === allowedPath || pathname.startsWith(`${allowedPath}/`));
 
   const resolvedThemeMode: DashboardResolvedThemeMode = themeMode === 'system' ? systemThemeMode : themeMode;
 
@@ -160,7 +166,7 @@ export default function DashboardClientLayout({
   }, [resolvedThemeMode, themeMode]);
 
   useEffect(() => {
-    if (isSubscriptionRestricted && pathname !== '/dashboard/plans') {
+    if (isSubscriptionRestricted && pathname !== '/dashboard/plans' && pathname !== '/change-password') {
       router.replace('/dashboard/plans');
     }
   }, [isSubscriptionRestricted, pathname, router]);
@@ -171,7 +177,7 @@ export default function DashboardClientLayout({
     }
   }, [isSuperAdmin, canAccessSuperAdminRoute, router]);
 
-  if (isSubscriptionRestricted) {
+  if (isSubscriptionRestricted && !isAccountRoute) {
     return (
       <main className="min-h-screen bg-sand p-4 sm:p-6">
         <div className="mx-auto max-w-7xl animate-fade-in">{children}</div>

@@ -1,20 +1,16 @@
 'use client';
 
-import type { CSSProperties, FormEvent } from 'react';
-import { useEffect, useMemo, useState } from 'react';
+import type { FormEvent } from 'react';
+import { useMemo, useState } from 'react';
 import Link from 'next/link';
 import FullPageLoader from '../../components/FullPageLoader';
+import PageHeader from '../../components/PageHeader';
 import { changePassword } from '../../services/auth.service';
-import {
-  defaultLoginExperience,
-  getLoginExperience,
-  type LoginExperience,
-} from '../../services/login-experience.service';
 
 type FieldErrors = Partial<Record<'currentPassword' | 'newPassword' | 'confirmPassword' | 'form', string>>;
 
 const baseInputClassName =
-  'w-full rounded-xl border bg-white px-4 py-3 text-sm shadow-sm outline-none transition-colors placeholder:text-slate-400';
+  'w-full rounded-xl border border-[var(--shell-border)] bg-[var(--shell-card)] px-4 py-3 text-sm font-semibold text-[var(--shell-text)] outline-none transition-colors placeholder:text-[var(--shell-muted)] focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10';
 
 const passwordChecks = [
   { id: 'length', label: 'Minimum 8 characters', test: (value: string) => value.length >= 8 },
@@ -24,27 +20,6 @@ const passwordChecks = [
   { id: 'special', label: 'At least 1 special character', test: (value: string) => /[^A-Za-z0-9]/.test(value) },
 ];
 
-const hexToRgb = (hex: string) => {
-  const normalized = hex.replace('#', '');
-  const value = Number.parseInt(normalized, 16);
-  return {
-    r: (value >> 16) & 255,
-    g: (value >> 8) & 255,
-    b: value & 255,
-  };
-};
-
-const readableTextColor = (hex: string) => {
-  const { r, g, b } = hexToRgb(hex);
-  const brightness = (r * 299 + g * 587 + b * 114) / 1000;
-  return brightness > 150 ? '#0f172a' : '#ffffff';
-};
-
-const rgba = (hex: string, alpha: number) => {
-  const { r, g, b } = hexToRgb(hex);
-  return `rgba(${r}, ${g}, ${b}, ${alpha})`;
-};
-
 function PasswordToggleIcon({ hidden }: { hidden: boolean }) {
   if (hidden) {
     return (
@@ -53,7 +28,7 @@ function PasswordToggleIcon({ hidden }: { hidden: boolean }) {
           strokeLinecap="round"
           strokeLinejoin="round"
           strokeWidth={2}
-          d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.878 9.878L3 3m6.878 6.878L21 21"
+          d="M13.875 18.825A10.05 10.05 0 0 1 12 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 0 1 1.563-3.029m5.858.908a3 3 0 1 1 4.243 4.243M9.878 9.878l4.242 4.242M9.878 9.878 3 3m6.878 6.878L21 21"
         />
       </svg>
     );
@@ -61,19 +36,27 @@ function PasswordToggleIcon({ hidden }: { hidden: boolean }) {
 
   return (
     <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z" />
       <path
         strokeLinecap="round"
         strokeLinejoin="round"
         strokeWidth={2}
-        d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"
+        d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7Z"
       />
     </svg>
   );
 }
 
+function SecurityIcon() {
+  return (
+    <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 3.5 5.5 6v5.5c0 4.1 2.6 7.5 6.5 9 3.9-1.5 6.5-4.9 6.5-9V6L12 3.5Z" />
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="m9 12 2 2 4-5" />
+    </svg>
+  );
+}
+
 export default function ChangePasswordPage() {
-  const [experience, setExperience] = useState<LoginExperience>(defaultLoginExperience);
   const [currentPassword, setCurrentPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
@@ -84,35 +67,14 @@ export default function ChangePasswordPage() {
   const [successMessage, setSuccessMessage] = useState('');
   const [loading, setLoading] = useState(false);
 
-  const theme = experience.theme;
-  const primaryTextColor = readableTextColor(theme.primaryColor);
   const completedChecks = useMemo(
     () => passwordChecks.filter((item) => item.test(newPassword)).length,
     [newPassword],
   );
-
-  const pageStyle: CSSProperties = {
-    background: `linear-gradient(135deg, ${theme.backgroundColor}, ${rgba(theme.accentColor, 0.12)})`,
-    color: theme.textColor,
-  };
-  const buttonStyle: CSSProperties = {
-    backgroundColor: theme.primaryColor,
-    color: primaryTextColor,
-  };
-  const inputStyle = (hasError?: boolean): CSSProperties => ({
-    borderColor: hasError ? theme.errorColor : '#dbe3eb',
-    color: theme.textColor,
-  });
-
-  useEffect(() => {
-    let mounted = true;
-    getLoginExperience().then((next) => {
-      if (mounted) setExperience(next);
-    });
-    return () => {
-      mounted = false;
-    };
-  }, []);
+  const strengthPercent = (completedChecks / passwordChecks.length) * 100;
+  const strengthLabel = completedChecks === passwordChecks.length ? 'Strong' : completedChecks >= 3 ? 'Medium' : 'Needs work';
+  const strengthColor =
+    completedChecks === passwordChecks.length ? 'bg-emerald-500' : completedChecks >= 3 ? 'bg-amber-500' : 'bg-rose-500';
 
   const validateForm = () => {
     const nextErrors: FieldErrors = {};
@@ -163,11 +125,7 @@ export default function ChangePasswordPage() {
   const fieldError = (key: keyof FieldErrors) => {
     const value = errors[key];
     if (!value) return null;
-    return (
-      <p className="mt-2 text-xs font-semibold" style={{ color: theme.errorColor }}>
-        {value}
-      </p>
-    );
+    return <p className="mt-2 text-xs font-bold text-rose-600">{value}</p>;
   };
 
   const passwordField = (params: {
@@ -179,7 +137,7 @@ export default function ChangePasswordPage() {
     onChange: (next: string) => void;
   }) => (
     <div>
-      <label className="block text-sm font-semibold" htmlFor={params.id} style={{ color: theme.textColor }}>
+      <label className="block text-sm font-bold text-[var(--shell-text)]" htmlFor={params.id}>
         {params.label}
       </label>
       <div className="relative mt-2">
@@ -189,13 +147,12 @@ export default function ChangePasswordPage() {
           autoComplete={params.id === 'currentPassword' ? 'current-password' : 'new-password'}
           value={params.value}
           onChange={(event) => params.onChange(event.target.value)}
-          className={`${baseInputClassName} pr-14`}
-          style={inputStyle(Boolean(errors[params.id]))}
+          className={`${baseInputClassName} pr-14 ${errors[params.id] ? 'border-rose-400 focus:border-rose-500 focus:ring-rose-500/10' : ''}`}
         />
         <button
           type="button"
           onClick={() => params.setShow(!params.show)}
-          className="absolute inset-y-0 right-3 my-auto flex h-9 w-9 items-center justify-center rounded-lg text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-700"
+          className="absolute inset-y-0 right-3 my-auto flex h-9 w-9 items-center justify-center rounded-lg text-[var(--shell-muted)] transition-colors hover:bg-[var(--shell-hover)] hover:text-[var(--shell-text)]"
           aria-label={params.show ? `Hide ${params.label.toLowerCase()}` : `Show ${params.label.toLowerCase()}`}
         >
           <PasswordToggleIcon hidden={params.show} />
@@ -206,141 +163,152 @@ export default function ChangePasswordPage() {
   );
 
   return (
-    <main className="min-h-screen px-4 py-8 sm:px-6 lg:px-8" style={pageStyle}>
+    <>
       {loading ? <FullPageLoader label="Saving password..." /> : null}
 
-      <div className="mx-auto flex min-h-[calc(100vh-4rem)] w-full max-w-5xl items-center justify-center">
-        <div className="grid w-full overflow-hidden rounded-2xl border border-white/70 bg-white shadow-2xl shadow-slate-200/80 lg:grid-cols-[0.85fr_1.15fr]">
-          <section
-            className="flex min-h-[240px] flex-col justify-between p-6 text-white sm:p-8 lg:p-10"
-            style={{
-              background: `linear-gradient(135deg, ${theme.primaryColor}, ${rgba(theme.accentColor, 0.9)})`,
-              color: primaryTextColor,
-            }}
+      <PageHeader
+        title="Change Password"
+        subtitle="Update your account password without leaving the dashboard workspace."
+        breadcrumbs={[
+          { label: 'Dashboard', href: '/dashboard' },
+          { label: 'Change Password' },
+        ]}
+        actions={
+          <Link
+            href="/dashboard"
+            className="rounded-lg border border-[var(--shell-border)] px-3 py-2 text-xs font-bold text-[var(--shell-text)] transition-colors hover:bg-[var(--shell-hover)]"
           >
-            <div className="flex items-center gap-3">
-              <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-white/95 text-slate-950 shadow-lg shadow-black/15">
-                {experience.logoUrl ? (
-                  <img
-                    src={experience.logoUrl}
-                    alt={`${experience.brandName} logo`}
-                    className="h-9 w-9 rounded-lg object-cover"
-                  />
-                ) : (
-                  <span className="text-lg font-bold">{experience.brandName.charAt(0).toUpperCase()}</span>
-                )}
+            Back to Dashboard
+          </Link>
+        }
+      />
+
+      <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_22rem]">
+        <section className="rounded-2xl border border-[var(--shell-border)] bg-[var(--shell-card)] p-5 shadow-sm sm:p-6">
+          <div className="mb-6 flex flex-col gap-4 rounded-2xl border border-blue-500/15 bg-blue-500/5 p-5 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex min-w-0 items-start gap-3">
+              <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-blue-600 text-white shadow-lg shadow-blue-600/20">
+                <SecurityIcon />
               </div>
-              <div>
-                <p className="text-lg font-semibold tracking-tight">{experience.brandName}</p>
-                <p className="text-xs font-medium uppercase tracking-[0.24em] opacity-75">{experience.consoleName}</p>
-              </div>
-            </div>
-
-            <div className="mt-12 max-w-md">
-              <p className="text-sm font-semibold uppercase tracking-[0.2em] opacity-80">Security</p>
-              <h1 className="mt-4 text-3xl font-bold tracking-tight sm:text-4xl">Change your password</h1>
-              <p className="mt-5 text-sm leading-6 opacity-85 sm:text-base">
-                Confirm your current password before saving a new one.
-              </p>
-            </div>
-
-            <div className="mt-8 rounded-xl border border-white/15 bg-white/10 p-4 text-sm backdrop-blur">
-              <p className="font-semibold">Session protection</p>
-              <p className="mt-1 opacity-80">Other active sessions are revoked after this password change.</p>
-            </div>
-          </section>
-
-          <section className="flex items-center justify-center p-5 sm:p-8 lg:p-10">
-            <div className="w-full max-w-md">
-              <div>
-                <p className="text-sm font-semibold uppercase tracking-[0.18em]" style={{ color: theme.accentColor }}>
-                  Account password
+              <div className="min-w-0">
+                <p className="text-sm font-bold uppercase tracking-[0.14em] text-blue-600">Account Security</p>
+                <h2 className="mt-1 text-2xl font-bold tracking-tight text-[var(--shell-text)]">Save a new password</h2>
+                <p className="mt-1 text-sm leading-6 text-[var(--shell-muted)]">
+                  Other active sessions are revoked after a successful password change.
                 </p>
-                <h2 className="mt-2 text-2xl font-bold tracking-tight sm:text-3xl" style={{ color: theme.textColor }}>
-                  Save a new password
-                </h2>
-              </div>
-
-              <form onSubmit={handleSubmit} className="mt-7 space-y-5">
-                {passwordField({
-                  id: 'currentPassword',
-                  label: 'Current password',
-                  value: currentPassword,
-                  show: showCurrentPassword,
-                  setShow: setShowCurrentPassword,
-                  onChange: setCurrentPassword,
-                })}
-
-                {passwordField({
-                  id: 'newPassword',
-                  label: 'New password',
-                  value: newPassword,
-                  show: showNewPassword,
-                  setShow: setShowNewPassword,
-                  onChange: setNewPassword,
-                })}
-
-                <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
-                  <div className="mb-3 flex items-center justify-between gap-3">
-                    <p className="text-sm font-semibold" style={{ color: theme.textColor }}>
-                      Password strength
-                    </p>
-                    <p className="text-xs font-semibold text-slate-500">
-                      {completedChecks}/{passwordChecks.length}
-                    </p>
-                  </div>
-                  <div className="grid gap-2 text-xs font-medium text-slate-600 sm:grid-cols-2">
-                    {passwordChecks.map((item) => {
-                      const passed = item.test(newPassword);
-                      return (
-                        <p key={item.id} className={passed ? 'text-emerald-700' : 'text-slate-500'}>
-                          <span aria-hidden="true">{passed ? 'OK' : '-'}</span> {item.label}
-                        </p>
-                      );
-                    })}
-                  </div>
-                </div>
-
-                {passwordField({
-                  id: 'confirmPassword',
-                  label: 'Confirm password',
-                  value: confirmPassword,
-                  show: showConfirmPassword,
-                  setShow: setShowConfirmPassword,
-                  onChange: setConfirmPassword,
-                })}
-
-                {successMessage ? (
-                  <p className="rounded-xl bg-emerald-50 px-4 py-3 text-sm font-semibold text-emerald-700">
-                    {successMessage}
-                  </p>
-                ) : null}
-
-                {errors.form ? (
-                  <p className="rounded-xl px-4 py-3 text-sm font-semibold" style={{ backgroundColor: rgba(theme.errorColor, 0.08), color: theme.errorColor }}>
-                    {errors.form}
-                  </p>
-                ) : null}
-
-                <button
-                  type="submit"
-                  disabled={loading}
-                  className="flex w-full items-center justify-center rounded-xl px-4 py-3 text-sm font-semibold shadow-lg transition-colors disabled:cursor-not-allowed disabled:opacity-60"
-                  style={buttonStyle}
-                >
-                  {loading ? 'Saving...' : 'Save password'}
-                </button>
-              </form>
-
-              <div className="mt-6 text-center">
-                <Link href="/dashboard" className="text-sm font-semibold" style={{ color: theme.primaryColor }}>
-                  Back to dashboard
-                </Link>
               </div>
             </div>
+            <div className="rounded-xl border border-[var(--shell-border)] bg-[var(--shell-card)] px-4 py-3 text-sm font-bold text-[var(--shell-text)]">
+              Status: Protected
+            </div>
+          </div>
+
+          <form onSubmit={handleSubmit} className="grid gap-5 xl:grid-cols-2">
+            {passwordField({
+              id: 'currentPassword',
+              label: 'Current password',
+              value: currentPassword,
+              show: showCurrentPassword,
+              setShow: setShowCurrentPassword,
+              onChange: setCurrentPassword,
+            })}
+
+            {passwordField({
+              id: 'newPassword',
+              label: 'New password',
+              value: newPassword,
+              show: showNewPassword,
+              setShow: setShowNewPassword,
+              onChange: setNewPassword,
+            })}
+
+            <div className="xl:col-span-2">
+              <div className="rounded-2xl border border-[var(--shell-border)] bg-[var(--shell-subtle)] p-4">
+                <div className="flex items-center justify-between gap-3">
+                  <p className="text-sm font-bold text-[var(--shell-text)]">Password strength</p>
+                  <p className="text-xs font-bold text-[var(--shell-muted)]">
+                    {strengthLabel} {completedChecks}/{passwordChecks.length}
+                  </p>
+                </div>
+                <div className="mt-3 h-2 overflow-hidden rounded-full bg-[var(--shell-border)]">
+                  <div className={`h-full rounded-full ${strengthColor}`} style={{ width: `${strengthPercent}%` }} />
+                </div>
+                <div className="mt-4 grid gap-2 text-xs font-bold text-[var(--shell-muted)] sm:grid-cols-2 lg:grid-cols-3">
+                  {passwordChecks.map((item) => {
+                    const passed = item.test(newPassword);
+                    return (
+                      <p key={item.id} className={passed ? 'text-emerald-600' : undefined}>
+                        <span aria-hidden="true">{passed ? 'OK' : '--'}</span> {item.label}
+                      </p>
+                    );
+                  })}
+                </div>
+              </div>
+            </div>
+
+            {passwordField({
+              id: 'confirmPassword',
+              label: 'Confirm password',
+              value: confirmPassword,
+              show: showConfirmPassword,
+              setShow: setShowConfirmPassword,
+              onChange: setConfirmPassword,
+            })}
+
+            <div className="flex items-end">
+              <button
+                type="submit"
+                disabled={loading}
+                className="flex min-h-[46px] w-full items-center justify-center rounded-xl bg-blue-600 px-4 py-3 text-sm font-bold text-white shadow-lg shadow-blue-600/20 transition-colors hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                {loading ? 'Saving...' : 'Save Password'}
+              </button>
+            </div>
+
+            {successMessage ? (
+              <p className="rounded-xl border border-emerald-500/20 bg-emerald-500/10 px-4 py-3 text-sm font-bold text-emerald-700 xl:col-span-2">
+                {successMessage}
+              </p>
+            ) : null}
+
+            {errors.form ? (
+              <p className="rounded-xl border border-rose-500/20 bg-rose-500/10 px-4 py-3 text-sm font-bold text-rose-700 xl:col-span-2">
+                {errors.form}
+              </p>
+            ) : null}
+          </form>
+        </section>
+
+        <aside className="space-y-5">
+          <section className="rounded-2xl border border-[var(--shell-border)] bg-[var(--shell-card)] p-5 shadow-sm">
+            <p className="text-sm font-bold uppercase tracking-[0.14em] text-[var(--shell-muted)]">Password Rules</p>
+            <div className="mt-4 space-y-3">
+              {passwordChecks.map((item) => {
+                const passed = item.test(newPassword);
+                return (
+                  <div
+                    key={item.id}
+                    className="flex items-center gap-3 rounded-xl border border-[var(--shell-border)] bg-[var(--shell-subtle)] px-3 py-2"
+                  >
+                    <span className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-xs font-black ${passed ? 'bg-emerald-500 text-white' : 'bg-[var(--shell-card)] text-[var(--shell-muted)]'}`}>
+                      {passed ? 'OK' : '--'}
+                    </span>
+                    <span className="text-sm font-semibold text-[var(--shell-text)]">{item.label}</span>
+                  </div>
+                );
+              })}
+            </div>
           </section>
-        </div>
+
+          <section className="rounded-2xl border border-[var(--shell-border)] bg-[var(--shell-card)] p-5 shadow-sm">
+            <p className="text-sm font-bold uppercase tracking-[0.14em] text-[var(--shell-muted)]">Security Notes</p>
+            <div className="mt-4 space-y-3 text-sm font-semibold text-[var(--shell-muted)]">
+              <p className="rounded-xl bg-[var(--shell-subtle)] px-4 py-3">Current password confirmation protects account changes.</p>
+              <p className="rounded-xl bg-[var(--shell-subtle)] px-4 py-3">New passwords must pass every strength rule before saving.</p>
+            </div>
+          </section>
+        </aside>
       </div>
-    </main>
+    </>
   );
 }

@@ -58,8 +58,12 @@ export const academicRouter = Router();
 academicRouter.use(authMiddleware);
 
 const schoolAdminOnly = (req: Request, _res: Response, next: NextFunction) => {
+  if (req.auth?.role === 'SUPER_ADMIN') {
+    return next();
+  }
+
   if (req.auth?.role !== 'SCHOOL_ADMIN' || !req.auth.schoolId) {
-    return next(new HttpError(403, 'Only School Admin can manage academic setup'));
+    return next(new HttpError(403, 'Only School Admin or Super Admin can manage academic setup'));
   }
   return next();
 };

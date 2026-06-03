@@ -52,6 +52,7 @@ import { leaveRouter } from './routes/leave.routes';
 import { uploadRouter } from './routes/upload.routes';
 import { messagingAdminRouter } from './routes/messagingAdmin.routes';
 import { messagingSettingsRouter } from './routes/messagingSettings.routes';
+import { schoolSystemSettingsRouter } from './routes/schoolSystemSettings.routes';
 import { publicBrandingRouter } from './routes/publicBranding.routes';
 import { publicAssetRouter } from './routes/publicAsset.routes';
 import { schoolDomainRouter } from './routes/schoolDomain.routes';
@@ -213,6 +214,7 @@ export const createApp = () => {
   app.use('/api/v1/uploads', uploadRouter);
   app.use('/api/v1/admin/messaging-services', messagingAdminRouter);
   app.use('/api/v1/messaging-services', messagingSettingsRouter);
+  app.use('/api/v1/system-settings', schoolSystemSettingsRouter);
   app.use('/uploads', express.static(path.join(process.cwd(), 'uploads')));
 
   app.use(notFoundMiddleware);

@@ -165,7 +165,7 @@ const iconForItem = (item: NavItem): IconName => {
   if (key.includes('health')) return 'activity';
   if (key.includes('backup')) return 'backup';
   if (key.includes('compliance')) return 'scale';
-  if (key.includes('security') || key.includes('access')) return 'lock';
+  if (key.includes('security') || key.includes('access') || key.includes('password')) return 'lock';
   if (key.includes('leave')) return 'calendar';
   if (key.includes('sms')) return 'message';
   if (key.includes('academic')) return 'book';
@@ -232,6 +232,7 @@ const platformSections: NavSection[] = [
       { href: '/dashboard/settings', label: 'Settings', icon: 'ST' },
       { href: '/dashboard/settings?tab=backups', label: 'Backups', icon: 'BK' },
       { href: '/dashboard/settings?tab=compliance', label: 'Compliance', icon: 'CP' },
+      { href: '/change-password', label: 'Change Password', icon: 'PW' },
     ],
   },
 ];
@@ -283,6 +284,7 @@ export const Sidebar = ({
   const sectionHasActiveItem = (section: NavSection) => section.items.some((item) => isActive(item.href));
 
   const isAllowedNavItem = (href: string) => {
+    if (href === '/change-password') return true;
     if (isPlatform) return true;
     if (href === '/dashboard/settings') return true;
     if (!isEmployee && !isSchoolAdmin) return true;
@@ -359,9 +361,10 @@ export const Sidebar = ({
                 { href: '/dashboard/audit', label: 'Audit Logs', icon: 'LG' },
                 { href: '/dashboard/plans', label: 'Plans', icon: 'PL' },
                 { href: '/dashboard/settings', label: 'System Setting', icon: 'SS' },
+                { href: '/change-password', label: 'Change Password', icon: 'PW' },
                 { href: '/parent/login', label: 'Parent Portal', icon: 'PP' },
               ]
-            : []),
+            : [{ href: '/change-password', label: 'Change Password', icon: 'PW' }]),
         ],
       },
     ];

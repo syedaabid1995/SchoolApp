@@ -12,8 +12,16 @@ export const createAcademicYear = async (payload: { name: string; startDate: str
   return data;
 };
 
-export const deleteAcademicYear = async (id: string) => {
-  const { data } = await api.delete(`/academics/academic-years/${id}`);
+export const updateAcademicYear = async (
+  id: string,
+  payload: { name?: string; startDate?: string; endDate?: string; isActive?: boolean; schoolId?: string },
+) => {
+  const { data } = await api.patch(`/academics/academic-years/${id}`, payload);
+  return data;
+};
+
+export const deleteAcademicYear = async (id: string, params?: { schoolId?: string }) => {
+  const { data } = await api.delete(`/academics/academic-years/${id}`, { params });
   return data;
 };
 

@@ -1,15 +1,379 @@
 'use client';
 
+import type { ReactNode } from 'react';
 import { useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { getSession } from '../../../services/auth.service';
-import { getSubscription, listActivePlans, upsertSubscription } from '../../../services/subscription.service';
+import {
+  getSubscription,
+  listActivePlans,
+  upsertSubscription,
+  type SubscriptionInfo,
+  type SubscriptionPlan,
+} from '../../../services/subscription.service';
 import { useNotify } from '../../../components/NotificationProvider';
 import FullPageLoader from '../../../components/FullPageLoader';
-import Button from '../../../components/Button';
 import PageHeader from '../../../components/PageHeader';
 import DashboardPageContainer from '../../../components/DashboardPageContainer';
+
+type BillingCycle = 'MONTHLY' | 'ANNUAL';
+type NoticeTone = 'blue' | 'emerald' | 'amber' | 'rose' | 'slate';
+
+const toneClasses: Record<NoticeTone, { badge: string; panel: string; icon: string; button: string; text: string }> = {
+  blue: {
+    badge: 'bg-blue-50 text-blue-700 ring-blue-200',
+    panel: 'border-blue-200 bg-blue-50/80',
+    icon: 'bg-blue-600 text-white',
+    button: 'bg-blue-600 text-white hover:bg-blue-700',
+    text: 'text-blue-700',
+  },
+  emerald: {
+    badge: 'bg-emerald-50 text-emerald-700 ring-emerald-200',
+    panel: 'border-emerald-200 bg-emerald-50/80',
+    icon: 'bg-emerald-600 text-white',
+    button: 'bg-emerald-600 text-white hover:bg-emerald-700',
+    text: 'text-emerald-700',
+  },
+  amber: {
+    badge: 'bg-amber-50 text-amber-700 ring-amber-200',
+    panel: 'border-amber-200 bg-amber-50/80',
+    icon: 'bg-amber-500 text-white',
+    button: 'bg-amber-500 text-slate-950 hover:bg-amber-400',
+    text: 'text-amber-700',
+  },
+  rose: {
+    badge: 'bg-rose-50 text-rose-700 ring-rose-200',
+    panel: 'border-rose-200 bg-rose-50/80',
+    icon: 'bg-rose-600 text-white',
+    button: 'bg-rose-600 text-white hover:bg-rose-700',
+    text: 'text-rose-700',
+  },
+  slate: {
+    badge: 'bg-slate-100 text-slate-700 ring-slate-200',
+    panel: 'border-slate-200 bg-slate-50',
+    icon: 'bg-slate-900 text-white',
+    button: 'bg-slate-900 text-white hover:bg-slate-800',
+    text: 'text-slate-700',
+  },
+};
+
+const formatNumber = (value?: number | null) =>
+  Number.isFinite(Number(value)) ? Number(value).toLocaleString('en-IN') : '0';
+
+const formatDate = (value?: string | null) => {
+  if (!value) return 'Not scheduled';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return 'Not scheduled';
+  return date.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
+};
+
+const formatStatus = (value?: string | null) =>
+  value ? value.toLowerCase().replace(/_/g, ' ').replace(/\b\w/g, (char) => char.toUpperCase()) : 'Inactive';
+
+const statusTone = (status?: string | null): NoticeTone => {
+  const normalized = (status ?? '').toUpperCase();
+  if (normalized === 'ACTIVE' || normalized === 'TRIAL') return 'emerald';
+  if (normalized === 'OVERDUE' || normalized === 'PENDING' || normalized === 'PENDING_CANCEL') return 'amber';
+  if (normalized === 'EXPIRED' || normalized === 'CANCELLED') return 'rose';
+  return 'slate';
+};
+
+const getPriceParts = (plan: SubscriptionPlan, billingCycle: BillingCycle) => {
+  const monthlyCents = Number(plan.priceCents ?? 0);
+  if (monthlyCents <= 0) {
+    return { amount: 'Free', cadence: '', helper: 'Included core access' };
+  }
+  if (billingCycle === 'ANNUAL') {
+    const annualCents = Math.round(monthlyCents * 12 * 0.9);
+    return {
+      amount: `Rs ${Math.round(annualCents / 100).toLocaleString('en-IN')}`,
+      cadence: 'year',
+      helper: '10% annual saving',
+    };
+  }
+  return {
+    amount: `Rs ${Math.round(monthlyCents / 100).toLocaleString('en-IN')}`,
+    cadence: 'month',
+    helper: 'Billed monthly',
+  };
+};
+
+const getDueNotice = (subscription?: SubscriptionInfo | null) => {
+  if (!subscription?.endsAt || !subscription?.nextDueAt) return null;
+
+  const now = new Date();
+  const end = new Date(subscription.endsAt);
+  const nextDue = new Date(subscription.nextDueAt);
+  const daysToEnd = Math.ceil((end.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+  const daysToNextDue = Math.ceil((nextDue.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+
+  if (subscription.status === 'EXPIRED' || daysToNextDue <= 0) {
+    return {
+      tone: 'rose' as const,
+      title: 'Subscription expired',
+      message: 'Access is restricted until the school subscription is renewed.',
+    };
+  }
+
+  if (daysToEnd <= 0 && daysToNextDue > 0) {
+    return {
+      tone: 'amber' as const,
+      title: 'Grace period active',
+      message: `Renew by ${formatDate(subscription.nextDueAt)} to avoid suspension.`,
+    };
+  }
+
+  if (daysToEnd <= 7) {
+    return {
+      tone: 'blue' as const,
+      title: 'Renewal approaching',
+      message: `The current period ends on ${formatDate(subscription.endsAt)}.`,
+    };
+  }
+
+  return null;
+};
+
+const isSubscriptionExpired = (subscription?: SubscriptionInfo | null) => {
+  if (!subscription) return false;
+  const now = new Date();
+  const endsAt = subscription.endsAt ? new Date(subscription.endsAt) : null;
+  const nextDueAt = subscription.nextDueAt ? new Date(subscription.nextDueAt) : null;
+  if (subscription.status === 'EXPIRED') return true;
+  if (nextDueAt && !Number.isNaN(nextDueAt.getTime()) && nextDueAt < now) return true;
+  if (endsAt && !Number.isNaN(endsAt.getTime()) && endsAt < now) return true;
+  return false;
+};
+
+function Icon({ path }: { path: ReactNode }) {
+  return (
+    <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      {path}
+    </svg>
+  );
+}
+
+function StatusBadge({ label, tone }: { label: string; tone: NoticeTone }) {
+  return (
+    <span className={`inline-flex items-center rounded-full px-2.5 py-1 text-xs font-black ring-1 ${toneClasses[tone].badge}`}>
+      {label}
+    </span>
+  );
+}
+
+function BillingToggle({ billingCycle, onChange }: { billingCycle: BillingCycle; onChange: (cycle: BillingCycle) => void }) {
+  return (
+    <div className="inline-flex rounded-lg border border-[var(--shell-border)] bg-[var(--shell-subtle)] p-1" role="group" aria-label="Billing cycle">
+      {(['MONTHLY', 'ANNUAL'] as const).map((cycle) => {
+        const active = billingCycle === cycle;
+        return (
+          <button
+            key={cycle}
+            type="button"
+            aria-pressed={active}
+            onClick={() => onChange(cycle)}
+            className={[
+              'inline-flex h-9 items-center gap-2 rounded-md px-3 text-xs font-black transition',
+              active ? 'bg-[var(--shell-card)] text-[var(--shell-text)] shadow-sm' : 'text-[var(--shell-muted)] hover:text-[var(--shell-text)]',
+            ].join(' ')}
+          >
+            {cycle === 'MONTHLY' ? 'Monthly' : 'Annual'}
+            {cycle === 'ANNUAL' ? (
+              <span className="rounded-full bg-emerald-100 px-1.5 py-0.5 text-[10px] font-black text-emerald-700">
+                Save 10%
+              </span>
+            ) : null}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+function SummaryMetric({ label, value, helper, tone, icon }: { label: string; value: ReactNode; helper: string; tone: NoticeTone; icon: ReactNode }) {
+  return (
+    <article className="rounded-xl border border-[var(--shell-border)] bg-[var(--shell-card)] p-4 shadow-sm">
+      <div className="flex items-start justify-between gap-3">
+        <span className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg ${toneClasses[tone].icon}`}>
+          {icon}
+        </span>
+        <span className="text-right text-[11px] font-bold uppercase text-[var(--shell-muted)]">{label}</span>
+      </div>
+      <p className="mt-4 text-2xl font-black text-[var(--shell-text)]">{value}</p>
+      <p className="mt-1 text-xs leading-5 text-[var(--shell-muted)]">{helper}</p>
+    </article>
+  );
+}
+
+function DueNotice({ notice }: { notice: NonNullable<ReturnType<typeof getDueNotice>> }) {
+  const tone = toneClasses[notice.tone];
+  return (
+    <section className={`rounded-xl border px-4 py-3 ${tone.panel}`}>
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex min-w-0 items-start gap-3">
+          <span className={`mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg ${tone.icon}`}>
+            <Icon path={<path d="M12 9v4" />} />
+          </span>
+          <div className="min-w-0">
+            <p className="text-sm font-black text-[var(--shell-text)]">{notice.title}</p>
+            <p className="mt-1 text-sm leading-5 text-[var(--shell-muted)]">{notice.message}</p>
+          </div>
+        </div>
+        <span className={`shrink-0 rounded-full px-3 py-1 text-xs font-black ring-1 ${tone.badge}`}>
+          Action needed
+        </span>
+      </div>
+    </section>
+  );
+}
+
+function CurrentPlanOverview({
+  subscription,
+  currentPlan,
+  billingCycle,
+}: {
+  subscription?: SubscriptionInfo | null;
+  currentPlan?: SubscriptionPlan | null;
+  billingCycle: BillingCycle;
+}) {
+  const planName = subscription?.planName ?? currentPlan?.name ?? 'No plan selected';
+  const price = currentPlan ? getPriceParts(currentPlan, billingCycle) : null;
+  const tone = statusTone(subscription?.status);
+
+  return (
+    <section className="rounded-xl border border-[var(--shell-border)] bg-[var(--shell-card)] p-5 shadow-sm">
+      <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+        <div className="min-w-0">
+          <div className="flex flex-wrap items-center gap-2">
+            <p className="text-xs font-black uppercase text-[var(--shell-muted)]">Current subscription</p>
+            <StatusBadge label={formatStatus(subscription?.status)} tone={tone} />
+          </div>
+          <h2 className="mt-3 text-3xl font-black tracking-tight text-[var(--shell-text)]">{planName}</h2>
+          <p className="mt-2 max-w-2xl text-sm leading-6 text-[var(--shell-muted)]">
+            {subscription
+              ? `Billing is ${formatStatus(subscription.billingCycle)} with renewal due ${formatDate(subscription.nextDueAt)}.`
+              : 'Choose a plan below to activate this school workspace.'}
+          </p>
+        </div>
+        <div className="rounded-xl border border-[var(--shell-border)] bg-[var(--shell-subtle)] px-4 py-3 text-left lg:min-w-52">
+          <p className="text-xs font-black uppercase text-[var(--shell-muted)]">Selected cycle</p>
+          <p className="mt-1 text-2xl font-black text-[var(--shell-text)]">{price?.amount ?? 'Pending'}</p>
+          <p className="mt-1 text-xs font-semibold text-[var(--shell-muted)]">{price?.cadence ? `per ${price.cadence}` : 'Select a paid plan'}</p>
+        </div>
+      </div>
+
+      <div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        <LimitPill label="Students" value={subscription?.studentLimit ?? currentPlan?.studentLimit ?? 0} tone="blue" />
+        <LimitPill label="Teachers" value={subscription?.teacherLimit ?? currentPlan?.teacherLimit ?? 0} tone="emerald" />
+        <LimitPill label="Started" value={formatDate(subscription?.startsAt)} tone="slate" />
+        <LimitPill label="Next Due" value={formatDate(subscription?.nextDueAt)} tone="amber" />
+      </div>
+    </section>
+  );
+}
+
+function LimitPill({ label, value, tone }: { label: string; value: ReactNode; tone: NoticeTone }) {
+  return (
+    <div className="rounded-lg border border-[var(--shell-border)] bg-[var(--shell-subtle)] px-3 py-3">
+      <p className="text-xs font-black uppercase text-[var(--shell-muted)]">{label}</p>
+      <p className={`mt-1 text-lg font-black ${toneClasses[tone].text}`}>{typeof value === 'number' ? formatNumber(value) : value}</p>
+    </div>
+  );
+}
+
+function PlanCard({
+  plan,
+  billingCycle,
+  isCurrent,
+  isRecommended,
+  canRenewCurrent,
+  isPending,
+  onSelect,
+}: {
+  plan: SubscriptionPlan;
+  billingCycle: BillingCycle;
+  isCurrent: boolean;
+  isRecommended: boolean;
+  canRenewCurrent: boolean;
+  isPending: boolean;
+  onSelect: (planId: string) => void;
+}) {
+  const price = getPriceParts(plan, billingCycle);
+  const features = plan.features?.length ? plan.features : ['Core academic management'];
+  const visibleFeatures = features.slice(0, 6);
+  const buttonDisabled = (isCurrent && !canRenewCurrent) || isPending;
+  const tone: NoticeTone = isCurrent ? 'emerald' : isRecommended ? 'blue' : 'slate';
+
+  return (
+    <article className={[
+      'relative flex min-h-[34rem] flex-col rounded-xl border bg-[var(--shell-card)] p-5 shadow-sm transition',
+      isCurrent ? 'border-emerald-300 ring-2 ring-emerald-100' : isRecommended ? 'border-blue-300 ring-2 ring-blue-100' : 'border-[var(--shell-border)] hover:border-slate-300 hover:shadow-md',
+    ].join(' ')}>
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <p className="text-xs font-black uppercase text-[var(--shell-muted)]">Plan</p>
+          <h3 className="mt-2 truncate text-2xl font-black text-[var(--shell-text)]">{plan.name}</h3>
+        </div>
+        {isCurrent ? <StatusBadge label={canRenewCurrent ? 'Renew' : 'Current'} tone="emerald" /> : null}
+        {!isCurrent && isRecommended ? <StatusBadge label="Recommended" tone="blue" /> : null}
+      </div>
+
+      <div className="mt-6">
+        <div className="flex items-end gap-2">
+          <span className="text-4xl font-black tracking-tight text-[var(--shell-text)]">{price.amount}</span>
+          {price.cadence ? <span className="pb-1 text-sm font-bold text-[var(--shell-muted)]">/ {price.cadence}</span> : null}
+        </div>
+        <p className="mt-2 text-sm font-semibold text-[var(--shell-muted)]">{price.helper}</p>
+      </div>
+
+      <div className="mt-5 grid grid-cols-2 gap-3">
+        <LimitPill label="Students" value={plan.studentLimit} tone="blue" />
+        <LimitPill label="Teachers" value={plan.teacherLimit} tone="emerald" />
+      </div>
+
+      <ul className="mt-6 flex-1 space-y-3">
+        {visibleFeatures.map((feature) => (
+          <li key={feature} className="flex gap-3 text-sm leading-5 text-[var(--shell-muted)]">
+            <span className={`mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full ${toneClasses[tone].badge}`}>
+              <Icon path={<path d="m7 12 3 3 7-7" />} />
+            </span>
+            <span>{feature}</span>
+          </li>
+        ))}
+        {features.length > visibleFeatures.length ? (
+          <li className="text-sm font-bold text-[var(--shell-muted)]">+{features.length - visibleFeatures.length} more included</li>
+        ) : null}
+      </ul>
+
+      <button
+        type="button"
+        disabled={buttonDisabled}
+        onClick={() => onSelect(plan.id)}
+        className={[
+          'mt-6 inline-flex h-11 w-full items-center justify-center gap-2 rounded-lg px-4 text-sm font-black transition disabled:cursor-not-allowed disabled:opacity-60',
+          isCurrent && !canRenewCurrent ? 'border border-[var(--shell-border)] bg-[var(--shell-subtle)] text-[var(--shell-muted)]' : toneClasses[tone].button,
+        ].join(' ')}
+      >
+        {isPending ? (
+          <span className="h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent" />
+        ) : (
+          <Icon path={isCurrent && !canRenewCurrent ? <path d="m8 12 3 3 5-6" /> : <path d="M5 12h14" />} />
+        )}
+        {canRenewCurrent ? 'Renew plan' : isCurrent ? 'Current plan' : 'Select plan'}
+      </button>
+    </article>
+  );
+}
+
+function EmptyPlans() {
+  return (
+    <div className="rounded-xl border border-dashed border-[var(--shell-border)] bg-[var(--shell-card)] p-8 text-center">
+      <p className="text-base font-black text-[var(--shell-text)]">No active plans found</p>
+      <p className="mt-2 text-sm text-[var(--shell-muted)]">Ask the platform administrator to publish at least one active subscription plan.</p>
+    </div>
+  );
+}
 
 export default function PlansPage() {
   const queryClient = useQueryClient();
@@ -23,7 +387,7 @@ export default function PlansPage() {
     staleTime: 5 * 60_000,
   });
   const schoolId = session?.schoolId ?? undefined;
-  const [billingCycle, setBillingCycle] = useState<'MONTHLY' | 'ANNUAL'>('MONTHLY');
+  const [billingCycle, setBillingCycle] = useState<BillingCycle>('MONTHLY');
 
   const { data: plans, isLoading: plansLoading } = useQuery({
     queryKey: ['active-plans'],
@@ -43,6 +407,7 @@ export default function PlansPage() {
   });
 
   const currentPlanId = subscription?.planId ?? plans?.find((p) => p.name === subscription?.planName)?.id ?? null;
+  const currentPlan = plans?.find((plan) => plan.id === currentPlanId) ?? null;
 
   const upgradeMutation = useMutation({
     mutationFn: async (planId: string) => {
@@ -78,308 +443,98 @@ export default function PlansPage() {
     },
   });
 
-  const isBusy = plansLoading || subLoading || upgradeMutation.isPending;
-
   const planCards = useMemo(() => plans ?? [], [plans]);
-  const formatPrice = (plan: { priceCents: number }) => {
-    const baseMonthly = plan.priceCents;
-    if (billingCycle === 'ANNUAL') {
-      const annual = Math.round(baseMonthly * 12 * 0.9);
-      return `₹${Math.round(annual / 100)}/yr`;
-    }
-    return baseMonthly === 0 ? 'Free' : `₹${Math.round(baseMonthly / 100)}/mo`;
-  };
-  const dueMessage = useMemo(() => {
-    if (!subscription?.endsAt || !subscription?.nextDueAt) return null;
-    const now = new Date();
-    const end = new Date(subscription.endsAt);
-    const nextDue = new Date(subscription.nextDueAt);
-    const daysToEnd = Math.ceil((end.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
-    const daysToNextDue = Math.ceil((nextDue.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
-    
-    if (subscription.status === 'EXPIRED' || daysToNextDue <= 0) {
-      return {
-        type: 'error' as const,
-        message: `Your subscription has expired. Access is suspended. Please update your plan immediately.`
-      };
-    }
-    
-    if (daysToEnd <= 0 && daysToNextDue > 0) {
-      return {
-        type: 'warning' as const,
-        message: `Your subscription ended on ${end.toLocaleDateString()}. You have ${daysToNextDue} days remaining in your grace period. Please renew by ${nextDue.toLocaleDateString()} to avoid suspension.`
-      };
-    }
-    
-    if (daysToEnd <= 7) {
-      return {
-        type: 'info' as const,
-        message: `Your subscription expires on ${end.toLocaleDateString()} (${daysToEnd} days remaining). Please renew to avoid interruption.`
-      };
-    }
-    
-    return null;
-  }, [subscription]);
-  const isSubscriptionExpired = useMemo(() => {
-    if (!subscription) return false;
-    const now = new Date();
-    const endsAt = subscription.endsAt ? new Date(subscription.endsAt) : null;
-    const nextDueAt = subscription.nextDueAt ? new Date(subscription.nextDueAt) : null;
-    if (subscription.status === 'EXPIRED') return true;
-    if (nextDueAt && !Number.isNaN(nextDueAt.getTime()) && nextDueAt < now) return true;
-    if (endsAt && !Number.isNaN(endsAt.getTime()) && endsAt < now) return true;
-    return false;
-  }, [subscription]);
+  const dueNotice = useMemo(() => getDueNotice(subscription), [subscription]);
+  const canRenewCurrent = useMemo(() => isSubscriptionExpired(subscription), [subscription]);
+  const isBusy = plansLoading || subLoading || upgradeMutation.isPending;
+  const recommendedPlanId = planCards.length ? planCards[Math.min(1, planCards.length - 1)]?.id : null;
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50/30 to-indigo-50/40">
+    <div className="min-h-screen bg-[var(--shell-bg)]">
       {isBusy ? <FullPageLoader label="Loading plans..." /> : null}
-      
-      <DashboardPageContainer maxWidthClassName="max-w-7xl">
+
+      <DashboardPageContainer maxWidthClassName="max-w-7xl" className="space-y-5">
         <PageHeader
-          title="Subscription Management"
-          subtitle="Scale your school management with flexible plans designed to grow with your institution. Upgrade anytime to unlock advanced features and increased capacity."
+          title="Plans"
+          subtitle="Review the current subscription, compare capacity limits, and choose the plan that fits this school."
+          actions={<BillingToggle billingCycle={billingCycle} onChange={setBillingCycle} />}
         />
-        {/* Current Plan Section */}
-        <div className="mb-12">
-          <div className="mb-6 text-center">
-            <h2 className="text-2xl font-bold text-gray-900">Your Current Plan</h2>
-            <p className="text-gray-600">Monitor your subscription status and usage</p>
+
+        {dueNotice ? <DueNotice notice={dueNotice} /> : null}
+
+        <div className="grid gap-4 lg:grid-cols-[1fr_22rem]">
+          <CurrentPlanOverview subscription={subscription} currentPlan={currentPlan} billingCycle={billingCycle} />
+          <div className="grid gap-3 sm:grid-cols-3 lg:grid-cols-1">
+            <SummaryMetric
+              label="Current plan"
+              value={subscription?.planName ?? 'None'}
+              helper={formatStatus(subscription?.status)}
+              tone={statusTone(subscription?.status)}
+              icon={<Icon path={<path d="M4 7h16M4 12h16M4 17h10" />} />}
+            />
+            <SummaryMetric
+              label="Student capacity"
+              value={formatNumber(subscription?.studentLimit)}
+              helper="Allowed student records"
+              tone="blue"
+              icon={<Icon path={<path d="M17 21v-2a4 4 0 0 0-4-4H7a4 4 0 0 0-4 4v2" />} />}
+            />
+            <SummaryMetric
+              label="Teacher capacity"
+              value={formatNumber(subscription?.teacherLimit)}
+              helper="Allowed staff teachers"
+              tone="emerald"
+              icon={<Icon path={<path d="M12 3v12M5 8h14M7 21h10" />} />}
+            />
           </div>
-          
-          <div className="mx-auto max-w-2xl">
-            <div className="overflow-hidden rounded-2xl bg-white shadow-xl ring-1 ring-gray-200">
-              <div className="bg-gradient-to-r from-emerald-500 to-teal-600 px-6 py-4">
-                <div className="flex items-center justify-between text-white">
-                  <div>
-                    <p className="text-sm font-medium opacity-90">Active Plan</p>
-                    <p className="text-2xl font-bold">{subscription?.planName ?? 'No Plan'}</p>
-                  </div>
-                  <div className="rounded-full bg-white/20 px-3 py-1 text-sm font-semibold backdrop-blur-sm">
-                    {subscription?.status ?? 'Inactive'}
-                  </div>
-                </div>
-              </div>
-              
-              <div className="p-6">
-                <div className="grid grid-cols-2 gap-6">
-                  <div className="text-center">
-                    <div className="mx-auto mb-2 flex h-12 w-12 items-center justify-center rounded-full bg-blue-100">
-                      <svg className="h-6 w-6 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197m13.5-9a2.5 2.5 0 11-5 0 2.5 2.5 0 015 0z" />
-                      </svg>
-                    </div>
-                    <p className="text-2xl font-bold text-gray-900">{subscription?.studentLimit ?? 0}</p>
-                    <p className="text-sm text-gray-600">Students</p>
-                  </div>
-                  <div className="text-center">
-                    <div className="mx-auto mb-2 flex h-12 w-12 items-center justify-center rounded-full bg-purple-100">
-                      <svg className="h-6 w-6 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
-                      </svg>
-                    </div>
-                    <p className="text-2xl font-bold text-gray-900">{subscription?.teacherLimit ?? 0}</p>
-                    <p className="text-sm text-gray-600">Teachers</p>
-                  </div>
-                </div>
-                
-                {dueMessage && (
-                  <div className={`mt-6 rounded-xl border p-4 ${
-                    dueMessage.type === 'error' 
-                      ? 'border-red-200 bg-gradient-to-r from-red-50 to-red-100'
-                      : dueMessage.type === 'warning'
-                      ? 'border-amber-200 bg-gradient-to-r from-amber-50 to-orange-50'
-                      : 'border-blue-200 bg-gradient-to-r from-blue-50 to-indigo-50'
-                  }`}>
-                    <div className="flex items-start">
-                      <svg className={`mr-3 mt-0.5 h-5 w-5 flex-shrink-0 ${
-                        dueMessage.type === 'error'
-                          ? 'text-red-600'
-                          : dueMessage.type === 'warning'
-                          ? 'text-amber-600'
-                          : 'text-blue-600'
-                      }`} fill="currentColor" viewBox="0 0 20 20">
-                        {dueMessage.type === 'error' ? (
-                          <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
-                        ) : (
-                          <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
-                        )}
-                      </svg>
-                      <div>
-                        <h4 className={`font-semibold ${
-                          dueMessage.type === 'error'
-                            ? 'text-red-900'
-                            : dueMessage.type === 'warning'
-                            ? 'text-amber-900'
-                            : 'text-blue-900'
-                        }`}>
-                          {dueMessage.type === 'error' ? 'Subscription Expired' : dueMessage.type === 'warning' ? 'Payment Overdue' : 'Renewal Reminder'}
-                        </h4>
-                        <p className={`mt-1 text-sm ${
-                          dueMessage.type === 'error'
-                            ? 'text-red-800'
-                            : dueMessage.type === 'warning'
-                            ? 'text-amber-800'
-                            : 'text-blue-800'
-                        }`}>{dueMessage.message}</p>
-                      </div>
-                    </div>
-                  </div>
-                )}
-              </div>
+        </div>
+
+        <section className="space-y-4">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+            <div>
+              <p className="text-xs font-black uppercase text-[var(--shell-muted)]">Plan comparison</p>
+              <h2 className="mt-1 text-xl font-black text-[var(--shell-text)]">Available subscription plans</h2>
             </div>
-          </div>
-        </div>
-
-        {/* Billing Toggle */}
-        <div className="mb-8 text-center">
-          <h2 className="mb-4 text-3xl font-bold text-gray-900">Available Plans</h2>
-          <p className="mb-8 text-gray-600">Choose the plan that best fits your school's needs</p>
-          
-          <div className="inline-flex items-center rounded-full bg-white p-1 shadow-lg ring-1 ring-gray-200">
-            <button
-              className={`relative rounded-full px-6 py-2 text-sm font-semibold transition-all duration-200 ${
-                billingCycle === 'MONTHLY'
-                  ? 'bg-gradient-to-r from-blue-600 to-purple-600 text-white shadow-md'
-                  : 'text-gray-600 hover:text-gray-900'
-              }`}
-              onClick={() => setBillingCycle('MONTHLY')}
-            >
-              Monthly
-            </button>
-            <button
-              className={`relative rounded-full px-6 py-2 text-sm font-semibold transition-all duration-200 ${
-                billingCycle === 'ANNUAL'
-                  ? 'bg-gradient-to-r from-blue-600 to-purple-600 text-white shadow-md'
-                  : 'text-gray-600 hover:text-gray-900'
-              }`}
-              onClick={() => setBillingCycle('ANNUAL')}
-            >
-              Annual
-              <span className="ml-1 rounded-full bg-emerald-100 px-2 py-0.5 text-xs text-emerald-700">
-                Save 10%
-              </span>
-            </button>
-          </div>
-        </div>
-
-        {/* Plans Grid */}
-        <div className="grid gap-8 lg:grid-cols-3">
-          {planCards.map((plan, index) => {
-            const isCurrent = currentPlanId === plan.id;
-            const canRenewCurrent = isCurrent && isSubscriptionExpired;
-            const isPopular = index === 1; // Middle plan is popular
-            
-            return (
-              <div
-                key={plan.id}
-                className={`relative overflow-hidden rounded-2xl transition-all duration-300 hover:scale-105 ${
-                  isCurrent
-                    ? 'bg-gradient-to-br from-emerald-50 to-teal-50 ring-2 ring-emerald-500 shadow-xl'
-                    : isPopular
-                    ? 'bg-gradient-to-br from-blue-50 to-indigo-50 ring-2 ring-blue-500 shadow-xl'
-                    : 'bg-white shadow-lg ring-1 ring-gray-200 hover:shadow-xl'
-                }`}
-              >
-                {isPopular && !isCurrent && (
-                  <div className="absolute -top-1 left-1/2 -translate-x-1/2 transform">
-                    <div className="rounded-full bg-gradient-to-r from-blue-600 to-purple-600 px-4 py-1 text-xs font-semibold text-white">
-                      Most Popular
-                    </div>
-                  </div>
-                )}
-                
-                {isCurrent && (
-                  <div className="absolute -top-1 left-1/2 -translate-x-1/2 transform">
-                    <div className="rounded-full bg-gradient-to-r from-emerald-600 to-teal-600 px-4 py-1 text-xs font-semibold text-white">
-                      {canRenewCurrent ? 'Expired Plan' : 'Current Plan'}
-                    </div>
-                  </div>
-                )}
-
-                <div className="p-8">
-                  <div className="mb-6 text-center">
-                    <h3 className="text-2xl font-bold text-gray-900">{plan.name}</h3>
-                    <div className="mt-4">
-                      <span className="text-4xl font-bold text-gray-900">{formatPrice(plan).split('/')[0]}</span>
-                      {formatPrice(plan) !== 'Free' && (
-                        <span className="text-gray-600">/{formatPrice(plan).split('/')[1]}</span>
-                      )}
-                    </div>
-                  </div>
-
-                  <div className="mb-6 grid grid-cols-2 gap-4 text-center">
-                    <div className="rounded-lg bg-gray-50 p-3">
-                      <p className="text-2xl font-bold text-blue-600">{plan.studentLimit}</p>
-                      <p className="text-sm text-gray-600">Students</p>
-                    </div>
-                    <div className="rounded-lg bg-gray-50 p-3">
-                      <p className="text-2xl font-bold text-purple-600">{plan.teacherLimit}</p>
-                      <p className="text-sm text-gray-600">Teachers</p>
-                    </div>
-                  </div>
-
-                  <ul className="mb-8 space-y-3">
-                    {(plan.features?.length ? plan.features : ['Core academic features']).map((feature) => (
-                      <li key={feature} className="flex items-center text-sm text-gray-700">
-                        <svg className="mr-3 h-5 w-5 flex-shrink-0 text-emerald-500" fill="currentColor" viewBox="0 0 20 20">
-                          <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
-                        </svg>
-                        {feature}
-                      </li>
-                    ))}
-                  </ul>
-
-                  <Button
-                    variant={isCurrent && !canRenewCurrent ? 'outline' : 'primary'}
-                    fullWidth
-                    disabled={(isCurrent && !canRenewCurrent) || upgradeMutation.isPending}
-                    loading={upgradeMutation.isPending}
-                    onClick={() => upgradeMutation.mutate(plan.id)}
-                    icon={isCurrent && !canRenewCurrent ? (
-                      <svg className="h-4 w-4" fill="currentColor" viewBox="0 0 20 20">
-                        <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
-                      </svg>
-                    ) : undefined}
-                  >
-                    {canRenewCurrent ? 'Renew Plan' : isCurrent ? 'Current Plan' : 'Upgrade Plan'}
-                  </Button>
-                </div>
-              </div>
-            );
-          })}
-        </div>
-
-        {/* Additional Info */}
-        <div className="mt-16 text-center">
-          <div className="mx-auto max-w-3xl rounded-2xl bg-white p-8 shadow-lg ring-1 ring-gray-200">
-            <h3 className="mb-4 text-xl font-bold text-gray-900">Need Help Choosing?</h3>
-            <p className="mb-6 text-gray-600">
-              Our team is here to help you find the perfect plan for your school. 
-              Contact us for personalized recommendations and custom enterprise solutions.
+            <p className="max-w-xl text-sm leading-5 text-[var(--shell-muted)]">
+              Annual billing applies a 10% discount and renews the school for a full year.
             </p>
-            <div className="flex flex-wrap justify-center gap-4">
-              <div className="flex items-center text-sm text-gray-600">
-                <svg className="mr-2 h-4 w-4 text-emerald-500" fill="currentColor" viewBox="0 0 20 20">
-                  <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
-                </svg>
-                Free migration support
-              </div>
-              <div className="flex items-center text-sm text-gray-600">
-                <svg className="mr-2 h-4 w-4 text-emerald-500" fill="currentColor" viewBox="0 0 20 20">
-                  <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
-                </svg>
-                24/7 customer support
-              </div>
-              <div className="flex items-center text-sm text-gray-600">
-                <svg className="mr-2 h-4 w-4 text-emerald-500" fill="currentColor" viewBox="0 0 20 20">
-                  <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
-                </svg>
-                No setup fees
-              </div>
+          </div>
+
+          {planCards.length ? (
+            <div className="grid gap-4 lg:grid-cols-3">
+              {planCards.map((plan) => (
+                <PlanCard
+                  key={plan.id}
+                  plan={plan}
+                  billingCycle={billingCycle}
+                  isCurrent={currentPlanId === plan.id}
+                  isRecommended={recommendedPlanId === plan.id}
+                  canRenewCurrent={currentPlanId === plan.id && canRenewCurrent}
+                  isPending={upgradeMutation.isPending}
+                  onSelect={(planId) => upgradeMutation.mutate(planId)}
+                />
+              ))}
+            </div>
+          ) : (
+            <EmptyPlans />
+          )}
+        </section>
+
+        <section className="rounded-xl border border-[var(--shell-border)] bg-[var(--shell-card)] px-5 py-4 shadow-sm">
+          <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+            <div>
+              <p className="text-base font-black text-[var(--shell-text)]">Need a custom limit?</p>
+              <p className="mt-1 text-sm text-[var(--shell-muted)]">Platform admins can adjust school limits and module access from the subscriptions console.</p>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              {['No setup fee', 'Plan modules controlled by admin', 'Renew anytime'].map((item) => (
+                <span key={item} className="rounded-full bg-[var(--shell-subtle)] px-3 py-1 text-xs font-black text-[var(--shell-muted)] ring-1 ring-[var(--shell-border)]">
+                  {item}
+                </span>
+              ))}
             </div>
           </div>
-        </div>
+        </section>
       </DashboardPageContainer>
     </div>
   );

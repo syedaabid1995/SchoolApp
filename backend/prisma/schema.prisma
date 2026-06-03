@@ -100,6 +100,7 @@ model School {
   supportTickets                 SupportTicket[]
   supportTicketComments          TicketComment[]
   messagingConfigs               SchoolMessagingConfig[]
+  systemSetting                  SchoolSystemSetting?
   transferRequestsFrom           StudentTransferRequest[]        @relation("TransferFromSchool")
   transferRequestsTo             StudentTransferRequest[]        @relation("TransferToSchool")
   employeeRolePermissions        EmployeeRolePermission[]
@@ -2736,6 +2737,25 @@ model ConfigEntry {
 
   @@unique([key])
   @@map("config_entries")
+}
+
+model SchoolSystemSetting {
+  id              String   @id @default(uuid()) @db.Uuid
+  schoolId        String   @unique @map("school_id") @db.Uuid
+  general         Json     @default("{}")
+  paymentGateways Json     @default("[]") @map("payment_gateways")
+  baseSetups      Json     @default("{}") @map("base_setups")
+  sessions        Json     @default("[]")
+  holidays        Json     @default("[]")
+  weekends        Json     @default("[]")
+  smsSettings     Json     @default("{}") @map("sms_settings")
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+
+  school School @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+
+  @@index([schoolId])
+  @@map("school_system_settings")
 }
 
 model TenantConfigOverride {
