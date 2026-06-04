@@ -18,6 +18,7 @@ const envSchema = z.object({
   JWT_SECRET: z.string().min(32),
   TOTP_ENCRYPTION_KEY: z.string().min(32).optional(),
   AUTH_TWO_STEP_ENABLED: boolEnv(false).default(false),
+  OTP_EXPOSE_CODE_IN_DEV: boolEnv(false).default(false),
   REDIS_URL: z.string().min(1),
   FRONTEND_URL: z.string().url().default('http://localhost:3001'),
   CORS_ORIGINS: z.string().default('http://localhost:3000,http://127.0.0.1:3000,http://localhost:3001,http://127.0.0.1:3001'),

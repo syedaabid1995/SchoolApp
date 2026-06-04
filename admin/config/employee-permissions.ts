@@ -11,10 +11,34 @@ export type PermissionCatalogItem = {
 export const EMPLOYEE_PERMISSION_CATALOG: PermissionCatalogItem[] = [
   { code: 'dashboard.overview', label: 'Overview', path: '/dashboard', group: 'Overview' },
   { code: 'dashboard.overview', label: 'Reports', path: '/dashboard/reports', group: 'Overview' },
+  { code: 'reports.view', label: 'Reports - View', path: '/dashboard/reports', group: 'Overview' },
+  { code: 'reports.export', label: 'Reports - Export', path: '/dashboard/reports', group: 'Overview' },
+  { code: 'reports.students.view', label: 'Student Reports - View', path: '/dashboard/reports', group: 'Overview' },
+  { code: 'reports.parents.view', label: 'Parent Reports - View', path: '/dashboard/reports', group: 'Overview' },
+  { code: 'reports.attendance.view', label: 'Attendance Reports - View', path: '/dashboard/reports', group: 'Overview' },
+  { code: 'reports.exams.view', label: 'Exam Reports - View', path: '/dashboard/reports', group: 'Overview' },
+  { code: 'reports.staff.view', label: 'Staff Reports - View', path: '/dashboard/reports', group: 'Overview' },
+  { code: 'reports.academics.view', label: 'Academic Reports - View', path: '/dashboard/reports', group: 'Overview' },
+  { code: 'reports.homework.view', label: 'Homework Reports - View', path: '/dashboard/reports', group: 'Overview' },
+  { code: 'reports.library.view', label: 'Library Reports - View', path: '/dashboard/reports', group: 'Overview' },
+  { code: 'reports.transport.view', label: 'Transport Reports - View', path: '/dashboard/reports', group: 'Overview' },
+  { code: 'reports.dormitory.view', label: 'Dormitory Reports - View', path: '/dashboard/reports', group: 'Overview' },
+  { code: 'reports.fees.view', label: 'Fee Reports - View', path: '/dashboard/reports', group: 'Overview' },
+  { code: 'reports.payroll.view', label: 'Payroll Reports - View', path: '/dashboard/reports', group: 'Overview' },
+  { code: 'compliance.view', label: 'Compliance - View', path: '/dashboard/compliance', group: 'Audit' },
+  { code: 'compliance.review', label: 'Compliance - Review', path: '/dashboard/compliance', group: 'Audit' },
+  { code: 'compliance.export.review', label: 'Compliance Export - Review', path: '/dashboard/compliance', group: 'Audit' },
+  { code: 'compliance.deletion.review', label: 'Compliance Deletion - Review', path: '/dashboard/compliance', group: 'Audit' },
   { code: 'plans.view', label: 'Plans', path: '/dashboard/plans', group: 'Plans' },
   { code: 'settings.access', label: 'Institution & System Settings', path: '/dashboard/settings', group: 'Utilities' },
+  { code: 'school.onboarding.view', label: 'School Onboarding - View', path: '/dashboard/onboarding', group: 'Utilities' },
+  { code: 'school.onboarding.manage', label: 'School Onboarding - Manage', path: '/dashboard/onboarding', group: 'Utilities' },
+  { code: 'school.onboarding.review', label: 'School Onboarding - Review', path: '/dashboard/schools', group: 'Utilities' },
   { code: 'teachers.list', label: 'Employees - List', path: '/dashboard/teachers', group: 'Employees' },
   { code: 'teachers.add', label: 'Employees - Add', path: '/dashboard/teachers/add', group: 'Employees' },
+  { code: 'teacher.onboarding.view', label: 'Teacher Onboarding - View', path: '/dashboard/teachers/onboarding', group: 'Employees' },
+  { code: 'teacher.onboarding.manage', label: 'Teacher Onboarding - Manage', path: '/dashboard/teachers/onboarding', group: 'Employees' },
+  { code: 'teacher.credentials.manage', label: 'Teacher Credentials - Manage', path: '/dashboard/teachers/onboarding', group: 'Employees' },
   { code: 'staff.view', label: 'Staff Directory - View', path: '/dashboard/staff', group: 'Employees' },
   { code: 'staff.create', label: 'Staff Directory - Create', path: '/dashboard/staff/add', group: 'Employees' },
   { code: 'staff.edit', label: 'Staff Directory - Edit', path: '/dashboard/staff', group: 'Employees' },
@@ -60,6 +84,16 @@ export const EMPLOYEE_PERMISSION_CATALOG: PermissionCatalogItem[] = [
   { code: 'academic.routine.edit', label: 'Timetable Routine - Edit', path: '/dashboard/timetable', group: 'Academics' },
   { code: 'academic.routine.delete', label: 'Timetable Routine - Delete', path: '/dashboard/timetable', group: 'Academics' },
   { code: 'academics.exams', label: 'Exams', path: '/dashboard/academics/exams', group: 'Academics' },
+  { code: 'exam.center.view', label: 'Exam Centers - View', path: '/dashboard/academics/exams/centers', group: 'Academics' },
+  { code: 'exam.center.manage', label: 'Exam Centers - Manage', path: '/dashboard/academics/exams/centers', group: 'Academics' },
+  { code: 'exam.room.view', label: 'Exam Rooms - View', path: '/dashboard/academics/exams/rooms', group: 'Academics' },
+  { code: 'exam.room.manage', label: 'Exam Rooms - Manage', path: '/dashboard/academics/exams/rooms', group: 'Academics' },
+  { code: 'exam.seating.view', label: 'Exam Seating - View', path: '/dashboard/academics/exams/seating', group: 'Academics' },
+  { code: 'exam.seating.manage', label: 'Exam Seating - Manage', path: '/dashboard/academics/exams/seating', group: 'Academics' },
+  { code: 'exam.invigilator.view', label: 'Exam Invigilators - View', path: '/dashboard/academics/exams/invigilators', group: 'Academics' },
+  { code: 'exam.invigilator.manage', label: 'Exam Invigilators - Manage', path: '/dashboard/academics/exams/invigilators', group: 'Academics' },
+  { code: 'exam.hallticket.view', label: 'Exam Hall Tickets - View', path: '/dashboard/academics/exams/hall-tickets', group: 'Academics' },
+  { code: 'exam.hallticket.export', label: 'Exam Hall Tickets - Export', path: '/dashboard/academics/exams/hall-tickets', group: 'Academics' },
   { code: 'academics.marks', label: 'Upload Marks', path: '/dashboard/academics/marks', group: 'Academics' },
   { code: 'students.list', label: 'Students - List', path: '/dashboard/students', group: 'Students' },
   { code: 'students.add', label: 'Students - Add', path: '/dashboard/students/add', group: 'Students' },
@@ -135,11 +169,16 @@ export const EMPLOYEE_PERMISSION_CATALOG: PermissionCatalogItem[] = [
 ];
 
 export const getRequiredPermissionForPath = (pathname: string) => {
-  if (pathname.startsWith('/dashboard/reports')) return 'dashboard.overview';
+  if (pathname.startsWith('/dashboard/reports')) return 'reports.view';
+  if (pathname.startsWith('/dashboard/compliance')) return 'compliance.view';
   if (pathname === '/dashboard') return 'dashboard.overview';
   if (pathname.startsWith('/dashboard/plans')) return 'plans.view';
+  if (pathname.startsWith('/dashboard/onboarding')) return 'school.onboarding.view';
+  if (/^\/dashboard\/schools\/[^/]+\/onboarding/.test(pathname)) return 'school.onboarding.review';
 
   if (pathname.startsWith('/dashboard/teachers/add')) return 'teachers.add';
+  if (pathname.startsWith('/dashboard/teachers/onboarding')) return 'teacher.onboarding.view';
+  if (/^\/dashboard\/teachers\/[^/]+\/(onboarding|credentials|assignments|readiness)/.test(pathname)) return 'teacher.onboarding.view';
   if (pathname.startsWith('/dashboard/teachers')) return 'teachers.list';
   if (pathname.startsWith('/dashboard/staff/add')) return 'staff.create';
   if (pathname.startsWith('/dashboard/staff/attendance')) return 'staff.attendance.view';
@@ -151,6 +190,11 @@ export const getRequiredPermissionForPath = (pathname: string) => {
   if (pathname.startsWith('/dashboard/payroll')) return 'payroll.view';
 
   if (pathname.startsWith('/dashboard/timetable')) return 'academics.setup';
+  if (pathname.startsWith('/dashboard/academics/exams/centers')) return 'exam.center.view';
+  if (pathname.startsWith('/dashboard/academics/exams/rooms')) return 'exam.room.view';
+  if (pathname.startsWith('/dashboard/academics/exams/seating')) return 'exam.seating.view';
+  if (pathname.startsWith('/dashboard/academics/exams/invigilators')) return 'exam.invigilator.view';
+  if (pathname.startsWith('/dashboard/academics/exams/hall-tickets')) return 'exam.hallticket.view';
   if (pathname.startsWith('/dashboard/academics/exams')) return 'academics.exams';
   if (pathname.startsWith('/dashboard/academics/marks')) return 'academics.marks';
   if (pathname.startsWith('/dashboard/academics')) return 'academics.setup';

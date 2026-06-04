@@ -174,9 +174,28 @@ const findUser = (where: Record<string, unknown>) => {
   return result[0] ?? null;
 };
 
-const selectSchool = (where: Record<string, string>) => {
+const matchesTextFilter = (value: string, filter: unknown) => {
+  if (typeof filter === 'string') return value === filter;
+  if (filter && typeof filter === 'object' && 'equals' in filter) {
+    const equals = String((filter as { equals?: string }).equals ?? '');
+    const insensitive = (filter as { mode?: string }).mode === 'insensitive';
+    return insensitive ? value.toLowerCase() === equals.toLowerCase() : value === equals;
+  }
+  return false;
+};
+
+const selectSchool = (where: Record<string, any>) => {
   if (where.id) return schools.get(where.id) ?? null;
-  if (where.code) return Array.from(schools.values()).find((school) => school.code === where.code) ?? null;
+  if (where.code) return Array.from(schools.values()).find((school) => matchesTextFilter(school.code, where.code)) ?? null;
+  if (Array.isArray(where.OR)) {
+    return Array.from(schools.values()).find((school) =>
+      where.OR.some((condition: Record<string, unknown>) => {
+        if (condition.id) return school.id === condition.id;
+        if (condition.code) return matchesTextFilter(school.code, condition.code);
+        return false;
+      }),
+    ) ?? null;
+  }
   return null;
 };
 
@@ -243,7 +262,21 @@ const patchPrisma = () => {
   patchMethod(prisma.subscriptionPlanPermission as any, 'findMany', async () => []);
   patchMethod(prisma.employeeRolePermission as any, 'findMany', async () => []);
   patchMethod(prisma.employeeUserPermission as any, 'findMany', async () => []);
-  patchMethod(prisma.configEntry as any, 'findUnique', async () => null);
+  patchMethod(prisma.configEntry as any, 'findUnique', async ({ where }: any = {}) =>
+    where?.key === 'auth.security'
+      ? {
+          id: 'auth-security-config',
+          key: 'auth.security',
+          value: {
+            twoStepEnabled: true,
+            emailOtpEnabled: true,
+            authenticatorAppEnabled: true,
+            requiredRoles: ['SUPER_ADMIN', 'SCHOOL_ADMIN', 'PRINCIPAL', 'ACCOUNTANT'],
+          },
+          version: 1,
+        }
+      : null,
+  );
   patchMethod(prisma.configEntry as any, 'upsert', async ({ create, update }: any) => ({
     id: 'auth-security-config',
     key: create?.key ?? 'auth.security',

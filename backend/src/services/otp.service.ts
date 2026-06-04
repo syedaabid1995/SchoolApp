@@ -3,6 +3,7 @@ import bcrypt from 'bcryptjs';
 import { prisma } from '../config/db';
 import { HttpError } from '../middlewares/error.middleware';
 import { createAuditLog } from './auditLog.service';
+import { env } from '../config/env';
 
 const OTP_TTL_MINUTES = 5;
 const PURPOSE = 'PARENT_LOGIN';
@@ -39,7 +40,10 @@ export const requestOtp = async (params: { schoolId: string; phone: string; acto
     });
   }
 
-  return { sent: true, code }; // return code for now (stubbed send)
+  return {
+    sent: true,
+    ...(env.NODE_ENV !== 'production' && env.OTP_EXPOSE_CODE_IN_DEV ? { code } : {}),
+  };
 };
 
 export const verifyOtp = async (params: { schoolId: string; phone: string; code: string }) => {

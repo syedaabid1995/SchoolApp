@@ -18,6 +18,14 @@ enum SubscriptionPlan {
   PREMIUM
 }
 
+enum SchoolOnboardingStatus {
+  DRAFT
+  SETUP_IN_PROGRESS
+  READY_FOR_REVIEW
+  ACTIVE
+  BLOCKED
+}
+
 model School {
   id               String           @id @default(uuid()) @db.Uuid
   name             String
@@ -26,6 +34,7 @@ model School {
   domainUrl        String?          @map("domain_url")
   status           SchoolStatus     @default(ACTIVE)
   subscriptionPlan SubscriptionPlan @map("subscription_plan")
+  onboardingStatus SchoolOnboardingStatus @default(DRAFT) @map("onboarding_status")
   lastLoginAt      DateTime?        @map("last_login_at")
   activeUsersCount Int              @default(0) @map("active_users_count")
   statusReason     String?          @map("status_reason")
@@ -59,6 +68,7 @@ model School {
   studentSiblings                StudentSibling[]
   studentImportLogs              StudentImportLog[]
   teachers                       TeacherProfile[]
+  teacherOnboardings             TeacherOnboarding[]
   departments                    Department[]
   designations                   Designation[]
   staffDocuments                 StaffDocument[]
@@ -85,6 +95,10 @@ model School {
   exams                          Exam[]
   examGradingSetting             ExamGradingSetting?
   examTypes                      ExamTypeConfig[]
+  examCenters                    ExamCenter[]
+  examRooms                      ExamRoom[]
+  examSeatingAllocations         ExamSeatingAllocation[]
+  examInvigilatorAssignments     ExamInvigilatorAssignment[]
   themes                         Theme[]
   featureFlagOverrides           FeatureFlagOverride[]
   configOverrides                TenantConfigOverride[]
@@ -96,6 +110,7 @@ model School {
   consentRecords                 ConsentRecord[]
   dataExportJobs                 DataExportJob[]
   dataDeletionJobs               DataDeletionJob[]
+  complianceJobStatusHistories   ComplianceJobStatusHistory[]
   auditExports                   AuditExport[]
   supportTickets                 SupportTicket[]
   supportTicketComments          TicketComment[]
@@ -135,6 +150,7 @@ model School {
   feeFines                       FeeFine[]
   feeLedgers                     FeeLedger[]
   feeNotifications               FeeNotification[]
+  onboardingChecklist            SchoolOnboardingChecklist[]
 
   @@map("schools")
 }
@@ -185,8 +201,11 @@ model User {
   restoreApprovals                       RestoreJob[]                    @relation("RestoreApprovedBy")
   restoreRequests                        RestoreJob[]                    @relation("RestoreRequestedBy")
   dataExportJobs                         DataExportJob[]
+  dataExportReviews                      DataExportJob[]                 @relation("DataExportReviewedBy")
   dataDeletionRequests                   DataDeletionJob[]               @relation("DeletionRequestedBy")
   dataDeletionApprovals                  DataDeletionJob[]               @relation("DeletionApprovedBy")
+  dataDeletionReviews                    DataDeletionJob[]               @relation("DeletionReviewedBy")
+  complianceJobStatusHistories           ComplianceJobStatusHistory[]    @relation("ComplianceStatusHistoryActor")
   auditLogs                              AuditLog[]
   auditExports                           AuditExport[]
   supportTickets                         SupportTicket[]                 @relation("SupportTicketCreatedBy")
@@ -218,6 +237,7 @@ model User {
   staffTimelinesCreated                  StaffTimeline[]                 @relation("StaffTimelineCreatedBy")
   staffAttendancesMarked                 StaffAttendance[]               @relation("StaffAttendanceMarkedBy")
   staffAttendanceHolidaysCreated         StaffAttendanceHoliday[]        @relation("StaffAttendanceHolidayCreatedBy")
+  schoolOnboardingChecklistCompletions   SchoolOnboardingChecklist[]     @relation("SchoolOnboardingChecklistCompletedBy")
   payrollsGenerated                      Payroll[]                       @relation("PayrollGeneratedBy")
   payrollPaymentsRecorded                PayrollPayment[]                @relation("PayrollPaymentRecordedBy")
   homeworksCreated                       Homework[]                      @relation("HomeworkCreatedBy")
@@ -849,6 +869,7 @@ model Student {
   feeDiscounts             FeeDiscount[]
   feeLedgers               FeeLedger[]
   feeNotifications         FeeNotification[]
+  examSeatingAllocations   ExamSeatingAllocation[]
 
   @@unique([schoolId, admissionNo])
   @@index([academicSessionId])
@@ -1599,6 +1620,8 @@ model TeacherProfile {
   attendanceSubstitutionsAsSubstitute TeacherAttendanceSubstitution[] @relation("TeacherAttendanceSubstitutionSubstitute")
   timetableEntries                    TimetableEntry[]
   libraryMemberships                  LibraryMember[]
+  onboarding                          TeacherOnboarding?
+  examInvigilatorAssignments          ExamInvigilatorAssignment[]
 
   @@unique([schoolId, employeeNo])
   @@index([schoolId])
@@ -1606,6 +1629,33 @@ model TeacherProfile {
   @@index([departmentId])
   @@index([designationId])
   @@map("employee_profiles")
+}
+
+model TeacherOnboarding {
+  id                      String   @id @default(uuid()) @db.Uuid
+  schoolId                String   @map("school_id") @db.Uuid
+  teacherId               String   @unique @map("teacher_id") @db.Uuid
+  accountCreated          Boolean  @default(false) @map("account_created")
+  temporaryPasswordShared Boolean  @default(false) @map("temporary_password_shared")
+  manualShareConfirmed    Boolean  @default(false) @map("manual_share_confirmed")
+  firstLoginCompleted     Boolean  @default(false) @map("first_login_completed")
+  passwordChanged         Boolean  @default(false) @map("password_changed")
+  profileCompleted        Boolean  @default(false) @map("profile_completed")
+  active                  Boolean  @default(false)
+  classAssigned           Boolean  @default(false) @map("class_assigned")
+  subjectAssigned         Boolean  @default(false) @map("subject_assigned")
+  timetableAssigned       Boolean  @default(false) @map("timetable_assigned")
+  attendanceEnabled       Boolean  @default(false) @map("attendance_enabled")
+  readinessStatus         String   @default("PENDING") @map("readiness_status")
+  note                    String?
+  createdAt               DateTime @default(now()) @map("created_at")
+  updatedAt               DateTime @updatedAt @map("updated_at")
+
+  school  School         @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  teacher TeacherProfile @relation(fields: [teacherId], references: [id], onDelete: Cascade)
+
+  @@index([schoolId])
+  @@map("teacher_onboardings")
 }
 
 model TeacherBankDetails {
@@ -2565,6 +2615,8 @@ model Exam {
   class        Class?       @relation(fields: [classId], references: [id], onDelete: SetNull)
   section      Section?     @relation(fields: [sectionId], references: [id], onDelete: SetNull)
   papers       ExamPaper[]
+  seatingAllocations ExamSeatingAllocation[]
+  invigilatorAssignments ExamInvigilatorAssignment[]
 
   @@index([schoolId])
   @@index([academicYearId])
@@ -2626,6 +2678,107 @@ model ExamPaper {
   @@index([subjectId])
   @@index([classId])
   @@map("exam_papers")
+}
+
+model ExamCenter {
+  id            String   @id @default(uuid()) @db.Uuid
+  schoolId      String   @map("school_id") @db.Uuid
+  name          String
+  code          String
+  address       String
+  contactPerson String?  @map("contact_person")
+  phone         String?
+  isActive      Boolean  @default(true) @map("is_active")
+  createdAt     DateTime @default(now()) @map("created_at")
+  updatedAt     DateTime @updatedAt @map("updated_at")
+
+  school                  School                        @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  rooms                   ExamRoom[]
+  seatingAllocations      ExamSeatingAllocation[]
+  invigilatorAssignments  ExamInvigilatorAssignment[]
+
+  @@unique([schoolId, code])
+  @@index([schoolId])
+  @@map("exam_centers")
+}
+
+model ExamRoom {
+  id        String   @id @default(uuid()) @db.Uuid
+  schoolId  String   @map("school_id") @db.Uuid
+  centerId  String   @map("center_id") @db.Uuid
+  name      String
+  code      String
+  floor     String?
+  capacity  Int
+  rows      Int
+  columns   Int
+  isActive  Boolean  @default(true) @map("is_active")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  school                  School                        @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  center                  ExamCenter                    @relation(fields: [centerId], references: [id], onDelete: Cascade)
+  seatingAllocations      ExamSeatingAllocation[]
+  invigilatorAssignments  ExamInvigilatorAssignment[]
+
+  @@unique([schoolId, centerId, code])
+  @@index([schoolId])
+  @@index([centerId])
+  @@map("exam_rooms")
+}
+
+model ExamSeatingAllocation {
+  id         String   @id @default(uuid()) @db.Uuid
+  schoolId   String   @map("school_id") @db.Uuid
+  examId     String   @map("exam_id") @db.Uuid
+  studentId  String   @map("student_id") @db.Uuid
+  centerId   String   @map("center_id") @db.Uuid
+  roomId     String   @map("room_id") @db.Uuid
+  seatRow    Int      @map("seat_row")
+  seatColumn Int      @map("seat_column")
+  seatNumber String   @map("seat_number")
+  createdAt  DateTime @default(now()) @map("created_at")
+  updatedAt  DateTime @updatedAt @map("updated_at")
+
+  school  School     @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  exam    Exam       @relation(fields: [examId], references: [id], onDelete: Cascade)
+  student Student    @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  center  ExamCenter @relation(fields: [centerId], references: [id], onDelete: Restrict)
+  room    ExamRoom   @relation(fields: [roomId], references: [id], onDelete: Restrict)
+
+  @@unique([examId, studentId])
+  @@unique([examId, roomId, seatNumber])
+  @@index([schoolId])
+  @@index([examId])
+  @@index([studentId])
+  @@index([roomId])
+  @@map("exam_seating_allocations")
+}
+
+model ExamInvigilatorAssignment {
+  id         String   @id @default(uuid()) @db.Uuid
+  schoolId   String   @map("school_id") @db.Uuid
+  examId     String   @map("exam_id") @db.Uuid
+  teacherId  String   @map("teacher_id") @db.Uuid
+  centerId   String   @map("center_id") @db.Uuid
+  roomId     String   @map("room_id") @db.Uuid
+  assignedAt DateTime @default(now()) @map("assigned_at")
+  createdAt  DateTime @default(now()) @map("created_at")
+  updatedAt  DateTime @updatedAt @map("updated_at")
+
+  school  School         @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  exam    Exam           @relation(fields: [examId], references: [id], onDelete: Cascade)
+  teacher TeacherProfile @relation(fields: [teacherId], references: [id], onDelete: Restrict)
+  center  ExamCenter     @relation(fields: [centerId], references: [id], onDelete: Restrict)
+  room    ExamRoom       @relation(fields: [roomId], references: [id], onDelete: Restrict)
+
+  @@unique([examId, teacherId])
+  @@unique([examId, roomId])
+  @@index([schoolId])
+  @@index([examId])
+  @@index([teacherId])
+  @@index([roomId])
+  @@map("exam_invigilator_assignments")
 }
 
 model Mark {
@@ -3400,6 +3553,28 @@ model SchoolMessagingConfig {
   @@map("school_messaging_configs")
 }
 
+model SchoolOnboardingChecklist {
+  id            String    @id @default(uuid()) @db.Uuid
+  schoolId      String    @map("school_id") @db.Uuid
+  key           String
+  label         String
+  status        String    @default("PENDING")
+  required      Boolean   @default(true)
+  completedAt   DateTime? @map("completed_at")
+  completedById String?   @map("completed_by_id") @db.Uuid
+  note          String?
+  createdAt     DateTime  @default(now()) @map("created_at")
+  updatedAt     DateTime  @updatedAt @map("updated_at")
+
+  school      School @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  completedBy User?  @relation("SchoolOnboardingChecklistCompletedBy", fields: [completedById], references: [id], onDelete: SetNull)
+
+  @@unique([schoolId, key])
+  @@index([schoolId])
+  @@index([completedById])
+  @@map("school_onboarding_checklists")
+}
+
 enum BackupStatus {
   REQUESTED
   RUNNING
@@ -3410,6 +3585,7 @@ enum BackupStatus {
 enum RestoreStatus {
   REQUESTED
   APPROVED
+  REJECTED
   RUNNING
   COMPLETED
   FAILED
@@ -3633,6 +3809,8 @@ model ConsentRecord {
 
 enum DataJobStatus {
   REQUESTED
+  APPROVED
+  REJECTED
   RUNNING
   COMPLETED
   FAILED
@@ -3641,6 +3819,7 @@ enum DataJobStatus {
 enum DeletionStatus {
   REQUESTED
   APPROVED
+  REJECTED
   RUNNING
   COMPLETED
   FAILED
@@ -3650,8 +3829,12 @@ model DataExportJob {
   id            String        @id @default(uuid()) @db.Uuid
   schoolId      String        @map("school_id") @db.Uuid
   requestedById String        @map("requested_by_id") @db.Uuid
+  reviewedById  String?       @map("reviewed_by_id") @db.Uuid
   status        DataJobStatus @default(REQUESTED)
   filePath      String?       @map("file_path")
+  reviewNote    String?       @map("review_note")
+  rejectionReason String?     @map("rejection_reason")
+  reviewedAt    DateTime?     @map("reviewed_at")
   startedAt     DateTime?     @map("started_at")
   finishedAt    DateTime?     @map("finished_at")
   createdAt     DateTime      @default(now()) @map("created_at")
@@ -3659,9 +3842,11 @@ model DataExportJob {
 
   school      School @relation(fields: [schoolId], references: [id], onDelete: Cascade)
   requestedBy User   @relation(fields: [requestedById], references: [id], onDelete: Restrict)
+  reviewedBy  User?  @relation("DataExportReviewedBy", fields: [reviewedById], references: [id], onDelete: SetNull)
 
   @@index([schoolId])
   @@index([requestedById])
+  @@index([reviewedById])
   @@map("data_export_jobs")
 }
 
@@ -3670,8 +3855,12 @@ model DataDeletionJob {
   schoolId      String         @map("school_id") @db.Uuid
   requestedById String         @map("requested_by_id") @db.Uuid
   approvedById  String?        @map("approved_by_id") @db.Uuid
+  reviewedById  String?        @map("reviewed_by_id") @db.Uuid
   status        DeletionStatus @default(REQUESTED)
   reason        String?
+  reviewNote    String?        @map("review_note")
+  rejectionReason String?      @map("rejection_reason")
+  reviewedAt    DateTime?      @map("reviewed_at")
   scheduledFor  DateTime?      @map("scheduled_for")
   startedAt     DateTime?      @map("started_at")
   finishedAt    DateTime?      @map("finished_at")
@@ -3681,11 +3870,33 @@ model DataDeletionJob {
   school      School @relation(fields: [schoolId], references: [id], onDelete: Cascade)
   requestedBy User   @relation("DeletionRequestedBy", fields: [requestedById], references: [id], onDelete: Restrict)
   approvedBy  User?  @relation("DeletionApprovedBy", fields: [approvedById], references: [id], onDelete: SetNull)
+  reviewedBy  User?  @relation("DeletionReviewedBy", fields: [reviewedById], references: [id], onDelete: SetNull)
 
   @@index([schoolId])
   @@index([requestedById])
   @@index([approvedById])
+  @@index([reviewedById])
   @@map("data_deletion_jobs")
+}
+
+model ComplianceJobStatusHistory {
+  id        String   @id @default(uuid()) @db.Uuid
+  schoolId  String   @map("school_id") @db.Uuid
+  jobType   String   @map("job_type")
+  jobId     String   @map("job_id") @db.Uuid
+  oldStatus String   @map("old_status")
+  newStatus String   @map("new_status")
+  actorId   String   @map("actor_id") @db.Uuid
+  reason    String?
+  createdAt DateTime @default(now()) @map("created_at")
+
+  school School @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  actor  User   @relation("ComplianceStatusHistoryActor", fields: [actorId], references: [id], onDelete: Restrict)
+
+  @@index([schoolId])
+  @@index([jobType, jobId])
+  @@index([actorId])
+  @@map("compliance_job_status_history")
 }
 
 enum TicketStatus {

@@ -128,6 +128,16 @@ export const createBackup = async (payload: {
   return data;
 };
 
+export const runBackup = async (id: string) => {
+  const { data } = await api.post<BackupJob>(`/admin/backups/${id}/run`, {});
+  return data;
+};
+
+export const downloadBackup = async (id: string) => {
+  const { data } = await api.get<Blob>(`/admin/backups/${id}/download`, { responseType: 'blob' });
+  return data;
+};
+
 export const getRestoreJobs = async (params?: BackupFilters) => {
   const { data } = await api.get<RestoreListResponse | RestoreJob[]>('/admin/restores', { params: cleanParams(params) });
   return normalizeRestoreList(data);
@@ -155,5 +165,10 @@ export const approveRestore = async (id: string) => {
 
 export const rejectRestore = async (id: string) => {
   const { data } = await api.post<RestoreJob>(`/admin/restores/${id}/reject`, {});
+  return data;
+};
+
+export const runRestore = async (id: string) => {
+  const { data } = await api.post<RestoreJob>(`/admin/restores/${id}/run`, {});
   return data;
 };

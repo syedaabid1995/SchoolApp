@@ -117,6 +117,20 @@ export type ComplianceJob = {
   errorMessage?: string | null;
 };
 
+export type ComplianceJobHistoryRow = {
+  id: string;
+  schoolId: string;
+  schoolName?: string;
+  schoolCode?: string;
+  jobType: string;
+  jobId: string;
+  oldStatus: string;
+  newStatus: string;
+  actor?: ComplianceActor | null;
+  reason?: string | null;
+  createdAt?: string | null;
+};
+
 export type ComplianceListResponse<T> = {
   items: T[];
   total: number;
@@ -222,5 +236,10 @@ export const getComplianceJobs = async (params?: ComplianceFilters) => {
     '/admin/compliance/jobs',
     { params: cleanParams(params) },
   );
+  return unwrapData(data);
+};
+
+export const getComplianceJobHistory = async (id: string) => {
+  const { data } = await api.get<ApiEnvelope<ComplianceJobHistoryRow[]>>(`/admin/compliance/jobs/${id}/history`);
   return unwrapData(data);
 };

@@ -1,8 +1,8 @@
 'use client';
 
 import type { ReactNode } from 'react';
+import Link from 'next/link';
 import { useEffect, useMemo, useState } from 'react';
-import { useRouter } from 'next/navigation';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import Button from '../../../components/Button';
 import FullPageLoader from '../../../components/FullPageLoader';
@@ -117,63 +117,10 @@ function SkeletonRows() {
   );
 }
 
-function DetailRow({ label, value }: { label: string; value: ReactNode }) {
-  return (
-    <div className="rounded-xl bg-slate-50 px-3 py-2">
-      <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">{label}</p>
-      <div className="mt-1 break-words text-sm font-medium text-slate-900">{value || 'N/A'}</div>
-    </div>
-  );
-}
-
-function RequestDetailModal({
-  request,
-  type,
-  onClose,
-}: {
-  request: RequestItem;
-  type: 'export' | 'deletion';
-  onClose: () => void;
-}) {
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/60 p-4">
-      <div className="max-h-[90vh] w-full max-w-3xl overflow-y-auto rounded-2xl bg-white p-6 shadow-2xl">
-        <div className="flex items-start justify-between gap-4">
-          <div>
-            <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">
-              {type === 'export' ? 'Data Export Request' : 'Data Deletion Request'}
-            </p>
-            <h2 className="mt-1 text-xl font-bold text-slate-950">{request.requestNumber ?? request.id}</h2>
-          </div>
-          <button className="rounded-xl border border-slate-200 px-3 py-2 text-sm font-semibold text-slate-600 hover:bg-slate-50" onClick={onClose}>
-            Close
-          </button>
-        </div>
-        <div className="mt-5 grid gap-3 md:grid-cols-2">
-          <DetailRow label="Request ID" value={request.id} />
-          <DetailRow label="Status" value={<Badge className={statusBadgeClass(request.status)}>{formatLabel(request.status)}</Badge>} />
-          <DetailRow label="School" value={`${request.schoolName ?? 'N/A'}${request.schoolCode ? ` (${request.schoolCode})` : ''}`} />
-          <DetailRow label="Requested by" value={request.requestedBy ? `${request.requestedBy.name} (${request.requestedBy.email ?? 'no email'})` : 'N/A'} />
-          <DetailRow label="Subject type" value={request.subjectType ?? 'SCHOOL'} />
-          <DetailRow label="Subject ID" value={request.subjectId ?? 'N/A'} />
-          <DetailRow label="Requested at" value={formatDateTime(request.requestedAt)} />
-          <DetailRow label="Approved by" value={request.approvedBy?.name ?? 'N/A'} />
-          <DetailRow label="Approved at" value={formatDateTime(request.approvedAt)} />
-          <DetailRow label="Completed at" value={formatDateTime(request.completedAt)} />
-          <DetailRow label="Reason" value={request.reason ?? 'N/A'} />
-          <DetailRow label="Rejection reason" value={request.rejectionReason ?? 'N/A'} />
-        </div>
-      </div>
-    </div>
-  );
-}
-
 export default function CompliancePage() {
-  const router = useRouter();
   const queryClient = useQueryClient();
   const [activeTab, setActiveTab] = useState<TabKey>('overview');
   const [filters, setFilters] = useState({ query: '', status: '', schoolId: '' });
-  const [selectedRequest, setSelectedRequest] = useState<{ type: 'export' | 'deletion'; item: RequestItem } | null>(null);
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
@@ -186,12 +133,6 @@ export default function CompliancePage() {
   });
 
   const isSuperAdmin = session?.role === 'SUPER_ADMIN';
-
-  useEffect(() => {
-    if (!isSessionLoading && session?.role && session.role !== 'SUPER_ADMIN') {
-      router.replace('/dashboard');
-    }
-  }, [isSessionLoading, router, session?.role]);
 
   const schoolsQuery = useQuery({
     queryKey: ['compliance-schools'],
@@ -214,7 +155,7 @@ export default function CompliancePage() {
   const summaryQuery = useQuery({
     queryKey: ['compliance-summary'],
     queryFn: getComplianceSummary,
-    enabled: isSuperAdmin,
+    enabled: Boolean(session?.role),
     refetchOnWindowFocus: false,
     staleTime: 60_000,
   });
@@ -222,7 +163,7 @@ export default function CompliancePage() {
   const exportsQuery = useQuery({
     queryKey: ['compliance-export-requests', queryParams],
     queryFn: () => getExportRequests(queryParams),
-    enabled: isSuperAdmin,
+    enabled: Boolean(session?.role),
     refetchOnWindowFocus: false,
     staleTime: 60_000,
   });
@@ -230,7 +171,7 @@ export default function CompliancePage() {
   const deletionsQuery = useQuery({
     queryKey: ['compliance-deletion-requests', queryParams],
     queryFn: () => getDeletionRequests(queryParams),
-    enabled: isSuperAdmin,
+    enabled: Boolean(session?.role),
     refetchOnWindowFocus: false,
     staleTime: 60_000,
   });
@@ -238,7 +179,7 @@ export default function CompliancePage() {
   const consentsQuery = useQuery({
     queryKey: ['compliance-consents', queryParams],
     queryFn: () => getConsentRecords(queryParams),
-    enabled: isSuperAdmin,
+    enabled: Boolean(session?.role),
     refetchOnWindowFocus: false,
     staleTime: 60_000,
   });
@@ -246,7 +187,7 @@ export default function CompliancePage() {
   const jobsQuery = useQuery({
     queryKey: ['compliance-jobs', queryParams],
     queryFn: () => getComplianceJobs(queryParams),
-    enabled: isSuperAdmin,
+    enabled: Boolean(session?.role),
     refetchOnWindowFocus: false,
     staleTime: 60_000,
   });
@@ -340,7 +281,7 @@ export default function CompliancePage() {
   };
 
   if (isSessionLoading) return <FullPageLoader label="Loading compliance..." />;
-  if (!isSuperAdmin) return null;
+  if (!session?.role) return null;
 
   const summary = summaryQuery.data;
   const isBusy =
@@ -381,7 +322,7 @@ export default function CompliancePage() {
                 <td className="px-3 py-3 text-slate-600">{formatDateTime(request.completedAt)}</td>
                 <td className="px-3 py-3">
                   <div className="flex flex-wrap gap-2">
-                    <button className="rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50" onClick={() => setSelectedRequest({ type: 'export', item: request })}>View</button>
+                    <Link className="rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50" href={`/dashboard/compliance/exports/${request.id}/review`}>View</Link>
                     <button className="rounded-lg border border-emerald-200 px-3 py-1.5 text-xs font-semibold text-emerald-700 hover:bg-emerald-50" onClick={() => approveExport(request)}>Approve</button>
                     <button className="rounded-lg border border-rose-200 px-3 py-1.5 text-xs font-semibold text-rose-700 hover:bg-rose-50" onClick={() => rejectExport(request)}>Reject</button>
                     <button className="rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-semibold text-slate-400" disabled>
@@ -429,7 +370,7 @@ export default function CompliancePage() {
                 <td className="px-3 py-3 text-slate-600">{formatDateTime(request.completedAt)}</td>
                 <td className="px-3 py-3">
                   <div className="flex flex-wrap gap-2">
-                    <button className="rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50" onClick={() => setSelectedRequest({ type: 'deletion', item: request })}>View</button>
+                    <Link className="rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50" href={`/dashboard/compliance/deletions/${request.id}/review`}>View</Link>
                     <button className="rounded-lg border border-emerald-200 px-3 py-1.5 text-xs font-semibold text-emerald-700 hover:bg-emerald-50" onClick={() => approveDeletion(request)}>Approve</button>
                     <button className="rounded-lg border border-rose-200 px-3 py-1.5 text-xs font-semibold text-rose-700 hover:bg-rose-50" onClick={() => rejectDeletion(request)}>Reject</button>
                   </div>
@@ -523,7 +464,7 @@ export default function CompliancePage() {
 
       <section className="rounded-2xl border border-amber-200 bg-amber-50 p-5 text-sm text-amber-900 shadow-sm">
         <p className="font-semibold">Compliance actions can expose or modify sensitive data.</p>
-        <p className="mt-1">Review requests carefully before approval. Export approval/rejection and deletion rejection are not implemented by the current backend workflow, so the API reports that honestly.</p>
+        <p className="mt-1">Review requests carefully before approval. Approval records reviewer details and status history; deletion execution remains a separate controlled backend workflow.</p>
       </section>
 
       <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
@@ -607,14 +548,6 @@ export default function CompliancePage() {
           {activeTab === 'jobs' ? renderJobsTable() : null}
         </div>
       </section>
-
-      {selectedRequest ? (
-        <RequestDetailModal
-          request={selectedRequest.item}
-          type={selectedRequest.type}
-          onClose={() => setSelectedRequest(null)}
-        />
-      ) : null}
     </div>
   );
 }

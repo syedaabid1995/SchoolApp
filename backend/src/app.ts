@@ -38,6 +38,7 @@ import { adminDataComplianceRouter, dataComplianceRouter } from './routes/dataCo
 import { adminSupportRouter, ticketRouter } from './routes/ticket.routes';
 import { analyticsRouter } from './routes/analytics.routes';
 import { schoolAdminRouter } from './routes/schoolAdmin.routes';
+import { schoolOnboardingRouter } from './routes/schoolOnboarding.routes';
 import { subscriptionMetricsRouter } from './routes/subscriptionMetrics.routes';
 import { subscriptionPlanRouter } from './routes/subscriptionPlan.routes';
 import { teacherRouter } from './routes/teacher.routes';
@@ -200,6 +201,7 @@ export const createApp = () => {
   app.use('/api/v1/tickets', ticketRouter);
   app.use('/api/v1/analytics', analyticsRouter);
   app.use('/api/v1/admin/schools', schoolAdminRouter);
+  app.use('/api/v1/schools', schoolOnboardingRouter);
   app.use('/api/v1/admin/subscription-plans', subscriptionPlanRouter);
   app.use('/api/v1/admin/subscription-metrics', subscriptionMetricsRouter);
   app.use('/api/v1/admin', backupRouter);

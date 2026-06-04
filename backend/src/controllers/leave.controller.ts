@@ -133,6 +133,13 @@ const appInclude = {
 
 const formatStaff = (staff: any) => ({
   ...staff,
+  user: staff.user
+    ? {
+        id: staff.user.id,
+        email: staff.user.email,
+        status: staff.user.status,
+      }
+    : staff.user,
   staffNo: staff.employeeNo,
   fullName: `${staff.firstName ?? ''} ${staff.lastName ?? ''}`.trim(),
 });

@@ -63,7 +63,28 @@ let originalNodeEnv: typeof env.NODE_ENV | null = null;
 
 const defaultPermissionCodes = [
   'dashboard.overview',
+  'reports.view',
+  'reports.export',
+  'reports.students.view',
+  'reports.parents.view',
+  'reports.attendance.view',
+  'reports.exams.view',
+  'reports.staff.view',
+  'reports.academics.view',
+  'reports.homework.view',
+  'reports.library.view',
+  'reports.transport.view',
+  'reports.dormitory.view',
+  'reports.fees.view',
+  'reports.payroll.view',
+  'compliance.view',
+  'compliance.review',
+  'compliance.export.review',
+  'compliance.deletion.review',
   'plans.view',
+  'school.onboarding.view',
+  'school.onboarding.manage',
+  'school.onboarding.review',
   'settings.access',
   'teachers.list',
   'teachers.add',
@@ -101,6 +122,16 @@ const defaultPermissionCodes = [
   'academic.routine.edit',
   'academic.routine.delete',
   'academics.exams',
+  'exam.center.view',
+  'exam.center.manage',
+  'exam.room.view',
+  'exam.room.manage',
+  'exam.seating.view',
+  'exam.seating.manage',
+  'exam.invigilator.view',
+  'exam.invigilator.manage',
+  'exam.hallticket.view',
+  'exam.hallticket.export',
   'academics.marks',
   'students.list',
   'students.add',
@@ -234,8 +265,8 @@ const patchMethod = <T extends object, K extends keyof T>(target: T, key: K, val
 };
 
 const schoolFor = (id: string | null | undefined) => {
-  if (id === SCHOOL_A_ID) return { id, name: 'School A', code: 'SCHA', status: 'ACTIVE', deletedAt: null, statusReason: null };
-  if (id === SCHOOL_B_ID) return { id, name: 'School B', code: 'SCHB', status: 'ACTIVE', deletedAt: null, statusReason: null };
+  if (id === SCHOOL_A_ID) return { id, name: 'School A', code: 'SCHA', status: 'ACTIVE', onboardingStatus: 'DRAFT', deletedAt: null, statusReason: null };
+  if (id === SCHOOL_B_ID) return { id, name: 'School B', code: 'SCHB', status: 'ACTIVE', onboardingStatus: 'DRAFT', deletedAt: null, statusReason: null };
   return null;
 };
 
@@ -355,6 +386,7 @@ export const patchSecurityTestDependencies = () => {
     'classTeacher',
     'configEntry',
     'consentRecord',
+    'complianceJobStatusHistory',
     'dataDeletionJob',
     'dataExportJob',
     'department',
@@ -374,6 +406,7 @@ export const patchSecurityTestDependencies = () => {
     'refreshSession',
     'rolePermission',
     'school',
+    'schoolOnboardingChecklist',
     'schoolMessagingConfig',
     'section',
     'staffAttendance',
@@ -402,6 +435,7 @@ export const patchSecurityTestDependencies = () => {
     'subscriptionPlanPermission',
     'supportTicket',
     'teacherProfile',
+    'teacherOnboarding',
     'payroll',
     'payrollDeduction',
     'payrollEarning',
@@ -542,14 +576,20 @@ export const patchSecurityTestDependencies = () => {
     department: null,
     designation: null,
     isActive: true,
-    user: { id: TEACHER_A_ID, email: 'teacher-a@test.local', status: 'ACTIVE', roles: roleRowsFor(TEACHER_A_ID) },
+    address: 'Teacher Address',
+    user: { id: TEACHER_A_ID, email: 'teacher-a@test.local', status: 'ACTIVE', mustChangePassword: false, roles: roleRowsFor(TEACHER_A_ID) },
     payrolls: [],
   };
   patchMethod(prisma.teacherProfile as any, 'findFirst', async ({ where }: any = {}) => {
     if (where?.schoolId && where.schoolId !== SCHOOL_A_ID) return null;
+    const matchesOr = Array.isArray(where?.OR)
+      ? where.OR.some((condition: any) => condition.id === TEST_STAFF_PROFILE_A_ID || condition.userId === TEACHER_A_ID)
+      : true;
+    if (!matchesOr) return null;
     if (where?.id && where.id !== TEST_STAFF_PROFILE_A_ID) return null;
     if (where?.userId && where.userId !== TEACHER_A_ID) return null;
     if (where?.isActive === true) return testStaffProfile;
+    if (Array.isArray(where?.OR) && matchesOr) return testStaffProfile;
     if (where?.id === TEST_STAFF_PROFILE_A_ID || where?.userId === TEACHER_A_ID) return testStaffProfile;
     return null;
   });

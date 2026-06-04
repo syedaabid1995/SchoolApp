@@ -6,7 +6,7 @@ WORKDIR /app
 ENV PORT=3000
 
 RUN apt-get update -y \
-  && apt-get install -y --no-install-recommends openssl ca-certificates redis-server \
+  && apt-get install -y --no-install-recommends openssl ca-certificates redis-server postgresql-client \
   && rm -rf /var/lib/apt/lists/*
 
 COPY package.json package-lock.json* ./

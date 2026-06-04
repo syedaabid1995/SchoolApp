@@ -326,6 +326,7 @@ export const Sidebar = ({
         id: 'system-setup',
         label: 'System Setup',
         items: [
+          { href: '/dashboard/onboarding', label: 'Onboarding Readiness', icon: 'OR' },
           { href: '/dashboard/institution-setup', label: 'General', icon: 'IS', permissionPath: '/dashboard/settings' },
           { href: '/dashboard/settings/branding', label: 'Branding', icon: 'BR', permissionPath: '/dashboard/settings' },
           { href: '/dashboard/payment-methods', label: 'Payment Methods', icon: 'PM', permissionPath: '/dashboard/settings' },
@@ -352,6 +353,19 @@ export const Sidebar = ({
         ],
       },
       {
+        id: 'examination',
+        label: 'Examination',
+        items: [
+          { href: '/dashboard/academics/exams', label: 'Exams', icon: 'EX' },
+          { href: '/dashboard/academics/marks', label: 'Marks', icon: 'MK' },
+          { href: '/dashboard/academics/exams/centers', label: 'Centers', icon: 'EC' },
+          { href: '/dashboard/academics/exams/rooms', label: 'Rooms', icon: 'ER' },
+          { href: '/dashboard/academics/exams/seating', label: 'Seating', icon: 'ST' },
+          { href: '/dashboard/academics/exams/invigilators', label: 'Invigilators', icon: 'IN' },
+          { href: '/dashboard/academics/exams/hall-tickets', label: 'Hall Tickets', icon: 'HT' },
+        ],
+      },
+      {
         id: 'students',
         label: 'Students',
         items: [
@@ -371,6 +385,7 @@ export const Sidebar = ({
         label: 'Employees',
         items: [
           { href: '/dashboard/staff', label: 'Employee List', icon: 'SD' },
+          { href: '/dashboard/teachers/onboarding', label: 'Teacher Onboarding', icon: 'TO' },
           { href: '/dashboard/staff/add?type=teacher', label: 'Add Teacher', icon: 'AU' },
           { href: '/dashboard/staff/attendance', label: 'Employee Attendance', icon: 'SA' },
           { href: '/dashboard/teachers/assign', label: 'Assign Classes', icon: 'AC' },

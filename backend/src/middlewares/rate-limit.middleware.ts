@@ -301,9 +301,16 @@ export const aiRateLimit = () => async (req: Request, _res: Response, next: Next
 };
 
 export const loginIpRateLimit = () => async (req: Request, _res: Response, next: NextFunction) => {
-  void req;
-  // Temporarily disabled for demo login recovery. Re-enable before production hardening.
-  return next();
+  try {
+    const result = await consumeAuthBucket(loginIpKey(req), 20, 15 * 60);
+    if (result.limited) {
+      await auditRateLimitTriggered(req, 'LOGIN');
+      return rejectAuthRateLimit(result, next);
+    }
+    return next();
+  } catch (err) {
+    return next(err);
+  }
 };
 
 export const forgotPasswordRateLimit = () => async (req: Request, _res: Response, next: NextFunction) => {
@@ -331,22 +338,18 @@ export const forgotPasswordRateLimit = () => async (req: Request, _res: Response
 };
 
 export const assertLoginFailureLimit = async (identifier: string, schoolScope: string) => {
-  void identifier;
-  void schoolScope;
-  // Temporarily disabled for demo login recovery. Re-enable before production hardening.
+  const result = await peekAuthBucket(loginFailureKey(identifier, schoolScope), 5);
+  if (result.limited) {
+    throw new HttpError(429, AUTH_RATE_LIMIT_MESSAGE);
+  }
 };
 
 export const recordLoginFailure = async (identifier: string, schoolScope: string) => {
-  void identifier;
-  void schoolScope;
-  // Temporarily disabled for demo login recovery. Re-enable before production hardening.
-  return { limited: false, retryAfterSeconds: 0 };
+  return consumeAuthBucket(loginFailureKey(identifier, schoolScope), 5, 15 * 60);
 };
 
 export const resetLoginFailureCounter = async (identifier: string, schoolScope: string) => {
-  void identifier;
-  void schoolScope;
-  // Temporarily disabled for demo login recovery. Re-enable before production hardening.
+  await clearAuthBucket(loginFailureKey(identifier, schoolScope));
 };
 
 export const consumeMfaChallengeLimit = async (userId: string, schoolId: string | null) => {

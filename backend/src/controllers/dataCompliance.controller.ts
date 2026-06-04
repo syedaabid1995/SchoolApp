@@ -2,6 +2,7 @@ import type { Request, Response } from 'express';
 import { z } from 'zod';
 import { resolveSchoolId } from '../utils/tenant';
 import { HttpError } from '../middlewares/error.middleware';
+import { getEffectivePermissionCodesForUser } from '../utils/employeePermissions';
 import { exportTenantData, getExportJob } from '../services/dataExport.service';
 import { requestDeletion, approveDeletion, executeDeletion, listDeletionJobs } from '../services/dataDeletion.service';
 import {
@@ -10,6 +11,7 @@ import {
   getAdminComplianceSummary,
   getAdminDeletionRequestById,
   getAdminExportRequestById,
+  getComplianceJobHistory,
   listAdminComplianceJobs,
   listAdminConsentRecords,
   listAdminDeletionRequests,
@@ -43,12 +45,35 @@ const rejectSchema = z.object({
   reason: z.string().trim().min(1).max(500),
 });
 
+const managedRoles = new Set(['SCHOOL_ADMIN', 'TEACHER', 'ACCOUNTANT', 'LIBRARIAN', 'STAFF']);
+
 const parseAdminListQuery = (query: Request['query']) => adminListQuerySchema.parse(query) as {
   page: number;
   limit: number;
   status?: string;
   schoolId?: string;
   query?: string;
+};
+
+const scopeAdminQuery = (req: Request) => {
+  const query = parseAdminListQuery(req.query);
+  if (req.auth?.schoolId) {
+    if (query.schoolId && query.schoolId !== req.auth.schoolId) {
+      throw new HttpError(403, 'Tenant scope violation');
+    }
+    return { ...query, schoolId: req.auth.schoolId };
+  }
+  return query;
+};
+
+const requireCompliancePermission = async (req: Request, permissionCode: string) => {
+  const auth = req.auth;
+  if (!auth) throw new HttpError(401, 'Unauthorized');
+  if (!auth.schoolId || auth.role === 'SUPER_ADMIN' || !managedRoles.has(auth.role ?? '')) return;
+  const permissions = await getEffectivePermissionCodesForUser(auth.schoolId, auth.userId, auth.role);
+  if (!permissions.includes(permissionCode)) {
+    throw new HttpError(403, `Missing required compliance permission: ${permissionCode}`);
+  }
 };
 
 export const requestExport = async (req: Request, res: Response) => {
@@ -117,46 +142,67 @@ export const listDeletionJobsApi = async (req: Request, res: Response) => {
   res.status(200).json(jobs);
 };
 
-export const getComplianceSummaryApi = async (_req: Request, res: Response) => {
-  const summary = await getAdminComplianceSummary();
+export const getComplianceSummaryApi = async (req: Request, res: Response) => {
+  const summary = await getAdminComplianceSummary({ schoolId: req.auth?.schoolId ?? undefined });
   res.status(200).json({ success: true, data: summary });
 };
 
 export const listExportRequestsApi = async (req: Request, res: Response) => {
-  const query = parseAdminListQuery(req.query);
+  const query = scopeAdminQuery(req);
   const result = await listAdminExportRequests(query);
   res.status(200).json({ success: true, data: result });
 };
 
 export const getExportRequestByIdApi = async (req: Request, res: Response) => {
   const result = await getAdminExportRequestById(req.params.id);
+  if (req.auth?.schoolId && result.schoolId !== req.auth.schoolId) throw new HttpError(403, 'Tenant scope violation');
   res.status(200).json({ success: true, data: result });
 };
 
 export const approveExportRequestApi = async (req: Request, res: Response) => {
-  noteSchema.parse(req.body);
-  const result = await approveAdminExportRequest();
+  await requireCompliancePermission(req, 'compliance.export.review');
+  const payload = noteSchema.parse(req.body);
+  const auth = req.auth;
+  if (!auth) throw new HttpError(401, 'Unauthorized');
+  const result = await approveAdminExportRequest({
+    id: req.params.id,
+    actorId: auth.userId,
+    actorRole: auth.role ?? 'SUPER_ADMIN',
+    actorSchoolId: auth.schoolId,
+    note: payload.note ?? null,
+  });
   res.status(200).json({ success: true, data: result });
 };
 
 export const rejectExportRequestApi = async (req: Request, res: Response) => {
-  rejectSchema.parse(req.body);
-  const result = await rejectAdminExportRequest();
+  await requireCompliancePermission(req, 'compliance.export.review');
+  const payload = rejectSchema.parse(req.body);
+  const auth = req.auth;
+  if (!auth) throw new HttpError(401, 'Unauthorized');
+  const result = await rejectAdminExportRequest({
+    id: req.params.id,
+    actorId: auth.userId,
+    actorRole: auth.role ?? 'SUPER_ADMIN',
+    actorSchoolId: auth.schoolId,
+    reason: payload.reason,
+  });
   res.status(200).json({ success: true, data: result });
 };
 
 export const listDeletionRequestsApi = async (req: Request, res: Response) => {
-  const query = parseAdminListQuery(req.query);
+  const query = scopeAdminQuery(req);
   const result = await listAdminDeletionRequests(query);
   res.status(200).json({ success: true, data: result });
 };
 
 export const getDeletionRequestByIdApi = async (req: Request, res: Response) => {
   const result = await getAdminDeletionRequestById(req.params.id);
+  if (req.auth?.schoolId && result.schoolId !== req.auth.schoolId) throw new HttpError(403, 'Tenant scope violation');
   res.status(200).json({ success: true, data: result });
 };
 
 export const approveDeletionRequestApi = async (req: Request, res: Response) => {
+  await requireCompliancePermission(req, 'compliance.deletion.review');
   const payload = noteSchema.parse(req.body);
   const auth = req.auth;
   if (!auth) throw new HttpError(401, 'Unauthorized');
@@ -164,25 +210,40 @@ export const approveDeletionRequestApi = async (req: Request, res: Response) => 
     id: req.params.id,
     actorId: auth.userId,
     actorRole: auth.role ?? 'SUPER_ADMIN',
+    actorSchoolId: auth.schoolId,
     note: payload.note ?? null,
   });
   res.status(200).json({ success: true, data: result });
 };
 
 export const rejectDeletionRequestApi = async (req: Request, res: Response) => {
-  rejectSchema.parse(req.body);
-  const result = await rejectAdminDeletionRequest();
+  await requireCompliancePermission(req, 'compliance.deletion.review');
+  const payload = rejectSchema.parse(req.body);
+  const auth = req.auth;
+  if (!auth) throw new HttpError(401, 'Unauthorized');
+  const result = await rejectAdminDeletionRequest({
+    id: req.params.id,
+    actorId: auth.userId,
+    actorRole: auth.role ?? 'SUPER_ADMIN',
+    actorSchoolId: auth.schoolId,
+    reason: payload.reason,
+  });
   res.status(200).json({ success: true, data: result });
 };
 
 export const listConsentRecordsApi = async (req: Request, res: Response) => {
-  const query = parseAdminListQuery(req.query);
+  const query = scopeAdminQuery(req);
   const result = await listAdminConsentRecords(query);
   res.status(200).json({ success: true, data: result });
 };
 
 export const listComplianceJobsApi = async (req: Request, res: Response) => {
-  const query = parseAdminListQuery(req.query);
+  const query = scopeAdminQuery(req);
   const result = await listAdminComplianceJobs(query);
+  res.status(200).json({ success: true, data: result });
+};
+
+export const getComplianceJobHistoryApi = async (req: Request, res: Response) => {
+  const result = await getComplianceJobHistory({ jobId: req.params.id, actorSchoolId: req.auth?.schoolId });
   res.status(200).json({ success: true, data: result });
 };

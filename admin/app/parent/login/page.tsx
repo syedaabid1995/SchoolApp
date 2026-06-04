@@ -35,9 +35,9 @@ export default function ParentLoginPage() {
         throw new Error(message);
       }
       const data = await res.json().catch(() => null);
-      const otpValue = (data as any)?.otp || (data as any)?.data?.otp;
+      const otpValue = (data as any)?.code || (data as any)?.otp || (data as any)?.data?.code || (data as any)?.data?.otp;
       if (otpValue) {
-        setMessage(`OTP sent. Please check your phone. This is your code ${otpValue}`);
+        setMessage(otpValue ? `OTP sent. Development code: ${otpValue}` : 'OTP sent. Please check your phone.');
       } else {
         setMessage((data as any)?.message || 'OTP sent. Please check your phone.');
       }

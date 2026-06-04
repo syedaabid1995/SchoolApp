@@ -3,7 +3,7 @@ import { z } from 'zod';
 import { prisma } from '../config/db';
 import { resolveSchoolId } from '../utils/tenant';
 import { HttpError } from '../middlewares/error.middleware';
-import { createBackup, restoreBackup } from '../services/backup.service';
+import { createBackup, getBackupFilePath, restoreBackup } from '../services/backup.service';
 import { createAuditLog } from '../services/auditLog.service';
 
 const backupSchema = z.object({
@@ -33,11 +33,11 @@ const idSchema = z.object({
 const isUuid = (value?: string) => Boolean(value && z.string().uuid().safeParse(value).success);
 
 const serviceStatus = {
-  backupExecutionImplemented: false,
-  restoreExecutionImplemented: false,
-  downloadImplemented: false,
+  backupExecutionImplemented: true,
+  restoreExecutionImplemented: true,
+  downloadImplemented: true,
   deleteImplemented: false,
-  rejectRestoreImplemented: false,
+  rejectRestoreImplemented: true,
 };
 
 const requireAuth = (req: Request) => {
@@ -69,8 +69,8 @@ const restoreInclude = {
 
 const mapBackup = (backup: any) => ({
   id: backup.id,
-  type: 'SCHOOL_DATA',
-  scope: 'SCHOOL',
+  type: 'FULL_DATABASE',
+  scope: 'PLATFORM',
   schoolId: backup.schoolId,
   schoolName: backup.school?.name ?? null,
   schoolCode: backup.school?.code ?? null,
@@ -81,15 +81,15 @@ const mapBackup = (backup: any) => ({
   completedAt: backup.finishedAt?.toISOString() ?? null,
   createdAt: backup.createdAt.toISOString(),
   updatedAt: backup.updatedAt.toISOString(),
-  errorMessage: backup.status === 'FAILED' ? 'Backup service is not configured.' : null,
-  downloadAvailable: false,
+  errorMessage: backup.status === 'FAILED' ? 'Backup failed. Review server logs for details.' : null,
+  downloadAvailable: backup.status === 'COMPLETED' && Boolean(backup.storagePath),
   reason: backup.reason ?? null,
 });
 
 const mapRestore = (restore: any) => ({
   id: restore.id,
   backupId: restore.backupId,
-  scope: 'SCHOOL',
+  scope: 'PLATFORM',
   schoolId: restore.backup?.schoolId ?? null,
   schoolName: restore.backup?.school?.name ?? null,
   schoolCode: restore.backup?.school?.code ?? null,
@@ -101,7 +101,7 @@ const mapRestore = (restore: any) => ({
   completedAt: restore.finishedAt?.toISOString() ?? null,
   createdAt: restore.createdAt.toISOString(),
   updatedAt: restore.updatedAt.toISOString(),
-  errorMessage: restore.status === 'FAILED' ? 'Restore service is not configured.' : null,
+  errorMessage: restore.status === 'FAILED' ? 'Restore failed. Review server logs for details.' : null,
   reason: restore.reason ?? null,
 });
 
@@ -136,24 +136,7 @@ export const requestBackup = async (req: Request, res: Response) => {
     afterState: { backupId: job.id, schoolId },
   });
 
-  try {
-    await createBackup({ schoolId, requestedBy: auth.userId, reason: payload.reason ?? null });
-  } catch (error) {
-    await prisma.backupJob.update({ where: { id: job.id }, data: { status: 'FAILED', finishedAt: new Date() } });
-    await createAuditLog({
-      schoolId,
-      actorId: auth.userId,
-      actorRole: actorRole(req),
-      entityType: 'BackupJob',
-      entityId: job.id,
-      action: 'BACKUP_FAILED',
-      afterState: { backupId: job.id, reason: 'service_not_configured' },
-    });
-    throw error;
-  }
-
-  const updated = await prisma.backupJob.findUniqueOrThrow({ where: { id: job.id }, include: backupInclude });
-  res.status(202).json(mapBackup(updated));
+  res.status(201).json(mapBackup(job));
 };
 
 export const requestRestore = async (req: Request, res: Response) => {
@@ -191,29 +174,7 @@ export const requestRestore = async (req: Request, res: Response) => {
     afterState: { restoreId: restoreJob.id, backupId: payload.backupId },
   });
 
-  try {
-    await restoreBackup({
-      schoolId,
-      backupId: payload.backupId,
-      requestedBy: auth.userId,
-      reason: payload.reason ?? null,
-    });
-  } catch (error) {
-    await prisma.restoreJob.update({ where: { id: restoreJob.id }, data: { status: 'FAILED', finishedAt: new Date() } });
-    await createAuditLog({
-      schoolId,
-      actorId: auth.userId,
-      actorRole: actorRole(req),
-      entityType: 'RestoreJob',
-      entityId: restoreJob.id,
-      action: 'RESTORE_FAILED',
-      afterState: { restoreId: restoreJob.id, reason: 'service_not_configured' },
-    });
-    throw error;
-  }
-
-  const updated = await prisma.restoreJob.findUniqueOrThrow({ where: { id: restoreJob.id }, include: restoreInclude });
-  res.status(202).json(mapRestore(updated));
+  res.status(201).json(mapRestore(restoreJob));
 };
 
 export const approveRestore = async (req: Request, res: Response) => {
@@ -228,6 +189,7 @@ export const approveRestore = async (req: Request, res: Response) => {
   });
 
   if (!restoreJob) throw new HttpError(404, 'Restore job not found');
+  if (restoreJob.status !== 'REQUESTED') throw new HttpError(409, 'Only requested restore jobs can be approved');
 
   const updated = await prisma.restoreJob.update({
     where: { id },
@@ -249,8 +211,125 @@ export const approveRestore = async (req: Request, res: Response) => {
   res.status(200).json(mapRestore(updated));
 };
 
-export const rejectRestore = async (_req: Request, _res: Response) => {
-  throw new HttpError(501, 'Restore rejection is not supported by the current restore status model');
+export const rejectRestore = async (req: Request, res: Response) => {
+  const auth = requireAuth(req);
+  const { id } = idSchema.parse(req.params);
+  const payload = z.object({ reason: z.string().trim().min(1).max(1000).optional() }).parse(req.body ?? {});
+  const requestedSchoolId = req.body.schoolId ?? (req.query.schoolId as string | undefined);
+  const schoolId = resolveOptionalSchoolScope(req, requestedSchoolId);
+
+  const restoreJob = await prisma.restoreJob.findFirst({
+    where: { id, ...(schoolId ? { backup: { schoolId } } : {}) },
+    include: restoreInclude,
+  });
+
+  if (!restoreJob) throw new HttpError(404, 'Restore job not found');
+  if (restoreJob.status !== 'REQUESTED') throw new HttpError(409, 'Only requested restore jobs can be rejected');
+
+  const updated = await prisma.restoreJob.update({
+    where: { id },
+    data: { status: 'REJECTED', reason: payload.reason ?? restoreJob.reason },
+    include: restoreInclude,
+  });
+
+  await createAuditLog({
+    schoolId: updated.backup.schoolId,
+    actorId: auth.userId,
+    actorRole: actorRole(req),
+    entityType: 'RestoreJob',
+    entityId: updated.id,
+    action: 'RESTORE_REJECTED',
+    beforeState: { status: restoreJob.status },
+    afterState: { status: updated.status, reason: payload.reason ?? null },
+  });
+
+  res.status(200).json(mapRestore(updated));
+};
+
+export const runBackup = async (req: Request, res: Response) => {
+  const auth = requireAuth(req);
+  const { id } = idSchema.parse(req.params);
+  const backup = await prisma.backupJob.findUnique({ where: { id }, include: backupInclude });
+
+  if (!backup) throw new HttpError(404, 'Backup not found');
+  if (!['REQUESTED', 'FAILED'].includes(backup.status)) throw new HttpError(409, 'Backup cannot be run from its current status');
+
+  try {
+    await createBackup({ jobId: backup.id, schoolId: backup.schoolId, requestedBy: auth.userId, reason: backup.reason });
+  } catch (error) {
+    await createAuditLog({
+      schoolId: backup.schoolId,
+      actorId: auth.userId,
+      actorRole: actorRole(req),
+      entityType: 'BackupJob',
+      entityId: backup.id,
+      action: 'BACKUP_FAILED',
+      afterState: { backupId: backup.id, message: error instanceof Error ? error.message : 'unknown_error' },
+    });
+    throw error;
+  }
+
+  const updated = await prisma.backupJob.findUniqueOrThrow({ where: { id }, include: backupInclude });
+  await createAuditLog({
+    schoolId: updated.schoolId,
+    actorId: auth.userId,
+    actorRole: actorRole(req),
+    entityType: 'BackupJob',
+    entityId: updated.id,
+    action: 'BACKUP_COMPLETED',
+    beforeState: { status: backup.status },
+    afterState: { status: updated.status },
+  });
+  res.status(200).json(mapBackup(updated));
+};
+
+export const downloadBackup = async (req: Request, res: Response) => {
+  const { id } = idSchema.parse(req.params);
+  const backupFile = await getBackupFilePath(id);
+  res.download(backupFile, `${id}.dump`);
+};
+
+export const runRestore = async (req: Request, res: Response) => {
+  const auth = requireAuth(req);
+  const { id } = idSchema.parse(req.params);
+  const restoreJob = await prisma.restoreJob.findUnique({ where: { id }, include: restoreInclude });
+
+  if (!restoreJob) throw new HttpError(404, 'Restore job not found');
+  if (restoreJob.status !== 'APPROVED') throw new HttpError(409, 'Restore must be approved before it can run');
+
+  try {
+    await restoreBackup({
+      jobId: restoreJob.id,
+      schoolId: restoreJob.backup.schoolId,
+      backupId: restoreJob.backupId,
+      requestedBy: auth.userId,
+      reason: restoreJob.reason,
+    });
+  } catch (error) {
+    await createAuditLog({
+      schoolId: restoreJob.backup.schoolId,
+      actorId: auth.userId,
+      actorRole: actorRole(req),
+      entityType: 'RestoreJob',
+      entityId: restoreJob.id,
+      action: 'RESTORE_FAILED',
+      afterState: { restoreId: restoreJob.id, message: error instanceof Error ? error.message : 'unknown_error' },
+    });
+    throw error;
+  }
+
+  const updated = await prisma.restoreJob.findUniqueOrThrow({ where: { id }, include: restoreInclude });
+  await createAuditLog({
+    schoolId: updated.backup.schoolId,
+    actorId: auth.userId,
+    actorRole: actorRole(req),
+    entityType: 'RestoreJob',
+    entityId: updated.id,
+    action: 'RESTORE_COMPLETED',
+    beforeState: { status: restoreJob.status },
+    afterState: { status: updated.status },
+  });
+  res.status(200).json(mapRestore(updated));
 };
 
 export const listBackups = async (req: Request, res: Response) => {

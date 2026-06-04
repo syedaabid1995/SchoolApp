@@ -8,11 +8,14 @@ import FullPageLoader from '../../../components/FullPageLoader';
 import { getSession } from '../../../services/auth.service';
 import {
   createBackup,
+  downloadBackup,
   getBackupJobs,
   getRestoreJobs,
   requestRestore,
   approveRestore,
   rejectRestore,
+  runBackup,
+  runRestore,
   type BackupJob,
   type BackupServiceStatus,
   type RestoreJob,
@@ -20,14 +23,14 @@ import {
 import { listSchools } from '../../../services/school.service';
 
 const backupStatuses = ['REQUESTED', 'RUNNING', 'COMPLETED', 'FAILED'] as const;
-const backupTypes = ['SCHOOL_DATA', 'FULL_DATABASE', 'DATABASE_ONLY', 'FILES_ONLY'] as const;
+const backupTypes = ['FULL_DATABASE'] as const;
 
 const defaultServiceStatus: BackupServiceStatus = {
-  backupExecutionImplemented: false,
-  restoreExecutionImplemented: false,
-  downloadImplemented: false,
+  backupExecutionImplemented: true,
+  restoreExecutionImplemented: true,
+  downloadImplemented: true,
   deleteImplemented: false,
-  rejectRestoreImplemented: false,
+  rejectRestoreImplemented: true,
 };
 
 const formatLabel = (value?: string | null) =>
@@ -122,8 +125,8 @@ export default function BackupsPage() {
   const [selectedBackupJob, setSelectedBackupJob] = useState<BackupJob | null>(null);
   const [selectedRestoreJob, setSelectedRestoreJob] = useState<RestoreJob | null>(null);
   const [backupForm, setBackupForm] = useState({
-    type: 'SCHOOL_DATA',
-    scope: 'SCHOOL',
+    type: 'FULL_DATABASE',
+    scope: 'PLATFORM',
     schoolId: '',
     reason: '',
   });
@@ -238,11 +241,32 @@ export default function BackupsPage() {
     mutationFn: createBackup,
     onSuccess: () => {
       setIsBackupModalOpen(false);
-      setBackupForm({ type: 'SCHOOL_DATA', scope: 'SCHOOL', schoolId: '', reason: '' });
+      setBackupForm({ type: 'FULL_DATABASE', scope: 'PLATFORM', schoolId: '', reason: '' });
       setFormError('');
       queryClient.invalidateQueries({ queryKey: ['backup-jobs'] });
     },
-    onError: () => setFormError('Backup service is not implemented yet.'),
+    onError: (error: any) => setFormError(error?.response?.data?.error?.message ?? 'Unable to create backup request.'),
+  });
+
+  const runBackupMutation = useMutation({
+    mutationFn: runBackup,
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['backup-jobs'] }),
+    onError: (error: any) => setFormError(error?.response?.data?.error?.message ?? 'Unable to run backup.'),
+  });
+
+  const downloadBackupMutation = useMutation({
+    mutationFn: async (backup: BackupJob) => {
+      const blob = await downloadBackup(backup.id);
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `${backup.id}.dump`;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(url);
+    },
+    onError: (error: any) => setFormError(error?.response?.data?.error?.message ?? 'Unable to download backup.'),
   });
 
   const requestRestoreMutation = useMutation({
@@ -253,7 +277,7 @@ export default function BackupsPage() {
       setFormError('');
       queryClient.invalidateQueries({ queryKey: ['restore-jobs'] });
     },
-    onError: () => setFormError('Restore service is not implemented yet.'),
+    onError: (error: any) => setFormError(error?.response?.data?.error?.message ?? 'Unable to request restore.'),
   });
 
   const approveRestoreMutation = useMutation({
@@ -266,6 +290,12 @@ export default function BackupsPage() {
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['restore-jobs'] }),
   });
 
+  const runRestoreMutation = useMutation({
+    mutationFn: runRestore,
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['restore-jobs'] }),
+    onError: (error: any) => setFormError(error?.response?.data?.error?.message ?? 'Unable to run restore.'),
+  });
+
   const refreshAll = () => {
     refetchBackups();
     refetchRestores();
@@ -273,11 +303,11 @@ export default function BackupsPage() {
 
   const submitBackup = () => {
     if (!serviceStatus.backupExecutionImplemented) {
-      setFormError('Backup execution is not implemented yet on the backend.');
+      setFormError('Backup execution is currently unavailable on the backend.');
       return;
     }
     if (!backupForm.schoolId) {
-      setFormError('School is required for the current backup model.');
+      setFormError('School audit context is required by the current backup job model.');
       return;
     }
     createBackupMutation.mutate({
@@ -291,7 +321,7 @@ export default function BackupsPage() {
   const submitRestore = () => {
     if (!restoreBackupJob) return;
     if (!serviceStatus.restoreExecutionImplemented) {
-      setFormError('Restore execution is not implemented yet.');
+      setFormError('Restore execution is currently unavailable.');
       return;
     }
     if (!restoreForm.confirmed) {
@@ -322,7 +352,7 @@ export default function BackupsPage() {
             <p className="text-sm font-semibold uppercase tracking-wide text-slate-500">Super Admin</p>
             <h1 className="mt-1 text-2xl font-bold tracking-tight text-slate-950 md:text-3xl">Backups & Restore</h1>
             <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-600">
-              Manage platform and school backup jobs, restore requests, and backup history.
+              Manage platform database backup jobs, restore requests, and backup history.
             </p>
           </div>
           <div className="flex flex-wrap gap-2">
@@ -346,7 +376,7 @@ export default function BackupsPage() {
         <p className="font-semibold">Backup and restore operations are sensitive. Only Super Admins can perform these actions.</p>
         {!serviceStatus.backupExecutionImplemented || !serviceStatus.restoreExecutionImplemented ? (
           <p className="mt-1">
-            Backup and restore execution is currently not implemented. This page displays records and readiness status only.
+              Backup and restore execution is currently unavailable. This page displays records and readiness status only.
           </p>
         ) : null}
       </section>
@@ -426,14 +456,14 @@ export default function BackupsPage() {
             <div className="mb-5 flex items-start justify-between gap-4">
               <div>
                 <h2 className="text-xl font-semibold text-slate-950">Create Backup</h2>
-                <p className="mt-1 text-sm text-slate-500">Current backend model supports school-scoped backup records.</p>
+                <p className="mt-1 text-sm text-slate-500">Creates a full database backup. School selection is audit context only.</p>
               </div>
               <Button variant="outline" size="sm" onClick={() => setIsBackupModalOpen(false)}>
                 Close
               </Button>
             </div>
             <div className="mb-5 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
-              Backup execution is not implemented yet on the backend. The submit action is disabled to avoid fake success.
+              Backup execution is currently unavailable on the backend. The submit action is disabled to avoid fake success.
             </div>
             <div className="grid gap-4 md:grid-cols-2">
               <div>
@@ -444,8 +474,8 @@ export default function BackupsPage() {
                   className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm outline-none focus:border-sky-500 focus:ring-2 focus:ring-sky-100"
                 >
                   {backupTypes.map((type) => (
-                    <option key={type} value={type} disabled={type !== 'SCHOOL_DATA'}>
-                      {formatLabel(type)}{type !== 'SCHOOL_DATA' ? ' (not supported yet)' : ''}
+                    <option key={type} value={type}>
+                      {formatLabel(type)}
                     </option>
                   ))}
                 </select>
@@ -457,7 +487,7 @@ export default function BackupsPage() {
                   onChange={(event) => setBackupForm((prev) => ({ ...prev, schoolId: event.target.value }))}
                   className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm outline-none focus:border-sky-500 focus:ring-2 focus:ring-sky-100"
                 >
-                  <option value="">Select school</option>
+                  <option value="">Select audit school context</option>
                   {schools?.items.map((school) => (
                     <option key={school.id} value={school.id}>
                       {school.name} ({school.code})
@@ -502,12 +532,12 @@ export default function BackupsPage() {
               </Button>
             </div>
             <div className="mb-5 rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
-              Restore execution is not implemented yet. The submit action is disabled to avoid fake success.
+              Restore execution is currently unavailable. The submit action is disabled to avoid fake success.
             </div>
             <div className="space-y-4">
               <div className="rounded-xl bg-slate-50 px-4 py-3 text-sm">
                 <p className="font-semibold text-slate-950">{restoreBackupJob.id}</p>
-                <p className="text-slate-500">{restoreBackupJob.schoolName ?? 'Unknown school'}</p>
+                <p className="text-slate-500">Full database restore. Context: {restoreBackupJob.schoolName ?? 'Unknown school'}</p>
               </div>
               <textarea
                 value={restoreForm.reason}
@@ -555,7 +585,7 @@ export default function BackupsPage() {
               <DetailRow label="Status" value={<Badge className={statusBadgeClass(selectedBackupJob.status)}>{formatLabel(selectedBackupJob.status)}</Badge>} />
               <DetailRow label="Type" value={formatLabel(selectedBackupJob.type)} />
               <DetailRow label="Scope" value={formatLabel(selectedBackupJob.scope)} />
-              <DetailRow label="School" value={`${selectedBackupJob.schoolName ?? 'N/A'} ${selectedBackupJob.schoolCode ? `(${selectedBackupJob.schoolCode})` : ''}`} />
+              <DetailRow label="Audit context" value={`${selectedBackupJob.schoolName ?? 'N/A'} ${selectedBackupJob.schoolCode ? `(${selectedBackupJob.schoolCode})` : ''}`} />
               <DetailRow label="Created by" value={selectedBackupJob.createdBy?.name ?? 'N/A'} />
               <DetailRow label="File size" value={formatFileSize(selectedBackupJob.fileSize)} />
               <DetailRow label="Started" value={formatDateTime(selectedBackupJob.startedAt)} />
@@ -585,7 +615,7 @@ export default function BackupsPage() {
               <DetailRow label="Status" value={<Badge className={statusBadgeClass(selectedRestoreJob.status)}>{formatLabel(selectedRestoreJob.status)}</Badge>} />
               <DetailRow label="Backup ID" value={selectedRestoreJob.backupId} />
               <DetailRow label="Scope" value={formatLabel(selectedRestoreJob.scope)} />
-              <DetailRow label="School" value={`${selectedRestoreJob.schoolName ?? 'N/A'} ${selectedRestoreJob.schoolCode ? `(${selectedRestoreJob.schoolCode})` : ''}`} />
+              <DetailRow label="Audit context" value={`${selectedRestoreJob.schoolName ?? 'N/A'} ${selectedRestoreJob.schoolCode ? `(${selectedRestoreJob.schoolCode})` : ''}`} />
               <DetailRow label="Requested by" value={selectedRestoreJob.requestedBy?.name ?? 'N/A'} />
               <DetailRow label="Approved by" value={selectedRestoreJob.approvedBy?.name ?? 'N/A'} />
               <DetailRow label="Requested" value={formatDateTime(selectedRestoreJob.requestedAt)} />
@@ -620,7 +650,7 @@ export default function BackupsPage() {
                   <th className="whitespace-nowrap px-3 py-3">ID</th>
                   <th className="whitespace-nowrap px-3 py-3">Type</th>
                   <th className="whitespace-nowrap px-3 py-3">Scope</th>
-                  <th className="whitespace-nowrap px-3 py-3">School</th>
+                  <th className="whitespace-nowrap px-3 py-3">Audit context</th>
                   <th className="whitespace-nowrap px-3 py-3">Status</th>
                   <th className="whitespace-nowrap px-3 py-3">Size</th>
                   <th className="whitespace-nowrap px-3 py-3">Created by</th>
@@ -657,14 +687,23 @@ export default function BackupsPage() {
                         </button>
                         <button
                           type="button"
-                          disabled={!backup.downloadAvailable || !serviceStatus.downloadImplemented}
+                          disabled={!backup.downloadAvailable || !serviceStatus.downloadImplemented || downloadBackupMutation.isPending}
+                          onClick={() => downloadBackupMutation.mutate(backup)}
                           className="rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-semibold text-slate-400 disabled:cursor-not-allowed"
                         >
                           Download
                         </button>
                         <button
                           type="button"
-                          disabled={!serviceStatus.restoreExecutionImplemented}
+                          disabled={!['REQUESTED', 'FAILED'].includes(String(backup.status)) || runBackupMutation.isPending}
+                          onClick={() => runBackupMutation.mutate(backup.id)}
+                          className="rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-semibold text-slate-700 disabled:cursor-not-allowed disabled:text-slate-400"
+                        >
+                          Run
+                        </button>
+                        <button
+                          type="button"
+                          disabled={backup.status !== 'COMPLETED' || !serviceStatus.restoreExecutionImplemented}
                           onClick={() => {
                             setFormError('');
                             setRestoreBackupJob(backup);
@@ -707,7 +746,7 @@ export default function BackupsPage() {
                   <th className="whitespace-nowrap px-3 py-3">Restore ID</th>
                   <th className="whitespace-nowrap px-3 py-3">Backup ID</th>
                   <th className="whitespace-nowrap px-3 py-3">Scope</th>
-                  <th className="whitespace-nowrap px-3 py-3">School</th>
+                  <th className="whitespace-nowrap px-3 py-3">Audit context</th>
                   <th className="whitespace-nowrap px-3 py-3">Status</th>
                   <th className="whitespace-nowrap px-3 py-3">Requested by</th>
                   <th className="whitespace-nowrap px-3 py-3">Approved by</th>
@@ -752,11 +791,19 @@ export default function BackupsPage() {
                         </button>
                         <button
                           type="button"
-                          disabled={!serviceStatus.rejectRestoreImplemented}
+                          disabled={restore.status !== 'REQUESTED' || !serviceStatus.rejectRestoreImplemented}
                           onClick={() => rejectRestoreMutation.mutate(restore.id)}
                           className="rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-semibold text-slate-400 disabled:cursor-not-allowed"
                         >
                           Reject
+                        </button>
+                        <button
+                          type="button"
+                          disabled={restore.status !== 'APPROVED' || runRestoreMutation.isPending}
+                          onClick={() => runRestoreMutation.mutate(restore.id)}
+                          className="rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-semibold text-slate-700 disabled:cursor-not-allowed disabled:text-slate-400"
+                        >
+                          Run
                         </button>
                       </div>
                     </td>

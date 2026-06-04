@@ -46,6 +46,7 @@ export default function DashboardClientLayout({
     '/dashboard/library',
     '/dashboard/fees',
     '/dashboard/schools',
+    '/dashboard/schools/',
     '/dashboard/users',
     '/dashboard/subscriptions',
     '/dashboard/support',
@@ -66,6 +67,7 @@ export default function DashboardClientLayout({
     '/dashboard/settings',
   ];
   const schoolSetupAllowedPaths = [
+    '/dashboard/onboarding',
     '/dashboard/institution-setup',
     '/dashboard/settings/branding',
     '/dashboard/payment-methods',

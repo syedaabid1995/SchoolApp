@@ -11,6 +11,15 @@ type ListParams = {
   query?: string;
 };
 
+type ReviewParams = {
+  id: string;
+  actorId: string;
+  actorRole: string;
+  actorSchoolId?: string | null;
+  note?: string | null;
+  reason?: string | null;
+};
+
 type Actor = {
   id: string;
   email: string;
@@ -109,7 +118,11 @@ const consentWhere = (params: ListParams): Prisma.ConsentRecordWhereInput => {
 };
 
 const mapExportJob = (job: Prisma.DataExportJobGetPayload<{
-  include: { school: { select: { id: true; name: true; code: true } }; requestedBy: { select: typeof actorSelect } };
+  include: {
+    school: { select: { id: true; name: true; code: true } };
+    requestedBy: { select: typeof actorSelect };
+    reviewedBy?: { select: typeof actorSelect };
+  };
 }>) => ({
   id: job.id,
   requestNumber: `EXP-${job.id.slice(0, 8).toUpperCase()}`,
@@ -122,10 +135,11 @@ const mapExportJob = (job: Prisma.DataExportJobGetPayload<{
   status: job.status,
   reason: null,
   requestedAt: job.createdAt,
-  approvedBy: null,
-  approvedAt: null,
-  rejectedAt: null,
-  rejectionReason: null,
+  approvedBy: job.status === 'APPROVED' ? mapActor(job.reviewedBy) : null,
+  approvedAt: job.status === 'APPROVED' ? job.reviewedAt : null,
+  rejectedAt: job.status === 'REJECTED' ? job.reviewedAt : null,
+  rejectionReason: job.rejectionReason,
+  reviewNote: job.reviewNote,
   completedAt: job.finishedAt,
   expiresAt: null,
   downloadAvailable: false,
@@ -136,6 +150,7 @@ const mapDeletionJob = (job: Prisma.DataDeletionJobGetPayload<{
     school: { select: { id: true; name: true; code: true } };
     requestedBy: { select: typeof actorSelect };
     approvedBy: { select: typeof actorSelect };
+    reviewedBy?: { select: typeof actorSelect };
   };
 }>) => ({
   id: job.id,
@@ -149,22 +164,35 @@ const mapDeletionJob = (job: Prisma.DataDeletionJobGetPayload<{
   status: job.status,
   reason: job.reason,
   requestedAt: job.createdAt,
-  approvedBy: mapActor(job.approvedBy),
-  approvedAt: job.status === 'APPROVED' || job.approvedById ? job.updatedAt : null,
-  rejectedAt: null,
-  rejectionReason: null,
+  approvedBy: mapActor(job.reviewedBy ?? job.approvedBy),
+  approvedAt: job.status === 'APPROVED' ? job.reviewedAt ?? job.updatedAt : null,
+  rejectedAt: job.status === 'REJECTED' ? job.reviewedAt : null,
+  rejectionReason: job.rejectionReason,
+  reviewNote: job.reviewNote,
   completedAt: job.finishedAt,
 });
 
-export const getAdminComplianceSummary = async () => {
+const canReviewStatus = (status: string) => ['REQUESTED', 'PENDING'].includes(status);
+
+const enforceTenant = (jobSchoolId: string, actorSchoolId?: string | null) => {
+  if (actorSchoolId && actorSchoolId !== jobSchoolId) {
+    throw new HttpError(403, 'Tenant scope violation');
+  }
+};
+
+export const getAdminComplianceSummary = async (params?: { schoolId?: string }) => {
+  const scoped = params?.schoolId ? { schoolId: params.schoolId } : {};
   const [
     exportTotal,
     exportPending,
+    exportApproved,
+    exportRejected,
     exportCompleted,
     exportFailed,
     deletionTotal,
     deletionPending,
     deletionApproved,
+    deletionRejected,
     deletionCompleted,
     deletionFailed,
     consentTotal,
@@ -173,30 +201,33 @@ export const getAdminComplianceSummary = async () => {
     exportRunning,
     deletionRunning,
   ] = await Promise.all([
-    prisma.dataExportJob.count(),
-    prisma.dataExportJob.count({ where: { status: 'REQUESTED' } }),
-    prisma.dataExportJob.count({ where: { status: 'COMPLETED' } }),
-    prisma.dataExportJob.count({ where: { status: 'FAILED' } }),
-    prisma.dataDeletionJob.count(),
-    prisma.dataDeletionJob.count({ where: { status: 'REQUESTED' } }),
-    prisma.dataDeletionJob.count({ where: { status: 'APPROVED' } }),
-    prisma.dataDeletionJob.count({ where: { status: 'COMPLETED' } }),
-    prisma.dataDeletionJob.count({ where: { status: 'FAILED' } }),
-    prisma.consentRecord.count(),
-    prisma.consentRecord.count({ where: { status: { in: ['GRANTED', 'ACTIVE'] } } }),
+    prisma.dataExportJob.count({ where: scoped }),
+    prisma.dataExportJob.count({ where: { ...scoped, status: 'REQUESTED' } }),
+    prisma.dataExportJob.count({ where: { ...scoped, status: 'APPROVED' } }),
+    prisma.dataExportJob.count({ where: { ...scoped, status: 'REJECTED' } }),
+    prisma.dataExportJob.count({ where: { ...scoped, status: 'COMPLETED' } }),
+    prisma.dataExportJob.count({ where: { ...scoped, status: 'FAILED' } }),
+    prisma.dataDeletionJob.count({ where: scoped }),
+    prisma.dataDeletionJob.count({ where: { ...scoped, status: 'REQUESTED' } }),
+    prisma.dataDeletionJob.count({ where: { ...scoped, status: 'APPROVED' } }),
+    prisma.dataDeletionJob.count({ where: { ...scoped, status: 'REJECTED' } }),
+    prisma.dataDeletionJob.count({ where: { ...scoped, status: 'COMPLETED' } }),
+    prisma.dataDeletionJob.count({ where: { ...scoped, status: 'FAILED' } }),
+    prisma.consentRecord.count({ where: scoped }),
+    prisma.consentRecord.count({ where: { ...scoped, status: { in: ['GRANTED', 'ACTIVE'] } } }),
     prisma.consentRecord.count({
-      where: { OR: [{ withdrawnAt: { not: null } }, { status: { in: ['WITHDRAWN', 'REVOKED'] } }] },
+      where: { ...scoped, OR: [{ withdrawnAt: { not: null } }, { status: { in: ['WITHDRAWN', 'REVOKED'] } }] },
     }),
-    prisma.dataExportJob.count({ where: { status: 'RUNNING' } }),
-    prisma.dataDeletionJob.count({ where: { status: 'RUNNING' } }),
+    prisma.dataExportJob.count({ where: { ...scoped, status: 'RUNNING' } }),
+    prisma.dataDeletionJob.count({ where: { ...scoped, status: 'RUNNING' } }),
   ]);
 
   return {
     exportRequests: {
       total: exportTotal,
       pending: exportPending,
-      approved: 0,
-      rejected: 0,
+      approved: exportApproved,
+      rejected: exportRejected,
       completed: exportCompleted,
       failed: exportFailed,
     },
@@ -204,7 +235,7 @@ export const getAdminComplianceSummary = async () => {
       total: deletionTotal,
       pending: deletionPending,
       approved: deletionApproved,
-      rejected: 0,
+      rejected: deletionRejected,
       completed: deletionCompleted,
       failed: deletionFailed,
     },
@@ -233,6 +264,7 @@ export const listAdminExportRequests = async (params: ListParams) => {
       include: {
         school: { select: { id: true, name: true, code: true } },
         requestedBy: { select: actorSelect },
+        reviewedBy: { select: actorSelect },
       },
     }),
     prisma.dataExportJob.count({ where }),
@@ -247,18 +279,113 @@ export const getAdminExportRequestById = async (id: string) => {
     include: {
       school: { select: { id: true, name: true, code: true } },
       requestedBy: { select: actorSelect },
+      reviewedBy: { select: actorSelect },
     },
   });
   if (!job) throw new HttpError(404, 'Export request not found');
   return mapExportJob(job);
 };
 
-export const approveAdminExportRequest = async () => {
-  throw new HttpError(501, 'Export approval workflow is not implemented by the current export job model');
+export const approveAdminExportRequest = async (params: ReviewParams) => {
+  const job = await prisma.dataExportJob.findUnique({ where: { id: params.id } });
+  if (!job) throw new HttpError(404, 'Export request not found');
+  enforceTenant(job.schoolId, params.actorSchoolId);
+  if (!canReviewStatus(job.status)) throw new HttpError(409, 'Only requested export jobs can be approved');
+
+  const updated = await prisma.$transaction(async (tx) => {
+    const row = await tx.dataExportJob.update({
+      where: { id: job.id },
+      data: {
+        status: 'APPROVED',
+        reviewedById: params.actorId,
+        reviewedAt: new Date(),
+        reviewNote: params.note ?? null,
+        rejectionReason: null,
+      },
+      include: {
+        school: { select: { id: true, name: true, code: true } },
+        requestedBy: { select: actorSelect },
+        reviewedBy: { select: actorSelect },
+      },
+    });
+    await tx.complianceJobStatusHistory.create({
+      data: {
+        schoolId: job.schoolId,
+        jobType: 'DATA_EXPORT',
+        jobId: job.id,
+        oldStatus: job.status,
+        newStatus: row.status,
+        actorId: params.actorId,
+        reason: params.note ?? null,
+      },
+    });
+    return row;
+  });
+
+  await createAuditLog({
+    schoolId: job.schoolId,
+    actorId: params.actorId,
+    actorRole: params.actorRole,
+    entityType: 'DataExportJob',
+    entityId: job.id,
+    action: 'DATA_EXPORT_REQUEST_APPROVED',
+    beforeState: job as unknown as Prisma.InputJsonValue,
+    afterState: updated as unknown as Prisma.InputJsonValue,
+  });
+
+  return mapExportJob(updated);
 };
 
-export const rejectAdminExportRequest = async () => {
-  throw new HttpError(501, 'Export rejection workflow is not implemented by the current export job model');
+export const rejectAdminExportRequest = async (params: ReviewParams) => {
+  const reason = params.reason?.trim();
+  if (!reason) throw new HttpError(400, 'Rejection reason is required');
+  const job = await prisma.dataExportJob.findUnique({ where: { id: params.id } });
+  if (!job) throw new HttpError(404, 'Export request not found');
+  enforceTenant(job.schoolId, params.actorSchoolId);
+  if (!canReviewStatus(job.status)) throw new HttpError(409, 'Only requested export jobs can be rejected');
+
+  const updated = await prisma.$transaction(async (tx) => {
+    const row = await tx.dataExportJob.update({
+      where: { id: job.id },
+      data: {
+        status: 'REJECTED',
+        reviewedById: params.actorId,
+        reviewedAt: new Date(),
+        rejectionReason: reason,
+        reviewNote: params.note ?? null,
+      },
+      include: {
+        school: { select: { id: true, name: true, code: true } },
+        requestedBy: { select: actorSelect },
+        reviewedBy: { select: actorSelect },
+      },
+    });
+    await tx.complianceJobStatusHistory.create({
+      data: {
+        schoolId: job.schoolId,
+        jobType: 'DATA_EXPORT',
+        jobId: job.id,
+        oldStatus: job.status,
+        newStatus: row.status,
+        actorId: params.actorId,
+        reason,
+      },
+    });
+    return row;
+  });
+
+  await createAuditLog({
+    schoolId: job.schoolId,
+    actorId: params.actorId,
+    actorRole: params.actorRole,
+    entityType: 'DataExportJob',
+    entityId: job.id,
+    action: 'DATA_EXPORT_REQUEST_REJECTED',
+    beforeState: job as unknown as Prisma.InputJsonValue,
+    afterState: updated as unknown as Prisma.InputJsonValue,
+  });
+
+  return mapExportJob(updated);
 };
 
 export const listAdminDeletionRequests = async (params: ListParams) => {
@@ -272,6 +399,7 @@ export const listAdminDeletionRequests = async (params: ListParams) => {
         school: { select: { id: true, name: true, code: true } },
         requestedBy: { select: actorSelect },
         approvedBy: { select: actorSelect },
+        reviewedBy: { select: actorSelect },
       },
     }),
     prisma.dataDeletionJob.count({ where }),
@@ -287,6 +415,7 @@ export const getAdminDeletionRequestById = async (id: string) => {
       school: { select: { id: true, name: true, code: true } },
       requestedBy: { select: actorSelect },
       approvedBy: { select: actorSelect },
+      reviewedBy: { select: actorSelect },
     },
   });
   if (!job) throw new HttpError(404, 'Deletion request not found');
@@ -297,20 +426,44 @@ export const approveAdminDeletionRequest = async (params: {
   id: string;
   actorId: string;
   actorRole: string;
+  actorSchoolId?: string | null;
   note?: string | null;
 }) => {
   const job = await prisma.dataDeletionJob.findUnique({ where: { id: params.id } });
   if (!job) throw new HttpError(404, 'Deletion request not found');
-  if (job.status !== 'REQUESTED') throw new HttpError(409, 'Only requested deletion jobs can be approved');
+  enforceTenant(job.schoolId, params.actorSchoolId);
+  if (!canReviewStatus(job.status)) throw new HttpError(409, 'Only requested deletion jobs can be approved');
 
-  const updated = await prisma.dataDeletionJob.update({
-    where: { id: job.id },
-    data: { status: 'APPROVED', approvedById: params.actorId },
-    include: {
-      school: { select: { id: true, name: true, code: true } },
-      requestedBy: { select: actorSelect },
-      approvedBy: { select: actorSelect },
-    },
+  const updated = await prisma.$transaction(async (tx) => {
+    const row = await tx.dataDeletionJob.update({
+      where: { id: job.id },
+      data: {
+        status: 'APPROVED',
+        approvedById: params.actorId,
+        reviewedById: params.actorId,
+        reviewedAt: new Date(),
+        reviewNote: params.note ?? null,
+        rejectionReason: null,
+      },
+      include: {
+        school: { select: { id: true, name: true, code: true } },
+        requestedBy: { select: actorSelect },
+        approvedBy: { select: actorSelect },
+        reviewedBy: { select: actorSelect },
+      },
+    });
+    await tx.complianceJobStatusHistory.create({
+      data: {
+        schoolId: job.schoolId,
+        jobType: 'DATA_DELETION',
+        jobId: job.id,
+        oldStatus: job.status,
+        newStatus: row.status,
+        actorId: params.actorId,
+        reason: params.note ?? null,
+      },
+    });
+    return row;
   });
 
   await createAuditLog({
@@ -320,15 +473,93 @@ export const approveAdminDeletionRequest = async (params: {
     entityType: 'DataDeletionJob',
     entityId: job.id,
     action: 'DATA_DELETION_REQUEST_APPROVED',
-    beforeState: { status: job.status } as Prisma.InputJsonValue,
-    afterState: { status: updated.status, note: params.note ?? null } as Prisma.InputJsonValue,
+    beforeState: job as unknown as Prisma.InputJsonValue,
+    afterState: updated as unknown as Prisma.InputJsonValue,
   });
 
   return mapDeletionJob(updated);
 };
 
-export const rejectAdminDeletionRequest = async () => {
-  throw new HttpError(501, 'Deletion rejection workflow is not implemented by the current deletion job model');
+export const rejectAdminDeletionRequest = async (params: ReviewParams) => {
+  const reason = params.reason?.trim();
+  if (!reason) throw new HttpError(400, 'Rejection reason is required');
+  const job = await prisma.dataDeletionJob.findUnique({ where: { id: params.id } });
+  if (!job) throw new HttpError(404, 'Deletion request not found');
+  enforceTenant(job.schoolId, params.actorSchoolId);
+  if (!canReviewStatus(job.status)) throw new HttpError(409, 'Only requested deletion jobs can be rejected');
+
+  const updated = await prisma.$transaction(async (tx) => {
+    const row = await tx.dataDeletionJob.update({
+      where: { id: job.id },
+      data: {
+        status: 'REJECTED',
+        reviewedById: params.actorId,
+        reviewedAt: new Date(),
+        rejectionReason: reason,
+        reviewNote: params.note ?? null,
+      },
+      include: {
+        school: { select: { id: true, name: true, code: true } },
+        requestedBy: { select: actorSelect },
+        approvedBy: { select: actorSelect },
+        reviewedBy: { select: actorSelect },
+      },
+    });
+    await tx.complianceJobStatusHistory.create({
+      data: {
+        schoolId: job.schoolId,
+        jobType: 'DATA_DELETION',
+        jobId: job.id,
+        oldStatus: job.status,
+        newStatus: row.status,
+        actorId: params.actorId,
+        reason,
+      },
+    });
+    return row;
+  });
+
+  await createAuditLog({
+    schoolId: job.schoolId,
+    actorId: params.actorId,
+    actorRole: params.actorRole,
+    entityType: 'DataDeletionJob',
+    entityId: job.id,
+    action: 'DATA_DELETION_REQUEST_REJECTED',
+    beforeState: job as unknown as Prisma.InputJsonValue,
+    afterState: updated as unknown as Prisma.InputJsonValue,
+  });
+
+  return mapDeletionJob(updated);
+};
+
+export const getComplianceJobHistory = async (params: {
+  jobId: string;
+  actorSchoolId?: string | null;
+}) => {
+  const rows = await prisma.complianceJobStatusHistory.findMany({
+    where: { jobId: params.jobId },
+    orderBy: { createdAt: 'asc' },
+    include: {
+      school: { select: { id: true, name: true, code: true } },
+      actor: { select: actorSelect },
+    },
+  });
+  if (!rows.length) return [];
+  enforceTenant(rows[0].schoolId, params.actorSchoolId);
+  return rows.map((row) => ({
+    id: row.id,
+    schoolId: row.schoolId,
+    schoolName: row.school.name,
+    schoolCode: row.school.code,
+    jobType: row.jobType,
+    jobId: row.jobId,
+    oldStatus: row.oldStatus,
+    newStatus: row.newStatus,
+    actor: mapActor(row.actor),
+    reason: row.reason,
+    createdAt: row.createdAt,
+  }));
 };
 
 export const listAdminConsentRecords = async (params: ListParams) => {

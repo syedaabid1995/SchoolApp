@@ -153,6 +153,14 @@ const staffInclude = {
 
 const formatStaff = (staff: any) => ({
   ...staff,
+  user: staff.user
+    ? {
+        id: staff.user.id,
+        email: staff.user.email,
+        status: staff.user.status,
+        roles: staff.user.roles,
+      }
+    : staff.user,
   role: staff.user?.roles?.[0]?.role?.name ?? staff.roleName,
   staffNo: staff.employeeNo,
   fullName: `${staff.firstName ?? ''} ${staff.lastName ?? ''}`.trim(),

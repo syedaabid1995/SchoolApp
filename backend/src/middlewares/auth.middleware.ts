@@ -240,7 +240,36 @@ const resolvePermissionForPath = (path: string, method = 'GET') => {
     return 'leave.apply.view';
   }
 
+  if (pathOnly.startsWith('/api/v1/exams/centers')) {
+    return verb === 'GET' ? 'exam.center.view' : 'exam.center.manage';
+  }
+  if (pathOnly.startsWith('/api/v1/exams/rooms')) {
+    return verb === 'GET' ? 'exam.room.view' : 'exam.room.manage';
+  }
+  if (/^\/api\/v1\/exams\/[^/]+\/seating/.test(pathOnly)) {
+    return verb === 'GET' ? 'exam.seating.view' : 'exam.seating.manage';
+  }
+  if (/^\/api\/v1\/exams\/[^/]+\/invigilators/.test(pathOnly)) {
+    return verb === 'GET' ? 'exam.invigilator.view' : 'exam.invigilator.manage';
+  }
+  if (/^\/api\/v1\/exams\/[^/]+\/hall-tickets/.test(pathOnly)) {
+    return pathOnly.endsWith('/pdf') ? 'exam.hallticket.export' : 'exam.hallticket.view';
+  }
+  if (pathOnly.startsWith('/api/v1/reports')) {
+    if (pathOnly.endsWith('/export.csv') || pathOnly.endsWith('/export.pdf') || ['/api/v1/reports/term', '/api/v1/reports/annual', '/api/v1/reports/rank'].includes(pathOnly)) {
+      return 'reports.export';
+    }
+    return 'reports.view';
+  }
+  if (pathOnly.startsWith('/api/v1/admin/compliance') || pathOnly.startsWith('/api/v1/compliance')) {
+    if (/\/(approve|reject|execute)$/.test(pathOnly)) return 'compliance.review';
+    return 'compliance.view';
+  }
+
   const targets: Array<{ prefix: string; code: string }> = [
+    { prefix: '/api/v1/schools', code: verb === 'GET' ? 'school.onboarding.view' : 'school.onboarding.manage' },
+    { prefix: '/api/v1/teachers/onboarding', code: verb === 'GET' ? 'teacher.onboarding.view' : 'teacher.onboarding.manage' },
+    { prefix: '/api/v1/teachers/', code: pathOnly.includes('/credentials/') ? 'teacher.credentials.manage' : pathOnly.includes('/onboarding') ? (verb === 'GET' ? 'teacher.onboarding.view' : 'teacher.onboarding.manage') : 'teachers.list' },
     { prefix: '/api/v1/academics/timetable/teacher', code: 'attendance.view' },
     { prefix: '/api/v1/teachers', code: 'teachers.list' },
     { prefix: '/api/v1/teacher-assignments', code: 'teachers.list' },
@@ -256,7 +285,6 @@ const resolvePermissionForPath = (path: string, method = 'GET') => {
     { prefix: '/api/v1/leave', code: 'leave.apply.view' },
     { prefix: '/api/v1/academics', code: 'academics.setup' },
     { prefix: '/api/v1/exams', code: 'academics.exams' },
-    { prefix: '/api/v1/reports', code: 'academics.marks' },
     { prefix: '/api/v1/users/employee-permissions', code: 'settings.access' },
     { prefix: '/api/v1/audit-logs', code: 'audit.view' },
     { prefix: '/api/v1/tickets', code: 'support.view' },

@@ -721,6 +721,12 @@ export default function SchoolsPage() {
                             </svg>
                             Admins
                           </Link>
+                          <Link
+                            href={`/dashboard/schools/${school.id}/onboarding`}
+                            className="inline-flex items-center gap-1.5 rounded-lg border border-sky-300 bg-sky-50 px-3 py-1.5 text-xs font-medium text-sky-700 hover:bg-sky-100"
+                          >
+                            Review
+                          </Link>
                           {school.deletedAt ? (
                             <button
                               className="inline-flex items-center gap-1.5 rounded-lg border border-emerald-300 bg-emerald-50 px-3 py-1.5 text-xs font-medium text-emerald-700 hover:bg-emerald-100"
