@@ -130,7 +130,7 @@ export default function AccessControlPage() {
             <ShieldIcon />
           </div>
           <h1 className="text-xl font-semibold text-red-800 mb-2">Access Restricted</h1>
-          <p className="text-red-600">You don't have permission to manage access controls.</p>
+          <p className="text-red-600">You don&apos;t have permission to manage access controls.</p>
         </div>
       </div>
     );

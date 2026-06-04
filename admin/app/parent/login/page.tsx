@@ -128,7 +128,7 @@ export default function ParentLoginPage() {
       <div className="w-full max-w-md rounded-2xl border border-slate/10 bg-white p-6 shadow-sm sm:p-8">
         <div className="text-center">
           <h1 className="text-2xl font-semibold text-ink">Parent Login</h1>
-          <p className="mt-2 text-sm text-slate">Access your child's academic information</p>
+          <p className="mt-2 text-sm text-slate">Access your child&apos;s academic information</p>
         </div>
 
         <div className="mt-6 flex gap-2">

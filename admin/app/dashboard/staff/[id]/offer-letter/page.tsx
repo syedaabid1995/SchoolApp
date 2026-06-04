@@ -97,7 +97,7 @@ export default function OfferLetterPage() {
             <p>Dear {name},</p>
             <p>
               We are pleased to offer you the position of <strong className="text-slate-950">{designation}</strong>
-              {department !== '-' ? <> in the <strong className="text-slate-950">{department}</strong> department</> : null}. This offer is based on the details approved in your employee profile and is subject to the institution's employment policies.
+              {department !== '-' ? <> in the <strong className="text-slate-950">{department}</strong> department</> : null}. This offer is based on the details approved in your employee profile and is subject to the institution&apos;s employment policies.
             </p>
             <p>
               Your employment will start from <strong className="text-slate-950">{formatDate(staff.dateOfJoining)}</strong>. You will be provided system login access according to the assigned role <strong className="text-slate-950">{roleLabel(staff.role ?? staff.roleName)}</strong>.
