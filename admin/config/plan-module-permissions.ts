@@ -12,6 +12,7 @@ export type PlanPermissionGroup = {
   parent: string;
   modules: Array<{
     module: string;
+    path: string;
     description: string;
     permissions: PlanPermissionItem[];
   }>;
@@ -200,7 +201,7 @@ export const PLAN_PERMISSION_MODULES: PlanPermissionModuleDefinition[] = [
     parent: 'Academics',
     module: 'Academic Setup',
     path: '/dashboard/academics',
-    description: 'Classes, sections, subjects, rooms, periods, assignments, class teachers, and routines.',
+    description: 'Academic years, classes, sections, subjects, subject assignments, and class teachers.',
     codes: [
       'academics.setup',
       'academic.class.view',
@@ -215,14 +216,6 @@ export const PLAN_PERMISSION_MODULES: PlanPermissionModuleDefinition[] = [
       'academic.subject.create',
       'academic.subject.edit',
       'academic.subject.delete',
-      'academic.room.view',
-      'academic.room.create',
-      'academic.room.edit',
-      'academic.room.delete',
-      'academic.time.view',
-      'academic.time.create',
-      'academic.time.edit',
-      'academic.time.delete',
       'academic.assign_subject.view',
       'academic.assign_subject.create',
       'academic.assign_subject.edit',
@@ -231,18 +224,28 @@ export const PLAN_PERMISSION_MODULES: PlanPermissionModuleDefinition[] = [
       'academic.class_teacher.create',
       'academic.class_teacher.edit',
       'academic.class_teacher.delete',
-      'academic.routine.view',
-      'academic.routine.create',
-      'academic.routine.edit',
-      'academic.routine.delete',
     ],
   },
   {
     parent: 'Academics',
     module: 'Timetable',
-    path: '/dashboard/academics/timetable',
-    description: 'Academic timetable page access.',
-    codes: ['academics.setup'],
+    path: '/dashboard/timetable',
+    description: 'Weekend setup, class rooms, periods, class routine creation, and teacher timetable generation.',
+    codes: [
+      'academics.setup',
+      'academic.room.view',
+      'academic.room.create',
+      'academic.room.edit',
+      'academic.room.delete',
+      'academic.time.view',
+      'academic.time.create',
+      'academic.time.edit',
+      'academic.time.delete',
+      'academic.routine.view',
+      'academic.routine.create',
+      'academic.routine.edit',
+      'academic.routine.delete',
+    ],
   },
   {
     parent: 'Examination',
@@ -301,7 +304,7 @@ export const PLAN_PERMISSION_MODULES: PlanPermissionModuleDefinition[] = [
     parent: 'System Setting',
     module: 'System Setting',
     path: '/dashboard/settings',
-    description: 'School settings and role permission management.',
+    description: 'Branding, security, module controls, messaging, access, and advanced configuration.',
     codes: ['settings.access'],
   },
 ];

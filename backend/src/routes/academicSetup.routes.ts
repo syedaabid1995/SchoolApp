@@ -15,6 +15,7 @@ import {
   deleteSetupSection,
   deleteSetupSubject,
   deleteTimePeriod,
+  generateClassRoutine,
   listAssignSubjects,
   listClassRooms,
   listClassRoutines,
@@ -25,6 +26,7 @@ import {
   listTimePeriods,
   saveAssignSubjects,
   saveClassTeacher,
+  seedDefaultTimePeriods,
   updateClassRoom,
   updateClassRoutine,
   updateClassTeacher,
@@ -59,6 +61,7 @@ academicSetupRouter.patch('/rooms/:id', updateClassRoom);
 academicSetupRouter.delete('/rooms/:id', deleteClassRoom);
 
 academicSetupRouter.get('/time-periods', listTimePeriods);
+academicSetupRouter.post('/time-periods/defaults', seedDefaultTimePeriods);
 academicSetupRouter.post('/time-periods', createTimePeriod);
 academicSetupRouter.patch('/time-periods/:id', updateTimePeriod);
 academicSetupRouter.delete('/time-periods/:id', deleteTimePeriod);
@@ -74,5 +77,6 @@ academicSetupRouter.delete('/class-teachers/:id', deleteClassTeacher);
 
 academicSetupRouter.get('/routines', listClassRoutines);
 academicSetupRouter.post('/routines', createClassRoutine);
+academicSetupRouter.post('/routines/generate', generateClassRoutine);
 academicSetupRouter.patch('/routines/:id', updateClassRoutine);
 academicSetupRouter.delete('/routines/:id', deleteClassRoutine);

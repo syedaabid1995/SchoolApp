@@ -151,7 +151,7 @@ export default function DashboardPage() {
   const quickActions = useMemo(() => {
     if (isTeacher) {
       return [
-        { title: 'Timetable', href: '/dashboard/academics/timetable', icon: 'TT', description: 'Open class schedule', tone: 'blue' as const },
+        { title: 'Timetable', href: '/dashboard/timetable', icon: 'TT', description: 'Open class schedule', tone: 'blue' as const },
         { title: 'Mark Attendance', href: '/dashboard/attendance/students/mark', icon: 'AT', description: 'Start attendance workflow', tone: 'emerald' as const },
         { title: 'Upload Marks', href: '/dashboard/academics/marks', icon: 'MK', description: 'Update assessment records', tone: 'violet' as const },
         { title: 'Reports', href: '/dashboard/reports', icon: 'RP', description: 'Review assigned reports', tone: 'slate' as const },

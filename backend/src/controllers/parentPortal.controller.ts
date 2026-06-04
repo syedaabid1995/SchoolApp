@@ -413,6 +413,52 @@ export const listParentTimetable = async (_req: Request, res: Response) => {
   res.status(200).json([]);
 };
 
-export const listParentFees = async (_req: Request, res: Response) => {
-  res.status(200).json([]);
+export const listParentFees = async (req: Request, res: Response) => {
+  const auth = requireAuth(req);
+  const { childId } = req.query;
+  const { child } = await requireChildAccess(auth.userId, typeof childId === 'string' ? childId : undefined);
+
+  const invoices = await prisma.feeInvoice.findMany({
+    where: {
+      schoolId: child.schoolId,
+      studentId: child.id,
+      deletedAt: null,
+    },
+    include: {
+      feeType: { select: { name: true, schedule: true } },
+      items: { orderBy: { sortOrder: 'asc' } },
+      payments: { orderBy: { paidAt: 'desc' } },
+      receipts: { orderBy: { receiptDate: 'desc' } },
+    },
+    orderBy: { issueDate: 'desc' },
+    take: 100,
+  });
+
+  const items = invoices.map((invoice) => ({
+    id: invoice.id,
+    invoiceNumber: invoice.invoiceNumber,
+    title: invoice.feeMonth ? `${invoice.feeMonth} Fee` : invoice.feeType?.name ?? 'School Fee',
+    feeType: invoice.feeType?.name ?? null,
+    amount: invoice.totalAmount,
+    paidAmount: invoice.paidAmount,
+    dueAmount: invoice.dueAmount,
+    status: invoice.status,
+    dueDate: invoice.dueDate,
+    issueDate: invoice.issueDate,
+    items: invoice.items,
+    payments: invoice.payments,
+    receipts: invoice.receipts,
+  }));
+
+  const summary = items.reduce(
+    (result, invoice) => {
+      result.total += Number(invoice.amount ?? 0);
+      result.paid += Number(invoice.paidAmount ?? 0);
+      result.due += Number(invoice.dueAmount ?? 0);
+      return result;
+    },
+    { total: 0, paid: 0, due: 0 },
+  );
+
+  res.status(200).json({ child, summary, items });
 };

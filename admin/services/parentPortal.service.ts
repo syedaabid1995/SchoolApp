@@ -73,5 +73,5 @@ export const listParentTimetable = async (childId?: string) => {
 
 export const listParentFees = async (childId?: string) => {
   const { data } = await api.get('/parents/portal/fees', { params: { childId } });
-  return data?.items ?? data ?? [];
+  return data ?? { items: [], summary: { total: 0, paid: 0, due: 0 } };
 };

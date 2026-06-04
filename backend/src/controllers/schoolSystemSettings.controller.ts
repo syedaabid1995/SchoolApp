@@ -18,6 +18,7 @@ const updateSchema = z.object({
   holidays: jsonArray.optional(),
   weekends: jsonArray.optional(),
   smsSettings: jsonRecord.optional(),
+  feeChallanBanks: jsonArray.optional(),
 });
 
 const defaultGeneral = {
@@ -125,6 +126,21 @@ const defaultSmsSettings = {
   },
 };
 
+const defaultFeeChallanBanks = [
+  {
+    id: 'challan-bank-demo',
+    bankName: 'Demo National Bank',
+    branchAddress: 'Main Branch, School Road',
+    accountNumber: '100200300400',
+    instructions: 'Please include student admission number on the payment challan.',
+    logoDataUrl: '',
+    logoFileName: '',
+    logoMimeType: '',
+    logoSize: 0,
+    isActive: true,
+  },
+];
+
 const toJson = (value: unknown): Prisma.InputJsonValue => value as Prisma.InputJsonValue;
 
 const mergeRecord = (base: Record<string, unknown>, value: unknown) =>
@@ -140,6 +156,7 @@ const normalizeSetting = (setting: {
   holidays: Prisma.JsonValue;
   weekends: Prisma.JsonValue;
   smsSettings: Prisma.JsonValue;
+  feeChallanBanks: Prisma.JsonValue;
   createdAt: Date;
   updatedAt: Date;
 }) => ({
@@ -151,6 +168,7 @@ const normalizeSetting = (setting: {
   holidays: Array.isArray(setting.holidays) && setting.holidays.length ? setting.holidays : defaultHolidays,
   weekends: Array.isArray(setting.weekends) && setting.weekends.length ? setting.weekends : defaultWeekends,
   smsSettings: mergeRecord(defaultSmsSettings, setting.smsSettings),
+  feeChallanBanks: Array.isArray(setting.feeChallanBanks) ? setting.feeChallanBanks : defaultFeeChallanBanks,
 });
 
 const ensureSettings = async (schoolId: string) => {
@@ -166,6 +184,7 @@ const ensureSettings = async (schoolId: string) => {
       holidays: toJson(defaultHolidays),
       weekends: toJson(defaultWeekends),
       smsSettings: toJson(defaultSmsSettings),
+      feeChallanBanks: toJson(defaultFeeChallanBanks),
     },
   });
 
@@ -195,6 +214,7 @@ export const updateSchoolSystemSettings = async (req: Request, res: Response) =>
   if (payload.holidays) data.holidays = toJson(payload.holidays);
   if (payload.weekends) data.weekends = toJson(payload.weekends);
   if (payload.smsSettings) data.smsSettings = toJson(mergeRecord(defaultSmsSettings, payload.smsSettings));
+  if (payload.feeChallanBanks) data.feeChallanBanks = toJson(payload.feeChallanBanks);
 
   if (!Object.keys(data).length) {
     throw new HttpError(400, 'No settings payload supplied.');

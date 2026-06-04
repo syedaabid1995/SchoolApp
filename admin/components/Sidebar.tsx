@@ -167,8 +167,12 @@ const iconForItem = (item: NavItem): IconName => {
   if (key.includes('compliance')) return 'scale';
   if (key.includes('security') || key.includes('access') || key.includes('password')) return 'lock';
   if (key.includes('leave')) return 'calendar';
+  if (key.includes('fee')) return 'card';
   if (key.includes('sms')) return 'message';
   if (key.includes('academic')) return 'book';
+  if (key.includes('class room')) return 'building';
+  if (key.includes('period') || key.includes('routine')) return 'calendar';
+  if (key.includes('class') || key.includes('section') || key.includes('subject')) return 'book';
   if (key.includes('timetable')) return 'calendar';
   if (key.includes('exam') || key.includes('marks')) return 'clipboard';
   if (key.includes('id card')) return 'id';
@@ -179,13 +183,6 @@ const iconForItem = (item: NavItem): IconName => {
   if (key.includes('setting')) return 'settings';
   return 'file';
 };
-
-const academicItems: NavItem[] = [
-  { href: '/dashboard/academics', label: 'Classes', icon: 'CL' },
-  { href: '/dashboard/academics/timetable', label: 'Timetable', icon: 'TT' },
-  { href: '/dashboard/academics/exams', label: 'Exams', icon: 'EX' },
-  { href: '/dashboard/academics/marks', label: 'Upload Marks', icon: 'MK' },
-];
 
 const platformSections: NavSection[] = [
   {
@@ -214,6 +211,7 @@ const platformSections: NavSection[] = [
       { href: '/dashboard/transport', label: 'Transport', icon: 'TR' },
       { href: '/dashboard/homework', label: 'Homework', icon: 'HW' },
       { href: '/dashboard/library', label: 'Library', icon: 'LB' },
+      { href: '/dashboard/fees', label: 'Fees', icon: 'FE' },
     ],
   },
   {
@@ -227,8 +225,17 @@ const platformSections: NavSection[] = [
   },
   {
     id: 'platform-settings',
-    label: 'Settings',
+    label: 'System Setup',
     items: [
+      { href: '/dashboard/institution-setup', label: 'General', icon: 'IS' },
+      { href: '/dashboard/settings/branding', label: 'Branding', icon: 'BR' },
+      { href: '/dashboard/payment-methods', label: 'Payment Methods', icon: 'PM' },
+      { href: '/dashboard/fee-challan-details', label: 'Fee Challan', icon: 'FC' },
+      { href: '/dashboard/role-permissions', label: 'Role Permissions', icon: 'RP' },
+      { href: '/dashboard/base-setup', label: 'Base Setup', icon: 'BS' },
+      { href: '/dashboard/sessions', label: 'Sessions', icon: 'SN' },
+      { href: '/dashboard/holidays', label: 'Holidays', icon: 'HD' },
+      { href: '/dashboard/sms-settings', label: 'SMS Settings', icon: 'SM' },
       { href: '/dashboard/settings', label: 'Settings', icon: 'ST' },
       { href: '/dashboard/settings?tab=backups', label: 'Backups', icon: 'BK' },
       { href: '/dashboard/settings?tab=compliance', label: 'Compliance', icon: 'CP' },
@@ -274,9 +281,19 @@ export const Sidebar = ({
     if (path === '/dashboard/settings') {
       const tab = hrefTab(href);
       if (tab) {
-        return pathname === path && (searchParams.get('tab') || 'general') === tab;
+        return pathname === path && (searchParams.get('tab') || 'brand') === tab;
       }
-      return (pathname === path && !searchParams.get('tab')) || pathname.startsWith(`${path}/`);
+      return (
+        (pathname === path && !searchParams.get('tab')) ||
+        (pathname.startsWith(`${path}/`) && !pathname.startsWith(`${path}/branding`))
+      );
+    }
+    if (path === '/dashboard/academics') {
+      const tab = hrefTab(href);
+      if (tab) {
+        return pathname === path && (searchParams.get('tab') || 'academic-years') === tab;
+      }
+      return pathname === path;
     }
     return path === '/dashboard' ? pathname === path : pathname === path || pathname.startsWith(`${path}/`);
   };
@@ -306,9 +323,33 @@ export const Sidebar = ({
         ],
       },
       {
-        id: 'academics',
-        label: 'Academics',
-        items: academicItems,
+        id: 'system-setup',
+        label: 'System Setup',
+        items: [
+          { href: '/dashboard/institution-setup', label: 'General', icon: 'IS', permissionPath: '/dashboard/settings' },
+          { href: '/dashboard/settings/branding', label: 'Branding', icon: 'BR', permissionPath: '/dashboard/settings' },
+          { href: '/dashboard/payment-methods', label: 'Payment Methods', icon: 'PM', permissionPath: '/dashboard/settings' },
+          { href: '/dashboard/fee-challan-details', label: 'Fee Challan', icon: 'FC', permissionPath: '/dashboard/settings' },
+          { href: '/dashboard/role-permissions', label: 'Role Permissions', icon: 'RP', permissionPath: '/dashboard/settings' },
+          { href: '/dashboard/base-setup', label: 'Base Setup', icon: 'BS', permissionPath: '/dashboard/settings' },
+          { href: '/dashboard/sessions', label: 'Sessions', icon: 'SN', permissionPath: '/dashboard/settings' },
+          { href: '/dashboard/holidays', label: 'Holidays', icon: 'HD', permissionPath: '/dashboard/settings' },
+          { href: '/dashboard/sms-settings', label: 'SMS Settings', icon: 'SM', permissionPath: '/dashboard/settings' },
+        ],
+      },
+      {
+        id: 'academic-setup',
+        label: 'Academic Setup',
+        items: [
+          { href: '/dashboard/academics', label: 'Setup', icon: 'AC' },
+        ],
+      },
+      {
+        id: 'timetable',
+        label: 'Timetable',
+        items: [
+          { href: '/dashboard/timetable', label: 'Timetable', icon: 'TT', permissionPath: '/dashboard/academics' },
+        ],
       },
       {
         id: 'students',
@@ -327,14 +368,25 @@ export const Sidebar = ({
       },
       {
         id: 'staff',
-        label: 'Staff & Teachers',
+        label: 'Employees',
         items: [
-          { href: '/dashboard/staff', label: 'Staff Directory', icon: 'SD' },
-          { href: '/dashboard/staff/add', label: 'Add Staff', icon: 'AS' },
-          { href: '/dashboard/staff/attendance', label: 'Staff Attendance', icon: 'SA' },
-          { href: '/dashboard/teachers', label: 'Users', icon: 'LU' },
-          { href: '/dashboard/teachers/add', label: 'Add User', icon: 'AU' },
+          { href: '/dashboard/staff', label: 'Employee List', icon: 'SD' },
+          { href: '/dashboard/staff/add?type=teacher', label: 'Add Teacher', icon: 'AU' },
+          { href: '/dashboard/staff/attendance', label: 'Employee Attendance', icon: 'SA' },
           { href: '/dashboard/teachers/assign', label: 'Assign Classes', icon: 'AC' },
+        ],
+      },
+      {
+        id: 'fees',
+        label: 'Fees',
+        items: [
+          { href: '/dashboard/fees', label: 'Fee Management', icon: 'FE' },
+        ],
+      },
+      {
+        id: 'payroll',
+        label: 'Payroll',
+        items: [
           { href: '/dashboard/payroll', label: 'Payroll', icon: 'PY' },
           { href: '/dashboard/payroll/report', label: 'Payroll Report', icon: 'PR' },
         ],

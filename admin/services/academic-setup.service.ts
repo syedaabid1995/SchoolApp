@@ -105,6 +105,21 @@ export type ClassRoutine = {
   classRoom?: { id: string; roomNumber: string; capacity: number } | null;
 };
 
+export type SeedDefaultTimePeriodsResult = {
+  createdCount: number;
+  updatedCount: number;
+  skippedCount: number;
+  skipped: Array<{ name: string; reason: string }>;
+  periods: TimePeriod[];
+};
+
+export type GenerateClassRoutineResult = {
+  createdCount: number;
+  skippedCount: number;
+  skipped: Array<{ dayOfWeek: number; periodId: string; reason: string }>;
+  routines: ClassRoutine[];
+};
+
 const sanitizeParams = <T>(params?: T) => (params && (params as any).queryKey ? undefined : params);
 
 export const listSetupClasses = async (params?: { search?: string }) => {
@@ -202,6 +217,11 @@ export const deleteTimePeriod = async (id: string) => {
   await api.delete(`/academic-setup/time-periods/${id}`);
 };
 
+export const seedDefaultTimePeriods = async () => {
+  const { data } = await api.post<SeedDefaultTimePeriodsResult>('/academic-setup/time-periods/defaults', {});
+  return data;
+};
+
 export const listAssignSubjects = async (params?: { classId?: string; sectionId?: string }) => {
   const { data } = await api.get<AssignSubject[]>('/academic-setup/assign-subjects', { params: sanitizeParams(params) });
   return data;
@@ -240,7 +260,7 @@ export const deleteClassTeacher = async (id: string) => {
   await api.delete(`/academic-setup/class-teachers/${id}`);
 };
 
-export const listClassRoutines = async (params?: { classId?: string; sectionId?: string }) => {
+export const listClassRoutines = async (params?: { classId?: string; sectionId?: string; teacherId?: string }) => {
   const { data } = await api.get<ClassRoutine[]>('/academic-setup/routines', { params: sanitizeParams(params) });
   return data;
 };
@@ -273,4 +293,15 @@ export const updateClassRoutine = async (id: string, payload: Partial<{
 
 export const deleteClassRoutine = async (id: string) => {
   await api.delete(`/academic-setup/routines/${id}`);
+};
+
+export const generateClassRoutine = async (payload: {
+  classId: string;
+  sectionId: string;
+  classRoomId?: string | null;
+  replaceExisting?: boolean;
+  days?: number[];
+}) => {
+  const { data } = await api.post<GenerateClassRoutineResult>('/academic-setup/routines/generate', payload);
+  return data;
 };

@@ -26,7 +26,6 @@ import SecurityPage from './security/page';
 import SmsPage from './sms/page';
 import ConsentPage from './consent/page';
 import AccessPage from './access/page';
-import SystemSetupTab from './system-setup';
 import {
   getExamGradingSettings,
   updateExamGradingSettings,
@@ -36,7 +35,6 @@ import {
 
 type SettingsTabId =
   | 'brand'
-  | 'system-setup'
   | 'marks-grading'
   | 'security'
   | 'messaging'
@@ -77,12 +75,6 @@ const settingsTabs: SettingsTab[] = [
     id: 'brand',
     label: 'Branding & Theme',
     description: 'Platform identity, login branding, colors, publish, rollback, and preview.',
-    roles: ['SUPER_ADMIN', 'SCHOOL_ADMIN'],
-  },
-  {
-    id: 'system-setup',
-    label: 'Institution Setup',
-    description: 'General settings, payments, roles, base setup, sessions, holidays, SMS, and weekends.',
     roles: ['SUPER_ADMIN', 'SCHOOL_ADMIN'],
   },
   {
@@ -140,6 +132,25 @@ const settingsTabs: SettingsTab[] = [
     roles: ['SUPER_ADMIN'],
   },
 ];
+
+const setupTabRedirects: Record<string, string> = {
+  'system-setup': '/dashboard/institution-setup',
+  general: '/dashboard/institution-setup',
+  payment: '/dashboard/payment-methods',
+  payments: '/dashboard/payment-methods',
+  roles: '/dashboard/role-permissions',
+  base: '/dashboard/base-setup',
+  session: '/dashboard/sessions',
+  sessions: '/dashboard/sessions',
+  holiday: '/dashboard/holidays',
+  holidays: '/dashboard/holidays',
+  sms: '/dashboard/sms-settings',
+  'fee-challan': '/dashboard/fee-challan-details',
+  'fee-challan-details': '/dashboard/fee-challan-details',
+  challan: '/dashboard/fee-challan-details',
+  weekend: '/dashboard/timetable',
+  weekends: '/dashboard/timetable',
+};
 
 const moduleCatalog = [
   { key: 'module_attendance', label: 'Attendance', description: 'Attendance pages and related workflows.' },
@@ -1003,12 +1014,13 @@ function OperationsLinkTab({ type }: { type: 'compliance' | 'backups' }) {
 export default function SettingsPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const requestedTabParam = searchParams.get('tab') || 'system-setup';
+  const requestedTabParam = searchParams.get('tab') || 'brand';
+  const setupRedirectPath = setupTabRedirects[requestedTabParam];
   const requestedTab = (
     ['branding', 'login', 'theme'].includes(requestedTabParam)
       ? 'brand'
-      : ['general', 'payment', 'payments', 'roles', 'base', 'session', 'holiday', 'sms', 'weekend'].includes(requestedTabParam)
-        ? 'system-setup'
+      : setupRedirectPath
+        ? 'brand'
         : requestedTabParam
   ) as SettingsTabId;
 
@@ -1029,10 +1041,14 @@ export default function SettingsPage() {
 
   useEffect(() => {
     if (!role || !availableTabs.length) return;
+    if (setupRedirectPath) {
+      router.replace(setupRedirectPath);
+      return;
+    }
     if (!activeTab || requestedTab !== activeTab) {
       router.replace(`/dashboard/settings?tab=${activeTab ?? 'security'}`);
     }
-  }, [activeTab, availableTabs.length, requestedTab, role, router]);
+  }, [activeTab, availableTabs.length, requestedTab, role, router, setupRedirectPath]);
 
   if (isLoading) {
     return <FullPageLoader label="Loading settings..." />;
@@ -1047,12 +1063,14 @@ export default function SettingsPage() {
     );
   }
 
+  if (setupRedirectPath) {
+    return <FullPageLoader label="Opening setup page..." />;
+  }
+
   const renderActiveTab = () => {
     switch (activeTab) {
       case 'brand':
         return <BrandThemeSettingsTab />;
-      case 'system-setup':
-        return <SystemSetupTab />;
       case 'marks-grading':
         return <MarksGradingSettingsTab />;
       case 'security':
@@ -1080,7 +1098,7 @@ export default function SettingsPage() {
     <div className="space-y-5 pb-12">
       <PageHeader
         title="Settings"
-        subtitle="One workspace for institution setup, branding, theme, security, modules, messaging, and advanced configuration."
+        subtitle="One workspace for branding, theme, security, modules, messaging, access, and advanced configuration."
         breadcrumbs={[
           { label: 'Dashboard', href: '/dashboard' },
           { label: 'Settings' },

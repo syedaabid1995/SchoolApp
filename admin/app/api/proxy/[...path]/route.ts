@@ -34,6 +34,10 @@ const forward = async (req: Request, method: string, path: string[]) => {
   });
 
   const responseBody = await res.arrayBuffer();
+  if (res.status === 204 || res.status === 304) {
+    return new NextResponse(null, { status: res.status });
+  }
+
   const response = new NextResponse(responseBody, {
     status: res.status,
     headers: {

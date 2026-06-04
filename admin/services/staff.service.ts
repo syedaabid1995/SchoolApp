@@ -44,6 +44,26 @@ export type Staff = {
     contractType?: string | null;
     paymentMode?: string | null;
   } | null;
+  leaveBalances?: Array<{
+    id?: string;
+    leaveTypeId: string;
+    leaveType?: { id: string; name: string; totalDays: number };
+    totalDays: number;
+    usedDays: number;
+    remainingDays?: number;
+    extraTakenDays: number;
+  }>;
+  leaveApplications?: Array<{
+    id: string;
+    leaveTypeId: string;
+    leaveType?: { id: string; name: string; totalDays: number };
+    fromDate: string;
+    toDate: string;
+    durationDays: number;
+    reason: string;
+    status: string;
+    appliedAt: string;
+  }>;
   socialLinks?: Array<{ id?: string; platform: string; url: string }>;
   documents?: StaffDocument[];
   timelines?: StaffTimeline[];
@@ -94,6 +114,7 @@ export type StaffPayload = {
   maritalStatus?: string | null;
   bankDetails?: Record<string, string | null>;
   payrollInfo?: { epfNo?: string | null; basicSalary?: number | null; contractType?: string | null; paymentMode?: string | null };
+  leaveBalances?: Array<{ leaveTypeId: string; totalDays: number }>;
   socialLinks?: Array<{ platform: string; url: string }>;
 };
 
@@ -148,6 +169,11 @@ export const listDesignations = async () => {
 
 export const createDesignation = async (payload: { name: string }) => {
   const { data } = await api.post<Designation>('/staff/designations', payload);
+  return data;
+};
+
+export const seedStaffDefaults = async () => {
+  const { data } = await api.post<{ departments: Department[]; designations: Designation[]; leaveTypes: Array<{ id: string; name: string; totalDays: number }> }>('/staff/defaults');
   return data;
 };
 

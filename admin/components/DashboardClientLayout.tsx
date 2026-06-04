@@ -44,6 +44,7 @@ export default function DashboardClientLayout({
     '/dashboard/transport',
     '/dashboard/homework',
     '/dashboard/library',
+    '/dashboard/fees',
     '/dashboard/schools',
     '/dashboard/users',
     '/dashboard/subscriptions',
@@ -54,7 +55,26 @@ export default function DashboardClientLayout({
     '/dashboard/system-health',
     '/dashboard/backups',
     '/dashboard/compliance',
+    '/dashboard/institution-setup',
+    '/dashboard/payment-methods',
+    '/dashboard/fee-challan-details',
+    '/dashboard/role-permissions',
+    '/dashboard/base-setup',
+    '/dashboard/sessions',
+    '/dashboard/holidays',
+    '/dashboard/sms-settings',
     '/dashboard/settings',
+  ];
+  const schoolSetupAllowedPaths = [
+    '/dashboard/institution-setup',
+    '/dashboard/settings/branding',
+    '/dashboard/payment-methods',
+    '/dashboard/fee-challan-details',
+    '/dashboard/role-permissions',
+    '/dashboard/base-setup',
+    '/dashboard/sessions',
+    '/dashboard/holidays',
+    '/dashboard/sms-settings',
   ];
   const isManagedEmployeeRole = EMPLOYEE_MANAGED_ROLES.includes((session?.role ?? '') as (typeof EMPLOYEE_MANAGED_ROLES)[number]);
   const requiredPermission = getRequiredPermissionForPath(pathname);
@@ -65,7 +85,9 @@ export default function DashboardClientLayout({
     pathname === '/dashboard/settings' &&
     (!settingsTab ||
       settingsTab === 'security' ||
-      (session?.role === 'SCHOOL_ADMIN' && ['branding', 'theme', 'general', 'system-setup'].includes(settingsTab)));
+      (session?.role === 'SCHOOL_ADMIN' && ['brand', 'branding', 'theme'].includes(settingsTab)));
+  const isSafeSchoolSetupRoute =
+    session?.role === 'SCHOOL_ADMIN' && schoolSetupAllowedPaths.some((allowedPath) => pathname === allowedPath);
   const { data: shellBranding } = useQuery({
     queryKey: ['login-branding-settings', 'platform-shell'],
     queryFn: () => getLoginBrandingSettings(),
@@ -83,6 +105,7 @@ export default function DashboardClientLayout({
     isAccountRoute ||
     !isManagedEmployeeRole ||
     isSafeSettingsTab ||
+    isSafeSchoolSetupRoute ||
     (requiredPermission ? permissionCodes.includes(requiredPermission) : false);
   const canAccessSuperAdminRoute =
     isAccountRoute ||

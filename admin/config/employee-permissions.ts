@@ -5,14 +5,14 @@ export type PermissionCatalogItem = {
   code: string;
   label: string;
   path: string;
-  group: 'Overview' | 'Plans' | 'Employees' | 'Academics' | 'Students' | 'Attendance' | 'Payroll' | 'Support' | 'Audit' | 'Utilities';
+  group: 'Overview' | 'Plans' | 'Employees' | 'Academics' | 'Students' | 'Attendance' | 'Fees' | 'Payroll' | 'Support' | 'Audit' | 'Utilities';
 };
 
 export const EMPLOYEE_PERMISSION_CATALOG: PermissionCatalogItem[] = [
   { code: 'dashboard.overview', label: 'Overview', path: '/dashboard', group: 'Overview' },
   { code: 'dashboard.overview', label: 'Reports', path: '/dashboard/reports', group: 'Overview' },
   { code: 'plans.view', label: 'Plans', path: '/dashboard/plans', group: 'Plans' },
-  { code: 'settings.access', label: 'Settings / Access Control', path: '/dashboard/settings', group: 'Utilities' },
+  { code: 'settings.access', label: 'Institution & System Settings', path: '/dashboard/settings', group: 'Utilities' },
   { code: 'teachers.list', label: 'Employees - List', path: '/dashboard/teachers', group: 'Employees' },
   { code: 'teachers.add', label: 'Employees - Add', path: '/dashboard/teachers/add', group: 'Employees' },
   { code: 'staff.view', label: 'Staff Directory - View', path: '/dashboard/staff', group: 'Employees' },
@@ -39,14 +39,14 @@ export const EMPLOYEE_PERMISSION_CATALOG: PermissionCatalogItem[] = [
   { code: 'academic.subject.create', label: 'Academic Subjects - Create', path: '/dashboard/academics', group: 'Academics' },
   { code: 'academic.subject.edit', label: 'Academic Subjects - Edit', path: '/dashboard/academics', group: 'Academics' },
   { code: 'academic.subject.delete', label: 'Academic Subjects - Delete', path: '/dashboard/academics', group: 'Academics' },
-  { code: 'academic.room.view', label: 'Academic Rooms - View', path: '/dashboard/academics', group: 'Academics' },
-  { code: 'academic.room.create', label: 'Academic Rooms - Create', path: '/dashboard/academics', group: 'Academics' },
-  { code: 'academic.room.edit', label: 'Academic Rooms - Edit', path: '/dashboard/academics', group: 'Academics' },
-  { code: 'academic.room.delete', label: 'Academic Rooms - Delete', path: '/dashboard/academics', group: 'Academics' },
-  { code: 'academic.time.view', label: 'Academic Time Periods - View', path: '/dashboard/academics', group: 'Academics' },
-  { code: 'academic.time.create', label: 'Academic Time Periods - Create', path: '/dashboard/academics', group: 'Academics' },
-  { code: 'academic.time.edit', label: 'Academic Time Periods - Edit', path: '/dashboard/academics', group: 'Academics' },
-  { code: 'academic.time.delete', label: 'Academic Time Periods - Delete', path: '/dashboard/academics', group: 'Academics' },
+  { code: 'academic.room.view', label: 'Timetable Rooms - View', path: '/dashboard/timetable', group: 'Academics' },
+  { code: 'academic.room.create', label: 'Timetable Rooms - Create', path: '/dashboard/timetable', group: 'Academics' },
+  { code: 'academic.room.edit', label: 'Timetable Rooms - Edit', path: '/dashboard/timetable', group: 'Academics' },
+  { code: 'academic.room.delete', label: 'Timetable Rooms - Delete', path: '/dashboard/timetable', group: 'Academics' },
+  { code: 'academic.time.view', label: 'Timetable Periods - View', path: '/dashboard/timetable', group: 'Academics' },
+  { code: 'academic.time.create', label: 'Timetable Periods - Create', path: '/dashboard/timetable', group: 'Academics' },
+  { code: 'academic.time.edit', label: 'Timetable Periods - Edit', path: '/dashboard/timetable', group: 'Academics' },
+  { code: 'academic.time.delete', label: 'Timetable Periods - Delete', path: '/dashboard/timetable', group: 'Academics' },
   { code: 'academic.assign_subject.view', label: 'Assign Subjects - View', path: '/dashboard/academics', group: 'Academics' },
   { code: 'academic.assign_subject.create', label: 'Assign Subjects - Create', path: '/dashboard/academics', group: 'Academics' },
   { code: 'academic.assign_subject.edit', label: 'Assign Subjects - Edit', path: '/dashboard/academics', group: 'Academics' },
@@ -55,11 +55,10 @@ export const EMPLOYEE_PERMISSION_CATALOG: PermissionCatalogItem[] = [
   { code: 'academic.class_teacher.create', label: 'Class Teachers - Create', path: '/dashboard/academics', group: 'Academics' },
   { code: 'academic.class_teacher.edit', label: 'Class Teachers - Edit', path: '/dashboard/academics', group: 'Academics' },
   { code: 'academic.class_teacher.delete', label: 'Class Teachers - Delete', path: '/dashboard/academics', group: 'Academics' },
-  { code: 'academic.routine.view', label: 'Class Routine - View', path: '/dashboard/academics', group: 'Academics' },
-  { code: 'academic.routine.create', label: 'Class Routine - Create', path: '/dashboard/academics', group: 'Academics' },
-  { code: 'academic.routine.edit', label: 'Class Routine - Edit', path: '/dashboard/academics', group: 'Academics' },
-  { code: 'academic.routine.delete', label: 'Class Routine - Delete', path: '/dashboard/academics', group: 'Academics' },
-  { code: 'academics.setup', label: 'Timetable', path: '/dashboard/academics/timetable', group: 'Academics' },
+  { code: 'academic.routine.view', label: 'Timetable Routine - View', path: '/dashboard/timetable', group: 'Academics' },
+  { code: 'academic.routine.create', label: 'Timetable Routine - Create', path: '/dashboard/timetable', group: 'Academics' },
+  { code: 'academic.routine.edit', label: 'Timetable Routine - Edit', path: '/dashboard/timetable', group: 'Academics' },
+  { code: 'academic.routine.delete', label: 'Timetable Routine - Delete', path: '/dashboard/timetable', group: 'Academics' },
   { code: 'academics.exams', label: 'Exams', path: '/dashboard/academics/exams', group: 'Academics' },
   { code: 'academics.marks', label: 'Upload Marks', path: '/dashboard/academics/marks', group: 'Academics' },
   { code: 'students.list', label: 'Students - List', path: '/dashboard/students', group: 'Students' },
@@ -99,6 +98,12 @@ export const EMPLOYEE_PERMISSION_CATALOG: PermissionCatalogItem[] = [
   { code: 'leave.approve.edit', label: 'Leave Approval - Edit', path: '/dashboard/leave/requests', group: 'Attendance' },
   { code: 'leave.approve.delete', label: 'Leave Approval - Delete', path: '/dashboard/leave/requests', group: 'Attendance' },
   { code: 'leave.balance.view', label: 'Leave Balance - View', path: '/dashboard/leave/my', group: 'Attendance' },
+  { code: 'fees.view', label: 'Fees - View', path: '/dashboard/fees', group: 'Fees' },
+  { code: 'fees.create', label: 'Fees - Create', path: '/dashboard/fees', group: 'Fees' },
+  { code: 'fees.edit', label: 'Fees - Edit', path: '/dashboard/fees', group: 'Fees' },
+  { code: 'fees.delete', label: 'Fees - Delete', path: '/dashboard/fees', group: 'Fees' },
+  { code: 'fees.collect', label: 'Fees - Collect Payment', path: '/dashboard/fees', group: 'Fees' },
+  { code: 'fees.report', label: 'Fees - Reports', path: '/dashboard/fees', group: 'Fees' },
   { code: 'payroll.view', label: 'Payroll - View', path: '/dashboard/payroll', group: 'Payroll' },
   { code: 'payroll.generate', label: 'Payroll - Generate', path: '/dashboard/payroll', group: 'Payroll' },
   { code: 'payroll.pay', label: 'Payroll - Pay', path: '/dashboard/payroll', group: 'Payroll' },
@@ -141,9 +146,11 @@ export const getRequiredPermissionForPath = (pathname: string) => {
   if (pathname.startsWith('/dashboard/staff')) return 'staff.view';
   if (pathname.startsWith('/dashboard/leave/requests')) return 'leave.approve.view';
   if (pathname.startsWith('/dashboard/leave/my')) return 'leave.apply.view';
+  if (pathname.startsWith('/dashboard/fees')) return 'fees.view';
   if (pathname.startsWith('/dashboard/payroll/report')) return 'payroll.report';
   if (pathname.startsWith('/dashboard/payroll')) return 'payroll.view';
 
+  if (pathname.startsWith('/dashboard/timetable')) return 'academics.setup';
   if (pathname.startsWith('/dashboard/academics/exams')) return 'academics.exams';
   if (pathname.startsWith('/dashboard/academics/marks')) return 'academics.marks';
   if (pathname.startsWith('/dashboard/academics')) return 'academics.setup';
@@ -162,6 +169,14 @@ export const getRequiredPermissionForPath = (pathname: string) => {
   if (pathname.startsWith('/dashboard/id-cards')) return 'idcards.view';
 
   if (pathname.startsWith('/dashboard/attendance')) return 'attendance.view';
+  if (pathname.startsWith('/dashboard/institution-setup')) return 'settings.access';
+  if (pathname.startsWith('/dashboard/payment-methods')) return 'settings.access';
+  if (pathname.startsWith('/dashboard/fee-challan-details')) return 'settings.access';
+  if (pathname.startsWith('/dashboard/role-permissions')) return 'settings.access';
+  if (pathname.startsWith('/dashboard/base-setup')) return 'settings.access';
+  if (pathname.startsWith('/dashboard/sessions')) return 'settings.access';
+  if (pathname.startsWith('/dashboard/holidays')) return 'settings.access';
+  if (pathname.startsWith('/dashboard/sms-settings')) return 'settings.access';
   if (pathname.startsWith('/dashboard/settings')) return 'settings.access';
   if (pathname.startsWith('/dashboard/support')) return 'support.view';
   if (pathname.startsWith('/dashboard/audit')) return 'audit.view';

@@ -22,6 +22,7 @@ import {
   loadStaffAttendance,
   payPayroll,
   saveStaffAttendance,
+  seedStaffDefaults,
   updateStaff,
   uploadStaffDocumentMiddleware,
 } from '../controllers/staff.controller';
@@ -38,6 +39,7 @@ staffRouter.get('/departments', listDepartments);
 staffRouter.post('/departments', createDepartment);
 staffRouter.get('/designations', listDesignations);
 staffRouter.post('/designations', createDesignation);
+staffRouter.post('/defaults', seedStaffDefaults);
 
 staffRouter.get('/attendance', loadStaffAttendance);
 staffRouter.post('/attendance', saveStaffAttendance);

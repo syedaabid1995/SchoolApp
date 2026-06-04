@@ -72,6 +72,19 @@ export type SmsSystemSettings = {
   };
 };
 
+export type FeeChallanBankSetting = {
+  id: string;
+  bankName: string;
+  branchAddress: string;
+  accountNumber: string;
+  instructions: string;
+  logoDataUrl: string;
+  logoFileName: string;
+  logoMimeType: string;
+  logoSize: number;
+  isActive: boolean;
+};
+
 export type SchoolSystemSettings = {
   id: string;
   schoolId: string;
@@ -82,6 +95,7 @@ export type SchoolSystemSettings = {
   holidays: HolidaySetting[];
   weekends: WeekendSetting[];
   smsSettings: SmsSystemSettings;
+  feeChallanBanks: FeeChallanBankSetting[];
   createdAt: string;
   updatedAt: string;
 };
@@ -89,7 +103,7 @@ export type SchoolSystemSettings = {
 export type UpdateSchoolSystemSettingsInput = Partial<
   Pick<
     SchoolSystemSettings,
-    'general' | 'paymentGateways' | 'baseSetups' | 'sessions' | 'holidays' | 'weekends' | 'smsSettings'
+    'general' | 'paymentGateways' | 'baseSetups' | 'sessions' | 'holidays' | 'weekends' | 'smsSettings' | 'feeChallanBanks'
   >
 > & {
   schoolId?: string;

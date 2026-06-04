@@ -188,7 +188,7 @@ const superAdminSearchItems: GlobalSearchItem[] = [
   {
     title: 'Branding & Theme',
     description: 'Manage identity, login branding, colors, publishing, and rollback',
-    href: '/dashboard/settings?tab=brand',
+    href: '/dashboard/settings/branding',
     group: 'Settings',
     keywords: ['theme', 'themes', 'color', 'publish', 'rollback', 'branding', 'login branding', 'logo', 'login page', 'general'],
   },
@@ -233,6 +233,13 @@ const superAdminSearchItems: GlobalSearchItem[] = [
     href: '/dashboard/settings?tab=messaging',
     group: 'Settings',
     keywords: ['sms', 'whatsapp', 'wati', 'twilio', 'msg91', 'email', 'message', 'provider', 'notification'],
+  },
+  {
+    title: 'Fee Challan Details',
+    description: 'Manage fee challan bank logo, account number, address, and instructions',
+    href: '/dashboard/fee-challan-details',
+    group: 'Settings',
+    keywords: ['fee challan', 'challan bank', 'bank logo', 'bank account', 'fee bank'],
   },
   {
     title: 'Access Control',

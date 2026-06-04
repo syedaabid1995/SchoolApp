@@ -17,10 +17,89 @@ const requireSchoolAdmin = (req: Request) => {
 };
 
 const normalizeText = (value: string) => value.trim().replace(/\s+/g, ' ');
+const DEFAULT_TIME_PERIODS: Array<{ type: TimePeriodType; name: string; startTime: string; endTime: string }> = [
+  { type: 'CLASS_TIME', name: '1ST PERIOD', startTime: '09:00', endTime: '09:45' },
+  { type: 'CLASS_TIME', name: '2ND PERIOD', startTime: '09:45', endTime: '10:30' },
+  { type: 'BREAK', name: 'SHORT BREAK', startTime: '10:30', endTime: '10:45' },
+  { type: 'CLASS_TIME', name: '3RD PERIOD', startTime: '10:45', endTime: '11:30' },
+  { type: 'CLASS_TIME', name: '4TH PERIOD', startTime: '11:30', endTime: '12:15' },
+  { type: 'BREAK', name: 'LUNCH BREAK', startTime: '12:15', endTime: '13:00' },
+  { type: 'CLASS_TIME', name: '5TH PERIOD', startTime: '13:00', endTime: '13:45' },
+  { type: 'CLASS_TIME', name: '6TH PERIOD', startTime: '13:45', endTime: '14:30' },
+  { type: 'CLASS_TIME', name: '7TH PERIOD', startTime: '14:30', endTime: '15:15' },
+];
+
+const dayValueByKey = new Map([
+  ['saturday', 1],
+  ['sat', 1],
+  ['sunday', 2],
+  ['sun', 2],
+  ['monday', 3],
+  ['mon', 3],
+  ['tuesday', 4],
+  ['tue', 4],
+  ['wednesday', 5],
+  ['wed', 5],
+  ['thursday', 6],
+  ['thu', 6],
+  ['friday', 7],
+  ['fri', 7],
+]);
+
+const allRoutineDayValues = [1, 2, 3, 4, 5, 6, 7];
+
+const weekendValuesFromJson = (weekends: Prisma.JsonValue | null | undefined) => {
+  const values = new Set<number>();
+  if (!Array.isArray(weekends)) return new Set([7]);
+
+  for (const item of weekends) {
+    if (!item || typeof item !== 'object' || Array.isArray(item)) continue;
+    const day = item as Record<string, unknown>;
+    if (day.isWeekend !== true) continue;
+    const key = String(day.id ?? day.name ?? '').trim().toLowerCase();
+    const value = dayValueByKey.get(key);
+    if (value) values.add(value);
+  }
+
+  return values;
+};
+
+const getConfiguredWeekendValues = async (schoolId: string) => {
+  const setting = await prisma.schoolSystemSetting.findUnique({ where: { schoolId }, select: { weekends: true } });
+  return weekendValuesFromJson(setting?.weekends);
+};
 
 const ensureEndAfterStart = (startTime: string, endTime: string) => {
   if (endTime <= startTime) {
     throw new HttpError(400, 'End time must be after start time');
+  }
+};
+
+const findOverlappingTimePeriod = async (
+  schoolId: string,
+  startTime: string,
+  endTime: string,
+  excludeId?: string,
+) =>
+  prisma.timePeriod.findFirst({
+    where: {
+      schoolId,
+      ...(excludeId ? { id: { not: excludeId } } : {}),
+      startTime: { lt: endTime },
+      endTime: { gt: startTime },
+    },
+    select: { id: true, name: true, startTime: true, endTime: true },
+  });
+
+const assertNoOverlappingTimePeriod = async (
+  schoolId: string,
+  startTime: string,
+  endTime: string,
+  excludeId?: string,
+) => {
+  const overlap = await findOverlappingTimePeriod(schoolId, startTime, endTime, excludeId);
+  if (overlap) {
+    throw new HttpError(409, `Time period overlaps with ${overlap.name} (${overlap.startTime}-${overlap.endTime})`);
   }
 };
 
@@ -432,9 +511,15 @@ export const listClassRooms = async (req: Request, res: Response) => {
 export const createClassRoom = async (req: Request, res: Response) => {
   const { schoolId } = requireSchoolAdmin(req);
   const payload = roomSchema.parse(req.body);
+  const roomNumber = normalizeText(payload.roomNumber);
+  const duplicate = await prisma.classRoom.findFirst({
+    where: { schoolId, roomNumber: { equals: roomNumber, mode: 'insensitive' } },
+    select: { id: true },
+  });
+  if (duplicate) throw new HttpError(409, 'Room number already exists for this school');
   try {
     const room = await prisma.classRoom.create({
-      data: { schoolId, roomNumber: normalizeText(payload.roomNumber), capacity: payload.capacity },
+      data: { schoolId, roomNumber, capacity: payload.capacity },
     });
     res.status(201).json(room);
   } catch (err) {
@@ -448,11 +533,19 @@ export const updateClassRoom = async (req: Request, res: Response) => {
   const id = req.params.id;
   const existing = await prisma.classRoom.findFirst({ where: { id, schoolId }, select: { id: true } });
   if (!existing) throw new HttpError(404, 'Class room not found');
+  const roomNumber = payload.roomNumber === undefined ? undefined : normalizeText(payload.roomNumber);
+  if (roomNumber !== undefined) {
+    const duplicate = await prisma.classRoom.findFirst({
+      where: { schoolId, id: { not: id }, roomNumber: { equals: roomNumber, mode: 'insensitive' } },
+      select: { id: true },
+    });
+    if (duplicate) throw new HttpError(409, 'Room number already exists for this school');
+  }
   try {
     const room = await prisma.classRoom.update({
       where: { id },
       data: {
-        roomNumber: payload.roomNumber === undefined ? undefined : normalizeText(payload.roomNumber),
+        roomNumber,
         capacity: payload.capacity ?? undefined,
       },
     });
@@ -493,6 +586,7 @@ export const createTimePeriod = async (req: Request, res: Response) => {
   const { schoolId } = requireSchoolAdmin(req);
   const payload = timePeriodSchema.parse(req.body);
   ensureEndAfterStart(payload.startTime, payload.endTime);
+  await assertNoOverlappingTimePeriod(schoolId, payload.startTime, payload.endTime);
   try {
     const period = await prisma.timePeriod.create({
       data: { schoolId, type: payload.type, name: normalizeText(payload.name), startTime: payload.startTime, endTime: payload.endTime },
@@ -509,7 +603,10 @@ export const updateTimePeriod = async (req: Request, res: Response) => {
   const id = req.params.id;
   const existing = await prisma.timePeriod.findFirst({ where: { id, schoolId }, select: { id: true, startTime: true, endTime: true } });
   if (!existing) throw new HttpError(404, 'Time period not found');
-  ensureEndAfterStart(payload.startTime ?? existing.startTime, payload.endTime ?? existing.endTime);
+  const startTime = payload.startTime ?? existing.startTime;
+  const endTime = payload.endTime ?? existing.endTime;
+  ensureEndAfterStart(startTime, endTime);
+  await assertNoOverlappingTimePeriod(schoolId, startTime, endTime, id);
   try {
     const period = await prisma.timePeriod.update({
       where: { id },
@@ -524,6 +621,46 @@ export const updateTimePeriod = async (req: Request, res: Response) => {
   } catch (err) {
     handleUniqueError(err, 'Time period already exists for this school');
   }
+};
+
+export const seedDefaultTimePeriods = async (req: Request, res: Response) => {
+  const { schoolId } = requireSchoolAdmin(req);
+  let createdCount = 0;
+  let updatedCount = 0;
+  const skipped: Array<{ name: string; reason: string }> = [];
+
+  for (const period of DEFAULT_TIME_PERIODS) {
+    const existing = await prisma.timePeriod.findFirst({
+      where: { schoolId, type: period.type, name: { equals: period.name, mode: 'insensitive' } },
+      select: { id: true },
+    });
+    const overlap = await findOverlappingTimePeriod(schoolId, period.startTime, period.endTime, existing?.id);
+    if (overlap) {
+      skipped.push({
+        name: period.name,
+        reason: `Overlaps with ${overlap.name} (${overlap.startTime}-${overlap.endTime})`,
+      });
+      continue;
+    }
+    if (existing) {
+      await prisma.timePeriod.update({
+        where: { id: existing.id },
+        data: { type: period.type, name: period.name, startTime: period.startTime, endTime: period.endTime },
+      });
+      updatedCount += 1;
+      continue;
+    }
+    await prisma.timePeriod.create({ data: { schoolId, ...period } });
+    createdCount += 1;
+  }
+
+  const periods = await prisma.timePeriod.findMany({
+    where: { schoolId },
+    include: { _count: { select: { classRoutines: true } } },
+    orderBy: [{ startTime: 'asc' }, { name: 'asc' }],
+  });
+
+  res.status(200).json({ createdCount, updatedCount, skippedCount: skipped.length, skipped, periods });
 };
 
 export const deleteTimePeriod = async (req: Request, res: Response) => {
@@ -607,6 +744,42 @@ export const deleteAssignSubject = async (req: Request, res: Response) => {
 
 const classTeacherSchema = z.object({ classId: uuidSchema, sectionId: uuidSchema, teacherId: uuidSchema });
 
+const assertClassTeacherAssignable = async (schoolId: string, classId: string, teacherId: string, excludeId?: string) => {
+  const baseWhere = {
+    schoolId,
+    ...(excludeId ? { id: { not: excludeId } } : {}),
+  };
+  const classConflict = await prisma.classTeacher.findFirst({
+    where: { ...baseWhere, classId },
+    include: {
+      class: { select: { name: true } },
+      section: { select: { name: true } },
+      teacher: { select: { firstName: true, lastName: true } },
+    },
+  });
+  if (classConflict) {
+    throw new HttpError(
+      409,
+      `${classConflict.class?.name ?? 'This class'} already has class teacher ${classConflict.teacher?.firstName ?? ''} ${classConflict.teacher?.lastName ?? ''}`.trim(),
+    );
+  }
+
+  const teacherConflict = await prisma.classTeacher.findFirst({
+    where: { ...baseWhere, teacherId },
+    include: {
+      class: { select: { name: true } },
+      section: { select: { name: true } },
+      teacher: { select: { firstName: true, lastName: true } },
+    },
+  });
+  if (teacherConflict) {
+    throw new HttpError(
+      409,
+      `${teacherConflict.teacher?.firstName ?? 'This teacher'} ${teacherConflict.teacher?.lastName ?? ''} is already assigned to ${teacherConflict.class?.name ?? 'another class'}`.trim(),
+    );
+  }
+};
+
 export const listClassTeachers = async (req: Request, res: Response) => {
   const { schoolId } = requireSchoolAdmin(req);
   const items = await prisma.classTeacher.findMany({
@@ -628,10 +801,9 @@ export const saveClassTeacher = async (req: Request, res: Response) => {
   await assertSection(schoolId, payload.sectionId);
   await assertClassSection(schoolId, payload.classId, payload.sectionId);
   await assertTeacher(schoolId, payload.teacherId);
-  const item = await prisma.classTeacher.upsert({
-    where: { classId_sectionId: { classId: payload.classId, sectionId: payload.sectionId } },
-    update: { teacherId: payload.teacherId },
-    create: {
+  await assertClassTeacherAssignable(schoolId, payload.classId, payload.teacherId);
+  const item = await prisma.classTeacher.create({
+    data: {
       schoolId,
       classId: payload.classId,
       sectionId: payload.sectionId,
@@ -650,14 +822,16 @@ export const updateClassTeacher = async (req: Request, res: Response) => {
   const { schoolId } = requireSchoolAdmin(req);
   const payload = classTeacherSchema.partial().parse(req.body);
   const id = req.params.id;
-  const existing = await prisma.classTeacher.findFirst({ where: { id, schoolId }, select: { id: true, classId: true, sectionId: true } });
+  const existing = await prisma.classTeacher.findFirst({ where: { id, schoolId }, select: { id: true, classId: true, sectionId: true, teacherId: true } });
   if (!existing) throw new HttpError(404, 'Class teacher assignment not found');
   const classId = payload.classId ?? existing.classId;
   const sectionId = payload.sectionId ?? existing.sectionId;
+  const teacherId = payload.teacherId ?? existing.teacherId;
   await assertClass(schoolId, classId);
   await assertSection(schoolId, sectionId);
   await assertClassSection(schoolId, classId, sectionId);
-  if (payload.teacherId) await assertTeacher(schoolId, payload.teacherId);
+  await assertTeacher(schoolId, teacherId);
+  await assertClassTeacherAssignable(schoolId, classId, teacherId, id);
   const item = await prisma.classTeacher.update({
     where: { id },
     data: { classId: payload.classId, sectionId: payload.sectionId, teacherId: payload.teacherId },
@@ -674,14 +848,36 @@ export const deleteClassTeacher = async (req: Request, res: Response) => {
   res.status(204).send();
 };
 
+const classRoutineInclude = {
+  class: { select: { id: true, name: true } },
+  section: { select: { id: true, name: true } },
+  timePeriod: true,
+  subject: { select: { id: true, name: true, code: true, type: true } },
+  teacher: { select: { id: true, firstName: true, lastName: true, employeeNo: true } },
+  classRoom: { select: { id: true, roomNumber: true, capacity: true } },
+} satisfies Prisma.ClassRoutineInclude;
+
+const classRoutineOrderBy = [
+  { dayOfWeek: 'asc' },
+  { timePeriod: { startTime: 'asc' } },
+] satisfies Prisma.ClassRoutineOrderByWithRelationInput[];
+
 const routineSchema = z.object({
   classId: uuidSchema,
   sectionId: uuidSchema,
   timePeriodId: uuidSchema,
-  dayOfWeek: z.coerce.number().int().min(1).max(6),
+  dayOfWeek: z.coerce.number().int().min(1).max(7),
   subjectId: uuidSchema,
   teacherId: uuidSchema,
   classRoomId: uuidSchema.optional().nullable(),
+});
+
+const generateRoutineSchema = z.object({
+  classId: uuidSchema,
+  sectionId: uuidSchema,
+  classRoomId: uuidSchema.optional().nullable(),
+  replaceExisting: z.boolean().optional().default(false),
+  days: z.array(z.coerce.number().int().min(1).max(7)).min(1).max(7).optional(),
 });
 
 const validateRoutinePayload = async (schoolId: string, payload: z.infer<typeof routineSchema>) => {
@@ -691,6 +887,8 @@ const validateRoutinePayload = async (schoolId: string, payload: z.infer<typeof 
   await assertSubject(schoolId, payload.subjectId);
   await assertTeacher(schoolId, payload.teacherId);
   await assertClassRoom(schoolId, payload.classRoomId);
+  const weekendValues = await getConfiguredWeekendValues(schoolId);
+  if (weekendValues.has(payload.dayOfWeek)) throw new HttpError(400, 'Selected day is configured as weekend');
   const period = await assertTimePeriod(schoolId, payload.timePeriodId);
   if (period.type === 'BREAK') throw new HttpError(400, 'Break periods cannot be assigned as class routine');
   const subjectAssignment = await prisma.assignSubject.findFirst({
@@ -702,21 +900,60 @@ const validateRoutinePayload = async (schoolId: string, payload: z.infer<typeof 
   }
 };
 
+const assertRoutineAvailability = async (
+  schoolId: string,
+  payload: Pick<z.infer<typeof routineSchema>, 'teacherId' | 'classRoomId' | 'dayOfWeek' | 'timePeriodId'>,
+  excludeId?: string,
+) => {
+  const sameSlotWhere = {
+    schoolId,
+    dayOfWeek: payload.dayOfWeek,
+    timePeriodId: payload.timePeriodId,
+    ...(excludeId ? { id: { not: excludeId } } : {}),
+  };
+
+  const teacherConflict = await prisma.classRoutine.findFirst({
+    where: { ...sameSlotWhere, teacherId: payload.teacherId },
+    include: {
+      class: { select: { name: true } },
+      section: { select: { name: true } },
+      timePeriod: { select: { name: true, startTime: true, endTime: true } },
+    },
+  });
+  if (teacherConflict) {
+    throw new HttpError(
+      409,
+      `Teacher already has ${teacherConflict.class.name}-${teacherConflict.section.name} in ${teacherConflict.timePeriod.name}`,
+    );
+  }
+
+  if (!payload.classRoomId) return;
+  const roomConflict = await prisma.classRoutine.findFirst({
+    where: { ...sameSlotWhere, classRoomId: payload.classRoomId },
+    include: {
+      class: { select: { name: true } },
+      section: { select: { name: true } },
+      classRoom: { select: { roomNumber: true } },
+      timePeriod: { select: { name: true } },
+    },
+  });
+  if (roomConflict) {
+    throw new HttpError(
+      409,
+      `Room ${roomConflict.classRoom?.roomNumber ?? ''} is already used by ${roomConflict.class.name}-${roomConflict.section.name} in ${roomConflict.timePeriod.name}`,
+    );
+  }
+};
+
 export const listClassRoutines = async (req: Request, res: Response) => {
   const { schoolId } = requireSchoolAdmin(req);
   const classId = typeof req.query.classId === 'string' ? req.query.classId : undefined;
   const sectionId = typeof req.query.sectionId === 'string' ? req.query.sectionId : undefined;
+  const teacherId = typeof req.query.teacherId === 'string' ? req.query.teacherId : undefined;
   const routines = await prisma.classRoutine.findMany({
-    where: { schoolId, ...(classId ? { classId } : {}), ...(sectionId ? { sectionId } : {}) },
-    include: {
-      class: { select: { id: true, name: true } },
-      section: { select: { id: true, name: true } },
-      timePeriod: true,
-      subject: { select: { id: true, name: true, code: true, type: true } },
-      teacher: { select: { id: true, firstName: true, lastName: true, employeeNo: true } },
-      classRoom: { select: { id: true, roomNumber: true, capacity: true } },
-    },
-    orderBy: [{ dayOfWeek: 'asc' }, { timePeriod: { startTime: 'asc' } }],
+    where: { schoolId, ...(classId ? { classId } : {}), ...(sectionId ? { sectionId } : {}), ...(teacherId ? { teacherId } : {}) },
+    include: classRoutineInclude,
+    orderBy: classRoutineOrderBy,
   });
   res.status(200).json(routines);
 };
@@ -725,6 +962,7 @@ export const createClassRoutine = async (req: Request, res: Response) => {
   const { schoolId } = requireSchoolAdmin(req);
   const payload = routineSchema.parse(req.body);
   await validateRoutinePayload(schoolId, payload);
+  await assertRoutineAvailability(schoolId, payload);
   try {
     const item = await prisma.classRoutine.create({
       data: {
@@ -760,6 +998,7 @@ export const updateClassRoutine = async (req: Request, res: Response) => {
     classRoomId: payload.classRoomId === undefined ? existing.classRoomId : payload.classRoomId,
   };
   await validateRoutinePayload(schoolId, merged);
+  await assertRoutineAvailability(schoolId, merged, id);
   try {
     const item = await prisma.classRoutine.update({
       where: { id },
@@ -769,6 +1008,120 @@ export const updateClassRoutine = async (req: Request, res: Response) => {
   } catch (err) {
     handleUniqueError(err, 'Routine already exists for this day and period');
   }
+};
+
+export const generateClassRoutine = async (req: Request, res: Response) => {
+  const { schoolId } = requireSchoolAdmin(req);
+  const payload = generateRoutineSchema.parse(req.body);
+  await assertClass(schoolId, payload.classId);
+  await assertSection(schoolId, payload.sectionId);
+  await assertClassSection(schoolId, payload.classId, payload.sectionId);
+  await assertClassRoom(schoolId, payload.classRoomId);
+
+  const weekendValues = await getConfiguredWeekendValues(schoolId);
+  const requestedDays = payload.days?.length ? payload.days : allRoutineDayValues;
+  const days = [...new Set(requestedDays)].filter((day) => !weekendValues.has(day)).sort((a, b) => a - b);
+  if (!days.length) throw new HttpError(400, 'All selected days are configured as weekend');
+  const [periods, assignments] = await Promise.all([
+    prisma.timePeriod.findMany({
+      where: { schoolId, type: 'CLASS_TIME' },
+      orderBy: [{ startTime: 'asc' }, { name: 'asc' }],
+    }),
+    prisma.assignSubject.findMany({
+      where: { schoolId, classId: payload.classId, sectionId: payload.sectionId },
+      include: {
+        subject: { select: { name: true } },
+        teacher: { select: { firstName: true, lastName: true, employeeNo: true } },
+      },
+      orderBy: [{ subject: { name: 'asc' } }],
+    }),
+  ]);
+
+  if (!periods.length) throw new HttpError(400, 'Add class time periods before generating routine');
+  if (!assignments.length) throw new HttpError(400, 'Assign subjects and teachers before generating routine');
+
+  const periodIds = periods.map((period) => period.id);
+  const result = await prisma.$transaction(async (tx) => {
+    if (payload.replaceExisting) {
+      await tx.classRoutine.deleteMany({
+        where: { schoolId, classId: payload.classId, sectionId: payload.sectionId, dayOfWeek: { in: days }, timePeriodId: { in: periodIds } },
+      });
+    }
+
+    const existingRoutines = await tx.classRoutine.findMany({
+      where: { schoolId, dayOfWeek: { in: days }, timePeriodId: { in: periodIds } },
+      select: { classId: true, sectionId: true, dayOfWeek: true, timePeriodId: true, teacherId: true, classRoomId: true },
+    });
+
+    const occupiedClassSlots = new Set<string>();
+    const busyTeacherSlots = new Set<string>();
+    const busyRoomSlots = new Set<string>();
+    for (const routine of existingRoutines) {
+      if (routine.classId === payload.classId && routine.sectionId === payload.sectionId) {
+        occupiedClassSlots.add(`${routine.dayOfWeek}:${routine.timePeriodId}`);
+      }
+      busyTeacherSlots.add(`${routine.teacherId}:${routine.dayOfWeek}:${routine.timePeriodId}`);
+      if (routine.classRoomId) busyRoomSlots.add(`${routine.classRoomId}:${routine.dayOfWeek}:${routine.timePeriodId}`);
+    }
+
+    const skipped: Array<{ dayOfWeek: number; periodId: string; reason: string }> = [];
+    const createData: Prisma.ClassRoutineCreateManyInput[] = [];
+    let cursor = 0;
+
+    for (const dayOfWeek of days) {
+      for (const period of periods) {
+        const classSlotKey = `${dayOfWeek}:${period.id}`;
+        if (occupiedClassSlots.has(classSlotKey)) {
+          skipped.push({ dayOfWeek, periodId: period.id, reason: 'Class-section already has a routine in this period' });
+          continue;
+        }
+
+        let selected: (typeof assignments)[number] | null = null;
+        for (let offset = 0; offset < assignments.length; offset += 1) {
+          const candidate = assignments[(cursor + offset) % assignments.length];
+          const teacherSlotKey = `${candidate.teacherId}:${dayOfWeek}:${period.id}`;
+          const roomSlotKey = payload.classRoomId ? `${payload.classRoomId}:${dayOfWeek}:${period.id}` : null;
+          if (!busyTeacherSlots.has(teacherSlotKey) && (!roomSlotKey || !busyRoomSlots.has(roomSlotKey))) {
+            selected = candidate;
+            cursor = (cursor + offset + 1) % assignments.length;
+            break;
+          }
+        }
+
+        if (!selected) {
+          skipped.push({ dayOfWeek, periodId: period.id, reason: 'No assigned teacher available for this period' });
+          continue;
+        }
+
+        createData.push({
+          schoolId,
+          classId: payload.classId,
+          sectionId: payload.sectionId,
+          timePeriodId: period.id,
+          dayOfWeek,
+          subjectId: selected.subjectId,
+          teacherId: selected.teacherId,
+          classRoomId: payload.classRoomId ?? null,
+        });
+        occupiedClassSlots.add(classSlotKey);
+        busyTeacherSlots.add(`${selected.teacherId}:${dayOfWeek}:${period.id}`);
+        if (payload.classRoomId) busyRoomSlots.add(`${payload.classRoomId}:${dayOfWeek}:${period.id}`);
+      }
+    }
+
+    const created = createData.length
+      ? await tx.classRoutine.createMany({ data: createData, skipDuplicates: true })
+      : { count: 0 };
+    const routines = await tx.classRoutine.findMany({
+      where: { schoolId, classId: payload.classId, sectionId: payload.sectionId },
+      include: classRoutineInclude,
+      orderBy: classRoutineOrderBy,
+    });
+
+    return { createdCount: created.count, skippedCount: skipped.length, skipped, routines };
+  });
+
+  res.status(201).json(result);
 };
 
 export const deleteClassRoutine = async (req: Request, res: Response) => {

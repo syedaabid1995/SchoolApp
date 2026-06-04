@@ -210,6 +210,15 @@ const resolvePermissionForPath = (path: string, method = 'GET') => {
     return 'staff.view';
   }
 
+  if (pathOnly.startsWith('/api/v1/fees')) {
+    if (pathOnly.startsWith('/api/v1/fees/payments') && verb === 'POST') return 'fees.collect';
+    if (pathOnly.startsWith('/api/v1/fees/reports')) return 'fees.report';
+    if (verb === 'POST') return 'fees.create';
+    if (verb === 'PATCH' || verb === 'PUT') return 'fees.edit';
+    if (verb === 'DELETE') return 'fees.delete';
+    return 'fees.view';
+  }
+
   if (pathOnly.startsWith('/api/v1/leave/types')) {
     if (verb === 'POST') return 'leave.type.create';
     if (verb === 'PATCH' || verb === 'PUT') return 'leave.type.edit';

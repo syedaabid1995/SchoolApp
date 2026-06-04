@@ -267,10 +267,22 @@ export const uploadBrandingAsset = async (
   form.append('assetType', assetType);
   if (params?.schoolId) form.append('schoolId', params.schoolId);
 
-  const { data } = await api.post<BrandingAssetUploadResult>('/uploads/branding', form, {
-    headers: { 'Content-Type': 'multipart/form-data' },
+  const response = await fetch('/api/proxy/uploads/branding', {
+    method: 'POST',
+    body: form,
+    credentials: 'include',
   });
-  return data;
+  const payload = await response.json().catch(() => null);
+
+  if (!response.ok) {
+    const message =
+      payload?.error?.message ||
+      payload?.message ||
+      'Unable to upload branding asset.';
+    throw Object.assign(new Error(message), { response: { data: payload } });
+  }
+
+  return payload as BrandingAssetUploadResult;
 };
 
 export const getPublicLoginBranding = getLoginBranding;

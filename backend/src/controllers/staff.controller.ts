@@ -12,6 +12,40 @@ import { uploadBuffer } from '../services/s3.service';
 
 const staffRoles = ['SCHOOL_ADMIN', 'TEACHER', 'ACCOUNTANT', 'LIBRARIAN', 'STAFF'] as const;
 const attendanceStatuses = ['PRESENT', 'LATE', 'ABSENT', 'HOLIDAY', 'HALF_DAY', 'LEAVE'] as const;
+const defaultDepartments = ['Academics', 'Administration', 'Library', 'Accounts', 'Transport', 'Health & Safety', 'Operations', 'Support'];
+const defaultDesignations = [
+  'Principal',
+  'Vice Principal',
+  'Teacher',
+  'Senior Teacher',
+  'Academic Coordinator',
+  'Librarian',
+  'Assistant Librarian',
+  'Accountant',
+  'Fee Clerk',
+  'Driver',
+  'Transport Incharge',
+  'Receptionist',
+  'Nurse',
+  'Security Guard',
+  'Office Assistant',
+  'Lab Assistant',
+  'IT Support',
+  'Hostel Warden',
+];
+const defaultLeaveTypes = [
+  { name: 'Casual Leave', totalDays: 12 },
+  { name: 'Sick Leave', totalDays: 10 },
+  { name: 'Earned Leave', totalDays: 15 },
+  { name: 'Emergency Leave', totalDays: 3 },
+];
+const defaultLeaveDays: Record<(typeof staffRoles)[number], Record<string, number>> = {
+  SCHOOL_ADMIN: { 'Casual Leave': 15, 'Sick Leave': 10, 'Earned Leave': 18, 'Emergency Leave': 3 },
+  TEACHER: { 'Casual Leave': 12, 'Sick Leave': 10, 'Earned Leave': 15, 'Emergency Leave': 3 },
+  ACCOUNTANT: { 'Casual Leave': 12, 'Sick Leave': 10, 'Earned Leave': 15, 'Emergency Leave': 3 },
+  LIBRARIAN: { 'Casual Leave': 12, 'Sick Leave': 10, 'Earned Leave': 15, 'Emergency Leave': 3 },
+  STAFF: { 'Casual Leave': 10, 'Sick Leave': 8, 'Earned Leave': 12, 'Emergency Leave': 3 },
+};
 
 const requireSchoolAdmin = (req: Request) => {
   if (!req.auth?.userId) throw new HttpError(401, 'Unauthorized');
@@ -69,11 +103,19 @@ const payrollInfoSchema = z
   })
   .optional();
 
+const leaveBalanceInputSchema = z.object({
+  leaveTypeId: z.string().uuid(),
+  totalDays: z.coerce.number().int().min(0).max(365),
+});
+
 const staffPayloadSchema = z.object({
   email: z.string().email(),
   password: z.string().min(8).optional(),
   roleName: z.enum(staffRoles).default('TEACHER'),
-  employeeNo: z.string().trim().min(1).max(80).optional().nullable(),
+  employeeNo: z.preprocess(
+    (value) => (typeof value === 'string' && !value.trim() ? null : value),
+    z.string().trim().min(1).max(80).optional().nullable(),
+  ),
   departmentId: z.string().uuid().optional().nullable(),
   designationId: z.string().uuid().optional().nullable(),
   firstName: z.string().trim().min(1).max(120),
@@ -94,6 +136,7 @@ const staffPayloadSchema = z.object({
   maritalStatus: z.string().trim().max(40).optional().nullable(),
   bankDetails: bankDetailsSchema,
   payrollInfo: payrollInfoSchema,
+  leaveBalances: z.array(leaveBalanceInputSchema).max(20).optional(),
   socialLinks: z.array(socialLinkSchema).max(10).optional().default([]),
 });
 
@@ -114,6 +157,10 @@ const formatStaff = (staff: any) => ({
   staffNo: staff.employeeNo,
   fullName: `${staff.firstName ?? ''} ${staff.lastName ?? ''}`.trim(),
   bankInfo: staff.bankDetails ?? null,
+  leaveBalances: staff.leaveBalances?.map((balance: any) => ({
+    ...balance,
+    remainingDays: Math.max(0, Number(balance.totalDays ?? 0) - Number(balance.usedDays ?? 0)),
+  })),
 });
 
 const assertDepartmentScope = async (schoolId: string, departmentId?: string | null, designationId?: string | null) => {
@@ -185,6 +232,113 @@ const replaceSocialLinks = async (tx: Prisma.TransactionClient, staffId: string,
   }
 };
 
+const syncStaffLeaveBalances = async (
+  tx: Prisma.TransactionClient,
+  schoolId: string,
+  staffId: string,
+  roleName: RoleName,
+  balances?: Array<z.infer<typeof leaveBalanceInputSchema>>,
+) => {
+  const leaveTypes = await tx.leaveType.findMany({ where: { schoolId, isActive: true }, select: { id: true, name: true, totalDays: true } });
+  if (!leaveTypes.length) return;
+
+  const explicitBalances = Array.isArray(balances);
+  const balanceByType = new Map((balances ?? []).map((balance) => [balance.leaveTypeId, balance.totalDays]));
+  const defines = await tx.leaveDefine.findMany({ where: { schoolId, roleName }, select: { leaveTypeId: true, days: true } });
+  const defineByType = new Map(defines.map((define) => [define.leaveTypeId, define.days]));
+
+  for (const leaveType of leaveTypes) {
+    if (explicitBalances && !balanceByType.has(leaveType.id)) continue;
+    const totalDays = explicitBalances ? balanceByType.get(leaveType.id)! : defineByType.get(leaveType.id) ?? leaveType.totalDays;
+    await tx.leaveBalance.upsert({
+      where: { schoolId_staffId_leaveTypeId: { schoolId, staffId, leaveTypeId: leaveType.id } },
+      create: { schoolId, staffId, leaveTypeId: leaveType.id, totalDays, usedDays: 0, extraTakenDays: 0 },
+      update: { totalDays },
+    });
+  }
+};
+
+const employeeNoPrefix: Record<(typeof staffRoles)[number], string> = {
+  SCHOOL_ADMIN: 'ADM',
+  TEACHER: 'TCH',
+  ACCOUNTANT: 'ACC',
+  LIBRARIAN: 'LIB',
+  STAFF: 'STF',
+};
+
+const cleanCodePart = (value?: string | null) => {
+  const cleaned = String(value ?? 'SCH')
+    .replace(/[^a-z0-9]/gi, '')
+    .toUpperCase()
+    .slice(0, 10);
+  return cleaned || 'SCH';
+};
+
+const generateEmployeeNo = async (tx: Prisma.TransactionClient, schoolId: string, roleName: RoleName) => {
+  const school = await tx.school.findUnique({ where: { id: schoolId }, select: { code: true } });
+  const codePart = cleanCodePart(school?.code);
+  const prefix = employeeNoPrefix[roleName as (typeof staffRoles)[number]] ?? 'EMP';
+  const existingCount = await tx.teacherProfile.count({ where: { schoolId } });
+
+  for (let attempt = 1; attempt <= 50; attempt += 1) {
+    const candidate = `${codePart}-${prefix}-${String(existingCount + attempt).padStart(4, '0')}`;
+    const exists = await tx.teacherProfile.findFirst({ where: { schoolId, employeeNo: candidate }, select: { id: true } });
+    if (!exists) return candidate;
+  }
+
+  return `${codePart}-${prefix}-${Date.now().toString().slice(-8)}`;
+};
+
+const createOfferLetterDocument = async (
+  tx: Prisma.TransactionClient,
+  params: { schoolId: string; staffId: string; employeeNo: string; uploadedById: string },
+) => {
+  const fileSafeEmployeeNo = params.employeeNo.replace(/[^a-z0-9-]+/gi, '-').replace(/^-+|-+$/g, '') || 'employee';
+  await tx.staffDocument.create({
+    data: {
+      schoolId: params.schoolId,
+      staffId: params.staffId,
+      title: 'Offer Letter',
+      fileUrl: `/dashboard/staff/${params.staffId}/offer-letter`,
+      fileName: `${fileSafeEmployeeNo}-offer-letter.html`,
+      fileType: 'text/html',
+      uploadedById: params.uploadedById,
+    },
+  });
+};
+
+export const seedStaffDefaults = async (req: Request, res: Response) => {
+  const { schoolId } = requireSchoolAdmin(req);
+  const [departments, designations] = await Promise.all([
+    Promise.all(defaultDepartments.map((name) => prisma.department.upsert({ where: { schoolId_name: { schoolId, name } }, update: {}, create: { schoolId, name } }))),
+    Promise.all(defaultDesignations.map((name) => prisma.designation.upsert({ where: { schoolId_name: { schoolId, name } }, update: {}, create: { schoolId, name } }))),
+  ]);
+
+  const leaveTypes = await Promise.all(
+    defaultLeaveTypes.map((item) =>
+      prisma.leaveType.upsert({
+        where: { schoolId_name: { schoolId, name: item.name } },
+        update: { totalDays: item.totalDays, isActive: true },
+        create: { schoolId, name: item.name, totalDays: item.totalDays },
+      }),
+    ),
+  );
+
+  await Promise.all(
+    staffRoles.flatMap((roleName) =>
+      leaveTypes.map((leaveType) =>
+        prisma.leaveDefine.upsert({
+          where: { schoolId_roleName_leaveTypeId: { schoolId, roleName, leaveTypeId: leaveType.id } },
+          update: { days: defaultLeaveDays[roleName][leaveType.name] ?? leaveType.totalDays },
+          create: { schoolId, roleName, leaveTypeId: leaveType.id, days: defaultLeaveDays[roleName][leaveType.name] ?? leaveType.totalDays },
+        }),
+      ),
+    ),
+  );
+
+  res.status(200).json({ departments, designations, leaveTypes });
+};
+
 export const listDepartments = async (req: Request, res: Response) => {
   const { schoolId } = requireSchoolAdmin(req);
   const items = await prisma.department.findMany({ where: { schoolId }, orderBy: { name: 'asc' } });
@@ -233,6 +387,8 @@ export const listStaff = async (req: Request, res: Response) => {
             { lastName: { contains: query.search, mode: 'insensitive' } },
             { employeeNo: { contains: query.search, mode: 'insensitive' } },
             { phone: { contains: query.search, mode: 'insensitive' } },
+            { department: { name: { contains: query.search, mode: 'insensitive' } } },
+            { designation: { name: { contains: query.search, mode: 'insensitive' } } },
             { user: { email: { contains: query.search, mode: 'insensitive' } } },
           ],
         }
@@ -253,6 +409,11 @@ export const createStaff = async (req: Request, res: Response) => {
 
   const existing = await prisma.user.findFirst({ where: { schoolId, email: payload.email }, select: { id: true } });
   if (existing) throw new HttpError(409, 'Staff email already exists in this school');
+  const requestedEmployeeNo = normalizeNullable(payload.employeeNo);
+  if (requestedEmployeeNo) {
+    const duplicateEmployeeNo = await prisma.teacherProfile.findFirst({ where: { schoolId, employeeNo: requestedEmployeeNo }, select: { id: true } });
+    if (duplicateEmployeeNo) throw new HttpError(409, 'Employee number already exists in this school');
+  }
 
   const role = await prisma.role.upsert({ where: { name: payload.roleName }, update: {}, create: { name: payload.roleName } });
   const tempPassword = payload.password ?? crypto.randomBytes(9).toString('base64url');
@@ -271,12 +432,13 @@ export const createStaff = async (req: Request, res: Response) => {
       select: { id: true, email: true, schoolId: true, status: true },
     });
 
+    const employeeNo = requestedEmployeeNo ?? (await generateEmployeeNo(tx, schoolId, payload.roleName));
     const staff = await tx.teacherProfile.create({
       data: {
         schoolId,
         userId: user.id,
         roleName: payload.roleName,
-        employeeNo: normalizeNullable(payload.employeeNo),
+        employeeNo,
         firstName: payload.firstName,
         lastName: payload.lastName,
         departmentId: payload.departmentId ?? null,
@@ -299,8 +461,10 @@ export const createStaff = async (req: Request, res: Response) => {
         isActive: true,
       },
     });
+    await createOfferLetterDocument(tx, { schoolId, staffId: staff.id, employeeNo, uploadedById: userId });
     await upsertBankDetails(tx, staff.id, payload.bankDetails);
     await upsertPayrollInfo(tx, staff.id, payload.payrollInfo);
+    await syncStaffLeaveBalances(tx, schoolId, staff.id, payload.roleName, payload.leaveBalances);
     await replaceSocialLinks(tx, staff.id, payload.socialLinks);
     return { user, staff };
   });
@@ -325,6 +489,8 @@ export const getStaff = async (req: Request, res: Response) => {
       ...staffInclude,
       documents: { orderBy: { createdAt: 'desc' } },
       timelines: { orderBy: { timelineAt: 'desc' } },
+      leaveBalances: { include: { leaveType: true }, orderBy: { updatedAt: 'desc' } },
+      leaveApplications: { include: { leaveType: true }, orderBy: { appliedAt: 'desc' }, take: 10 },
       payrolls: { include: { earningRows: true, deductionRows: true, payments: true }, orderBy: [{ year: 'desc' }, { month: 'desc' }] },
     },
   });
@@ -376,6 +542,9 @@ export const updateStaff = async (req: Request, res: Response) => {
     });
     await upsertBankDetails(tx, existing.id, payload.bankDetails);
     await upsertPayrollInfo(tx, existing.id, payload.payrollInfo);
+    if (payload.leaveBalances !== undefined || payload.roleName) {
+      await syncStaffLeaveBalances(tx, schoolId, existing.id, (payload.roleName ?? existing.roleName) as RoleName, payload.leaveBalances);
+    }
     await replaceSocialLinks(tx, existing.id, payload.socialLinks);
     return staff;
   });

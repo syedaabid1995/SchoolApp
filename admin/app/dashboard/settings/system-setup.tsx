@@ -1,47 +1,32 @@
 'use client';
 
 import Link from 'next/link';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useState, type ChangeEvent } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import FullPageLoader from '../../../components/FullPageLoader';
 import { getSession } from '../../../services/auth.service';
 import { listSchools } from '../../../services/school.service';
 import {
-  createAcademicYear,
-  deleteAcademicYear,
-  listAcademicYears,
-  updateAcademicYear,
-} from '../../../services/academic.service';
-import {
   type BaseSetups,
+  type FeeChallanBankSetting,
   type GeneralSchoolSettings,
   type HolidaySetting,
   type PaymentGatewaySettings,
   type SchoolSessionSetting,
   type SmsSystemSettings,
-  type WeekendSetting,
   getSchoolSystemSettings,
   updateSchoolSystemSettings,
 } from '../../../services/system-settings.service';
 
-type SetupSection =
+export type SetupSection =
   | 'general'
   | 'payments'
   | 'roles'
   | 'base'
-  | 'academic'
   | 'sessions'
   | 'holidays'
   | 'sms'
-  | 'weekends';
-
-type AcademicYearItem = {
-  id: string;
-  name: string;
-  startDate: string;
-  endDate: string;
-  isActive?: boolean;
-};
+  | 'fee-challan';
 
 const inputClass =
   'w-full rounded-xl border border-[var(--shell-border)] bg-[var(--shell-card)] px-3 py-2.5 text-sm font-semibold text-[var(--shell-text)] outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10';
@@ -60,12 +45,17 @@ const setupTabs: Array<{ id: SetupSection; label: string; metric: string }> = [
   { id: 'payments', label: 'Payments', metric: 'Gateways' },
   { id: 'roles', label: 'Roles', metric: 'Permissions' },
   { id: 'base', label: 'Base Setup', metric: 'Master data' },
-  { id: 'academic', label: 'Academic Year', metric: 'Calendar' },
   { id: 'sessions', label: 'Sessions', metric: 'Terms' },
   { id: 'holidays', label: 'Holidays', metric: 'Calendar' },
   { id: 'sms', label: 'SMS', metric: 'Providers' },
-  { id: 'weekends', label: 'Weekend', metric: 'Days' },
+  { id: 'fee-challan', label: 'Fee Challan', metric: 'Banks' },
 ];
+
+type SystemSetupTabProps = {
+  section?: SetupSection;
+  showOverview?: boolean;
+  showSectionMenu?: boolean;
+};
 
 const currencyOptions = [
   { code: 'USD', symbol: '$', name: 'US Dollar' },
@@ -84,19 +74,41 @@ const currencyOptions = [
 
 const languageOptions = ['English', 'Bangla', 'Hindi', 'Arabic', 'French', 'Spanish', 'Urdu'];
 const dateFormatOptions = ['DD MMMM, YYYY', 'DD/MM/YYYY', 'MM/DD/YYYY', 'YYYY-MM-DD', 'D MMM, YYYY'];
+const bankLogoMaxBytes = 500 * 1024;
+const bankLogoMimeTypes = ['image/jpeg', 'image/png'];
+
+const emptyFeeChallanBankDraft: FeeChallanBankSetting = {
+  id: '',
+  bankName: '',
+  branchAddress: '',
+  accountNumber: '',
+  instructions: '',
+  logoDataUrl: '',
+  logoFileName: '',
+  logoMimeType: '',
+  logoSize: 0,
+  isActive: true,
+};
 
 const newId = (prefix: string) =>
   `${prefix}-${typeof crypto !== 'undefined' && 'randomUUID' in crypto ? crypto.randomUUID() : Date.now().toString(36)}`;
 
-const toDateInput = (value?: string) => {
-  if (!value) return '';
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return value.slice(0, 10);
-  return date.toISOString().slice(0, 10);
-};
-
 const countBaseItems = (baseSetups: BaseSetups) =>
   Object.values(baseSetups).reduce((sum, items) => sum + (Array.isArray(items) ? items.length : 0), 0);
+
+const formatFileSize = (value: number) => {
+  if (!value) return '0 KB';
+  if (value >= 1024 * 1024) return `${(value / 1024 / 1024).toFixed(1)} MB`;
+  return `${Math.round(value / 1024)} KB`;
+};
+
+const fileToDataUrl = (file: File) =>
+  new Promise<string>((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result ?? ''));
+    reader.onerror = () => reject(new Error('Unable to read bank logo.'));
+    reader.readAsDataURL(file);
+  });
 
 function Field({
   label,
@@ -159,9 +171,40 @@ function EmptyState({ label }: { label: string }) {
   );
 }
 
-export default function SystemSetupTab() {
+function ActionIcon({ name, className = 'h-4 w-4' }: { name: 'edit' | 'trash' | 'plus' | 'x'; className?: string }) {
+  const common = {
+    className,
+    viewBox: '0 0 24 24',
+    fill: 'none',
+    stroke: 'currentColor',
+    strokeWidth: 2,
+    strokeLinecap: 'round' as const,
+    strokeLinejoin: 'round' as const,
+    'aria-hidden': true,
+  };
+
+  if (name === 'edit') {
+    return <svg {...common}><path d="M12 20h9" /><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4 12.5-12.5Z" /></svg>;
+  }
+
+  if (name === 'trash') {
+    return <svg {...common}><path d="M3 6h18" /><path d="M8 6V4h8v2" /><path d="M6 6l1 18h10l1-18" /><path d="M10 11v6" /><path d="M14 11v6" /></svg>;
+  }
+
+  if (name === 'plus') {
+    return <svg {...common}><path d="M12 5v14" /><path d="M5 12h14" /></svg>;
+  }
+
+  return <svg {...common}><path d="M6 6l12 12" /><path d="M18 6 6 18" /></svg>;
+}
+
+export default function SystemSetupTab({
+  section = 'general',
+  showOverview = true,
+  showSectionMenu = true,
+}: SystemSetupTabProps = {}) {
   const queryClient = useQueryClient();
-  const [activeSection, setActiveSection] = useState<SetupSection>('general');
+  const [activeSection, setActiveSection] = useState<SetupSection>(section);
   const [selectedSchoolId, setSelectedSchoolId] = useState('');
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
@@ -185,14 +228,9 @@ export default function SystemSetupTab() {
     details: '',
   });
   const [smsSettings, setSmsSettings] = useState<SmsSystemSettings | null>(null);
-  const [weekends, setWeekends] = useState<WeekendSetting[]>([]);
-  const [academicYearDraft, setAcademicYearDraft] = useState({
-    id: '',
-    name: '',
-    startDate: '',
-    endDate: '',
-    isActive: false,
-  });
+  const [feeChallanBanks, setFeeChallanBanks] = useState<FeeChallanBankSetting[]>([]);
+  const [feeChallanBankDraft, setFeeChallanBankDraft] = useState<FeeChallanBankSetting>({ ...emptyFeeChallanBankDraft });
+  const [bankLogoError, setBankLogoError] = useState('');
 
   const { data: session, isLoading: sessionLoading } = useQuery({
     queryKey: ['session'],
@@ -200,6 +238,10 @@ export default function SystemSetupTab() {
     refetchOnWindowFocus: false,
     staleTime: 60_000,
   });
+
+  useEffect(() => {
+    setActiveSection(section);
+  }, [section]);
 
   const isSuperAdmin = session?.role === 'SUPER_ADMIN';
   const isSchoolAdmin = session?.role === 'SCHOOL_ADMIN';
@@ -222,14 +264,6 @@ export default function SystemSetupTab() {
     staleTime: 30_000,
   });
 
-  const academicYearsQuery = useQuery({
-    queryKey: ['academic-years', isSuperAdmin ? selectedSchoolId : session?.schoolId, 'system-setup'],
-    queryFn: () => listAcademicYears(schoolParams),
-    enabled: schoolScopeReady,
-    refetchOnWindowFocus: false,
-    staleTime: 60_000,
-  });
-
   useEffect(() => {
     const data = settingsQuery.data;
     if (!data) return;
@@ -240,7 +274,7 @@ export default function SystemSetupTab() {
     setSessions(data.sessions);
     setHolidays(data.holidays);
     setSmsSettings(data.smsSettings);
-    setWeekends(data.weekends);
+    setFeeChallanBanks(data.feeChallanBanks ?? []);
   }, [settingsQuery.data]);
 
   const updateMutation = useMutation({
@@ -252,7 +286,7 @@ export default function SystemSetupTab() {
       setSessions(next.sessions);
       setHolidays(next.holidays);
       setSmsSettings(next.smsSettings);
-      setWeekends(next.weekends);
+      setFeeChallanBanks(next.feeChallanBanks ?? []);
       setMessage('System settings saved.');
       setError('');
       queryClient.invalidateQueries({ queryKey: ['school-system-settings'] });
@@ -263,47 +297,16 @@ export default function SystemSetupTab() {
     },
   });
 
-  const createYearMutation = useMutation({
-    mutationFn: createAcademicYear,
-    onSuccess: () => {
-      setAcademicYearDraft({ id: '', name: '', startDate: '', endDate: '', isActive: false });
-      setMessage('Academic year saved.');
-      queryClient.invalidateQueries({ queryKey: ['academic-years'] });
-    },
-    onError: (mutationError: any) => setError(mutationError?.response?.data?.error?.message || 'Unable to save academic year.'),
-  });
-
-  const updateYearMutation = useMutation({
-    mutationFn: ({ id, payload }: { id: string; payload: any }) => updateAcademicYear(id, payload),
-    onSuccess: () => {
-      setAcademicYearDraft({ id: '', name: '', startDate: '', endDate: '', isActive: false });
-      setMessage('Academic year updated.');
-      queryClient.invalidateQueries({ queryKey: ['academic-years'] });
-    },
-    onError: (mutationError: any) => setError(mutationError?.response?.data?.error?.message || 'Unable to update academic year.'),
-  });
-
-  const deleteYearMutation = useMutation({
-    mutationFn: (id: string) => deleteAcademicYear(id, schoolParams),
-    onSuccess: () => {
-      setMessage('Academic year deleted.');
-      queryClient.invalidateQueries({ queryKey: ['academic-years'] });
-    },
-    onError: (mutationError: any) => setError(mutationError?.response?.data?.error?.message || 'Unable to delete academic year.'),
-  });
-
   const busy =
     sessionLoading ||
     settingsQuery.isLoading ||
-    updateMutation.isPending ||
-    createYearMutation.isPending ||
-    updateYearMutation.isPending ||
-    deleteYearMutation.isPending;
+    updateMutation.isPending;
 
   const selectedGateway = paymentGateways.find((gateway) => gateway.id === selectedGatewayId) ?? paymentGateways[0];
-  const academicYears = (academicYearsQuery.data ?? []) as AcademicYearItem[];
   const enabledGateways = paymentGateways.filter((gateway) => gateway.enabled).length;
-  const weekendCount = weekends.filter((day) => day.isWeekend).length;
+  const sessionChoices = Array.from(
+    new Set([general?.currentSession, ...sessions.map((item) => item.title)].filter((item): item is string => Boolean(item))),
+  );
 
   const saveSettings = (payload: Parameters<typeof updateSchoolSystemSettings>[0]) => {
     if (!schoolScopeReady) {
@@ -394,23 +397,92 @@ export default function SystemSetupTab() {
     setSmsSettings((current) => (current ? { ...current, activeProvider: provider } : current));
   };
 
-  const saveAcademicYear = () => {
-    if (!academicYearDraft.name.trim() || !academicYearDraft.startDate || !academicYearDraft.endDate) {
-      setError('Academic year, starting date, and ending date are required.');
+  const updateFeeChallanDraft = <K extends keyof FeeChallanBankSetting>(key: K, value: FeeChallanBankSetting[K]) => {
+    setFeeChallanBankDraft((current) => ({ ...current, [key]: value }));
+  };
+
+  const handleBankLogoChange = async (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    if (!bankLogoMimeTypes.includes(file.type)) {
+      setBankLogoError('Only JPG and PNG bank logos are allowed.');
+      event.target.value = '';
       return;
     }
-    const payload = {
-      name: academicYearDraft.name.trim(),
-      startDate: academicYearDraft.startDate,
-      endDate: academicYearDraft.endDate,
-      isActive: academicYearDraft.isActive,
-      ...(schoolParams ?? {}),
+
+    if (file.size > bankLogoMaxBytes) {
+      setBankLogoError('Bank logo must be 500KB or smaller.');
+      event.target.value = '';
+      return;
+    }
+
+    try {
+      const logoDataUrl = await fileToDataUrl(file);
+      setBankLogoError('');
+      setFeeChallanBankDraft((current) => ({
+        ...current,
+        logoDataUrl,
+        logoFileName: file.name,
+        logoMimeType: file.type,
+        logoSize: file.size,
+      }));
+    } catch (fileError) {
+      setBankLogoError((fileError as Error).message || 'Unable to read bank logo.');
+    }
+  };
+
+  const resetFeeChallanDraft = () => {
+    setFeeChallanBankDraft({ ...emptyFeeChallanBankDraft });
+    setBankLogoError('');
+  };
+
+  const persistFeeChallanBanks = (nextBanks: FeeChallanBankSetting[]) => {
+    setFeeChallanBanks(nextBanks);
+    saveSettings({ feeChallanBanks: nextBanks });
+  };
+
+  const saveFeeChallanBank = () => {
+    const nextBank: FeeChallanBankSetting = {
+      ...feeChallanBankDraft,
+      id: feeChallanBankDraft.id || newId('challan-bank'),
+      bankName: feeChallanBankDraft.bankName.trim(),
+      branchAddress: feeChallanBankDraft.branchAddress.trim(),
+      accountNumber: feeChallanBankDraft.accountNumber.trim(),
+      instructions: feeChallanBankDraft.instructions.trim(),
+      isActive: Boolean(feeChallanBankDraft.isActive),
     };
-    if (academicYearDraft.id) {
-      updateYearMutation.mutate({ id: academicYearDraft.id, payload });
+
+    if (!nextBank.logoDataUrl || !nextBank.bankName || !nextBank.branchAddress || !nextBank.accountNumber) {
+      setMessage('');
+      setError('Bank logo, bank name, branch address, and account number are required.');
       return;
     }
-    createYearMutation.mutate(payload);
+
+    const exists = feeChallanBanks.some((bank) => bank.id === nextBank.id);
+    const nextBanks = exists
+      ? feeChallanBanks.map((bank) => (bank.id === nextBank.id ? nextBank : bank))
+      : [nextBank, ...feeChallanBanks];
+
+    resetFeeChallanDraft();
+    persistFeeChallanBanks(nextBanks);
+  };
+
+  const editFeeChallanBank = (bank: FeeChallanBankSetting) => {
+    setFeeChallanBankDraft(bank);
+    setBankLogoError('');
+  };
+
+  const deleteFeeChallanBank = (id: string) => {
+    if (!window.confirm('Delete this fee challan bank?')) return;
+    persistFeeChallanBanks(feeChallanBanks.filter((bank) => bank.id !== id));
+    if (feeChallanBankDraft.id === id) resetFeeChallanDraft();
+  };
+
+  const toggleFeeChallanBank = (id: string) => {
+    persistFeeChallanBanks(
+      feeChallanBanks.map((bank) => (bank.id === id ? { ...bank, isActive: !bank.isActive } : bank)),
+    );
   };
 
   const renderGatewayFields = () => {
@@ -505,7 +577,7 @@ export default function SystemSetupTab() {
           title="Institution Logo"
           subtitle="Published logo assets are managed in Branding & Theme."
           actions={
-            <Link href="/dashboard/settings?tab=brand" className={primaryButtonClass}>
+            <Link href="/dashboard/settings/branding" className={primaryButtonClass}>
               Open Branding
             </Link>
           }
@@ -546,7 +618,7 @@ export default function SystemSetupTab() {
             </Field>
             <Field label="Session">
               <select className={inputClass} value={general.currentSession} onChange={(event) => updateGeneralField('currentSession', event.target.value)}>
-                {[...new Set([...sessions.map((item) => item.title), ...academicYears.map((item) => item.name)])].map((item) => (
+                {sessionChoices.map((item) => (
                   <option key={item} value={item}>{item}</option>
                 ))}
               </select>
@@ -716,67 +788,6 @@ export default function SystemSetupTab() {
     );
   };
 
-  const renderAcademicYears = () => (
-    <SectionPanel
-      title="Academic Year"
-      subtitle="Academic years are saved through the existing academic setup API."
-      actions={<button className={primaryButtonClass} onClick={saveAcademicYear}>{academicYearDraft.id ? 'Update Year' : 'Save Year'}</button>}
-    >
-      <div className="grid gap-5 lg:grid-cols-[22rem_minmax(0,1fr)]">
-        <div className="rounded-2xl border border-[var(--shell-border)] bg-[var(--shell-subtle)] p-4">
-          <div className="space-y-4">
-            <Field label="Year title" required>
-              <input className={inputClass} value={academicYearDraft.name} onChange={(event) => setAcademicYearDraft((current) => ({ ...current, name: event.target.value }))} placeholder="2026 Year" />
-            </Field>
-            <Field label="Starting date" required>
-              <input type="date" className={inputClass} value={academicYearDraft.startDate} onChange={(event) => setAcademicYearDraft((current) => ({ ...current, startDate: event.target.value }))} />
-            </Field>
-            <Field label="Ending date" required>
-              <input type="date" className={inputClass} value={academicYearDraft.endDate} onChange={(event) => setAcademicYearDraft((current) => ({ ...current, endDate: event.target.value }))} />
-            </Field>
-            <label className="flex items-center gap-3 rounded-xl border border-[var(--shell-border)] bg-[var(--shell-card)] px-4 py-3 text-sm font-bold text-[var(--shell-text)]">
-              <input type="checkbox" checked={academicYearDraft.isActive} onChange={(event) => setAcademicYearDraft((current) => ({ ...current, isActive: event.target.checked }))} />
-              Active academic year
-            </label>
-          </div>
-        </div>
-
-        <div className="overflow-x-auto rounded-xl border border-[var(--shell-border)]">
-          <table className="min-w-full divide-y divide-[var(--shell-border)] text-sm">
-            <thead className="bg-[var(--shell-subtle)] text-left text-xs font-black uppercase tracking-[0.12em] text-[var(--shell-muted)]">
-              <tr>
-                <th className="px-4 py-3">Year</th>
-                <th className="px-4 py-3">Starting Date</th>
-                <th className="px-4 py-3">Ending Date</th>
-                <th className="px-4 py-3">Status</th>
-                <th className="px-4 py-3">Action</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-[var(--shell-border)]">
-              {academicYears.map((year) => (
-                <tr key={year.id}>
-                  <td className="px-4 py-3 font-bold text-[var(--shell-text)]">{year.name}</td>
-                  <td className="px-4 py-3 text-[var(--shell-muted)]">{toDateInput(year.startDate)}</td>
-                  <td className="px-4 py-3 text-[var(--shell-muted)]">{toDateInput(year.endDate)}</td>
-                  <td className="px-4 py-3"><StatusPill active={Boolean(year.isActive)} /></td>
-                  <td className="px-4 py-3">
-                    <div className="flex flex-wrap gap-2">
-                      <button className={subtleButtonClass} onClick={() => setAcademicYearDraft({ id: year.id, name: year.name, startDate: toDateInput(year.startDate), endDate: toDateInput(year.endDate), isActive: Boolean(year.isActive) })}>Edit</button>
-                      <button className={dangerButtonClass} onClick={() => window.confirm(`Delete ${year.name}?`) && deleteYearMutation.mutate(year.id)}>Delete</button>
-                    </div>
-                  </td>
-                </tr>
-              ))}
-              {!academicYears.length ? (
-                <tr><td colSpan={5} className="px-4 py-8"><EmptyState label="No academic years found." /></td></tr>
-              ) : null}
-            </tbody>
-          </table>
-        </div>
-      </div>
-    </SectionPanel>
-  );
-
   const renderSessions = () => (
     <SectionPanel
       title="Session"
@@ -865,6 +876,195 @@ export default function SystemSetupTab() {
     </SectionPanel>
   );
 
+  const renderFeeChallan = () => (
+    <SectionPanel
+      title="Fee Challan Details"
+      subtitle="Manage the bank accounts printed on student fee challans."
+      actions={
+        <button className={primaryButtonClass} onClick={() => saveSettings({ feeChallanBanks })} disabled={updateMutation.isPending}>
+          Save Fee Challan Details
+        </button>
+      }
+    >
+      <div className="grid gap-5 xl:grid-cols-[23rem_minmax(0,1fr)]">
+        <div className="rounded-2xl border border-[var(--shell-border)] bg-[var(--shell-subtle)] p-4">
+          <div className="mb-5 flex items-center justify-between gap-3">
+            <div>
+              <h3 className="text-base font-black text-[var(--shell-text)]">
+                {feeChallanBankDraft.id ? 'Edit Bank' : 'Add New Bank'}
+              </h3>
+              <p className="mt-1 text-xs font-semibold text-[var(--shell-muted)]">JPG, PNG. Max 500KB.</p>
+            </div>
+            {feeChallanBankDraft.id ? (
+              <button type="button" className={subtleButtonClass} onClick={resetFeeChallanDraft}>
+                Clear
+              </button>
+            ) : null}
+          </div>
+
+          <div className="space-y-4">
+            <Field label="Bank Logo" required>
+              <div className="rounded-2xl border border-dashed border-[var(--shell-border)] bg-[var(--shell-card)] p-4">
+                <div className="mb-3 flex items-center gap-3">
+                  <div className="flex h-16 w-16 shrink-0 items-center justify-center overflow-hidden rounded-xl border border-[var(--shell-border)] bg-white">
+                    {feeChallanBankDraft.logoDataUrl ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img src={feeChallanBankDraft.logoDataUrl} alt="Bank logo preview" className="h-full w-full object-contain" />
+                    ) : (
+                      <span className="text-lg font-black text-slate-400">BK</span>
+                    )}
+                  </div>
+                  <div className="min-w-0">
+                    <p className="truncate text-sm font-black text-[var(--shell-text)]">
+                      {feeChallanBankDraft.logoFileName || 'No file chosen'}
+                    </p>
+                    <p className="mt-1 text-xs font-semibold text-[var(--shell-muted)]">
+                      {feeChallanBankDraft.logoSize ? formatFileSize(feeChallanBankDraft.logoSize) : 'Choose Logo'}
+                    </p>
+                  </div>
+                </div>
+                <input
+                  type="file"
+                  accept="image/jpeg,image/png"
+                  className="block w-full text-sm font-semibold text-[var(--shell-muted)] file:mr-3 file:rounded-xl file:border-0 file:bg-blue-600 file:px-3 file:py-2 file:text-xs file:font-black file:text-white hover:file:bg-blue-700"
+                  onChange={handleBankLogoChange}
+                />
+                <p className="mt-2 text-xs font-semibold text-[var(--shell-muted)]">JPG, PNG. Max 500KB</p>
+                {bankLogoError ? <p className="mt-2 text-xs font-bold text-rose-600">{bankLogoError}</p> : null}
+              </div>
+            </Field>
+
+            <Field label="Bank Name" required>
+              <input
+                className={inputClass}
+                value={feeChallanBankDraft.bankName}
+                onChange={(event) => updateFeeChallanDraft('bankName', event.target.value)}
+                placeholder="Your Bank Name"
+              />
+            </Field>
+
+            <Field label="Bank / Branch Address" required>
+              <textarea
+                className={inputClass}
+                rows={3}
+                value={feeChallanBankDraft.branchAddress}
+                onChange={(event) => updateFeeChallanDraft('branchAddress', event.target.value)}
+                placeholder="Bank Address"
+              />
+            </Field>
+
+            <Field label="Account Number" required>
+              <input
+                className={inputClass}
+                value={feeChallanBankDraft.accountNumber}
+                onChange={(event) => updateFeeChallanDraft('accountNumber', event.target.value)}
+                placeholder="Bank Account No"
+              />
+            </Field>
+
+            <Field label="Instructions">
+              <textarea
+                className={inputClass}
+                rows={4}
+                value={feeChallanBankDraft.instructions}
+                onChange={(event) => updateFeeChallanDraft('instructions', event.target.value)}
+                placeholder="Write Instructions"
+              />
+            </Field>
+
+            <label className="flex items-center justify-between gap-3 rounded-xl border border-[var(--shell-border)] bg-[var(--shell-card)] px-4 py-3 text-sm font-bold text-[var(--shell-text)]">
+              <span>Use this bank on fee challans</span>
+              <input
+                type="checkbox"
+                checked={feeChallanBankDraft.isActive}
+                onChange={(event) => updateFeeChallanDraft('isActive', event.target.checked)}
+                className="h-5 w-5"
+              />
+            </label>
+
+            <button type="button" className={primaryButtonClass} onClick={saveFeeChallanBank} disabled={updateMutation.isPending}>
+              <span className="inline-flex items-center gap-2">
+                <ActionIcon name="plus" />
+                {feeChallanBankDraft.id ? 'Update Bank' : 'Add Bank'}
+              </span>
+            </button>
+          </div>
+        </div>
+
+        <div className="rounded-2xl border border-[var(--shell-border)] bg-[var(--shell-subtle)] p-4">
+          <div className="mb-4 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <h3 className="text-base font-black text-[var(--shell-text)]">Bank List</h3>
+              <p className="mt-1 text-xs font-semibold text-[var(--shell-muted)]">{feeChallanBanks.length} configured challan bank(s)</p>
+            </div>
+          </div>
+
+          {feeChallanBanks.length ? (
+            <div className="space-y-3">
+              {feeChallanBanks.map((bank) => (
+                <article key={bank.id} className="rounded-2xl border border-[var(--shell-border)] bg-[var(--shell-card)] p-4">
+                  <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+                    <div className="flex min-w-0 gap-3">
+                      <div className="flex h-16 w-16 shrink-0 items-center justify-center overflow-hidden rounded-xl border border-[var(--shell-border)] bg-white">
+                        {bank.logoDataUrl ? (
+                          // eslint-disable-next-line @next/next/no-img-element
+                          <img src={bank.logoDataUrl} alt={`${bank.bankName} logo`} className="h-full w-full object-contain" />
+                        ) : (
+                          <span className="text-lg font-black text-slate-400">BK</span>
+                        )}
+                      </div>
+                      <div className="min-w-0">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <h4 className="truncate text-sm font-black text-[var(--shell-text)]">{bank.bankName}</h4>
+                          <StatusPill active={bank.isActive} label={bank.isActive ? 'Active' : 'Hidden'} />
+                        </div>
+                        <p className="mt-1 text-sm font-semibold text-[var(--shell-muted)]">{bank.accountNumber}</p>
+                        <p className="mt-1 line-clamp-2 text-sm text-[var(--shell-muted)]">{bank.branchAddress}</p>
+                      </div>
+                    </div>
+                    <div className="flex shrink-0 flex-wrap gap-2">
+                      <button
+                        type="button"
+                        className={subtleButtonClass}
+                        onClick={() => toggleFeeChallanBank(bank.id)}
+                      >
+                        {bank.isActive ? 'Hide' : 'Show'}
+                      </button>
+                      <button
+                        type="button"
+                        className="rounded-xl border border-[var(--shell-border)] bg-[var(--shell-card)] p-2 text-[var(--shell-text)] transition-colors hover:bg-[var(--shell-hover)]"
+                        onClick={() => editFeeChallanBank(bank)}
+                        aria-label={`Edit ${bank.bankName}`}
+                      >
+                        <ActionIcon name="edit" />
+                      </button>
+                      <button
+                        type="button"
+                        className="rounded-xl border border-rose-200 bg-rose-50 p-2 text-rose-700 transition-colors hover:bg-rose-100"
+                        onClick={() => deleteFeeChallanBank(bank.id)}
+                        aria-label={`Delete ${bank.bankName}`}
+                      >
+                        <ActionIcon name="trash" />
+                      </button>
+                    </div>
+                  </div>
+                  {bank.instructions ? (
+                    <div className="mt-4 rounded-xl border border-[var(--shell-border)] bg-[var(--shell-subtle)] px-4 py-3">
+                      <p className="text-xs font-black uppercase tracking-[0.12em] text-[var(--shell-muted)]">Instructions</p>
+                      <p className="mt-1 text-sm leading-6 text-[var(--shell-text)]">{bank.instructions}</p>
+                    </div>
+                  ) : null}
+                </article>
+              ))}
+            </div>
+          ) : (
+            <EmptyState label="No fee challan banks found. Add a bank to print challan account details." />
+          )}
+        </div>
+      </div>
+    </SectionPanel>
+  );
+
   const renderSms = () => {
     if (!smsSettings) return <EmptyState label="SMS settings are loading." />;
     return (
@@ -918,28 +1118,6 @@ export default function SystemSetupTab() {
     );
   };
 
-  const renderWeekends = () => (
-    <SectionPanel
-      title="Weekend"
-      subtitle="Weekend days are used by calendar, attendance, and timetable planning."
-      actions={<button className={primaryButtonClass} onClick={() => saveSettings({ weekends })}>Update Weekend</button>}
-    >
-      <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-        {weekends.map((day) => (
-          <label key={day.id} className="flex items-center justify-between gap-3 rounded-xl border border-[var(--shell-border)] bg-[var(--shell-subtle)] px-4 py-3">
-            <span className="text-sm font-black text-[var(--shell-text)]">{day.name}</span>
-            <input
-              type="checkbox"
-              checked={day.isWeekend}
-              onChange={(event) => setWeekends((current) => current.map((item) => item.id === day.id ? { ...item, isWeekend: event.target.checked } : item))}
-              className="h-5 w-5"
-            />
-          </label>
-        ))}
-      </div>
-    </SectionPanel>
-  );
-
   if (sessionLoading) return <FullPageLoader label="Loading system setup..." />;
   if (!isSuperAdmin && !isSchoolAdmin) {
     return <EmptyState label="System setup is available for administrators only." />;
@@ -968,16 +1146,14 @@ export default function SystemSetupTab() {
         return renderRoles();
       case 'base':
         return renderBaseSetup();
-      case 'academic':
-        return renderAcademicYears();
       case 'sessions':
         return renderSessions();
       case 'holidays':
         return renderHolidays();
       case 'sms':
         return renderSms();
-      case 'weekends':
-        return renderWeekends();
+      case 'fee-challan':
+        return renderFeeChallan();
       default:
         return renderGeneral();
     }
@@ -1001,12 +1177,12 @@ export default function SystemSetupTab() {
       {message ? <p className="rounded-xl border border-emerald-500/20 bg-emerald-500/10 px-4 py-3 text-sm font-bold text-emerald-700">{message}</p> : null}
       {error ? <p className="rounded-xl border border-rose-500/20 bg-rose-500/10 px-4 py-3 text-sm font-bold text-rose-700">{error}</p> : null}
 
-      <section className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+      {showOverview ? <section className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         {[
           { label: 'Enabled Gateways', value: enabledGateways, detail: `${paymentGateways.length} configured` },
           { label: 'Base Setup Items', value: countBaseItems(baseSetups), detail: 'Gender, religion, blood group' },
-          { label: 'Academic Years', value: academicYears.length, detail: 'Live academic records' },
-          { label: 'Weekend Days', value: weekendCount, detail: weekends.filter((item) => item.isWeekend).map((item) => item.name).join(', ') || 'None' },
+          { label: 'Sessions', value: sessions.length, detail: 'Academic terms configured' },
+          { label: 'Challan Banks', value: feeChallanBanks.length, detail: `${feeChallanBanks.filter((bank) => bank.isActive).length} active` },
         ].map((item) => (
           <div key={item.label} className="rounded-2xl border border-[var(--shell-border)] bg-[var(--shell-card)] p-4 shadow-sm">
             <p className="text-xs font-black uppercase tracking-[0.12em] text-[var(--shell-muted)]">{item.label}</p>
@@ -1014,9 +1190,9 @@ export default function SystemSetupTab() {
             <p className="mt-1 text-sm font-semibold text-[var(--shell-muted)]">{item.detail}</p>
           </div>
         ))}
-      </section>
+      </section> : null}
 
-      <section className="rounded-2xl border border-[var(--shell-border)] bg-[var(--shell-card)] p-3 shadow-sm">
+      {showSectionMenu ? <section className="rounded-2xl border border-[var(--shell-border)] bg-[var(--shell-card)] p-3 shadow-sm">
         <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
           {setupTabs.map((tab) => (
             <button
@@ -1036,7 +1212,7 @@ export default function SystemSetupTab() {
             </button>
           ))}
         </div>
-      </section>
+      </section> : null}
 
       {renderActiveSection()}
     </div>

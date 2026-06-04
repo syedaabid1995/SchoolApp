@@ -295,7 +295,7 @@ export default function TeachersPage() {
             <Button
               variant="primary"
               size="sm"
-              onClick={() => router.push('/dashboard/teachers/add')}
+              onClick={() => router.push('/dashboard/staff/add')}
               icon={
                 <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
@@ -434,7 +434,7 @@ export default function TeachersPage() {
 
                   <div className="flex gap-2">
                     <Link
-                      href={`/dashboard/teachers/${employee.id}${isSuperAdmin && effectiveSchoolId ? `?schoolId=${effectiveSchoolId}` : ''}`}
+                      href={`/dashboard/staff/${employee.id}`}
                       className="flex-1 rounded-lg border border-gray-200 px-3 py-2 text-center text-xs font-semibold text-gray-700 transition-colors hover:border-purple-300 hover:text-purple-600"
                     >
                       View Profile
@@ -464,7 +464,7 @@ export default function TeachersPage() {
             </p>
             <Button
               variant="primary"
-              onClick={() => router.push('/dashboard/teachers/add')}
+              onClick={() => router.push('/dashboard/staff/add')}
               icon={
                 <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />

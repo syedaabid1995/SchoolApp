@@ -50,6 +50,14 @@ const statusBadge = (status?: string | null) => {
   return 'border-slate-200 bg-slate-50 text-slate-600';
 };
 
+const leaveStatusBadge = (status?: string | null) => {
+  const key = String(status ?? '').toUpperCase();
+  if (key === 'APPROVED') return 'border-emerald-200 bg-emerald-50 text-emerald-700';
+  if (key === 'PENDING') return 'border-amber-200 bg-amber-50 text-amber-700';
+  if (key === 'REJECTED') return 'border-rose-200 bg-rose-50 text-rose-700';
+  return 'border-slate-200 bg-slate-50 text-slate-600';
+};
+
 const InfoRow = ({ label, value }: { label: string; value?: string | number | null }) => (
   <div className="rounded-xl border border-slate-100 bg-slate-50 px-4 py-3">
     <p className="text-xs font-bold uppercase tracking-wide text-slate-500">{label}</p>
@@ -73,6 +81,8 @@ export default function StaffDetailPage() {
   const staffQuery = useQuery({ queryKey: ['staff-detail', staffId], queryFn: () => getStaff(staffId), enabled: Boolean(isSchoolAdmin && staffId) });
   const staff = staffQuery.data;
   const name = fullName(staff);
+  const leaveBalances = staff?.leaveBalances ?? [];
+  const leaveApplications = staff?.leaveApplications ?? [];
 
   const documentMutation = useMutation({
     mutationFn: async () => {
@@ -128,6 +138,10 @@ export default function StaffDetailPage() {
       </div>
     );
   }
+
+  const documents = staff.documents ?? [];
+  const offerDocument = documents.find((doc) => doc.fileUrl.startsWith('/dashboard/') && doc.title.toLowerCase().includes('offer'));
+  const uploadedDocuments = documents.filter((doc) => doc.id !== offerDocument?.id);
 
   return (
     <div className="min-h-screen bg-slate-100 pb-10">
@@ -234,32 +248,102 @@ export default function StaffDetailPage() {
             ) : null}
 
             {tab === 'leaves' ? (
-              <section className="rounded-2xl border border-slate-200 bg-white p-8 text-center shadow-sm">
-                <h2 className="text-lg font-bold text-slate-950">Leaves</h2>
-                <p className="mt-2 text-sm text-slate-500">Leave records will appear here when the leave workflow is connected for this staff member.</p>
+              <section className="space-y-5 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <div>
+                    <h2 className="text-lg font-bold text-slate-950">Leave Balance</h2>
+                    <p className="text-sm text-slate-500">Opening balance, used days, and remaining leave for this employee.</p>
+                  </div>
+                  <Link href="/dashboard/leave/requests" className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-bold text-slate-700">Manage Leave</Link>
+                </div>
+                <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+                  {leaveBalances.length ? leaveBalances.map((balance) => (
+                    <div key={balance.leaveTypeId} className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                      <p className="text-sm font-bold text-slate-950">{balance.leaveType?.name ?? 'Leave'}</p>
+                      <p className="mt-2 text-2xl font-black text-slate-950">{balance.remainingDays ?? Math.max(0, Number(balance.totalDays) - Number(balance.usedDays))}</p>
+                      <p className="text-xs font-semibold text-slate-500">Remaining of {balance.totalDays}</p>
+                      <div className="mt-3 h-2 overflow-hidden rounded-full bg-slate-200">
+                        <div
+                          className="h-full rounded-full bg-[var(--theme-button-bg)]"
+                          style={{ width: `${Math.min(100, Math.max(0, ((Number(balance.usedDays ?? 0) / Math.max(1, Number(balance.totalDays ?? 1))) * 100)))}%` }}
+                        />
+                      </div>
+                      <p className="mt-2 text-xs text-slate-500">Used {balance.usedDays} / Extra {balance.extraTakenDays}</p>
+                    </div>
+                  )) : (
+                    <p className="rounded-xl border border-dashed border-slate-200 py-8 text-center text-sm text-slate-500 md:col-span-2 xl:col-span-4">No leave balance assigned.</p>
+                  )}
+                </div>
+                <div>
+                  <h3 className="mb-3 text-sm font-bold uppercase tracking-wide text-slate-500">Recent Leave Applications</h3>
+                  <div className="overflow-x-auto rounded-2xl border border-slate-200">
+                    <table className="min-w-full divide-y divide-slate-100 text-sm">
+                      <thead className="bg-slate-50 text-left text-xs uppercase text-slate-500">
+                        <tr>
+                          <th className="px-4 py-3">Type</th>
+                          <th className="px-4 py-3">From</th>
+                          <th className="px-4 py-3">To</th>
+                          <th className="px-4 py-3">Days</th>
+                          <th className="px-4 py-3">Status</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100">
+                        {leaveApplications.length ? leaveApplications.map((item) => (
+                          <tr key={item.id}>
+                            <td className="px-4 py-3 font-semibold">{item.leaveType?.name ?? '-'}</td>
+                            <td className="px-4 py-3">{formatDate(item.fromDate)}</td>
+                            <td className="px-4 py-3">{formatDate(item.toDate)}</td>
+                            <td className="px-4 py-3">{item.durationDays}</td>
+                            <td className="px-4 py-3"><span className={`rounded-full border px-2.5 py-1 text-xs font-bold ${leaveStatusBadge(item.status)}`}>{item.status}</span></td>
+                          </tr>
+                        )) : (
+                          <tr><td colSpan={5} className="px-4 py-8 text-center text-slate-500">No leave applications yet.</td></tr>
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
               </section>
             ) : null}
 
             {tab === 'documents' ? (
               <section className="space-y-4 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+                <div className="rounded-2xl border border-violet-100 bg-violet-50/70 p-4">
+                  <div className="flex flex-wrap items-center justify-between gap-3">
+                    <div>
+                      <p className="text-sm font-black text-slate-950">Generated Offer Letter</p>
+                      <p className="mt-1 text-xs font-semibold text-slate-500">{offerDocument?.fileName ?? `${staff.employeeNo ?? staff.staffNo ?? 'employee'}-offer-letter.html`}</p>
+                    </div>
+                    <Link href={offerDocument?.fileUrl ?? `/dashboard/staff/${staff.id}/offer-letter`} className="rounded-xl bg-[var(--theme-button-bg)] px-4 py-2 text-sm font-bold text-[var(--theme-button-text)]">
+                      View / Print
+                    </Link>
+                  </div>
+                </div>
                 <div className="grid gap-3 md:grid-cols-[1fr_1fr_auto]">
                   <input value={documentForm.title} onChange={(event) => setDocumentForm({ ...documentForm, title: event.target.value })} placeholder="Document title" className="rounded-xl border border-slate-200 px-3 py-2 text-sm" />
                   <input type="file" onChange={(event) => setDocumentForm({ ...documentForm, file: event.target.files?.[0] ?? null })} className="rounded-xl border border-slate-200 px-3 py-2 text-sm" />
                   <button onClick={() => documentMutation.mutate()} disabled={documentMutation.isPending} className="rounded-xl bg-[var(--theme-button-bg)] px-4 py-2 text-sm font-bold text-[var(--theme-button-text)] disabled:opacity-50">Upload</button>
                 </div>
                 <div className="grid gap-3">
-                  {staff.documents?.length ? staff.documents.map((doc) => (
-                    <div key={doc.id} className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-slate-100 bg-slate-50 px-4 py-3">
-                      <div>
-                        <p className="font-semibold text-slate-950">{doc.title}</p>
-                        <p className="text-xs text-slate-500">{doc.fileName ?? 'Document'} - {formatDate(doc.createdAt)}</p>
+                  {uploadedDocuments.length ? uploadedDocuments.map((doc) => {
+                    const isInternalDocument = doc.fileUrl.startsWith('/dashboard/');
+                    return (
+                      <div key={doc.id} className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-slate-100 bg-slate-50 px-4 py-3">
+                        <div>
+                          <p className="font-semibold text-slate-950">{doc.title}</p>
+                          <p className="text-xs text-slate-500">{doc.fileName ?? 'Document'} - {formatDate(doc.createdAt)}</p>
+                        </div>
+                        <div className="flex gap-2">
+                          {isInternalDocument ? (
+                            <Link href={doc.fileUrl} className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-bold">View</Link>
+                          ) : (
+                            <a href={doc.fileUrl} target="_blank" rel="noreferrer" className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-bold">Download</a>
+                          )}
+                          <button onClick={() => window.confirm('Delete this document?') && deleteDocumentMutation.mutate(doc.id)} className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-1.5 text-xs font-bold text-rose-700">Delete</button>
+                        </div>
                       </div>
-                      <div className="flex gap-2">
-                        <a href={doc.fileUrl} target="_blank" rel="noreferrer" className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-bold">Download</a>
-                        <button onClick={() => window.confirm('Delete this document?') && deleteDocumentMutation.mutate(doc.id)} className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-1.5 text-xs font-bold text-rose-700">Delete</button>
-                      </div>
-                    </div>
-                  )) : <p className="rounded-xl border border-dashed border-slate-200 py-8 text-center text-sm text-slate-500">No documents uploaded.</p>}
+                    );
+                  }) : <p className="rounded-xl border border-dashed border-slate-200 py-8 text-center text-sm text-slate-500">No uploaded documents found.</p>}
                 </div>
               </section>
             ) : null}
