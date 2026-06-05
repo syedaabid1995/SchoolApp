@@ -16,6 +16,8 @@ import {
   exportReportPdfApi,
   getReportApi,
 } from '../controllers/report.controller';
+import { createExam } from '../controllers/exam.controller';
+import { uploadMarks } from '../controllers/marks.controller';
 import { rejectRestore, runRestore } from '../controllers/backup.controller';
 import { HttpError } from '../middlewares/error.middleware';
 import {
@@ -70,6 +72,7 @@ const RESTORE_ID = '20202020-2020-4202-8202-202020202020';
 const EXAM_ID = '30303030-3030-4303-8303-303030303030';
 const STUDENT_ID = '40404040-4040-4404-8404-404040404040';
 const SUBJECT_ID = '50505050-5050-4505-8505-505050505050';
+const SUBJECT_TWO_ID = '51515151-5151-4515-8515-515151515151';
 const PAPER_ID = '60606060-6060-4606-8606-606060606060';
 const ONBOARDING_ROW_ID = '80808080-8080-4808-8808-808080808080';
 const TEACHER_ONBOARDING_ID = '90909090-9090-4909-8909-909090909090';
@@ -933,6 +936,186 @@ test('school admin cannot read another school exam centers', async () => {
       (error: unknown) => error instanceof HttpError && error.statusCode === 403 && /Tenant scope/.test(error.message),
     );
   } finally {
+    restoreSecurityTestDependencies();
+  }
+});
+
+test('exam creation uses assigned subjects for selected class and section', async () => {
+  patchSecurityTestDependencies();
+  seedSecurityUsers();
+  const response = makeResponse();
+  const createdPapers: any[] = [];
+  const req = {
+    auth: { userId: SCHOOL_ADMIN_A_ID, schoolId: SCHOOL_A_ID, role: 'SCHOOL_ADMIN' },
+    query: {},
+    params: {},
+    body: {
+      schoolId: SCHOOL_A_ID,
+      academicYearId: TEST_ACADEMIC_YEAR_A_ID,
+      classId: TEST_CLASS_A_ID,
+      sectionId: TEST_SECTION_A_ID,
+      type: 'MIDTERM',
+      name: 'Assigned Subject Exam',
+      scheduledAt: '2026-07-01T04:30:00.000Z',
+      subjectMappings: [
+        { subjectId: SUBJECT_ID, maxMarks: 100, passMarks: 35, scheduledAt: '2026-07-01T04:30:00.000Z' },
+        { subjectId: SUBJECT_TWO_ID, maxMarks: 50, passMarks: 20, scheduledAt: '2026-07-02T04:30:00.000Z' },
+      ],
+    },
+  } as any;
+
+  const restoreExamTypeCount = patch(prisma.examTypeConfig as any, 'count', async () => 1);
+  const restoreExamTypeFind = patch(prisma.examTypeConfig as any, 'findFirst', async () => ({ id: 'exam-type-1', code: 'MIDTERM', isActive: true }));
+  const restoreSubjects = patch(prisma.subject as any, 'findMany', async () => [
+    { id: SUBJECT_ID, name: 'Mathematics', classId: null, academicYearId: null },
+    { id: SUBJECT_TWO_ID, name: 'English', classId: null, academicYearId: null },
+  ]);
+  const restoreAssignments = patch(prisma.assignSubject as any, 'findMany', async ({ where }: any) =>
+    [SUBJECT_ID, SUBJECT_TWO_ID]
+      .filter((subjectId) => where.subjectId.in.includes(subjectId))
+      .map((subjectId) => ({ subjectId })),
+  );
+  const restoreTransaction = patch(prisma as any, '$transaction', async (callback: any) =>
+    callback({
+      exam: {
+        create: async ({ data }: any) => ({ id: EXAM_ID, ...data }),
+      },
+      examPaper: {
+        createMany: async ({ data }: any) => {
+          createdPapers.push(...data);
+          return { count: data.length };
+        },
+      },
+    }),
+  );
+  const restoreAudit = patch(prisma.auditLog as any, 'create', async ({ data }: any) => ({ id: 'audit-1', ...data }));
+
+  try {
+    await createExam(req, response as any);
+    assert.equal(response.statusCode, 201);
+    assert.equal(response.body.classId, TEST_CLASS_A_ID);
+    assert.equal(response.body.sectionId, TEST_SECTION_A_ID);
+    assert.deepEqual(createdPapers.map((paper) => paper.subjectId).sort(), [SUBJECT_ID, SUBJECT_TWO_ID].sort());
+    assert.equal(createdPapers.every((paper) => paper.classId === TEST_CLASS_A_ID), true);
+  } finally {
+    restoreAudit();
+    restoreTransaction();
+    restoreAssignments();
+    restoreSubjects();
+    restoreExamTypeFind();
+    restoreExamTypeCount();
+    restoreSecurityTestDependencies();
+  }
+});
+
+test('exam creation rejects unassigned duplicate or invalid subject mappings', async () => {
+  patchSecurityTestDependencies();
+  seedSecurityUsers();
+  const baseReq = {
+    auth: { userId: SCHOOL_ADMIN_A_ID, schoolId: SCHOOL_A_ID, role: 'SCHOOL_ADMIN' },
+    query: {},
+    params: {},
+  };
+
+  const restoreExamTypeCount = patch(prisma.examTypeConfig as any, 'count', async () => 1);
+  const restoreExamTypeFind = patch(prisma.examTypeConfig as any, 'findFirst', async () => ({ id: 'exam-type-1', code: 'MIDTERM', isActive: true }));
+  const restoreSubjects = patch(prisma.subject as any, 'findMany', async () => [
+    { id: SUBJECT_ID, name: 'Mathematics', classId: null, academicYearId: null },
+  ]);
+  const restoreAssignments = patch(prisma.assignSubject as any, 'findMany', async () => []);
+
+  try {
+    await assert.rejects(
+      () =>
+        createExam({
+          ...baseReq,
+          body: {
+            schoolId: SCHOOL_A_ID,
+            academicYearId: TEST_ACADEMIC_YEAR_A_ID,
+            classId: TEST_CLASS_A_ID,
+            sectionId: TEST_SECTION_A_ID,
+            type: 'MIDTERM',
+            subjectMappings: [{ subjectId: SUBJECT_ID, maxMarks: 100, passMarks: 35, scheduledAt: '2026-07-01T04:30:00.000Z' }],
+          },
+        } as any, makeResponse() as any),
+      (error: unknown) => error instanceof HttpError && error.statusCode === 400 && /not assigned/.test(error.message),
+    );
+
+    await assert.rejects(
+      () =>
+        createExam({
+          ...baseReq,
+          body: {
+            schoolId: SCHOOL_A_ID,
+            academicYearId: TEST_ACADEMIC_YEAR_A_ID,
+            classId: TEST_CLASS_A_ID,
+            sectionId: TEST_SECTION_A_ID,
+            type: 'MIDTERM',
+            subjectMappings: [
+              { subjectId: SUBJECT_ID, maxMarks: 100, passMarks: 35, scheduledAt: '2026-07-01T04:30:00.000Z' },
+              { subjectId: SUBJECT_ID, maxMarks: 100, passMarks: 35, scheduledAt: '2026-07-02T04:30:00.000Z' },
+            ],
+          },
+        } as any, makeResponse() as any),
+      (error: unknown) => error instanceof HttpError && error.statusCode === 400 && /Duplicate/.test(error.message),
+    );
+
+    await assert.rejects(
+      () =>
+        createExam({
+          ...baseReq,
+          body: {
+            schoolId: SCHOOL_A_ID,
+            academicYearId: TEST_ACADEMIC_YEAR_A_ID,
+            classId: TEST_CLASS_A_ID,
+            sectionId: TEST_SECTION_A_ID,
+            type: 'MIDTERM',
+            subjectMappings: [{ subjectId: SUBJECT_ID, maxMarks: 40, passMarks: 50, scheduledAt: '2026-07-01T04:30:00.000Z' }],
+          },
+        } as any, makeResponse() as any),
+      /Pass marks cannot exceed max marks/,
+    );
+  } finally {
+    restoreAssignments();
+    restoreSubjects();
+    restoreExamTypeFind();
+    restoreExamTypeCount();
+    restoreSecurityTestDependencies();
+  }
+});
+
+test('marks upload rejects marks above paper maximum', async () => {
+  patchSecurityTestDependencies();
+  seedSecurityUsers();
+  const req = {
+    auth: { userId: SCHOOL_ADMIN_A_ID, schoolId: SCHOOL_A_ID, role: 'SCHOOL_ADMIN' },
+    query: {},
+    params: {},
+    body: {
+      schoolId: SCHOOL_A_ID,
+      examPaperId: PAPER_ID,
+      entries: [{ studentId: STUDENT_ID, marks: 101 }],
+    },
+  } as any;
+
+  const restorePaper = patch(prisma.examPaper as any, 'findFirst', async () => ({ id: PAPER_ID, maxMarks: 100 }));
+  const restoreSettings = patch(prisma.examGradingSetting as any, 'findUnique', async () => null);
+  const restoreTransaction = patch(prisma as any, '$transaction', async (callback: any) =>
+    callback({
+      student: { findFirst: async () => ({ id: STUDENT_ID }) },
+      mark: { upsert: async () => ({ studentId: STUDENT_ID, grade: 'A' }) },
+    }),
+  );
+
+  try {
+    await assert.rejects(
+      () => uploadMarks(req, makeResponse() as any),
+      (error: unknown) => error instanceof HttpError && error.statusCode === 422 && /Marks exceed max marks/.test(error.message),
+    );
+  } finally {
+    restoreTransaction();
+    restoreSettings();
+    restorePaper();
     restoreSecurityTestDependencies();
   }
 });

@@ -32,6 +32,14 @@ const subjectMappingSchema = z.object({
   maxMarks: z.number().positive(),
   passMarks: z.number().min(0),
   scheduledAt: z.coerce.date(),
+}).superRefine((value, ctx) => {
+  if (value.passMarks > value.maxMarks) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ['passMarks'],
+      message: 'Pass marks cannot exceed max marks',
+    });
+  }
 });
 
 const createSchema = z.object({
@@ -78,6 +86,12 @@ export const createExam = async (req: Request, res: Response) => {
   if (!subjectIds.length) {
     throw new HttpError(400, 'At least one subject is required');
   }
+  if (new Set(subjectIds).size !== subjectIds.length) {
+    throw new HttpError(400, 'Duplicate exam paper subjects are not allowed');
+  }
+  if (!payload.classId || !payload.sectionId) {
+    throw new HttpError(400, 'Class and section are required for exam subject assignment');
+  }
   if (!payload.subjectMappings?.length) {
     if (!payload.scheduledAt) {
       throw new HttpError(400, 'Subject exam date is required for each subject');
@@ -92,6 +106,19 @@ export const createExam = async (req: Request, res: Response) => {
   });
   if (subjects.length !== subjectIds.length) {
     throw new HttpError(404, 'One or more subjects not found');
+  }
+
+  const assignedSubjects = await prisma.assignSubject.findMany({
+    where: {
+      schoolId,
+      classId: payload.classId,
+      sectionId: payload.sectionId,
+      subjectId: { in: subjectIds },
+    },
+    select: { subjectId: true },
+  });
+  if (assignedSubjects.length !== subjectIds.length) {
+    throw new HttpError(400, 'One or more subjects are not assigned to the selected class/section');
   }
 
   let academicYearId = payload.academicYearId;
@@ -129,11 +156,7 @@ export const createExam = async (req: Request, res: Response) => {
     }
   }
 
-  const subjectClassIds = Array.from(new Set(subjects.map((s) => s.classId).filter(Boolean)));
-  if (subjectClassIds.length !== 1) {
-    throw new HttpError(400, 'Subjects must belong to the same class');
-  }
-  const classId = subjectClassIds[0] as string;
+  const classId = payload.classId;
 
   const mismatchedYear = subjects.find(
     (s) => s.academicYearId && s.academicYearId !== academicYearId,
@@ -151,7 +174,7 @@ export const createExam = async (req: Request, res: Response) => {
         academicYearId,
         termId: payload.termId ?? null,
         classId,
-        sectionId: payload.sectionId ?? null,
+        sectionId: payload.sectionId,
         name: examName,
         type: examTypeCode,
         status: payload.status ?? 'DRAFT',

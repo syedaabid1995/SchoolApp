@@ -2,7 +2,8 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { listAcademicYears, listClasses, listExamTypes, listSections, listSubjects } from '../../../../services/academic.service';
+import { listAcademicYears, listClasses, listExamTypes, listSections } from '../../../../services/academic.service';
+import { listAssignSubjects, type AssignSubject } from '../../../../services/academic-setup.service';
 import { listSchools } from '../../../../services/school.service';
 import { getSession } from '../../../../services/auth.service';
 import { createExam, listExams } from '../../../../services/report.service';
@@ -11,11 +12,10 @@ import FullPageLoader from '../../../../components/FullPageLoader';
 import PageHeader from '../../../../components/PageHeader';
 import Button from '../../../../components/Button';
 
-type SubjectRow = {
+type ExamSubjectRow = {
   id: string;
   name: string;
-  class?: { id: string; name: string } | null;
-  academicYear?: { id: string; name: string } | null;
+  code?: string | null;
 };
 
 type SubjectSelection = {
@@ -103,10 +103,11 @@ export default function ExamsPage() {
     queryFn: () => listSections({ schoolId: effectiveSchoolId }),
     enabled: Boolean(effectiveSchoolId),
   });
-  const { data: subjects } = useQuery({
-    queryKey: ['subjects', effectiveSchoolId],
-    queryFn: () => listSubjects({ schoolId: effectiveSchoolId }),
-    enabled: Boolean(effectiveSchoolId),
+  const canLoadAssignedSubjects = Boolean(effectiveSchoolId && examBasics.academicYearId && examBasics.classId && examBasics.sectionId);
+  const { data: assignedSubjects, isLoading: assignedSubjectsLoading } = useQuery({
+    queryKey: ['exam-assigned-subjects', effectiveSchoolId, examBasics.academicYearId, examBasics.classId, examBasics.sectionId],
+    queryFn: () => listAssignSubjects({ classId: examBasics.classId, sectionId: examBasics.sectionId }),
+    enabled: canLoadAssignedSubjects,
   });
   const { data: examTypes } = useQuery({
     queryKey: ['exam-types', effectiveSchoolId],
@@ -136,15 +137,19 @@ export default function ExamsPage() {
     return map;
   }, [years]);
 
-  const filteredSubjects = useMemo(() => {
-    const rows = (subjects ?? []) as SubjectRow[];
-    if (!examBasics.classId || !examBasics.academicYearId) return [];
-    return rows.filter(
-      (subject) =>
-        subject.class?.id === examBasics.classId &&
-        subject.academicYear?.id === examBasics.academicYearId,
-    );
-  }, [subjects, examBasics.classId, examBasics.academicYearId]);
+  const filteredSubjects = useMemo<ExamSubjectRow[]>(() => {
+    const rows = (assignedSubjects ?? []) as AssignSubject[];
+    const uniqueSubjects = new Map<string, ExamSubjectRow>();
+    rows.forEach((assignment) => {
+      if (!assignment.subject) return;
+      uniqueSubjects.set(assignment.subject.id, {
+        id: assignment.subject.id,
+        name: assignment.subject.name,
+        code: assignment.subject.code,
+      });
+    });
+    return Array.from(uniqueSubjects.values());
+  }, [assignedSubjects]);
 
   const selectedSubjectIds = useMemo(
     () => Object.entries(subjectMap).filter(([, value]) => value.include).map(([id]) => id),
@@ -192,12 +197,19 @@ export default function ExamsPage() {
     setSubjectMap(next);
   };
 
+  useEffect(() => {
+    setSubjectMap({});
+    setStep((currentStep) => (currentStep > 1 ? 1 : currentStep));
+  }, [examBasics.academicYearId, examBasics.classId, examBasics.sectionId]);
+
   const handleContinueFromBasics = () => {
     let error = '';
     if (!examBasics.type) error = 'Select exam type.';
     else if (!examBasics.academicYearId) error = 'Select academic year.';
     else if (!examBasics.classId) error = 'Select class.';
+    else if (!examBasics.sectionId) error = 'Select section.';
     else if (!examBasics.examDate) error = 'Select exam date.';
+    else if (!assignedSubjectsLoading && !filteredSubjects.length) error = 'No subjects assigned to this class/section. Assign subjects first from Academics > Assign Subjects.';
     setStepError(error);
     if (error) {
       notify.error('Validation error', error);
@@ -205,7 +217,7 @@ export default function ExamsPage() {
     }
     syncSubjectMap();
     setStep(2);
-    notify.success('Step saved', 'Exam details saved. Continue to subjects.');
+    notify.success('Step saved', 'Exam details saved. Continue to assigned subjects.');
   };
 
   const handleToggleSubject = (id: string) => {
@@ -398,7 +410,7 @@ export default function ExamsPage() {
                   onChange={(e) => setExamBasics({ ...examBasics, sectionId: e.target.value })}
                   className="w-full rounded-lg border border-slate/20 px-3 py-2 text-sm"
                 >
-                  <option value="">All sections (optional)</option>
+                  <option value="">Select section</option>
                   {sections
                     ?.filter((section: { classId: string }) => section.classId === examBasics.classId)
                     .map((section: { id: string; name: string }) => (
@@ -456,7 +468,7 @@ export default function ExamsPage() {
             <div>
               <h3 className="text-sm font-semibold text-ink">Assign Subjects to Exam</h3>
               <p className="text-xs text-slate">
-                Subjects are auto-loaded from the selected class and academic year.
+                Subjects are loaded from Academics &gt; Assign Subjects for the selected academic year, class, and section.
               </p>
             </div>
             <div className="overflow-x-auto">
@@ -534,7 +546,11 @@ export default function ExamsPage() {
                   {!filteredSubjects.length ? (
                     <tr>
                       <td colSpan={6} className="py-6 text-center text-slate">
-                        No subjects found for this class and academic year.
+                        {!canLoadAssignedSubjects
+                          ? 'Select academic year, class, and section before choosing subjects.'
+                          : assignedSubjectsLoading
+                            ? 'Loading assigned subjects...'
+                            : 'No subjects assigned to this class/section. Assign subjects first from Academics > Assign Subjects.'}
                       </td>
                     </tr>
                   ) : null}
@@ -558,6 +574,17 @@ export default function ExamsPage() {
                   const missingDates = selectedSubjectIds.filter((id) => !subjectMap[id]?.scheduledAt);
                   if (missingDates.length) {
                     const message = 'Set exam date for every selected subject.';
+                    setStepError(message);
+                    notify.error('Validation error', message);
+                    return;
+                  }
+                  const invalidMarks = selectedSubjectIds.some((id) => {
+                    const maxMarks = Number(subjectMap[id]?.maxMarks);
+                    const passMarks = Number(subjectMap[id]?.passMarks);
+                    return !Number.isFinite(maxMarks) || maxMarks <= 0 || !Number.isFinite(passMarks) || passMarks < 0 || passMarks > maxMarks;
+                  });
+                  if (invalidMarks) {
+                    const message = 'Enter valid max/pass marks. Pass marks cannot exceed max marks.';
                     setStepError(message);
                     notify.error('Validation error', message);
                     return;

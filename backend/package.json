@@ -10,6 +10,7 @@
     "test:cache": "npm run build && node --test dist/services/cache/__tests__/*.test.js",
     "test:auth": "npm run build && node --test dist/controllers/__tests__/auth.security.test.js",
     "test:security": "npm run build && node --test --test-concurrency=1 dist/__tests__/*.test.js",
+    "reset:qa": "tsx scripts/reset-qa-data.ts",
     "prisma": "prisma",
     "seed": "prisma db seed"
   },
