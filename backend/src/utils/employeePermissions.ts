@@ -131,13 +131,43 @@ export const EMPLOYEE_PERMISSION_CATALOG: EmployeePermissionItem[] = [
   { code: 'leave.approve.edit', label: 'Leave Approval - Edit', path: '/dashboard/leave/requests', group: 'Attendance' },
   { code: 'leave.approve.delete', label: 'Leave Approval - Delete', path: '/dashboard/leave/requests', group: 'Attendance' },
   { code: 'leave.balance.view', label: 'Leave Balance - View', path: '/dashboard/leave/my', group: 'Attendance' },
-  { code: 'fees.view', label: 'Fees - View', path: '/dashboard/fees', group: 'Fees' },
-  { code: 'fees.create', label: 'Fees - Create', path: '/dashboard/fees', group: 'Fees' },
-  { code: 'fees.edit', label: 'Fees - Edit', path: '/dashboard/fees', group: 'Fees' },
-  { code: 'fees.delete', label: 'Fees - Delete', path: '/dashboard/fees', group: 'Fees' },
-  { code: 'fees.collect', label: 'Fees - Collect Payment', path: '/dashboard/fees', group: 'Fees' },
-  { code: 'fees.report', label: 'Fees - Reports', path: '/dashboard/fees', group: 'Fees' },
-  { code: 'payroll.view', label: 'Payroll - View', path: '/dashboard/payroll', group: 'Payroll' },
+  { code: 'fees.overview.view', label: 'Fee Overview - View', path: '/dashboard/fees/overview', group: 'Fees' },
+  { code: 'fees.particulars.view', label: 'Fee Particulars - View', path: '/dashboard/fees/particulars', group: 'Fees' },
+  { code: 'fees.particulars.create', label: 'Fee Particulars - Create', path: '/dashboard/fees/particulars', group: 'Fees' },
+  { code: 'fees.particulars.update', label: 'Fee Particulars - Update', path: '/dashboard/fees/particulars', group: 'Fees' },
+  { code: 'fees.particulars.delete', label: 'Fee Particulars - Delete', path: '/dashboard/fees/particulars', group: 'Fees' },
+  { code: 'fees.types.view', label: 'Fee Types - View', path: '/dashboard/fees/types', group: 'Fees' },
+  { code: 'fees.types.create', label: 'Fee Types - Create', path: '/dashboard/fees/types', group: 'Fees' },
+  { code: 'fees.types.update', label: 'Fee Types - Update', path: '/dashboard/fees/types', group: 'Fees' },
+  { code: 'fees.types.delete', label: 'Fee Types - Delete', path: '/dashboard/fees/types', group: 'Fees' },
+  { code: 'fees.structures.view', label: 'Fee Structures - View', path: '/dashboard/fees/structures', group: 'Fees' },
+  { code: 'fees.structures.create', label: 'Fee Structures - Create', path: '/dashboard/fees/structures', group: 'Fees' },
+  { code: 'fees.structures.update', label: 'Fee Structures - Update', path: '/dashboard/fees/structures', group: 'Fees' },
+  { code: 'fees.structures.delete', label: 'Fee Structures - Delete', path: '/dashboard/fees/structures', group: 'Fees' },
+  { code: 'fees.assignments.view', label: 'Fee Assignments - View', path: '/dashboard/fees/assignments', group: 'Fees' },
+  { code: 'fees.assignments.create', label: 'Fee Assignments - Create', path: '/dashboard/fees/assignments', group: 'Fees' },
+  { code: 'fees.assignments.update', label: 'Fee Assignments - Update', path: '/dashboard/fees/assignments', group: 'Fees' },
+  { code: 'fees.assignments.delete', label: 'Fee Assignments - Delete', path: '/dashboard/fees/assignments', group: 'Fees' },
+  { code: 'fees.invoice-generate.view', label: 'Generate Invoices - View', path: '/dashboard/fees/invoice-generate', group: 'Fees' },
+  { code: 'fees.invoice-generate.create', label: 'Generate Invoices - Create', path: '/dashboard/fees/invoice-generate', group: 'Fees' },
+  { code: 'fees.invoices.view', label: 'Fee Invoices - View', path: '/dashboard/fees/invoices', group: 'Fees' },
+  { code: 'fees.invoices.cancel', label: 'Fee Invoices - Cancel', path: '/dashboard/fees/invoices', group: 'Fees' },
+  { code: 'fees.collection.view', label: 'Fee Collection - View', path: '/dashboard/fees/collection', group: 'Fees' },
+  { code: 'fees.collection.create', label: 'Fee Collection - Create', path: '/dashboard/fees/collection', group: 'Fees' },
+  { code: 'fees.receipts.print', label: 'Fee Receipts - Print', path: '/dashboard/fees/collection', group: 'Fees' },
+  { code: 'fees.discounts.view', label: 'Fee Discounts - View', path: '/dashboard/fees/discounts', group: 'Fees' },
+  { code: 'fees.discounts.create', label: 'Fee Discounts - Create', path: '/dashboard/fees/discounts', group: 'Fees' },
+  { code: 'fees.discounts.update', label: 'Fee Discounts - Update', path: '/dashboard/fees/discounts', group: 'Fees' },
+  { code: 'fees.discounts.delete', label: 'Fee Discounts - Delete', path: '/dashboard/fees/discounts', group: 'Fees' },
+  { code: 'fees.discounts.approve', label: 'Fee Discounts - Approve/Reject', path: '/dashboard/fees/discounts', group: 'Fees' },
+  { code: 'fees.fines.view', label: 'Fee Fines - View', path: '/dashboard/fees/fines', group: 'Fees' },
+  { code: 'fees.fines.create', label: 'Fee Fines - Create', path: '/dashboard/fees/fines', group: 'Fees' },
+  { code: 'fees.fines.update', label: 'Fee Fines - Update', path: '/dashboard/fees/fines', group: 'Fees' },
+  { code: 'fees.fines.delete', label: 'Fee Fines - Delete', path: '/dashboard/fees/fines', group: 'Fees' },
+  { code: 'fees.ledger.view', label: 'Fee Ledger - View', path: '/dashboard/fees/ledger', group: 'Fees' },
+  { code: 'fees.ledger.export', label: 'Fee Ledger - Export', path: '/dashboard/fees/ledger', group: 'Fees' },
+  { code: 'fees.reports.view', label: 'Fee Reports - View', path: '/dashboard/fees/reports', group: 'Fees' },
+  { code: 'fees.reports.export', label: 'Fee Reports - Export', path: '/dashboard/fees/reports', group: 'Fees' },  { code: 'payroll.view', label: 'Payroll - View', path: '/dashboard/payroll', group: 'Payroll' },
   { code: 'payroll.generate', label: 'Payroll - Generate', path: '/dashboard/payroll', group: 'Payroll' },
   { code: 'payroll.pay', label: 'Payroll - Pay', path: '/dashboard/payroll', group: 'Payroll' },
   { code: 'payroll.report', label: 'Payroll Report', path: '/dashboard/payroll/report', group: 'Payroll' },
@@ -192,14 +222,95 @@ const DEFAULT_PERMISSION_BY_ROLE: Record<ManagedEmployeeRole, string[]> = {
     'support.view',
     'plans.view',
   ],
-  ACCOUNTANT: ['dashboard.overview', 'students.list', 'fees.view', 'fees.create', 'fees.edit', 'fees.delete', 'fees.collect', 'fees.report', 'leave.type.view', 'leave.apply.view', 'leave.apply.create', 'leave.apply.edit', 'leave.apply.delete', 'leave.balance.view', 'idcards.view', 'support.view', 'plans.view'],
+  ACCOUNTANT: ['dashboard.overview', 'students.list', 'fees.overview.view', 'fees.invoices.view', 'fees.collection.view', 'fees.collection.create', 'fees.receipts.print', 'fees.ledger.view', 'fees.reports.view', 'fees.reports.export', 'leave.type.view', 'leave.apply.view', 'leave.apply.create', 'leave.apply.edit', 'leave.apply.delete', 'leave.balance.view', 'idcards.view', 'support.view', 'plans.view'],
   LIBRARIAN: ['dashboard.overview', 'students.list', 'leave.type.view', 'leave.apply.view', 'leave.apply.create', 'leave.apply.edit', 'leave.apply.delete', 'leave.balance.view', 'idcards.view', 'support.view', 'plans.view'],
   STAFF: ['dashboard.overview', 'students.list', 'leave.type.view', 'leave.apply.view', 'leave.apply.create', 'leave.apply.edit', 'leave.apply.delete', 'leave.balance.view', 'idcards.view', 'support.view', 'plans.view'],
 };
 
+const CATALOG_PERMISSION_CODES = new Set(EMPLOYEE_PERMISSION_CATALOG.map((entry) => entry.code));
+
+const LEGACY_FEE_PERMISSION_EXPANSIONS: Record<string, string[]> = {
+  'fees.view': [
+    'fees.overview.view',
+    'fees.particulars.view',
+    'fees.types.view',
+    'fees.structures.view',
+    'fees.assignments.view',
+    'fees.invoice-generate.view',
+    'fees.invoices.view',
+    'fees.collection.view',
+    'fees.discounts.view',
+    'fees.fines.view',
+    'fees.ledger.view',
+    'fees.reports.view',
+  ],
+  'fees.create': [
+    'fees.particulars.create',
+    'fees.types.create',
+    'fees.structures.create',
+    'fees.assignments.create',
+    'fees.invoice-generate.create',
+    'fees.collection.create',
+    'fees.discounts.create',
+    'fees.fines.create',
+  ],
+  'fees.edit': [
+    'fees.particulars.update',
+    'fees.types.update',
+    'fees.structures.update',
+    'fees.assignments.update',
+    'fees.discounts.update',
+    'fees.fines.update',
+  ],
+  'fees.update': [
+    'fees.particulars.update',
+    'fees.types.update',
+    'fees.structures.update',
+    'fees.assignments.update',
+    'fees.discounts.update',
+    'fees.fines.update',
+  ],
+  'fees.delete': [
+    'fees.particulars.delete',
+    'fees.types.delete',
+    'fees.structures.delete',
+    'fees.assignments.delete',
+    'fees.discounts.delete',
+    'fees.fines.delete',
+    'fees.invoices.cancel',
+  ],
+  'fees.collect': [
+    'fees.invoices.view',
+    'fees.collection.view',
+    'fees.collection.create',
+    'fees.receipts.print',
+  ],
+  'fees.report': [
+    'fees.ledger.view',
+    'fees.ledger.export',
+    'fees.reports.view',
+    'fees.reports.export',
+  ],
+};
+
+const expandPermissionCodes = (codes: Iterable<string>) => {
+  const expanded = new Set<string>();
+  for (const code of codes) {
+    if (CATALOG_PERMISSION_CODES.has(code)) {
+      expanded.add(code);
+    }
+    for (const replacement of LEGACY_FEE_PERMISSION_EXPANSIONS[code] ?? []) {
+      if (CATALOG_PERMISSION_CODES.has(replacement)) {
+        expanded.add(replacement);
+      }
+    }
+  }
+  return Array.from(expanded);
+};
+
 export const getDefaultPermissionCodes = (roleName: string | null | undefined) => {
   const role = (roleName ?? '').toUpperCase() as ManagedEmployeeRole;
-  return DEFAULT_PERMISSION_BY_ROLE[role] ?? [];
+  return expandPermissionCodes(DEFAULT_PERMISSION_BY_ROLE[role] ?? []);
 };
 
 export const getPlanPermissionCodesForSchool = async (schoolId: string) => {
@@ -221,7 +332,7 @@ export const getPlanPermissionCodesForSchool = async (schoolId: string) => {
     return [];
   }
 
-  return permissions.filter((entry) => entry.enabled).map((entry) => entry.permissionCode);
+  return expandPermissionCodes(permissions.filter((entry) => entry.enabled).map((entry) => entry.permissionCode));
 };
 
 export const getEffectivePermissionCodesForRole = async (schoolId: string, roleName: string | null | undefined) => {

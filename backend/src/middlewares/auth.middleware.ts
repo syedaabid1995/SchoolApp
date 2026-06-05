@@ -140,7 +140,7 @@ export const authMiddleware = async (req: Request, _res: Response, next: NextFun
   next();
 };
 
-const resolvePermissionForPath = (path: string, method = 'GET') => {
+export const resolvePermissionForPath = (path: string, method = 'GET') => {
   const pathOnly = path.split('?')[0] ?? path;
   const verb = method.toUpperCase();
 
@@ -211,14 +211,65 @@ const resolvePermissionForPath = (path: string, method = 'GET') => {
   }
 
   if (pathOnly.startsWith('/api/v1/fees')) {
-    if (pathOnly.startsWith('/api/v1/fees/payments') && verb === 'POST') return 'fees.collect';
-    if (pathOnly.startsWith('/api/v1/fees/reports')) return 'fees.report';
-    if (verb === 'POST') return 'fees.create';
-    if (verb === 'PATCH' || verb === 'PUT') return 'fees.edit';
-    if (verb === 'DELETE') return 'fees.delete';
-    return 'fees.view';
+    if (pathOnly.startsWith('/api/v1/fees/metadata')) return 'fees.overview.view';
+    if (pathOnly.startsWith('/api/v1/fees/particulars')) {
+      if (verb === 'POST') return 'fees.particulars.create';
+      if (verb === 'PATCH' || verb === 'PUT') return 'fees.particulars.update';
+      if (verb === 'DELETE') return 'fees.particulars.delete';
+      return 'fees.particulars.view';
+    }
+    if (pathOnly.startsWith('/api/v1/fees/types')) {
+      if (verb === 'POST') return 'fees.types.create';
+      if (verb === 'PATCH' || verb === 'PUT') return 'fees.types.update';
+      if (verb === 'DELETE') return 'fees.types.delete';
+      return 'fees.types.view';
+    }
+    if (pathOnly.startsWith('/api/v1/fees/structures')) {
+      if (verb === 'POST') return 'fees.structures.create';
+      if (verb === 'PATCH' || verb === 'PUT') return 'fees.structures.update';
+      if (verb === 'DELETE') return 'fees.structures.delete';
+      return 'fees.structures.view';
+    }
+    if (pathOnly.startsWith('/api/v1/fees/assignments')) {
+      if (verb === 'POST') return 'fees.assignments.create';
+      if (verb === 'PATCH' || verb === 'PUT') return 'fees.assignments.update';
+      if (verb === 'DELETE') return 'fees.assignments.delete';
+      return 'fees.assignments.view';
+    }
+    if (pathOnly.startsWith('/api/v1/fees/invoices/preview')) return 'fees.invoice-generate.view';
+    if (pathOnly.startsWith('/api/v1/fees/invoices/generate')) return verb === 'POST' ? 'fees.invoice-generate.create' : 'fees.invoice-generate.view';
+    if (pathOnly.startsWith('/api/v1/fees/invoices')) {
+      if (verb === 'DELETE' || verb === 'PATCH' || verb === 'PUT') return 'fees.invoices.cancel';
+      return 'fees.invoices.view';
+    }
+    if (pathOnly.startsWith('/api/v1/fees/payments')) return verb === 'POST' ? 'fees.collection.create' : 'fees.collection.view';
+    if (pathOnly.startsWith('/api/v1/fees/collection')) {
+      if (pathOnly.includes('/receipt') || pathOnly.includes('/print')) return 'fees.receipts.print';
+      return verb === 'POST' ? 'fees.collection.create' : 'fees.collection.view';
+    }
+    if (pathOnly.startsWith('/api/v1/fees/ledger')) {
+      if (pathOnly.includes('/export') || pathOnly.endsWith('.pdf') || pathOnly.endsWith('.xlsx')) return 'fees.ledger.export';
+      return 'fees.ledger.view';
+    }
+    if (pathOnly.startsWith('/api/v1/fees/discounts')) {
+      if (/\/(approve|reject|activate|deactivate)$/.test(pathOnly) && ['POST', 'PATCH', 'PUT'].includes(verb)) return 'fees.discounts.approve';
+      if (verb === 'POST') return 'fees.discounts.create';
+      if (verb === 'PATCH' || verb === 'PUT') return 'fees.discounts.update';
+      if (verb === 'DELETE') return 'fees.discounts.delete';
+      return 'fees.discounts.view';
+    }
+    if (pathOnly.startsWith('/api/v1/fees/fines')) {
+      if (verb === 'POST') return 'fees.fines.create';
+      if (verb === 'PATCH' || verb === 'PUT') return 'fees.fines.update';
+      if (verb === 'DELETE') return 'fees.fines.delete';
+      return 'fees.fines.view';
+    }
+    if (pathOnly.startsWith('/api/v1/fees/reports')) {
+      if (pathOnly.includes('/export') || pathOnly.endsWith('.csv') || pathOnly.endsWith('.pdf') || pathOnly.endsWith('.xlsx')) return 'fees.reports.export';
+      return 'fees.reports.view';
+    }
+    return 'fees.overview.view';
   }
-
   if (pathOnly.startsWith('/api/v1/leave/types')) {
     if (verb === 'POST') return 'leave.type.create';
     if (verb === 'PATCH' || verb === 'PUT') return 'leave.type.edit';

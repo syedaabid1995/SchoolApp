@@ -184,6 +184,21 @@ const iconForItem = (item: NavItem): IconName => {
   return 'file';
 };
 
+const feeNavItems: NavItem[] = [
+  { href: '/dashboard/fees/overview', label: 'Fee Overview', icon: 'FO' },
+  { href: '/dashboard/fees/particulars', label: 'Fee Particulars', icon: 'FP' },
+  { href: '/dashboard/fees/types', label: 'Fee Types', icon: 'FT' },
+  { href: '/dashboard/fees/structures', label: 'Fee Structures', icon: 'ST' },
+  { href: '/dashboard/fees/assignments', label: 'Fee Assignments', icon: 'AS' },
+  { href: '/dashboard/fees/invoice-generate', label: 'Generate Invoices', icon: 'GI' },
+  { href: '/dashboard/fees/invoices', label: 'Invoice List', icon: 'IN' },
+  { href: '/dashboard/fees/collection', label: 'Fee Collection', icon: 'FC' },
+  { href: '/dashboard/fees/discounts', label: 'Fee Discounts', icon: 'FD' },
+  { href: '/dashboard/fees/fines', label: 'Fee Fines', icon: 'FF' },
+  { href: '/dashboard/fees/ledger', label: 'Fee Ledger', icon: 'FL' },
+  { href: '/dashboard/fees/reports', label: 'Fee Reports', icon: 'FR' },
+];
+
 const platformSections: NavSection[] = [
   {
     id: 'platform-overview',
@@ -211,7 +226,7 @@ const platformSections: NavSection[] = [
       { href: '/dashboard/transport', label: 'Transport', icon: 'TR' },
       { href: '/dashboard/homework', label: 'Homework', icon: 'HW' },
       { href: '/dashboard/library', label: 'Library', icon: 'LB' },
-      { href: '/dashboard/fees', label: 'Fees', icon: 'FE' },
+      ...feeNavItems,
     ],
   },
   {
@@ -395,7 +410,7 @@ export const Sidebar = ({
         id: 'fees',
         label: 'Fees',
         items: [
-          { href: '/dashboard/fees', label: 'Fee Management', icon: 'FE' },
+          ...feeNavItems,
         ],
       },
       {

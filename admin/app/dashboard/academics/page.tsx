@@ -496,6 +496,7 @@ export default function AcademicSetupPage() {
     await Promise.all([
       queryClient.invalidateQueries({ queryKey: ['academic-setup-classes'] }),
       queryClient.invalidateQueries({ queryKey: ['academic-years'] }),
+      queryClient.invalidateQueries({ queryKey: ['fees'] }),
       queryClient.invalidateQueries({ queryKey: ['academic-setup-sections'] }),
       queryClient.invalidateQueries({ queryKey: ['academic-setup-subjects'] }),
       queryClient.invalidateQueries({ queryKey: ['academic-setup-rooms'] }),
