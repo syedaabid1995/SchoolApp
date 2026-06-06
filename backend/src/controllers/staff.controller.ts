@@ -9,6 +9,7 @@ import { HttpError } from '../middlewares/error.middleware';
 import { hashPassword } from '../utils/password';
 import { logAudit } from '../utils/audit';
 import { uploadBuffer } from '../services/s3.service';
+import { enforceLimits, incrementUsage } from '../services/subscription.service';
 
 const staffRoles = ['SCHOOL_ADMIN', 'TEACHER', 'ACCOUNTANT', 'LIBRARIAN', 'STAFF'] as const;
 const attendanceStatuses = ['PRESENT', 'LATE', 'ABSENT', 'HOLIDAY', 'HALF_DAY', 'LEAVE'] as const;
@@ -414,6 +415,7 @@ export const createStaff = async (req: Request, res: Response) => {
   const { schoolId, userId } = requireSchoolAdmin(req);
   const payload = staffPayloadSchema.parse(req.body);
   await assertDepartmentScope(schoolId, payload.departmentId, payload.designationId);
+  await enforceLimits(schoolId, 'teachers');
 
   const existing = await prisma.user.findFirst({ where: { schoolId, email: payload.email }, select: { id: true } });
   if (existing) throw new HttpError(409, 'Staff email already exists in this school');
@@ -476,6 +478,7 @@ export const createStaff = async (req: Request, res: Response) => {
     await replaceSocialLinks(tx, staff.id, payload.socialLinks);
     return { user, staff };
   });
+  await incrementUsage(schoolId, 'teachers', 1);
 
   await logAudit(req, {
     schoolId,

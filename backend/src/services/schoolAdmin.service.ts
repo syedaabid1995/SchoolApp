@@ -1,5 +1,5 @@
 import crypto from 'crypto';
-import { Prisma } from '@prisma/client';
+import { Prisma, type SubscriptionPlan } from '@prisma/client';
 import { prisma } from '../config/db';
 import { HttpError } from '../middlewares/error.middleware';
 import { hashPassword } from '../utils/password';
@@ -9,7 +9,7 @@ import { upsertSubscription } from './subscription.service';
 export type SchoolCreateInput = {
   name: string;
   code: string;
-  subscriptionPlan: 'STARTER' | 'STANDARD' | 'PREMIUM';
+  subscriptionPlan: string;
   status?: 'ACTIVE' | 'SUSPENDED';
   adminEmail?: string;
   adminBankDetails?: {
@@ -25,7 +25,7 @@ export type SchoolCreateInput = {
 
 export type SchoolUpdateInput = {
   name?: string;
-  subscriptionPlan?: 'STARTER' | 'STANDARD' | 'PREMIUM';
+  subscriptionPlan?: string;
   statusReason?: string | null;
   lastLoginAt?: Date | null;
   activeUsersCount?: number;
@@ -57,6 +57,51 @@ const addDays = (date: Date, days: number) => {
   const next = new Date(date.getTime());
   next.setDate(next.getDate() + days);
   return next;
+};
+
+const legacyPlanDefaults = {
+  STARTER: { studentLimit: 500, teacherLimit: 50, trialDays: 14 },
+  STANDARD: { studentLimit: 2000, teacherLimit: 200, trialDays: 14 },
+  PREMIUM: { studentLimit: 10000, teacherLimit: 1000, trialDays: 14 },
+} as const;
+
+const toLegacySchoolPlan = (planName: string): SubscriptionPlan => {
+  const normalized = planName.toUpperCase();
+  if (normalized === 'STARTER' || normalized === 'STANDARD' || normalized === 'PREMIUM') {
+    return normalized;
+  }
+  return 'STANDARD';
+};
+
+const resolveSchoolSubscriptionPlan = async (client: Prisma.TransactionClient | typeof prisma, planName: string) => {
+  const normalizedName = planName.trim();
+  const plan = await client.subscriptionPlanDef.findUnique({
+    where: { name: normalizedName },
+  });
+
+  if (plan) {
+    if (plan.status !== 'ACTIVE') {
+      throw new HttpError(400, 'Selected subscription plan is inactive');
+    }
+    return plan;
+  }
+
+  const legacyDefaults = legacyPlanDefaults[normalizedName as keyof typeof legacyPlanDefaults];
+  if (!legacyDefaults) {
+    throw new HttpError(400, 'Selected subscription plan does not exist');
+  }
+
+  return client.subscriptionPlanDef.create({
+    data: {
+      name: normalizedName,
+      status: 'ACTIVE',
+      priceCents: 0,
+      features: [],
+      studentLimit: legacyDefaults.studentLimit,
+      teacherLimit: legacyDefaults.teacherLimit,
+      trialDays: legacyDefaults.trialDays,
+    },
+  });
 };
 
 export const createSchoolAdmin = async (schoolId: string, adminEmail: string, bankDetails?: BankDetailsInput) => {
@@ -221,6 +266,7 @@ export const setSchoolAdminStatus = async (
 export const createSchool = async (payload: SchoolCreateInput) => {
   try {
     return await prisma.$transaction(async (tx) => {
+      const planRow = await resolveSchoolSubscriptionPlan(tx, payload.subscriptionPlan);
       const subdomain = normalizeSchoolSubdomain(payload.code);
       if (!subdomain) {
         throw new HttpError(400, 'School code cannot be used as a subdomain');
@@ -232,37 +278,10 @@ export const createSchool = async (payload: SchoolCreateInput) => {
           code: payload.code,
           subdomain,
           domainUrl: buildSchoolDomainUrl(subdomain),
-          subscriptionPlan: payload.subscriptionPlan,
+          subscriptionPlan: toLegacySchoolPlan(planRow.name),
           status: payload.status ?? 'ACTIVE',
         },
       });
-
-    const plan = await tx.subscriptionPlanDef.findUnique({
-      where: { name: payload.subscriptionPlan },
-    });
-    const planRow =
-      plan ??
-      (await tx.subscriptionPlanDef.create({
-        data: {
-          name: payload.subscriptionPlan,
-          status: 'ACTIVE',
-          priceCents: 0,
-          features: [],
-          studentLimit:
-            payload.subscriptionPlan === 'STARTER'
-              ? 500
-              : payload.subscriptionPlan === 'STANDARD'
-                ? 2000
-                : 10000,
-          teacherLimit:
-            payload.subscriptionPlan === 'STARTER'
-              ? 50
-              : payload.subscriptionPlan === 'STANDARD'
-                ? 200
-                : 1000,
-          trialDays: 14,
-        },
-      }));
 
     const startsAt = new Date();
     const trialDays = planRow.trialDays ?? 0;
@@ -430,20 +449,24 @@ export const listSchools = async (params: {
 };
 
 export const updateSchool = async (id: string, payload: SchoolUpdateInput) => {
+  const planRow = payload.subscriptionPlan
+    ? await resolveSchoolSubscriptionPlan(prisma, payload.subscriptionPlan)
+    : null;
   const updated = await prisma.school.update({
     where: { id },
     data: {
       name: payload.name ?? undefined,
-      subscriptionPlan: payload.subscriptionPlan ?? undefined,
+      subscriptionPlan: planRow ? toLegacySchoolPlan(planRow.name) : undefined,
       statusReason: payload.statusReason === undefined ? undefined : payload.statusReason,
       lastLoginAt: payload.lastLoginAt === undefined ? undefined : payload.lastLoginAt,
       activeUsersCount: payload.activeUsersCount ?? undefined,
     },
   });
-  if (payload.subscriptionPlan) {
+  if (planRow) {
     await upsertSubscription({
       schoolId: updated.id,
-      planName: payload.subscriptionPlan,
+      planId: planRow.id,
+      planName: planRow.name,
       status: 'ACTIVE',
       startsAt: new Date(),
       billingCycle: 'MONTHLY',

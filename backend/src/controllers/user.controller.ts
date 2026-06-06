@@ -6,6 +6,7 @@ import { HttpError } from '../middlewares/error.middleware';
 import { resolveSchoolId } from '../utils/tenant';
 import { hashPassword } from '../utils/password';
 import { createTeacher } from '../services/teacher.service';
+import { enforceLimits, incrementUsage } from '../services/subscription.service';
 import { logAudit } from '../utils/audit';
 import {
   EMPLOYEE_PERMISSION_CATALOG,
@@ -220,6 +221,7 @@ export const createSchoolUserApi = async (req: Request, res: Response) => {
   if (existingUser) {
     throw new HttpError(409, 'User with this email already exists in this school');
   }
+  await enforceLimits(schoolId, 'teachers');
 
   const tempPassword = crypto.randomBytes(9).toString('base64url');
   const passwordHash = await hashPassword(tempPassword);
@@ -304,6 +306,7 @@ export const createSchoolUserApi = async (req: Request, res: Response) => {
       },
     });
   }
+  await incrementUsage(schoolId, 'teachers', 1);
 
   res.status(201).json({
     user: {

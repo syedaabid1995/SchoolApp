@@ -33,7 +33,7 @@ const bankDetailsSchema = z
 const createSchema = z.object({
   name: z.string().min(1),
   code: z.string().min(1),
-  subscriptionPlan: z.enum(['STARTER', 'STANDARD', 'PREMIUM']),
+  subscriptionPlan: z.string().trim().min(1).max(120),
   status: z.enum(['ACTIVE', 'SUSPENDED']).optional(),
   adminEmail: z.string().email().optional(),
   adminBankDetails: bankDetailsSchema,
@@ -52,7 +52,7 @@ const listSchema = z.object({
 
 const updateSchema = z.object({
   name: z.string().min(1).optional(),
-  subscriptionPlan: z.enum(['STARTER', 'STANDARD', 'PREMIUM']).optional(),
+  subscriptionPlan: z.string().trim().min(1).max(120).optional(),
   statusReason: z.string().min(1).nullable().optional(),
   lastLoginAt: z.coerce.date().nullable().optional(),
   activeUsersCount: z.number().int().min(0).optional(),
