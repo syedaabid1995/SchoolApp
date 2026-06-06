@@ -329,10 +329,10 @@ test('invoice preview validates period and does not create invoice records', asy
     assert.equal(res.payload.rows[0].studentId, STUDENT_ID);
     assert.equal(res.payload.rows[0].baseAmount, 100);
     assert.equal(res.payload.rows[0].discountAmount, 10);
-    assert.equal(res.payload.rows[0].previousBalance, 25);
-    assert.equal(res.payload.rows[0].netPayable, 115);
+    assert.equal(res.payload.rows[0].previousBalance, 0);
+    assert.equal(res.payload.rows[0].netPayable, 90);
     assert.equal(res.payload.rows[0].duplicateInvoiceExists, false);
-    assert.equal(res.payload.totals.totalNetPayable, 115);
+    assert.equal(res.payload.totals.totalNetPayable, 90);
     assert.equal(createCalled, false);
   } finally {
     restoreTransaction();
@@ -964,13 +964,13 @@ test('invoice generation creates a scoped invoice and ledger row', async () => {
     assert.equal(capturedInvoiceData.studentId, STUDENT_ID);
     assert.equal(capturedInvoiceData.feeStructureId, STRUCTURE_ID);
     assert.equal(capturedInvoiceData.feeTypeId, FEE_TYPE_ID);
-    assert.equal(capturedInvoiceData.totalAmount.toString(), '125');
-    assert.equal(capturedInvoiceData.dueAmount.toString(), '125');
+    assert.equal(capturedInvoiceData.totalAmount.toString(), '100');
+    assert.equal(capturedInvoiceData.dueAmount.toString(), '100');
     assert.equal(capturedLedgerData.schoolId, SCHOOL_ID);
     assert.equal(capturedLedgerData.academicSessionId, SESSION_ID);
     assert.equal(capturedLedgerData.type, 'INVOICE_DEBIT');
-    assert.equal(capturedLedgerData.debitAmount.toString(), '125');
-    assert.equal(capturedLedgerData.balanceAfter.toString(), '125');
+    assert.equal(capturedLedgerData.debitAmount.toString(), '100');
+    assert.equal(capturedLedgerData.balanceAfter.toString(), '100');
   } finally {
     restoreTransaction();
     restoreDiscounts();
@@ -1117,7 +1117,7 @@ test('invoice generation applies approved current discounts by target and caps d
     discountWhere = where;
     return [
       { valueType: 'PERCENTAGE', value: new Prisma.Decimal(50), amount: null },
-      { valueType: 'FIXED', value: new Prisma.Decimal(80), amount: null },
+      { valueType: 'FIXED', value: new Prisma.Decimal(30), amount: null },
     ];
   });
   let capturedInvoiceData: any;
@@ -1156,9 +1156,9 @@ test('invoice generation applies approved current discounts by target and caps d
     assert.ok(discountWhere.OR.some((item: any) => item.targetType === 'CLASS' && item.classId === CLASS_ID));
     assert.ok(discountWhere.AND.some((item: any) => item.OR?.some((condition: any) => condition.validFrom?.lte)));
     assert.ok(discountWhere.AND.some((item: any) => item.OR?.some((condition: any) => condition.validTo?.gte)));
-    assert.equal(capturedInvoiceData.discountAmount.toString(), '100');
-    assert.equal(capturedInvoiceData.totalAmount.toString(), '25');
-    assert.equal(capturedInvoiceData.dueAmount.toString(), '25');
+    assert.equal(capturedInvoiceData.discountAmount.toString(), '80');
+    assert.equal(capturedInvoiceData.totalAmount.toString(), '100');
+    assert.equal(capturedInvoiceData.dueAmount.toString(), '20');
   } finally {
     restoreTransaction();
     restoreDiscounts();
@@ -1443,9 +1443,12 @@ test('bulk invoice generation preloads data for 500 students and preserves calcu
     assert.equal(res.payload.failedCount, 0);
     assert.equal(createdInvoices.length, 495);
     assert.equal(new Set(createdInvoices.map((invoice) => invoice.invoiceNumber)).size, 495);
-    assert.equal(createdInvoices[0].totalAmount.toString(), '95');
+    assert.equal(createdInvoices[0].totalAmount.toString(), '100');
+    assert.equal(createdInvoices[0].dueAmount.toString(), '95');
     const previousBalanceInvoice = createdInvoices.find((invoice) => invoice.studentId === previousBalanceStudentId);
-    assert.equal(previousBalanceInvoice.totalAmount.toString(), '120');
+    assert.equal(previousBalanceInvoice.totalAmount.toString(), '100');
+    assert.equal(previousBalanceInvoice.dueAmount.toString(), '95');
+    assert.equal(previousBalanceInvoice.previousBalance.toString(), '0');
     assert.equal(ledgerEntries.filter((entry) => entry.type === 'INVOICE_DEBIT').length, 495);
     assert.equal(ledgerEntries.filter((entry) => entry.type === 'DISCOUNT_CREDIT').length, 495);
     assert.ok(res.payload.durationMs >= 0);
@@ -1973,17 +1976,39 @@ test('central fee ledger balance increases by debit and decreases by credit', as
   assert.deepEqual(created.map((item) => item.balanceAfter.toString()), ['100', '90', '40']);
 });
 
-test('approved student discount creates a discount credit ledger entry', async () => {
+test('approved student discount updates invoice due and creates a discount credit ledger entry', async () => {
   const restoreAcademic = patchAcademicSession();
   const restoreStudent = patch(prisma.student as any, 'findFirst', async () => ({ id: STUDENT_ID, schoolId: SCHOOL_ID }));
   const restoreInvoiceAggregate = patch(prisma.feeInvoice as any, 'aggregate', async () => ({
     _sum: { dueAmount: new Prisma.Decimal(100) },
   }));
   const restoreDuplicate = patch(prisma.feeDiscount as any, 'findFirst', async () => null);
+  let capturedInvoiceUpdate: any;
   let capturedLedgerData: any;
   const tx = {
     feeDiscount: {
       create: async ({ data }: any) => ({ ...data, id: 'discount-1' }),
+    },
+    feeInvoice: {
+      findFirst: async () => null,
+      findMany: async () => [
+        {
+          id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+          schoolId: SCHOOL_ID,
+          academicSessionId: SESSION_ID,
+          studentId: STUDENT_ID,
+          status: 'ISSUED',
+          totalAmount: new Prisma.Decimal(100),
+          discountAmount: new Prisma.Decimal(0),
+          fineAmount: new Prisma.Decimal(0),
+          paidAmount: new Prisma.Decimal(0),
+          dueAmount: new Prisma.Decimal(100),
+        },
+      ],
+      update: async ({ data }: any) => {
+        capturedInvoiceUpdate = data;
+        return { ...data, id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa' };
+      },
     },
     feeLedger: {
       count: async () => 0,
@@ -2013,6 +2038,8 @@ test('approved student discount creates a discount credit ledger entry', async (
       res,
     );
     assert.equal(res.statusCode, 201);
+    assert.equal(capturedInvoiceUpdate.discountAmount.toString(), '40');
+    assert.equal(capturedInvoiceUpdate.dueAmount.toString(), '60');
     assert.equal(capturedLedgerData.type, 'DISCOUNT_CREDIT');
     assert.equal(capturedLedgerData.creditAmount.toString(), '40');
     assert.equal(capturedLedgerData.balanceAfter.toString(), '60');
@@ -2070,6 +2097,11 @@ test('discount lifecycle supports update, approval, rejection, and soft delete',
         storedDiscount = { ...storedDiscount, ...data };
         return storedDiscount;
       },
+    },
+    feeInvoice: {
+      findFirst: async () => null,
+      findMany: async () => [],
+      update: async ({ data }: any) => data,
     },
     feeLedger: {
       count: async () => 0,
@@ -2240,13 +2272,17 @@ test('student fine application creates a fine debit ledger entry', async () => {
     academicSessionId: SESSION_ID,
     studentId: STUDENT_ID,
     status: 'ISSUED',
+    totalAmount: new Prisma.Decimal(100),
+    discountAmount: new Prisma.Decimal(0),
     fineAmount: new Prisma.Decimal(0),
+    paidAmount: new Prisma.Decimal(0),
     dueAmount: new Prisma.Decimal(100),
   }));
   let capturedInvoiceUpdate: any;
   let capturedLedgerData: any;
   const tx = {
     feeFine: {
+      findFirst: async () => null,
       create: async ({ data }: any) => ({ ...data, id: 'fine-1' }),
     },
     feeInvoice: {
@@ -2286,6 +2322,60 @@ test('student fine application creates a fine debit ledger entry', async () => {
     assert.equal(capturedLedgerData.type, 'FINE_DEBIT');
     assert.equal(capturedLedgerData.debitAmount.toString(), '25');
     assert.equal(capturedLedgerData.balanceAfter.toString(), '125');
+  } finally {
+    restoreTransaction();
+    restoreInvoice();
+    restoreStudent();
+    restoreAcademic();
+  }
+});
+
+test('duplicate fine is blocked for the same invoice, name, and type', async () => {
+  const restoreAcademic = patchAcademicSession();
+  const restoreStudent = patch(prisma.student as any, 'findFirst', async () => ({ id: STUDENT_ID, schoolId: SCHOOL_ID }));
+  const restoreInvoice = patch(prisma.feeInvoice as any, 'findFirst', async () => ({
+    id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+    schoolId: SCHOOL_ID,
+    academicSessionId: SESSION_ID,
+    studentId: STUDENT_ID,
+    status: 'ISSUED',
+    totalAmount: new Prisma.Decimal(100),
+    discountAmount: new Prisma.Decimal(0),
+    fineAmount: new Prisma.Decimal(25),
+    paidAmount: new Prisma.Decimal(0),
+    dueAmount: new Prisma.Decimal(125),
+  }));
+  let createCalled = false;
+  const tx = {
+    feeFine: {
+      findFirst: async () => ({ id: 'fine-existing' }),
+      create: async () => {
+        createCalled = true;
+        throw new Error('duplicate fine should not be created');
+      },
+    },
+  };
+  const restoreTransaction = patch(prisma as any, '$transaction', async (callback: any) => callback(tx));
+
+  try {
+    await assert.rejects(
+      () =>
+        createFeeFine(
+          makeReq({
+            body: {
+              academicSessionId: SESSION_ID,
+              studentId: STUDENT_ID,
+              invoiceId: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+              name: 'Late Payment Fine',
+              fineType: 'FIXED',
+              amount: 25,
+            },
+          }),
+          makeRes(),
+        ),
+      (error: unknown) => error instanceof HttpError && error.statusCode === 409 && /Fine already applied/.test(error.message),
+    );
+    assert.equal(createCalled, false);
   } finally {
     restoreTransaction();
     restoreInvoice();

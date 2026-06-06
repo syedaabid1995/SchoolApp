@@ -280,6 +280,18 @@ const paymentSchema = z.object({
   chequeNumber: z.string().trim().optional(),
   bankName: z.string().trim().optional(),
   note: z.string().trim().optional(),
+}).superRefine((payload, ctx) => {
+  if (['UPI', 'BANK_TRANSFER', 'CARD', 'ONLINE_GATEWAY'].includes(payload.paymentMode) && !payload.transactionReference) {
+    ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['transactionReference'], message: 'Transaction reference is required for this payment mode' });
+  }
+  if (payload.paymentMode === 'CHEQUE') {
+    if (!payload.chequeNumber) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['chequeNumber'], message: 'Cheque number is required' });
+    }
+    if (!payload.bankName) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['bankName'], message: 'Bank name is required' });
+    }
+  }
 });
 
 const discountSchema = z.object({
@@ -322,7 +334,7 @@ const fineSchema = z.object({
   name: z.string().trim().min(1, 'Fine name is required'),
   particularId: z.string().optional(),
   fineType: z.enum(fineTypes),
-  amount: z.coerce.number().min(0),
+  amount: z.coerce.number().positive('Amount must be greater than zero'),
   graceDays: z.coerce.number().int().min(0).default(0),
   status: z.enum(['ACTIVE', 'INACTIVE']).default('ACTIVE'),
 });

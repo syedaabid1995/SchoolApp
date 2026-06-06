@@ -207,7 +207,11 @@ const findLatestLedgerBalance = async (schoolId: string, academicSessionId: stri
   for (const row of rows) {
     if (!latest.has(row.studentId)) latest.set(row.studentId, row.balanceAfter);
   }
-  return Array.from(latest.values()).reduce((sum, value) => sum + toNumber(value), 0);
+  const byStudentId = Object.fromEntries(Array.from(latest.entries()).map(([studentId, balance]) => [studentId, money(balance)]));
+  return {
+    total: money(Array.from(latest.values()).reduce((sum, value) => sum + toNumber(value), 0)),
+    byStudentId,
+  };
 };
 
 async function main() {
@@ -494,6 +498,21 @@ async function main() {
       },
     },
   });
+  await prisma.feeLedger.create({
+    data: {
+      schoolId: school.id,
+      academicSessionId: session.id,
+      studentId: previousBalanceStudent.id,
+      invoiceId: previousBalanceInvoice.id,
+      type: 'INVOICE_DEBIT',
+      description: `Opening previous balance invoice ${previousBalanceInvoice.invoiceNumber}`,
+      debitAmount: 500,
+      creditAmount: 0,
+      balanceAfter: 500,
+      entryDate: date('2026-05-01'),
+      createdById: adminUser.id,
+    },
+  });
 
   await prisma.feeInvoice.create({
     data: {
@@ -521,18 +540,17 @@ async function main() {
     },
   });
 
-  const setupApiError = await expectError('fee particular API currently crashes before setup can proceed', null, () =>
-    call('create particular API blocker probe', createFeeParticular, {
-      auth: adminAuth,
-      body: {
-        academicSessionId: session.id,
-        name: 'API Blocker Probe',
-        code: `API_BLOCKER_${stamp}`,
-        type: 'CHARGE',
-        status: 'ACTIVE',
-      },
-    }),
-  );
+  await call('create fee particular through API', createFeeParticular, {
+    auth: adminAuth,
+    body: {
+      academicSessionId: session.id,
+      name: 'API Blocker Probe',
+      code: `API_BLOCKER_${stamp}`,
+      type: 'CHARGE',
+      status: 'ACTIVE',
+    },
+  });
+  const setupApiError: any = null;
   if (setupApiError?.message?.includes('Unknown argument `userId`')) {
     addBug({
       id: 'LIVE-FM-000',
@@ -677,7 +695,7 @@ async function main() {
       },
     }),
   );
-  await expectError('used fee particular delete API still blocked before usage validation', null, () =>
+  await expectError('used fee particular delete is restricted when structure uses it', 409, () =>
     call('delete used particular call', deleteFeeParticular, {
       auth: adminAuth,
       params: { id: particulars.get('Monthly Tuition Fee')!.id },
@@ -685,18 +703,16 @@ async function main() {
     }),
   );
 
-  await expectError('assignment API currently crashes before assignment validation', null, () =>
-    call('assignment API blocker probe', assignStudentFees, {
-      auth: adminAuth,
-      body: {
-        academicSessionId: session.id,
-        feeStructureId: structures.get('Class 1 Monthly Fee').id,
-        targetType: 'CLASS',
-        classId: classRows.get('Class 1')!.id,
-        startMonth: '2026-06',
-      },
-    }),
-  );
+  await call('create fee assignment through API', assignStudentFees, {
+    auth: adminAuth,
+    body: {
+      academicSessionId: session.id,
+      feeStructureId: structures.get('Annual Admission Fee').id,
+      targetType: 'CLASS',
+      classId: classRows.get('Class 2')!.id,
+      startMonth: '2026-09',
+    },
+  });
 
   const createAssignment = async (name: string, data: Record<string, unknown>) => {
     const row = await prisma.studentFeeAssignment.create({
@@ -895,12 +911,11 @@ async function main() {
     feeMonth: '2026-06',
     dueDate: '2026-06-15',
   };
-  const structurePreviewError = await expectError('invoice preview with feeStructureId currently crashes before preview', null, () =>
-    call('preview with feeStructureId blocker probe', previewFeeInvoices, {
-      auth: adminAuth,
-      body: class1PayloadWithStructure,
-    }),
-  );
+  await call('preview with feeStructureId succeeds', previewFeeInvoices, {
+    auth: adminAuth,
+    body: class1PayloadWithStructure,
+  });
+  const structurePreviewError: any = null;
   if (structurePreviewError?.message?.includes('Unknown argument `userId`')) {
     addBug({
       id: 'LIVE-FM-001',
@@ -1314,7 +1329,11 @@ async function main() {
         allocations: [{ invoiceId: discountInvoice.id, amount: money(discountCollectionRow.balanceAmount) }],
       });
     const refreshedDiscountInvoice = await prisma.feeInvoice.findUniqueOrThrow({ where: { id: discountInvoice.id } });
-    if (refreshedDiscountInvoice.status === 'PAID' && money(refreshedDiscountInvoice.paidAmount) < money(refreshedDiscountInvoice.totalAmount)) {
+    const refreshedDiscountNetPayable =
+      money(refreshedDiscountInvoice.totalAmount) +
+      money(refreshedDiscountInvoice.fineAmount) -
+      money(refreshedDiscountInvoice.discountAmount);
+    if (refreshedDiscountInvoice.status === 'PAID' && money(refreshedDiscountInvoice.paidAmount) < refreshedDiscountNetPayable) {
       addBug({
         id: 'LIVE-FM-009',
         title: 'Discounted invoice can be marked PAID with paidAmount lower than net total',
@@ -1616,19 +1635,21 @@ async function main() {
       status: 'ACTIVE',
     },
   });
-  await call('apply duplicate fixed fine to same invoice', createFeeFine, {
-    auth: adminAuth,
-    body: {
-      academicSessionId: session.id,
-      invoiceId: partialInvoice.id,
-      particularId: particulars.get('Fine')!.id,
-      name: 'Fixed Late Fine',
-      fineType: 'FIXED',
-      amount: 50,
-      graceDays: 0,
-      status: 'ACTIVE',
-    },
-  });
+  await expectError('duplicate fixed fine is blocked for same invoice', 409, () =>
+    call('apply duplicate fixed fine to same invoice', createFeeFine, {
+      auth: adminAuth,
+      body: {
+        academicSessionId: session.id,
+        invoiceId: partialInvoice.id,
+        particularId: particulars.get('Fine')!.id,
+        name: 'Fixed Late Fine',
+        fineType: 'FIXED',
+        amount: 50,
+        graceDays: 0,
+        status: 'ACTIVE',
+      },
+    }),
+  );
   await call('create daily fine rule with grace period', createFeeFine, {
     auth: adminAuth,
     body: {
@@ -1897,6 +1918,11 @@ async function main() {
   });
   const invoiceAggregate = await prisma.feeInvoice.aggregate({
     where: { schoolId: school.id, academicSessionId: session.id, status: { not: 'CANCELLED' }, deletedAt: null },
+    _sum: { totalAmount: true, discountAmount: true, fineAmount: true, paidAmount: true, dueAmount: true },
+  });
+  const invoiceDueByStudent = await prisma.feeInvoice.groupBy({
+    by: ['studentId'],
+    where: { schoolId: school.id, academicSessionId: session.id, status: { not: 'CANCELLED' }, deletedAt: null },
     _sum: { dueAmount: true },
   });
   const ledgerClosingBalanceSum = await findLatestLedgerBalance(school.id, session.id);
@@ -1923,7 +1949,26 @@ async function main() {
     });
   }
   const dbDue = money(invoiceAggregate._sum.dueAmount);
-  const ledgerDue = money(ledgerClosingBalanceSum);
+  const ledgerDue = money(ledgerClosingBalanceSum.total);
+  const invoiceGrossTotal = money(invoiceAggregate._sum.totalAmount);
+  const invoiceDiscountTotal = money(invoiceAggregate._sum.discountAmount);
+  const invoiceFineTotal = money(invoiceAggregate._sum.fineAmount);
+  const invoicePaidTotal = money(invoiceAggregate._sum.paidAmount);
+  const formulaDueTotal = money(invoiceGrossTotal - invoiceDiscountTotal + invoiceFineTotal - invoicePaidTotal);
+  const invoiceDueByStudentMap = Object.fromEntries(invoiceDueByStudent.map((row) => [row.studentId, money(row._sum.dueAmount)]));
+  const studentIdsForReconciliation = Array.from(new Set([...Object.keys(invoiceDueByStudentMap), ...Object.keys(ledgerClosingBalanceSum.byStudentId)]));
+  const reconciliationMismatches = studentIdsForReconciliation
+    .map((studentId) => {
+      const invoiceDue = money(invoiceDueByStudentMap[studentId] ?? 0);
+      const ledgerClosing = money(ledgerClosingBalanceSum.byStudentId[studentId] ?? 0);
+      return {
+        studentId,
+        invoiceDue,
+        ledgerClosing,
+        difference: money(invoiceDue - ledgerClosing),
+      };
+    })
+    .filter((row) => Math.abs(row.difference) > 0.01);
   if (Math.abs(dbDue - ledgerDue) > 0.01) {
     addBug({
       id: 'LIVE-FM-015',
@@ -1944,6 +1989,46 @@ async function main() {
       retestSteps: ['Run the full fee lifecycle.', 'Verify invoice due totals equal ledger closing balances after each event.'],
     });
   }
+  if (Math.abs(dbDue - formulaDueTotal) > 0.01) {
+    addBug({
+      id: 'LIVE-FM-023',
+      title: 'Invoice stored due does not match gross-discount+fine-paid formula',
+      severity: 'High',
+      priority: 'P1',
+      module: 'Fees Management - Accounting',
+      route: 'Fee invoice mutation paths',
+      role: 'School Admin',
+      testData: `school=${qaCode}`,
+      steps: ['Run full live fee workflow.', 'Aggregate invoice gross, discount, fine, paid, and due totals.', 'Compare stored due to formula due.'],
+      expected: 'Stored invoice due total should equal gross - discount + fine - paid.',
+      actual: `formulaDue=${formulaDueTotal}, storedDue=${dbDue}.`,
+      rootCauseGuess: 'One invoice mutation path updates dueAmount without using the shared accounting formula.',
+      businessImpact: 'Collection, invoice list, ledger, and reports can show different receivable balances.',
+      suggestedFix: 'Route all invoice due mutations through the shared gross-discount+fine-paid calculation.',
+      developerNotes: 'Added by final reconciliation QA.',
+      retestSteps: ['Run scripts/live-fees-qa.ts.', 'Verify accountingTotals.formulaDueTotal equals dueTotal.'],
+    });
+  }
+  if (reconciliationMismatches.length > 0 && !bugs.some((bug) => bug.id === 'LIVE-FM-015')) {
+    addBug({
+      id: 'LIVE-FM-015',
+      title: 'Outstanding invoice due does not reconcile with ledger closing balances',
+      severity: 'High',
+      priority: 'P1',
+      module: 'Fees Management - Ledger/Reports',
+      route: 'GET /api/v1/fees/ledger and GET /api/v1/fees/reports',
+      role: 'School Admin',
+      testData: `school=${qaCode}`,
+      steps: ['Run invoice generation, discounts, fines, payments, and cancellation.', 'Compare per-student invoice due to latest ledger balance.'],
+      expected: 'Each student invoice due should reconcile with ledger closing balance.',
+      actual: JSON.stringify(reconciliationMismatches.slice(0, 10)),
+      rootCauseGuess: 'A financial mutation path missed either invoice due update or ledger entry.',
+      businessImpact: 'Individual student ledger cannot be trusted for fee counter/accounting.',
+      suggestedFix: 'Fix the mutation path for the mismatched student/invoice and add a per-student reconciliation regression test.',
+      developerNotes: 'Final reconciliation uses latest fee ledger balance per student.',
+      retestSteps: ['Run scripts/live-fees-qa.ts.', 'Verify reconciliation.mismatches is empty.'],
+    });
+  }
 
   const permissions = {
     schoolAdminFeePermissionCount: getDefaultPermissionCodes('SCHOOL_ADMIN').filter((code) => code.startsWith('fees.')).length,
@@ -1957,6 +2042,10 @@ async function main() {
 
   const passCount = results.filter((result) => result.status === 'PASS').length;
   const failCount = results.filter((result) => result.status === 'FAIL').length;
+  const passedWorkflows = results.filter((result) => result.status === 'PASS').map((result) => result.name);
+  const failedWorkflows = results.filter((result) => result.status === 'FAIL').map((result) => result.name);
+  const reconciliationStatus = Math.abs(dbDue - ledgerDue) <= 0.01 && Math.abs(dbDue - formulaDueTotal) <= 0.01 && reconciliationMismatches.length === 0 ? 'PASS' : 'FAIL';
+  const finalReadiness = failCount === 0 && bugs.length === 0 && reconciliationStatus === 'PASS' ? 'PRODUCTION READY' : 'NOT READY';
   const output = {
     qaRun: {
       code: qaCode,
@@ -1964,6 +2053,7 @@ async function main() {
       academicSessionId: session.id,
       generatedAt: new Date().toISOString(),
     },
+    finalReadiness,
     insertedDataSummary: {
       school: school.name,
       academicSession: session.name,
@@ -2031,9 +2121,29 @@ async function main() {
       },
       permissions,
     },
+    accountingTotals: {
+      invoiceGrossTotal,
+      discountTotal: invoiceDiscountTotal,
+      fineTotal: invoiceFineTotal,
+      paidTotal: invoicePaidTotal,
+      dueTotal: dbDue,
+      formulaDueTotal,
+      ledgerClosingTotal: ledgerDue,
+    },
+    reconciliation: {
+      status: reconciliationStatus,
+      formula: 'grossAmount - discountAmount + fineAmount - paidAmount = dueAmount',
+      invoiceDueTotal: dbDue,
+      ledgerClosingTotal: ledgerDue,
+      formulaDueTotal,
+      mismatchCount: reconciliationMismatches.length,
+      mismatches: reconciliationMismatches,
+    },
     stepSummary: {
       passCount,
       failCount,
+      passedWorkflows,
+      failedWorkflows,
       failedSteps: results.filter((result) => result.status === 'FAIL'),
     },
     bugs,

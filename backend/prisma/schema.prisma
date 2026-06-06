@@ -3305,6 +3305,7 @@ model FeeInvoice {
   receipts        FeeReceipt[]
   paymentAllocations FeePaymentAllocation[]
   ledgers         FeeLedger[]
+  fines           FeeFine[]
   notifications   FeeNotification[]
 
   @@unique([schoolId, invoiceNumber])
@@ -3487,6 +3488,7 @@ model FeeFine {
   id                String          @id @default(uuid()) @db.Uuid
   schoolId          String          @map("school_id") @db.Uuid
   academicSessionId String          @map("academic_session_id") @db.Uuid
+  invoiceId         String?         @map("invoice_id") @db.Uuid
   particularId      String?         @map("particular_id") @db.Uuid
   name              String
   fineType          FeeFineType     @map("fine_type")
@@ -3499,10 +3501,13 @@ model FeeFine {
 
   school          School         @relation(fields: [schoolId], references: [id], onDelete: Cascade)
   academicSession AcademicYear   @relation(fields: [academicSessionId], references: [id], onDelete: Cascade)
+  invoice         FeeInvoice?    @relation(fields: [invoiceId], references: [id], onDelete: SetNull)
   particular      FeeParticular? @relation(fields: [particularId], references: [id], onDelete: SetNull)
   ledgers         FeeLedger[]
 
+  @@unique([schoolId, academicSessionId, invoiceId, name, fineType], name: "unique_invoice_fine_rule")
   @@index([schoolId, academicSessionId])
+  @@index([invoiceId])
   @@index([status])
   @@index([deletedAt])
   @@map("fee_fines")

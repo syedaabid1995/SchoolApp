@@ -35,6 +35,7 @@ export type FeeInvoiceCalculation = {
   fineAmount: Prisma.Decimal;
   grossAmount: Prisma.Decimal;
   totalAmount: Prisma.Decimal;
+  netAmount: Prisma.Decimal;
   invoiceItems: Array<{
     particularId: string | null;
     name: string;
@@ -93,8 +94,9 @@ export const calculateFeeInvoiceAmountsFromPreloaded = ({
   }, toDecimal(0));
   const discountAmount = Prisma.Decimal.min(rawDiscountAmount, baseAmount);
   const fineAmount = toDecimal(inputFineAmount ?? 0);
-  const grossAmount = baseAmount.plus(previousBalanceAmount).plus(fineAmount);
-  const totalAmount = Prisma.Decimal.max(grossAmount.minus(discountAmount), 0);
+  const grossAmount = baseAmount.plus(previousBalanceAmount);
+  const totalAmount = grossAmount;
+  const netAmount = Prisma.Decimal.max(grossAmount.minus(discountAmount).plus(fineAmount), 0);
 
   return {
     baseAmount,
@@ -103,6 +105,7 @@ export const calculateFeeInvoiceAmountsFromPreloaded = ({
     fineAmount,
     grossAmount,
     totalAmount,
+    netAmount,
     invoiceItems,
   };
 };
@@ -121,14 +124,7 @@ export const calculateFeeInvoiceAmounts = async ({
   feeMonth: string;
   dueDate: Date;
 }): Promise<FeeInvoiceCalculation> => {
-  const previousBalance = toDecimal(
-    (
-      await prisma.feeInvoice.aggregate({
-        where: { ...scope, studentId: student.id, deletedAt: null, status: { not: 'CANCELLED' } },
-        _sum: { dueAmount: true },
-      })
-    )._sum.dueAmount ?? 0,
-  );
+  const previousBalance = toDecimal(0);
 
   const discountTargets: Prisma.FeeDiscountWhereInput[] = [
     { targetType: 'ALL' },

@@ -15,6 +15,7 @@ import { getNextNumber } from '../services/numberSequence.service';
 import { logAudit } from '../utils/audit';
 
 const uuidSchema = z.string().uuid();
+const uuidParam = (req: Request, name = 'id') => uuidSchema.parse(req.params[name]);
 const decimalInput = z.coerce.number().min(0).max(100000000);
 const positiveDecimalInput = z.coerce.number().positive('Amount must be greater than 0').max(100000000);
 const dateInput = z.coerce.date().optional().nullable();
@@ -267,8 +268,11 @@ const assertSection = async (schoolId: string, sectionId?: string | null) => {
   if (!found) throw new HttpError(404, 'Section not found');
 };
 
-const assertStudent = async (schoolId: string, studentId: string) => {
-  const found = await prisma.student.findFirst({ where: { id: studentId, schoolId }, select: { id: true } });
+const assertStudent = async (schoolId: string, studentId: string, academicSessionId?: string) => {
+  const found = await prisma.student.findFirst({
+    where: { id: studentId, schoolId, ...(academicSessionId ? { academicSessionId } : {}) },
+    select: { id: true },
+  });
   if (!found) throw new HttpError(404, 'Student not found');
 };
 
@@ -414,7 +418,7 @@ function validateDiscountTarget(payload: NormalizedDiscountPayload) {
 }
 
 const assertDiscountReferences = async (scope: FeeTenantScope, payload: NormalizedDiscountPayload) => {
-  if (payload.studentId) await assertStudent(scope.schoolId, payload.studentId);
+  if (payload.studentId) await assertStudent(scope.schoolId, payload.studentId, scope.academicSessionId);
   if (payload.classId) await assertClass(scope.schoolId, payload.classId);
   if (payload.sectionId) await assertSection(scope.schoolId, payload.sectionId);
   if (payload.categoryId) await assertStudentCategory(scope.schoolId, payload.categoryId);
@@ -437,7 +441,7 @@ const assertNoDuplicateActiveDiscount = async (scope: FeeTenantScope, payload: N
   if (payload.validFrom) and.push({ OR: [{ validTo: null }, { validTo: { gte: payload.validFrom } }] });
   const duplicate = await prisma.feeDiscount.findFirst({
     where: {
-      ...scope,
+      ...tenantScopeOnly(scope),
       ...(excludeId ? { id: { not: excludeId } } : {}),
       deletedAt: null,
       approvalStatus: { in: [...approvedDiscountStatuses] },
@@ -455,7 +459,7 @@ const assertNoDuplicateActiveDiscount = async (scope: FeeTenantScope, payload: N
 };
 
 const buildDiscountInvoiceWhere = (scope: FeeTenantScope, discount: Pick<NormalizedDiscountPayload, 'targetType' | 'studentId' | 'classId' | 'sectionId' | 'categoryId' | 'feeTypeId'>): Prisma.FeeInvoiceWhereInput => ({
-  ...scope,
+  ...tenantScopeOnly(scope),
   deletedAt: null,
   status: { in: ['PAID', 'PARTIALLY_PAID'] },
   discountAmount: { gt: 0 },
@@ -473,48 +477,107 @@ const assertDiscountNotLockedByPayment = async (scope: FeeTenantScope, discount:
   }
 };
 
-const calculateStudentDiscountLedgerAmount = async (scope: FeeTenantScope, payload: NormalizedDiscountPayload) => {
-  if (!payload.studentId) return null;
+const assertDiscountDoesNotExceedCurrentPayable = async (scope: FeeTenantScope, payload: NormalizedDiscountPayload) => {
+  if (!payload.studentId || payload.valueType !== 'FIXED') return;
   const payable = toDecimal(
     (
       await prisma.feeInvoice.aggregate({
-        where: { ...scope, studentId: payload.studentId, deletedAt: null, status: { not: 'CANCELLED' } },
+        where: {
+          ...tenantScopeOnly(scope),
+          studentId: payload.studentId,
+          deletedAt: null,
+          status: { not: 'CANCELLED' },
+        },
         _sum: { dueAmount: true },
       })
     )._sum.dueAmount ?? 0,
   );
-  const discountAmount = payload.valueType === 'PERCENTAGE' ? payable.mul(payload.value).div(100) : toDecimal(payload.amount ?? payload.value);
+  const discountAmount = toDecimal(payload.amount ?? payload.value);
   if (payable.gt(0) && discountAmount.gt(payable)) throw new HttpError(400, 'Discount cannot exceed payable amount');
-  return payable.gt(0) ? discountAmount : null;
 };
 
-const maybeCreateApprovedDiscountLedger = async (
+const buildDiscountTargetInvoiceWhere = (
+  scope: FeeTenantScope,
+  discount: Pick<FeeDiscount, 'targetType' | 'studentId' | 'classId' | 'sectionId' | 'categoryId' | 'feeTypeId'>,
+): Prisma.FeeInvoiceWhereInput => ({
+  ...tenantScopeOnly(scope),
+  deletedAt: null,
+  ...(discount.feeTypeId ? { feeTypeId: discount.feeTypeId } : {}),
+  ...(discount.targetType === 'STUDENT' && discount.studentId ? { studentId: discount.studentId } : {}),
+  ...(discount.targetType === 'CLASS' && discount.classId ? { classId: discount.classId } : {}),
+  ...(discount.targetType === 'SECTION' && discount.sectionId ? { sectionId: discount.sectionId } : {}),
+  ...(discount.targetType === 'CATEGORY' && discount.categoryId ? { student: { studentCategoryId: discount.categoryId } } : {}),
+});
+
+const discountAmountForInvoice = (
+  discount: Pick<FeeDiscount, 'valueType' | 'value' | 'amount'>,
+  invoice: Pick<Prisma.FeeInvoiceGetPayload<{}>, 'totalAmount' | 'dueAmount'>,
+) => {
+  const value = toDecimal(discount.amount ?? discount.value);
+  const rawAmount = discount.valueType === 'PERCENTAGE' ? toDecimal(invoice.totalAmount).mul(value).div(100) : value;
+  return Prisma.Decimal.min(rawAmount, toDecimal(invoice.dueAmount));
+};
+
+const applyApprovedDiscountToOpenInvoices = async (
   tx: Prisma.TransactionClient,
   scope: FeeTenantScope & { userId: string },
   discount: FeeDiscount,
-  amount: Prisma.Decimal | null,
 ) => {
-  if (!discount.studentId || !amount?.gt(0) || !approvedDiscountStatuses.includes(discount.approvalStatus as (typeof approvedDiscountStatuses)[number])) return;
-  const existing = await tx.feeLedger.count({
+  if (!approvedDiscountStatuses.includes(discount.approvalStatus as (typeof approvedDiscountStatuses)[number])) return;
+
+  const existingLedger = await tx.feeLedger.count({
     where: {
-      schoolId: scope.schoolId,
-      academicSessionId: scope.academicSessionId,
-      studentId: discount.studentId,
+      ...tenantScopeOnly(scope),
       discountId: discount.id,
       type: 'DISCOUNT_CREDIT',
     },
   });
-  if (existing) return;
-  await createLedgerEntry(tx, {
-    schoolId: scope.schoolId,
-    academicSessionId: scope.academicSessionId,
-    studentId: discount.studentId,
-    discountId: discount.id,
-    type: 'DISCOUNT_CREDIT',
-    description: `${discount.discountName ?? discount.discountType.replace(/_/g, ' ')} discount approved`,
-    creditAmount: amount,
-    createdById: scope.userId,
+  if (existingLedger) return;
+
+  const targetWhere = buildDiscountTargetInvoiceWhere(scope, discount);
+  const lockedInvoice = await tx.feeInvoice.findFirst({
+    where: {
+      ...targetWhere,
+      status: { in: ['PAID', 'CANCELLED'] },
+    },
+    select: { id: true },
   });
+  if (lockedInvoice) throw new HttpError(409, 'Cannot apply discount directly to paid or cancelled invoice');
+
+  const invoices = await tx.feeInvoice.findMany({
+    where: {
+      ...targetWhere,
+      status: { in: ['ISSUED', 'OVERDUE', 'PARTIALLY_PAID'] },
+      dueAmount: { gt: 0 },
+    },
+    orderBy: [{ dueDate: 'asc' }, { issueDate: 'asc' }],
+  });
+
+  for (const invoice of invoices) {
+    const discountAmount = discountAmountForInvoice(discount, invoice);
+    if (discountAmount.lte(0)) continue;
+    const newDiscountAmount = toDecimal(invoice.discountAmount).plus(discountAmount);
+    const newDueAmount = calculateInvoiceDueFromParts({ ...invoice, discountAmount: newDiscountAmount });
+    await tx.feeInvoice.update({
+      where: { id: invoice.id },
+      data: {
+        discountAmount: newDiscountAmount,
+        dueAmount: newDueAmount,
+        status: newDueAmount.eq(0) ? 'PAID' : invoice.status,
+      },
+    });
+    await createLedgerEntry(tx, {
+      schoolId: scope.schoolId,
+      academicSessionId: scope.academicSessionId,
+      studentId: invoice.studentId,
+      invoiceId: invoice.id,
+      discountId: discount.id,
+      type: 'DISCOUNT_CREDIT',
+      description: `${discount.discountName ?? discount.discountType.replace(/_/g, ' ')} discount applied`,
+      creditAmount: discountAmount,
+      createdById: scope.userId,
+    });
+  }
 };
 
 const assignmentSchema = z.object({
@@ -604,7 +667,7 @@ const assignmentDuplicateWhere = (
   studentId?: string | null,
   excludeId?: string,
 ): Prisma.StudentFeeAssignmentWhereInput => ({
-  ...scope,
+  ...tenantScopeOnly(scope),
   ...(excludeId ? { id: { not: excludeId } } : {}),
   feeStructureId: payload.feeStructureId,
   targetType,
@@ -805,18 +868,52 @@ type InvoiceAmountSnapshot = {
   fineAmount: Prisma.Decimal | number | string;
   discountAmount: Prisma.Decimal | number | string;
   paidAmount: Prisma.Decimal | number | string;
+  dueAmount?: Prisma.Decimal | number | string | null;
 };
 
 const calculateInvoiceDueAmount = (invoice: InvoiceAmountSnapshot) =>
   Prisma.Decimal.max(
-    toDecimal(invoice.totalAmount).plus(invoice.fineAmount).minus(invoice.discountAmount).minus(invoice.paidAmount),
+    invoice.dueAmount !== undefined && invoice.dueAmount !== null
+      ? toDecimal(invoice.dueAmount)
+      : toDecimal(invoice.totalAmount).plus(invoice.fineAmount).minus(invoice.discountAmount).minus(invoice.paidAmount),
     0,
   );
 
+const calculateInvoiceDueFromParts = ({
+  totalAmount,
+  discountAmount,
+  fineAmount,
+  paidAmount,
+}: InvoiceAmountSnapshot) =>
+  Prisma.Decimal.max(toDecimal(totalAmount).minus(discountAmount).plus(fineAmount).minus(paidAmount), 0);
+
 const lockFeeInvoicesForPayment = async (tx: Prisma.TransactionClient, scope: PaymentScope, invoiceIds: string[]) => {
-  await tx.$queryRaw<{ id: string }[]>(
-    Prisma.sql`SELECT id FROM fee_invoices WHERE id IN (${Prisma.join(invoiceIds)}) AND school_id = ${scope.schoolId} AND academic_session_id = ${scope.academicSessionId} AND deleted_at IS NULL FOR UPDATE`,
-  );
+  if (!invoiceIds.length) return;
+  const query = Prisma.sql`
+    SELECT id
+    FROM fee_invoices
+    WHERE id = ANY(ARRAY[${Prisma.join(invoiceIds)}]::uuid[])
+      AND school_id = ${scope.schoolId}::uuid
+      AND academic_session_id = ${scope.academicSessionId}::uuid
+      AND deleted_at IS NULL
+    FOR UPDATE
+  `;
+  const rawClient = tx as Prisma.TransactionClient & {
+    $queryRaw?: <T = unknown>(query: Prisma.Sql) => Promise<T>;
+    $queryRawUnsafe?: <T = unknown>(query: string, ...values: unknown[]) => Promise<T>;
+  };
+  if (typeof rawClient.$queryRaw === 'function') {
+    await rawClient.$queryRaw<{ id: string }[]>(query);
+    return;
+  }
+  if (typeof rawClient.$queryRawUnsafe === 'function') {
+    await rawClient.$queryRawUnsafe<{ id: string }[]>(
+      'SELECT id FROM fee_invoices WHERE id = ANY($1::uuid[]) AND school_id = $2::uuid AND academic_session_id = $3::uuid AND deleted_at IS NULL FOR UPDATE',
+      invoiceIds,
+      scope.schoolId,
+      scope.academicSessionId,
+    );
+  }
 };
 
 const findIdempotentPayment = async (
@@ -876,20 +973,20 @@ export const getFeeMetadata = async (req: Request, res: Response) => {
     prisma.class.findMany({ where: { schoolId: scope.schoolId }, orderBy: { name: 'asc' }, select: { id: true, name: true } }),
     prisma.section.findMany({ where: { schoolId: scope.schoolId }, orderBy: { name: 'asc' }, select: { id: true, name: true, classId: true } }),
     prisma.student.findMany({
-      where: { schoolId: scope.schoolId, academicSessionId: scope.academicSessionId, status: { not: 'DISABLED' } },
+      where: { schoolId: scope.schoolId, academicSessionId: scope.academicSessionId, status: assignableStudentStatus },
       orderBy: { fullName: 'asc' },
       take: 300,
       select: { id: true, admissionNo: true, fullName: true, classId: true, sectionId: true },
     }),
     prisma.studentGroup.findMany({ where: { schoolId: scope.schoolId }, orderBy: { name: 'asc' }, select: { id: true, name: true } }),
     prisma.studentCategory.findMany({ where: { schoolId: scope.schoolId }, orderBy: { name: 'asc' }, select: { id: true, name: true } }),
-    prisma.feeParticular.findMany({ where: { ...scope, deletedAt: null }, orderBy: [{ sortOrder: 'asc' }, { name: 'asc' }] }),
-    prisma.feeType.findMany({ where: { ...scope, deletedAt: null }, orderBy: [{ sortOrder: 'asc' }, { name: 'asc' }] }),
-    prisma.feeStructure.findMany({ where: { ...scope, deletedAt: null }, include: includeStructure, orderBy: { createdAt: 'desc' }, take: 100 }),
+    prisma.feeParticular.findMany({ where: { ...tenantScopeOnly(scope), deletedAt: null }, orderBy: [{ sortOrder: 'asc' }, { name: 'asc' }] }),
+    prisma.feeType.findMany({ where: { ...tenantScopeOnly(scope), deletedAt: null }, orderBy: [{ sortOrder: 'asc' }, { name: 'asc' }] }),
+    prisma.feeStructure.findMany({ where: { ...tenantScopeOnly(scope), deletedAt: null }, include: includeStructure, orderBy: { createdAt: 'desc' }, take: 100 }),
     prisma.transportRoute.findMany({ where: { schoolId: scope.schoolId }, orderBy: { title: 'asc' }, select: { id: true, title: true, fare: true } }),
   ]);
 
-  res.status(200).json({ ...scope, academicSessions, classes, sections, students, studentGroups, studentCategories, particulars, feeTypes, structures, transportRoutes });
+  res.status(200).json({ ...tenantScopeOnly(scope), academicSessions, classes, sections, students, studentGroups, studentCategories, particulars, feeTypes, structures, transportRoutes });
 };
 
 const particularSchema = z.object({
@@ -908,7 +1005,7 @@ const particularSchema = z.object({
 const assertUniqueFeeParticularName = async (scope: FeeTenantScope, normalizedName: string, excludeId?: string) => {
   const duplicate = await prisma.feeParticular.findFirst({
     where: {
-      ...scope,
+      ...tenantScopeOnly(scope),
       normalizedName,
       ...(excludeId ? { id: { not: excludeId } } : {}),
     },
@@ -924,7 +1021,7 @@ export const listFeeParticulars = async (req: Request, res: Response) => {
   const search = typeof req.query.search === 'string' ? req.query.search.trim() : '';
   const status = typeof req.query.status === 'string' ? req.query.status : undefined;
   const where: Prisma.FeeParticularWhereInput = {
-    ...scope,
+    ...tenantScopeOnly(scope),
     deletedAt: null,
     ...(status === 'ACTIVE' || status === 'INACTIVE' ? { status } : {}),
     ...(search ? { OR: [{ name: { contains: search, mode: 'insensitive' } }, { code: { contains: search, mode: 'insensitive' } }] } : {}),
@@ -945,7 +1042,7 @@ export const createFeeParticular = async (req: Request, res: Response) => {
   try {
     const item = await prisma.feeParticular.create({
       data: {
-        ...scope,
+        ...tenantScopeOnly(scope),
         name,
         normalizedName,
         code: slugCode(payload.code || payload.name),
@@ -968,7 +1065,7 @@ export const createFeeParticular = async (req: Request, res: Response) => {
 export const updateFeeParticular = async (req: Request, res: Response) => {
   const payload = particularSchema.partial().parse(req.body);
   const scope = await resolveScope(req, payload);
-  const existing = await prisma.feeParticular.findFirst({ where: { id: req.params.id, ...scope, deletedAt: null } });
+  const existing = await prisma.feeParticular.findFirst({ where: { id: uuidParam(req), ...tenantScopeOnly(scope), deletedAt: null } });
   if (!existing) throw new HttpError(404, 'Fee particular not found');
   const normalizedName = payload.name === undefined ? undefined : normalizeName(payload.name);
   if (normalizedName) await assertUniqueFeeParticularName(scope, normalizedName, existing.id);
@@ -997,12 +1094,12 @@ export const updateFeeParticular = async (req: Request, res: Response) => {
 
 export const deleteFeeParticular = async (req: Request, res: Response) => {
   const scope = await resolveScope(req);
-  const existing = await prisma.feeParticular.findFirst({ where: { id: req.params.id, ...scope, deletedAt: null } });
+  const existing = await prisma.feeParticular.findFirst({ where: { id: uuidParam(req), ...tenantScopeOnly(scope), deletedAt: null } });
   if (!existing) throw new HttpError(404, 'Fee particular not found');
   const usage = await prisma.feeStructureItem.count({
     where: {
       particularId: existing.id,
-      structure: { ...scope, deletedAt: null },
+      structure: { ...tenantScopeOnly(scope), deletedAt: null },
     },
   });
   if (usage) throw new HttpError(409, 'Cannot delete fee particular while fee structures use it');
@@ -1025,7 +1122,7 @@ const feeTypeSchema = z.object({
 const assertUniqueFeeTypeName = async (scope: FeeTenantScope, normalizedName: string, excludeId?: string) => {
   const duplicate = await prisma.feeType.findFirst({
     where: {
-      ...scope,
+      ...tenantScopeOnly(scope),
       normalizedName,
       ...(excludeId ? { id: { not: excludeId } } : {}),
     },
@@ -1037,7 +1134,7 @@ const assertUniqueFeeTypeName = async (scope: FeeTenantScope, normalizedName: st
 export const listFeeTypes = async (req: Request, res: Response) => {
   const scope = await resolveScope(req);
   await ensureFeeDefaults(scope.schoolId, scope.academicSessionId);
-  const items = await prisma.feeType.findMany({ where: { ...scope, deletedAt: null }, orderBy: [{ sortOrder: 'asc' }, { name: 'asc' }] });
+  const items = await prisma.feeType.findMany({ where: { ...tenantScopeOnly(scope), deletedAt: null }, orderBy: [{ sortOrder: 'asc' }, { name: 'asc' }] });
   res.status(200).json(items);
 };
 
@@ -1050,7 +1147,7 @@ export const createFeeType = async (req: Request, res: Response) => {
   try {
     const item = await prisma.feeType.create({
       data: {
-        ...scope,
+        ...tenantScopeOnly(scope),
         name,
         normalizedName,
         code: slugCode(payload.code || payload.name),
@@ -1071,7 +1168,7 @@ export const createFeeType = async (req: Request, res: Response) => {
 export const updateFeeType = async (req: Request, res: Response) => {
   const payload = feeTypeSchema.partial().parse(req.body);
   const scope = await resolveScope(req, payload);
-  const existing = await prisma.feeType.findFirst({ where: { id: req.params.id, ...scope, deletedAt: null } });
+  const existing = await prisma.feeType.findFirst({ where: { id: uuidParam(req), ...tenantScopeOnly(scope), deletedAt: null } });
   if (!existing) throw new HttpError(404, 'Fee type not found');
   const normalizedName = payload.name === undefined ? undefined : normalizeName(payload.name);
   if (normalizedName) await assertUniqueFeeTypeName(scope, normalizedName, existing.id);
@@ -1098,7 +1195,7 @@ export const updateFeeType = async (req: Request, res: Response) => {
 
 export const deleteFeeType = async (req: Request, res: Response) => {
   const scope = await resolveScope(req);
-  const existing = await prisma.feeType.findFirst({ where: { id: req.params.id, ...scope, deletedAt: null } });
+  const existing = await prisma.feeType.findFirst({ where: { id: uuidParam(req), ...tenantScopeOnly(scope), deletedAt: null } });
   if (!existing) throw new HttpError(404, 'Fee type not found');
   const usage = await prisma.feeStructure.count({ where: { feeTypeId: existing.id, deletedAt: null } });
   if (usage) throw new HttpError(409, 'Cannot delete fee type while structures use it');
@@ -1131,7 +1228,7 @@ export const listFeeStructures = async (req: Request, res: Response) => {
   const scope = await resolveScope(req);
   const { page, limit, skip } = pagination(req);
   const classId = typeof req.query.classId === 'string' ? req.query.classId : undefined;
-  const where: Prisma.FeeStructureWhereInput = { ...scope, deletedAt: null, ...(classId ? { classId } : {}) };
+  const where: Prisma.FeeStructureWhereInput = { ...tenantScopeOnly(scope), deletedAt: null, ...(classId ? { classId } : {}) };
   const [items, total] = await Promise.all([
     prisma.feeStructure.findMany({ where, include: includeStructure, orderBy: { createdAt: 'desc' }, skip, take: limit }),
     prisma.feeStructure.count({ where }),
@@ -1151,7 +1248,7 @@ export const createFeeStructure = async (req: Request, res: Response) => {
   try {
     const item = await prisma.feeStructure.create({
       data: {
-        ...scope,
+        ...tenantScopeOnly(scope),
         classId: payload.classId,
         sectionId: payload.sectionId ?? null,
         feeTypeId: payload.feeTypeId,
@@ -1180,7 +1277,7 @@ export const createFeeStructure = async (req: Request, res: Response) => {
 export const updateFeeStructure = async (req: Request, res: Response) => {
   const payload = structureSchema.partial({ items: true }).parse(req.body);
   const scope = await resolveScope(req, payload);
-  const existing = await prisma.feeStructure.findFirst({ where: { id: req.params.id, ...scope, deletedAt: null }, include: includeStructure });
+  const existing = await prisma.feeStructure.findFirst({ where: { id: uuidParam(req), ...tenantScopeOnly(scope), deletedAt: null }, include: includeStructure });
   if (!existing) throw new HttpError(404, 'Fee structure not found');
   if (payload.classId) await assertClass(scope.schoolId, payload.classId);
   if (payload.sectionId !== undefined) await assertSection(scope.schoolId, payload.sectionId);
@@ -1225,7 +1322,7 @@ export const updateFeeStructure = async (req: Request, res: Response) => {
 
 export const deleteFeeStructure = async (req: Request, res: Response) => {
   const scope = await resolveScope(req);
-  const existing = await prisma.feeStructure.findFirst({ where: { id: req.params.id, ...scope, deletedAt: null }, include: { _count: { select: { assignments: true, invoices: true } } } });
+  const existing = await prisma.feeStructure.findFirst({ where: { id: uuidParam(req), ...tenantScopeOnly(scope), deletedAt: null }, include: { _count: { select: { assignments: true, invoices: true } } } });
   if (!existing) throw new HttpError(404, 'Fee structure not found');
   if (existing._count.assignments + existing._count.invoices > 0) throw new HttpError(409, 'Cannot delete fee structure while students or invoices use it');
   const item = await prisma.feeStructure.update({ where: { id: existing.id }, data: { deletedAt: new Date(), status: 'INACTIVE' } });
@@ -1236,13 +1333,13 @@ export const deleteFeeStructure = async (req: Request, res: Response) => {
 export const duplicateFeeStructure = async (req: Request, res: Response) => {
   const payload = z.object({ schoolId: uuidSchema.optional(), academicSessionId: uuidSchema.optional(), classId: uuidSchema, sectionId: uuidSchema.optional().nullable(), feeTypeId: uuidSchema.optional() }).parse(req.body);
   const scope = await resolveScope(req, payload);
-  const source = await prisma.feeStructure.findFirst({ where: { id: req.params.id, ...scope, deletedAt: null }, include: includeStructure });
+  const source = await prisma.feeStructure.findFirst({ where: { id: uuidParam(req), ...tenantScopeOnly(scope), deletedAt: null }, include: includeStructure });
   if (!source) throw new HttpError(404, 'Fee structure not found');
   const created = await createFeeStructure(
     {
       ...req,
       body: {
-        ...scope,
+        ...tenantScopeOnly(scope),
         classId: payload.classId,
         sectionId: payload.sectionId ?? null,
         feeTypeId: payload.feeTypeId ?? source.feeTypeId,
@@ -1345,7 +1442,7 @@ export const assignStudentFees = async (req: Request, res: Response) => {
   assertAssignmentTargetFields(targetType, payload);
   assertMonthRange(payload.startMonth ?? currentMonthValue(), payload.endMonth);
   if (payload.overrideAmount !== undefined && payload.overrideAmount !== null && toDecimal(payload.overrideAmount).lte(0)) throw new HttpError(400, 'overrideAmount must be greater than 0');
-  const structure = await prisma.feeStructure.findFirst({ where: { id: payload.feeStructureId, ...scope, deletedAt: null, status: 'ACTIVE' } });
+  const structure = await prisma.feeStructure.findFirst({ where: { id: payload.feeStructureId, ...tenantScopeOnly(scope), deletedAt: null, status: 'ACTIVE' } });
   if (!structure) throw new HttpError(404, 'Active fee structure not found');
   await assertAssignmentReferences(scope, payload, targetType);
   const studentIds = targetType === 'STUDENT' ? Array.from(new Set(payload.studentIds?.length ? payload.studentIds : [payload.studentId].filter(Boolean) as string[])) : [null];
@@ -1375,13 +1472,13 @@ export const assignStudentFees = async (req: Request, res: Response) => {
 export const updateFeeAssignment = async (req: Request, res: Response) => {
   const payload = assignmentSchema.parse(req.body);
   const scope = await resolveScope(req, payload);
-  const existing = await prisma.studentFeeAssignment.findFirst({ where: { id: req.params.id, ...scope, deletedAt: null } });
+  const existing = await prisma.studentFeeAssignment.findFirst({ where: { id: uuidParam(req), ...tenantScopeOnly(scope), deletedAt: null } });
   if (!existing) throw new HttpError(404, 'Fee assignment not found');
   const targetType = assignmentTargetFromPayload(payload);
   assertAssignmentTargetFields(targetType, payload);
   assertMonthRange(payload.startMonth ?? currentMonthValue(), payload.endMonth);
   if (payload.overrideAmount !== undefined && payload.overrideAmount !== null && toDecimal(payload.overrideAmount).lte(0)) throw new HttpError(400, 'overrideAmount must be greater than 0');
-  const structure = await prisma.feeStructure.findFirst({ where: { id: payload.feeStructureId, ...scope, deletedAt: null, status: 'ACTIVE' } });
+  const structure = await prisma.feeStructure.findFirst({ where: { id: payload.feeStructureId, ...tenantScopeOnly(scope), deletedAt: null, status: 'ACTIVE' } });
   if (!structure) throw new HttpError(404, 'Active fee structure not found');
   await assertAssignmentReferences(scope, payload, targetType);
   const studentId = targetType === 'STUDENT' ? payload.studentId ?? payload.studentIds?.[0] ?? null : null;
@@ -1401,7 +1498,7 @@ export const updateFeeAssignment = async (req: Request, res: Response) => {
 
 export const deleteFeeAssignment = async (req: Request, res: Response) => {
   const scope = await resolveScope(req);
-  const existing = await prisma.studentFeeAssignment.findFirst({ where: { id: req.params.id, ...scope, deletedAt: null } });
+  const existing = await prisma.studentFeeAssignment.findFirst({ where: { id: uuidParam(req), ...tenantScopeOnly(scope), deletedAt: null } });
   if (!existing) throw new HttpError(404, 'Fee assignment not found');
   const item = await prisma.studentFeeAssignment.update({
     where: { id: existing.id },
@@ -1413,7 +1510,7 @@ export const deleteFeeAssignment = async (req: Request, res: Response) => {
 
 export const activateFeeAssignment = async (req: Request, res: Response) => {
   const scope = await resolveScope(req);
-  const existing = await prisma.studentFeeAssignment.findFirst({ where: { id: req.params.id, ...scope, deletedAt: null } });
+  const existing = await prisma.studentFeeAssignment.findFirst({ where: { id: uuidParam(req), ...tenantScopeOnly(scope), deletedAt: null } });
   if (!existing) throw new HttpError(404, 'Fee assignment not found');
   const payload = assignmentSchema.parse({
     academicSessionId: scope.academicSessionId,
@@ -1442,7 +1539,7 @@ export const activateFeeAssignment = async (req: Request, res: Response) => {
 
 export const deactivateFeeAssignment = async (req: Request, res: Response) => {
   const scope = await resolveScope(req);
-  const existing = await prisma.studentFeeAssignment.findFirst({ where: { id: req.params.id, ...scope, deletedAt: null } });
+  const existing = await prisma.studentFeeAssignment.findFirst({ where: { id: uuidParam(req), ...tenantScopeOnly(scope), deletedAt: null } });
   if (!existing) throw new HttpError(404, 'Fee assignment not found');
   const item = await prisma.studentFeeAssignment.update({ where: { id: existing.id }, data: { status: 'INACTIVE', updatedById: scope.userId }, include: includeAssignment });
   await logAudit(req, { schoolId: scope.schoolId, entityType: 'STUDENT_FEE_ASSIGNMENT', entityId: item.id, action: 'INACTIVE', beforeState: existing, afterState: item });
@@ -1497,7 +1594,7 @@ const assertDueDateForFeeMonth = (feeMonth: string, dueDate: Date) => {
 const assertFeeStructureActive = async (scope: FeeTenantScope, feeStructureId?: string) => {
   if (!feeStructureId) return;
   const found = await prisma.feeStructure.findFirst({
-    where: { id: feeStructureId, ...scope, deletedAt: null },
+    where: { id: feeStructureId, ...tenantScopeOnly(scope), deletedAt: null },
     select: { id: true, status: true, feeType: { select: { status: true, deletedAt: true } } },
   });
   if (!found) throw new HttpError(404, 'Fee structure not found');
@@ -1551,7 +1648,7 @@ const resolveInvoiceAssignment = async (
 
   const candidates = await prisma.studentFeeAssignment.findMany({
     where: {
-      ...scope,
+      ...tenantScopeOnly(scope),
       status: 'ACTIVE',
       deletedAt: null,
       OR: targets,
@@ -1586,7 +1683,13 @@ const invoicePeriodKey = (studentId: string, feeStructureId?: string | null, fee
   `${studentId}:${feeStructureId ?? ''}:${feeTypeId ?? ''}:${feeMonth ?? ''}`;
 
 const uniqueStrings = (values: Array<string | null | undefined>) => Array.from(new Set(values.filter(Boolean) as string[]));
-const tenantScopeOnly = (scope: FeeTenantScope) => ({ schoolId: scope.schoolId, academicSessionId: scope.academicSessionId });
+function tenantScope(scope: FeeTenantScope) {
+  return {
+    schoolId: scope.schoolId,
+    academicSessionId: scope.academicSessionId,
+  };
+}
+const tenantScopeOnly = tenantScope;
 
 const resolveInvoiceAssignmentsForStudents = async (
   scope: FeeTenantScope,
@@ -1692,22 +1795,8 @@ const loadExistingInvoiceMap = async (
   return new Map(rows.map((row) => [invoicePeriodKey(row.studentId, row.feeStructureId, row.feeTypeId, feeMonth), { id: row.id, invoiceNumber: row.invoiceNumber }]));
 };
 
-const loadPreviousBalanceMap = async (scope: FeeTenantScope, students: InvoiceStudent[]) => {
-  if (!students.length) return new Map<string, Prisma.Decimal>();
-  if (students.length === 1) {
-    const student = students[0];
-    const result = await prisma.feeInvoice.aggregate({
-      where: { ...tenantScopeOnly(scope), studentId: student.id, deletedAt: null, status: { not: 'CANCELLED' } },
-      _sum: { dueAmount: true },
-    });
-    return new Map([[student.id, toDecimal(result._sum.dueAmount ?? 0)]]);
-  }
-  const rows = await prisma.feeInvoice.groupBy({
-    by: ['studentId'],
-    where: { ...tenantScopeOnly(scope), studentId: { in: students.map((student) => student.id) }, deletedAt: null, status: { not: 'CANCELLED' } },
-    _sum: { dueAmount: true },
-  });
-  return new Map(rows.map((row) => [row.studentId, toDecimal(row._sum.dueAmount ?? 0)]));
+const loadPreviousBalanceMap = async (_scope: FeeTenantScope, students: InvoiceStudent[]) => {
+  return new Map(students.map((student) => [student.id, toDecimal(0)]));
 };
 
 const discountAppliesToStudent = (discount: FeeCalculationDiscount & {
@@ -1811,7 +1900,7 @@ const buildInvoicePreviewCandidates = async (
           previousBalance: previousBalanceByStudentId.get(student.id) ?? toDecimal(0),
           discounts: discountsByStudentId.get(student.id) ?? [],
         });
-        if (calculation.totalAmount.lte(0)) warnings.push('Net payable is zero or invalid');
+        if (calculation.netAmount.lte(0)) warnings.push('Net payable is zero or invalid');
       }
     }
     return { student, assignment, structure, duplicate, calculation, warnings };
@@ -1833,7 +1922,7 @@ const buildInvoicePreviewResponse = (
   dueDate: Date,
 ) => {
   const rows = candidates.map(({ student, structure, duplicate, calculation, warnings }) => {
-    const canGenerate = Boolean(structure && calculation && !duplicate && calculation.totalAmount.gt(0));
+    const canGenerate = Boolean(structure && calculation && !duplicate && calculation.netAmount.gt(0));
     return {
       studentId: student.id,
       studentName: student.fullName,
@@ -1848,7 +1937,7 @@ const buildInvoicePreviewResponse = (
       discountAmount: decimalNumber(calculation?.discountAmount),
       fineAmount: decimalNumber(calculation?.fineAmount),
       previousBalance: decimalNumber(calculation?.previousBalance),
-      netPayable: decimalNumber(calculation?.totalAmount),
+      netPayable: decimalNumber(calculation?.netAmount),
       duplicateInvoiceExists: Boolean(duplicate),
       warnings,
       canGenerate,
@@ -1908,7 +1997,7 @@ export const generateFeeInvoices = async (req: Request, res: Response) => {
       skippedDuplicateCount += 1;
       continue;
     }
-    if (!candidate.calculation || candidate.calculation.totalAmount.lte(0)) {
+    if (!candidate.calculation || candidate.calculation.netAmount.lte(0)) {
       skipped.push({ studentId: candidate.student.id, reason: 'Net payable is zero or invalid' });
       skippedInvalidAmountCount += 1;
       continue;
@@ -1926,9 +2015,10 @@ export const generateFeeInvoices = async (req: Request, res: Response) => {
         previousBalance,
         discountAmount,
         fineAmount,
-        grossAmount,
         totalAmount,
+        netAmount,
       } = calculation;
+      const receivableDebitAmount = totalAmount.plus(fineAmount);
       const invoicePeriodWhere: Prisma.FeeInvoiceWhereInput = {
         ...tenantScope,
         studentId: student.id,
@@ -1956,7 +2046,7 @@ export const generateFeeInvoices = async (req: Request, res: Response) => {
               fineAmount,
               totalAmount,
               paidAmount: toDecimal(0),
-              dueAmount: totalAmount,
+              dueAmount: netAmount,
               status: 'ISSUED',
               createdById: scope.userId,
               items: {
@@ -1987,7 +2077,7 @@ export const generateFeeInvoices = async (req: Request, res: Response) => {
             invoiceId: created.id,
             type: 'INVOICE_DEBIT',
             description: `Invoice ${created.invoiceNumber}`,
-            debitAmount: grossAmount,
+            debitAmount: receivableDebitAmount,
             createdById: scope.userId,
           });
           if (discountAmount.gt(0)) {
@@ -2093,7 +2183,7 @@ export const listFeeInvoices = async (req: Request, res: Response) => {
   const invoiceDateFilter = dateRange(query.dateFrom, query.dateTo);
   const dueDateFilter = dateRange(query.dueDateFrom, query.dueDateTo);
   const where: Prisma.FeeInvoiceWhereInput = {
-    ...scope,
+    ...tenantScopeOnly(scope),
     deletedAt: null,
     ...(query.studentId ? { studentId: query.studentId } : {}),
     ...(query.classId ? { classId: query.classId } : {}),
@@ -2147,7 +2237,7 @@ export const cancelFeeInvoice = async (req: Request, res: Response) => {
   const payload = cancelInvoiceSchema.parse(req.body ?? {});
   const scope = await resolveScope(req, payload);
   const invoice = await prisma.feeInvoice.findFirst({
-    where: { id: req.params.id, ...scope, deletedAt: null },
+    where: { id: uuidParam(req), ...tenantScopeOnly(scope), deletedAt: null },
     include: { payments: { select: { id: true } } },
   });
   if (!invoice) throw new HttpError(404, 'Invoice not found');
@@ -2186,7 +2276,7 @@ export const searchFeeCollectionStudents = async (req: Request, res: Response) =
     where: {
       schoolId: scope.schoolId,
       academicSessionId: scope.academicSessionId,
-      status: { not: 'DISABLED' },
+      status: assignableStudentStatus,
       ...(classId ? { classId } : {}),
       ...(sectionId ? { sectionId } : {}),
       ...(search
@@ -2242,12 +2332,12 @@ export const searchFeeCollectionStudents = async (req: Request, res: Response) =
 
 export const listStudentCollectionInvoices = async (req: Request, res: Response) => {
   const scope = await resolveScope(req);
-  await assertStudent(scope.schoolId, req.params.studentId);
+  await assertStudent(scope.schoolId, uuidParam(req, 'studentId'), scope.academicSessionId);
   const items = await prisma.feeInvoice.findMany({
     where: {
       schoolId: scope.schoolId,
       academicSessionId: scope.academicSessionId,
-      studentId: req.params.studentId,
+      studentId: uuidParam(req, 'studentId'),
       deletedAt: null,
       status: { notIn: ['PAID', 'CANCELLED'] },
       dueAmount: { gt: 0 },
@@ -2484,7 +2574,7 @@ export const listFeePayments = async (req: Request, res: Response) => {
   const sortBy = requestedSortBy === 'paymentDate' ? 'paidAt' : requestedSortBy;
   const sortOrder = req.query.sortOrder === 'asc' ? 'asc' : 'desc';
   const where: Prisma.FeePaymentWhereInput = {
-    ...scope,
+    ...tenantScopeOnly(scope),
     ...(paymentMode ? { paymentMode } : {}),
     ...(status ? { status } : {}),
     ...(search
@@ -2588,14 +2678,14 @@ const formatLedgerEntry = (item: LedgerRecord) => ({
 const buildLedgerData = async (req: Request, options?: { export?: boolean }) => {
   const payload = ledgerQuerySchema.parse({
     ...req.query,
-    studentId: req.params.studentId ?? req.query.studentId,
+    studentId: req.params.studentId ? uuidParam(req, 'studentId') : req.query.studentId,
     limit: options?.export ? req.query.limit ?? 5000 : req.query.limit,
   });
   if (payload.dateFrom && payload.dateTo && payload.dateFrom > payload.dateTo) {
     throw new HttpError(400, 'dateFrom must be before dateTo');
   }
   const scope = await resolveScope(req, payload);
-  if (payload.studentId) await assertStudent(scope.schoolId, payload.studentId);
+  if (payload.studentId) await assertStudent(scope.schoolId, payload.studentId, scope.academicSessionId);
   if (payload.classId) await assertClass(scope.schoolId, payload.classId);
   if (payload.sectionId) await assertSection(scope.schoolId, payload.sectionId);
 
@@ -2806,7 +2896,7 @@ export const listFeeDiscounts = async (req: Request, res: Response) => {
     : 'createdAt';
   const sortOrder = req.query.sortOrder === 'asc' ? 'asc' : 'desc';
   const where: Prisma.FeeDiscountWhereInput = {
-    ...scope,
+    ...tenantScopeOnly(scope),
     deletedAt: null,
     ...(status ? { approvalStatus: status } : {}),
     ...(targetType ? { targetType } : {}),
@@ -2874,7 +2964,7 @@ export const createFeeDiscount = async (req: Request, res: Response) => {
   assertDiscountApprovalAllowed(req, payload.approvalStatus);
   await assertDiscountReferences(tenantScope, payload);
   await assertNoDuplicateActiveDiscount(tenantScope, payload);
-  const ledgerDiscountAmount = await calculateStudentDiscountLedgerAmount(tenantScope, payload);
+  await assertDiscountDoesNotExceedCurrentPayable(tenantScope, payload);
   const item = await prisma.$transaction(async (tx) => {
     const discount = await tx.feeDiscount.create({
       data: {
@@ -2901,7 +2991,7 @@ export const createFeeDiscount = async (req: Request, res: Response) => {
         createdById: scope.userId,
       },
     });
-    await maybeCreateApprovedDiscountLedger(tx, scope, discount, ledgerDiscountAmount);
+    await applyApprovedDiscountToOpenInvoices(tx, scope, discount);
     return discount;
   });
   await logAudit(req, { schoolId: scope.schoolId, entityType: 'FEE_DISCOUNT', entityId: item.id, action: 'CREATE', afterState: item });
@@ -2912,7 +3002,7 @@ export const updateFeeDiscount = async (req: Request, res: Response) => {
   const rawPayload = discountSchema.partial().parse(req.body);
   const scope = await resolveScope(req, rawPayload);
   const tenantScope = { schoolId: scope.schoolId, academicSessionId: scope.academicSessionId };
-  const existing = await prisma.feeDiscount.findFirst({ where: { id: req.params.id, ...tenantScope, deletedAt: null } });
+  const existing = await prisma.feeDiscount.findFirst({ where: { id: uuidParam(req), ...tenantScope, deletedAt: null } });
   if (!existing) throw new HttpError(404, 'Discount not found');
   await assertDiscountNotLockedByPayment(tenantScope, existing);
 
@@ -2927,7 +3017,7 @@ export const updateFeeDiscount = async (req: Request, res: Response) => {
   assertDiscountApprovalAllowed(req, merged.approvalStatus);
   await assertDiscountReferences(tenantScope, merged);
   await assertNoDuplicateActiveDiscount(tenantScope, merged, existing.id);
-  const ledgerDiscountAmount = await calculateStudentDiscountLedgerAmount(tenantScope, merged);
+  await assertDiscountDoesNotExceedCurrentPayable(tenantScope, merged);
   const item = await prisma.$transaction(async (tx) => {
     const discount = await tx.feeDiscount.update({
       where: { id: existing.id },
@@ -2954,7 +3044,7 @@ export const updateFeeDiscount = async (req: Request, res: Response) => {
         updatedById: scope.userId,
       },
     });
-    await maybeCreateApprovedDiscountLedger(tx, scope, discount, ledgerDiscountAmount);
+    await applyApprovedDiscountToOpenInvoices(tx, scope, discount);
     return discount;
   });
   await logAudit(req, { schoolId: scope.schoolId, entityType: 'FEE_DISCOUNT', entityId: item.id, action: 'UPDATE', beforeState: existing, afterState: item });
@@ -2964,7 +3054,7 @@ export const updateFeeDiscount = async (req: Request, res: Response) => {
 export const deleteFeeDiscount = async (req: Request, res: Response) => {
   const scope = await resolveScope(req);
   const tenantScope = { schoolId: scope.schoolId, academicSessionId: scope.academicSessionId };
-  const existing = await prisma.feeDiscount.findFirst({ where: { id: req.params.id, ...tenantScope, deletedAt: null } });
+  const existing = await prisma.feeDiscount.findFirst({ where: { id: uuidParam(req), ...tenantScope, deletedAt: null } });
   if (!existing) throw new HttpError(404, 'Discount not found');
   await assertDiscountNotLockedByPayment(tenantScope, existing);
   const item = await prisma.feeDiscount.update({
@@ -2979,7 +3069,7 @@ const reviewFeeDiscount = async (req: Request, status: Extract<FeeDiscountStatus
   requireDiscountApprover(req);
   const scope = await resolveScope(req);
   const tenantScope = { schoolId: scope.schoolId, academicSessionId: scope.academicSessionId };
-  const existing = await prisma.feeDiscount.findFirst({ where: { id: req.params.id, ...tenantScope, deletedAt: null } });
+  const existing = await prisma.feeDiscount.findFirst({ where: { id: uuidParam(req), ...tenantScope, deletedAt: null } });
   if (!existing) throw new HttpError(404, 'Discount not found');
   const normalized = normalizeDiscountPayload({
     ...existing,
@@ -2990,7 +3080,7 @@ const reviewFeeDiscount = async (req: Request, status: Extract<FeeDiscountStatus
     reason: typeof req.body?.reason === 'string' ? req.body.reason : existing.reason,
   });
   await assertNoDuplicateActiveDiscount(tenantScope, normalized, existing.id);
-  const ledgerDiscountAmount = await calculateStudentDiscountLedgerAmount(tenantScope, normalized);
+  await assertDiscountDoesNotExceedCurrentPayable(tenantScope, normalized);
   const item = await prisma.$transaction(async (tx) => {
     const discount = await tx.feeDiscount.update({
       where: { id: existing.id },
@@ -3002,7 +3092,7 @@ const reviewFeeDiscount = async (req: Request, status: Extract<FeeDiscountStatus
         updatedById: scope.userId,
       },
     });
-    await maybeCreateApprovedDiscountLedger(tx, scope, discount, ledgerDiscountAmount);
+    await applyApprovedDiscountToOpenInvoices(tx, scope, discount);
     return discount;
   });
   await logAudit(req, { schoolId: scope.schoolId, entityType: 'FEE_DISCOUNT', entityId: item.id, action: status, beforeState: existing, afterState: item });
@@ -3027,7 +3117,7 @@ export const activateFeeDiscount = async (req: Request, res: Response) => {
 export const deactivateFeeDiscount = async (req: Request, res: Response) => {
   const scope = await resolveScope(req);
   const tenantScope = { schoolId: scope.schoolId, academicSessionId: scope.academicSessionId };
-  const existing = await prisma.feeDiscount.findFirst({ where: { id: req.params.id, ...tenantScope, deletedAt: null } });
+  const existing = await prisma.feeDiscount.findFirst({ where: { id: uuidParam(req), ...tenantScope, deletedAt: null } });
   if (!existing) throw new HttpError(404, 'Discount not found');
   await assertDiscountNotLockedByPayment(tenantScope, existing);
   const item = await prisma.feeDiscount.update({
@@ -3061,7 +3151,7 @@ export const listFeeFines = async (req: Request, res: Response) => {
     : 'createdAt';
   const sortOrder = req.query.sortOrder === 'asc' ? 'asc' : 'desc';
   const where: Prisma.FeeFineWhereInput = {
-    ...scope,
+    ...tenantScopeOnly(scope),
     deletedAt: null,
     ...(status ? { status } : {}),
     ...(search
@@ -3090,7 +3180,7 @@ export const listFeeFines = async (req: Request, res: Response) => {
 
 export const deleteFeeFine = async (req: Request, res: Response) => {
   const scope = await resolveScope(req);
-  const existing = await prisma.feeFine.findFirst({ where: { id: req.params.id, ...scope, deletedAt: null } });
+  const existing = await prisma.feeFine.findFirst({ where: { id: uuidParam(req), ...tenantScopeOnly(scope), deletedAt: null } });
   if (!existing) throw new HttpError(404, 'Fine rule not found');
   const item = await prisma.feeFine.update({
     where: { id: existing.id },
@@ -3104,9 +3194,10 @@ export const createFeeFine = async (req: Request, res: Response) => {
   const payload = fineSchema.parse(req.body);
   const scope = await resolveScope(req, payload);
   const tenantScope = { schoolId: scope.schoolId, academicSessionId: scope.academicSessionId };
-  if (payload.studentId) await assertStudent(scope.schoolId, payload.studentId);
+  if (payload.studentId) await assertStudent(scope.schoolId, payload.studentId, scope.academicSessionId);
   if (payload.particularId) await assertParticulars(scope.schoolId, scope.academicSessionId, [payload.particularId]);
   const fineAmount = toDecimal(payload.amount);
+  const fineName = normalizeText(payload.name);
   const invoice = payload.invoiceId
     ? await prisma.feeInvoice.findFirst({ where: { id: payload.invoiceId, ...tenantScope, deletedAt: null } })
     : null;
@@ -3115,11 +3206,25 @@ export const createFeeFine = async (req: Request, res: Response) => {
   if (invoice?.status === 'PAID') throw new HttpError(409, 'Cannot apply fine to paid invoice');
   const ledgerStudentId = payload.studentId ?? invoice?.studentId ?? null;
   const item = await prisma.$transaction(async (tx) => {
+    if (invoice) {
+      const duplicate = await tx.feeFine.findFirst({
+        where: {
+          ...tenantScope,
+          invoiceId: invoice.id,
+          name: fineName,
+          fineType: payload.fineType,
+          deletedAt: null,
+        },
+        select: { id: true },
+      });
+      if (duplicate) throw new HttpError(409, 'Fine already applied to this invoice');
+    }
     const fine = await tx.feeFine.create({
       data: {
         ...tenantScope,
+        invoiceId: invoice?.id ?? null,
         particularId: payload.particularId ?? null,
-        name: normalizeText(payload.name),
+        name: fineName,
         fineType: payload.fineType,
         amount: fineAmount,
         graceDays: payload.graceDays ?? 0,
@@ -3127,11 +3232,12 @@ export const createFeeFine = async (req: Request, res: Response) => {
       },
     });
     if (invoice) {
+      const newFineAmount = toDecimal(invoice.fineAmount).plus(fineAmount);
       await tx.feeInvoice.update({
         where: { id: invoice.id },
         data: {
-          fineAmount: toDecimal(invoice.fineAmount).plus(fineAmount),
-          dueAmount: toDecimal(invoice.dueAmount).plus(fineAmount),
+          fineAmount: newFineAmount,
+          dueAmount: calculateInvoiceDueFromParts({ ...invoice, fineAmount: newFineAmount }),
           status: invoice.status === 'ISSUED' || invoice.status === 'OVERDUE' ? invoice.status : 'PARTIALLY_PAID',
         },
       });
@@ -3150,6 +3256,9 @@ export const createFeeFine = async (req: Request, res: Response) => {
       });
     }
     return fine;
+  }).catch((error) => {
+    if (isUniqueConstraintError(error)) throw new HttpError(409, 'Fine already applied to this invoice');
+    throw error;
   });
   await logAudit(req, { schoolId: scope.schoolId, entityType: 'FEE_FINE', entityId: item.id, action: 'CREATE', afterState: item });
   res.status(201).json(item);
@@ -3223,7 +3332,7 @@ const buildFeeReport = async (req: Request) => {
   const dateFilter = reportDateRange(dateFrom, dateTo);
   const invoiceStatus = feeInvoiceStatuses.includes(query.status as any) ? query.status : undefined;
   const invoiceWhere: Prisma.FeeInvoiceWhereInput = {
-    ...scope,
+    ...tenantScopeOnly(scope),
     deletedAt: null,
     ...(query.studentId ? { studentId: query.studentId } : {}),
     ...(query.classId ? { classId: query.classId } : {}),
@@ -3241,7 +3350,7 @@ const buildFeeReport = async (req: Request) => {
     ...(invoiceStatus ? { status: invoiceStatus as any } : {}),
   };
   const paymentWhere: Prisma.FeePaymentWhereInput = {
-    ...scope,
+    ...tenantScopeOnly(scope),
     status: 'SUCCESS',
     ...(query.studentId ? { studentId: query.studentId } : {}),
     ...(query.paymentMode ? { paymentMode: query.paymentMode } : {}),
@@ -3250,14 +3359,14 @@ const buildFeeReport = async (req: Request) => {
     ...(Object.keys(invoiceRelationFilter).length ? { invoice: invoiceRelationFilter } : {}),
   };
   const receiptWhere: Prisma.FeeReceiptWhereInput = {
-    ...scope,
+    ...tenantScopeOnly(scope),
     ...(query.studentId ? { studentId: query.studentId } : {}),
     ...(dateFilter ? { receiptDate: dateFilter } : {}),
     ...(Object.keys(invoiceRelationFilter).length ? { invoice: invoiceRelationFilter } : {}),
     ...(query.paymentMode || query.collectedById ? { payment: { ...(query.paymentMode ? { paymentMode: query.paymentMode } : {}), ...(query.collectedById ? { collectedById: query.collectedById } : {}) } } : {}),
   };
   const discountWhere: Prisma.FeeDiscountWhereInput = {
-    ...scope,
+    ...tenantScopeOnly(scope),
     deletedAt: null,
     ...(query.studentId ? { studentId: query.studentId } : {}),
     ...(query.classId ? { classId: query.classId } : {}),
@@ -3266,7 +3375,7 @@ const buildFeeReport = async (req: Request) => {
     ...(query.status ? { approvalStatus: query.status as any } : {}),
   };
   const ledgerWhere: Prisma.FeeLedgerWhereInput = {
-    ...scope,
+    ...tenantScopeOnly(scope),
     ...(query.studentId ? { studentId: query.studentId } : {}),
     ...(dateFilter ? { entryDate: dateFilter } : {}),
     ...(Object.keys(invoiceRelationFilter).length ? { invoice: invoiceRelationFilter } : {}),
@@ -3303,7 +3412,7 @@ const buildFeeReport = async (req: Request) => {
       },
       orderBy: { createdAt: 'desc' },
     }),
-    prisma.feeFine.findMany({ where: { ...scope, deletedAt: null, ...(query.status ? { status: query.status as any } : {}) }, orderBy: { createdAt: 'desc' } }),
+    prisma.feeFine.findMany({ where: { ...tenantScopeOnly(scope), deletedAt: null, ...(query.status ? { status: query.status as any } : {}) }, orderBy: { createdAt: 'desc' } }),
     prisma.feeLedger.findMany({
       where: { ...ledgerWhere, OR: [{ type: 'FINE_DEBIT' }, { fineId: { not: null } }] },
       include: {
@@ -3481,6 +3590,7 @@ const buildFeeReport = async (req: Request) => {
   return {
     type: query.type,
     filters: {
+      schoolId: scope.schoolId,
       academicSessionId: scope.academicSessionId,
       dateFrom: dateFrom ? dateKey(dateFrom) : null,
       dateTo: dateTo ? dateKey(dateTo) : null,
@@ -3533,6 +3643,13 @@ export const exportFeeReports = async (req: Request, res: Response) => {
     sheet.addRow({});
     sheet.addRow(report.summary);
     const buffer = await workbook.xlsx.writeBuffer();
+    await logAudit(req, {
+      schoolId: report.filters.schoolId,
+      entityType: 'FEE_REPORT_EXPORT',
+      entityId: report.type,
+      action: 'EXPORT_XLSX',
+      afterState: { rows: rows.length, filters: report.filters },
+    });
     res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
     res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
     res.send(Buffer.from(buffer));
@@ -3544,6 +3661,13 @@ export const exportFeeReports = async (req: Request, res: Response) => {
       columns.join(','),
       ...rows.map((row) => columns.map((key) => `"${String(row[key] ?? '').replace(/"/g, '""')}"`).join(',')),
     ].join('\n');
+    await logAudit(req, {
+      schoolId: report.filters.schoolId,
+      entityType: 'FEE_REPORT_EXPORT',
+      entityId: report.type,
+      action: 'EXPORT_CSV',
+      afterState: { rows: rows.length, filters: report.filters },
+    });
     res.setHeader('Content-Type', 'text/csv; charset=utf-8');
     res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
     res.send(csv);
@@ -3564,5 +3688,14 @@ export const exportFeeReports = async (req: Request, res: Response) => {
   if (!rows.length) doc.fontSize(10).text('No rows found for selected filters.');
   doc.end();
   await new Promise<void>((resolve) => doc.on('end', resolve));
+  await logAudit(req, {
+    schoolId: report.filters.schoolId,
+    entityType: 'FEE_REPORT_EXPORT',
+    entityId: report.type,
+    action: 'EXPORT_PDF',
+    afterState: { rows: rows.length, filters: report.filters },
+  });
   res.send(Buffer.concat(chunks));
 };
+
+
