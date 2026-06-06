@@ -36,10 +36,12 @@ import {
   updateExamCenterApi,
   updateExamRoomApi,
 } from '../controllers/examOperations.controller';
+import { blockSuperAdminSchoolOperations } from '../middlewares/rbac.middleware';
 
 export const examRouter = Router();
 
 examRouter.use(authMiddleware);
+examRouter.use(blockSuperAdminSchoolOperations('Super Admin cannot manage exams, marks, or hall-ticket operations inside a school'));
 
 examRouter.post('/', createExam);
 examRouter.get('/', listExams);

@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import { authMiddleware } from '../middlewares/auth.middleware';
+import { blockSuperAdminSchoolOperations } from '../middlewares/rbac.middleware';
 import {
   createDormitory,
   createDormitoryRoom,
@@ -19,6 +20,7 @@ import {
 export const dormitoryRouter = Router();
 
 dormitoryRouter.use(authMiddleware);
+dormitoryRouter.use(blockSuperAdminSchoolOperations('Super Admin cannot manage school dormitory operations'));
 
 dormitoryRouter.get('/report', getStudentDormitoryReport);
 

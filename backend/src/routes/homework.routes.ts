@@ -11,10 +11,12 @@ import {
   uploadHomeworkAttachment,
 } from '../controllers/homework.controller';
 import { authMiddleware } from '../middlewares/auth.middleware';
+import { blockSuperAdminSchoolOperations } from '../middlewares/rbac.middleware';
 
 export const homeworkRouter = Router();
 
 homeworkRouter.use(authMiddleware);
+homeworkRouter.use(blockSuperAdminSchoolOperations('Super Admin cannot manage school homework'));
 
 homeworkRouter.post('/attachments', homeworkAttachmentUpload.single('file'), uploadHomeworkAttachment);
 homeworkRouter.get('/evaluation-report', getHomeworkEvaluationReport);

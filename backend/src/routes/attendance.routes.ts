@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { authMiddleware } from '../middlewares/auth.middleware';
-import { requirePermission, requireRole } from '../middlewares/rbac.middleware';
+import { blockSuperAdminSchoolOperations, requirePermission, requireRole } from '../middlewares/rbac.middleware';
 import {
   createAttendancePeriod,
   listAttendancePeriods,
@@ -34,6 +34,7 @@ import { idempotencyMiddleware } from '../middlewares/idempotency.middleware';
 export const attendanceRouter = Router();
 
 attendanceRouter.use(authMiddleware);
+attendanceRouter.use(blockSuperAdminSchoolOperations('Super Admin cannot manage student attendance'));
 
 // Attendance P1 endpoints
 attendanceRouter.post('/sessions', requireRole('SCHOOL_ADMIN', 'TEACHER'), createAttendanceSessionApi);

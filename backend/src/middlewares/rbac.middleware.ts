@@ -64,6 +64,19 @@ export const requireSchoolAdminOrSuperAdmin = async (req: Request, _res: Respons
   }
 };
 
+export const blockSuperAdminSchoolOperations = (
+  message = 'Super Admin cannot manage school daily operations',
+) => {
+  return (req: Request, _res: Response, next: NextFunction) => {
+    const isMutation = ['POST', 'PUT', 'PATCH', 'DELETE'].includes(req.method.toUpperCase());
+    if (isMutation && req.auth?.role === SUPER_ADMIN_ROLE) {
+      return next(new HttpError(403, message));
+    }
+
+    return next();
+  };
+};
+
 export const requirePermission = (...permissions: string[]) => {
   return async (req: Request, _res: Response, next: NextFunction) => {
     try {

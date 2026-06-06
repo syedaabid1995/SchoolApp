@@ -15,10 +15,12 @@ import {
   updateTransportVehicle,
 } from '../controllers/transport.controller';
 import { authMiddleware } from '../middlewares/auth.middleware';
+import { blockSuperAdminSchoolOperations } from '../middlewares/rbac.middleware';
 
 export const transportRouter = Router();
 
 transportRouter.use(authMiddleware);
+transportRouter.use(blockSuperAdminSchoolOperations('Super Admin cannot manage school transport operations'));
 
 transportRouter.get('/report', getStudentTransportReport);
 

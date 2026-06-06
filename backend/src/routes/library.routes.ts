@@ -17,10 +17,12 @@ import {
   updateLibraryCategory,
 } from '../controllers/library.controller';
 import { authMiddleware } from '../middlewares/auth.middleware';
+import { blockSuperAdminSchoolOperations } from '../middlewares/rbac.middleware';
 
 export const libraryRouter = Router();
 
 libraryRouter.use(authMiddleware);
+libraryRouter.use(blockSuperAdminSchoolOperations('Super Admin cannot manage school library operations'));
 
 libraryRouter.get('/issued', listIssuedLibraryBooks);
 libraryRouter.patch('/issues/:id/return', returnLibraryBook);

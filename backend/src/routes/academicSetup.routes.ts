@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import { authMiddleware } from '../middlewares/auth.middleware';
+import { blockSuperAdminSchoolOperations } from '../middlewares/rbac.middleware';
 import {
   createClassRoom,
   createClassRoutine,
@@ -39,6 +40,7 @@ import {
 export const academicSetupRouter = Router();
 
 academicSetupRouter.use(authMiddleware);
+academicSetupRouter.use(blockSuperAdminSchoolOperations('Super Admin cannot manage school academic setup'));
 
 academicSetupRouter.get('/classes', listSetupClasses);
 academicSetupRouter.post('/classes', createSetupClass);

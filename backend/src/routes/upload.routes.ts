@@ -3,7 +3,7 @@ import multer from 'multer';
 import path from 'path';
 import crypto from 'crypto';
 import { authMiddleware } from '../middlewares/auth.middleware';
-import { requireSchoolAdminOrSuperAdmin } from '../middlewares/rbac.middleware';
+import { blockSuperAdminSchoolOperations, requireSchoolAdminOrSuperAdmin } from '../middlewares/rbac.middleware';
 import { resolveSchoolId } from '../utils/tenant';
 import { getSignedUrlForKey, uploadBuffer, getBucketName } from '../services/s3.service';
 import { prisma } from '../config/db';
@@ -186,7 +186,11 @@ uploadRouter.post('/branding', requireSchoolAdminOrSuperAdmin, runBrandingUpload
   });
 });
 
-uploadRouter.post('/photos', upload.single('file'), (req, res) => {
+const blockSuperAdminDailyAssetUpload = blockSuperAdminSchoolOperations(
+  'Super Admin cannot upload school daily-operation photos or documents',
+);
+
+uploadRouter.post('/photos', blockSuperAdminDailyAssetUpload, upload.single('file'), (req, res) => {
   if (!req.file) {
     res.status(400).json({ error: { message: 'No file uploaded', details: null } });
     return;
@@ -215,7 +219,7 @@ const docUpload = multer({
   limits: { fileSize: 20 * 1024 * 1024 },
 });
 
-uploadRouter.post('/documents', docUpload.single('file'), (req, res) => {
+uploadRouter.post('/documents', blockSuperAdminDailyAssetUpload, docUpload.single('file'), (req, res) => {
   if (!req.file) {
     res.status(400).json({ error: { message: 'No file uploaded', details: null } });
     return;

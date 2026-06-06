@@ -46,10 +46,12 @@ import {
   updateFeeType,
 } from '../controllers/feeManagement.controller';
 import { authMiddleware } from '../middlewares/auth.middleware';
+import { blockSuperAdminSchoolOperations } from '../middlewares/rbac.middleware';
 
 export const feeManagementRouter = Router();
 
 feeManagementRouter.use(authMiddleware);
+feeManagementRouter.use(blockSuperAdminSchoolOperations('Super Admin cannot manage school fee operations'));
 
 feeManagementRouter.get('/metadata', getFeeMetadata);
 

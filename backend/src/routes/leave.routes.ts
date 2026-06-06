@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import { authMiddleware } from '../middlewares/auth.middleware';
+import { blockSuperAdminSchoolOperations } from '../middlewares/rbac.middleware';
 import {
   approveLeaveApplication,
   createLeaveApplication,
@@ -24,6 +25,7 @@ import {
 export const leaveRouter = Router();
 
 leaveRouter.use(authMiddleware);
+leaveRouter.use(blockSuperAdminSchoolOperations('Super Admin cannot manage school leave operations'));
 
 leaveRouter.get('/types', listLeaveTypes);
 leaveRouter.post('/types', createLeaveType);
