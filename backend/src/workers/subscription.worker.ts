@@ -1,10 +1,13 @@
 import { prisma } from '../config/db';
 import { logger } from '../config/logger';
+import { markOverdueSubscriptionInvoices } from '../services/subscription.service';
 
 export const processExpiredSubscriptions = async () => {
   try {
     const now = new Date();
     
+    const overdueInvoices = await markOverdueSubscriptionInvoices(now);
+
     // Find subscriptions past grace period
     const expiredSubscriptions = await prisma.subscription.findMany({
       where: {
@@ -48,7 +51,9 @@ export const processExpiredSubscriptions = async () => {
       logger.warn(`School ${subscription.school.name} in grace period - ${daysLeft} days left`);
     }
 
-    logger.info(`Processed ${expiredSubscriptions.length} expired subscriptions, ${graceSubscriptions.length} in grace period`);
+    logger.info(
+      `Processed ${expiredSubscriptions.length} expired subscriptions, ${graceSubscriptions.length} in grace period, ${overdueInvoices.count} overdue invoices`,
+    );
   } catch (error) {
     logger.error({ err: error }, 'Error processing expired subscriptions');
   }

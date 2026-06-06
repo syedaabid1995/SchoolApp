@@ -55,6 +55,18 @@ const superAdminOnlyEndpoints: ProtectedEndpoint[] = [
     body: { planId: 'plan-1', billingCycle: 'MONTHLY', trialDays: 0, reason: 'Security test' },
   },
   {
+    name: 'school subscription invoice generate',
+    method: 'POST',
+    path: `/api/v1/admin/subscriptions/${SCHOOL_A_ID}/invoices/generate`,
+    body: { taxPercent: 0, discountPercent: 0 },
+  },
+  {
+    name: 'school subscription manual payment',
+    method: 'POST',
+    path: `/api/v1/admin/subscriptions/${SCHOOL_A_ID}/manual-payment`,
+    body: { invoiceId: '99999999-1111-4111-8111-111111111111', amount: 100, paymentMode: 'UPI', paymentDate: '2026-06-06' },
+  },
+  {
     name: 'legacy subscription mutation',
     method: 'POST',
     path: '/api/v1/subscriptions',

@@ -2,13 +2,11 @@
 
 import type { ReactNode } from 'react';
 import { useMemo, useState } from 'react';
-import { useRouter } from 'next/navigation';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useQuery } from '@tanstack/react-query';
 import { getSession } from '../../../services/auth.service';
 import {
   getSubscription,
   listActivePlans,
-  upsertSubscription,
   type SubscriptionInfo,
   type SubscriptionPlan,
 } from '../../../services/subscription.service';
@@ -376,9 +374,7 @@ function EmptyPlans() {
 }
 
 export default function PlansPage() {
-  const queryClient = useQueryClient();
   const notify = useNotify();
-  const router = useRouter();
   const { data: session } = useQuery({
     queryKey: ['session'],
     queryFn: getSession,
@@ -409,44 +405,18 @@ export default function PlansPage() {
   const currentPlanId = subscription?.planId ?? plans?.find((p) => p.name === subscription?.planName)?.id ?? null;
   const currentPlan = plans?.find((plan) => plan.id === currentPlanId) ?? null;
 
-  const upgradeMutation = useMutation({
-    mutationFn: async (planId: string) => {
-      const plan = plans?.find((item) => item.id === planId);
-      if (!plan || !schoolId) throw new Error('Plan not found');
-      const paidAt = new Date().toISOString();
-      return upsertSubscription({
-        schoolId,
-        planId: plan.id,
-        planName: plan.name,
-        status: 'ACTIVE',
-        startsAt: paidAt,
-        paidAt,
-        billingCycle,
-        discountPercent: billingCycle === 'ANNUAL' ? 10 : 0,
-        graceDays: 15,
-        studentLimit: plan.studentLimit,
-        teacherLimit: plan.teacherLimit,
-      });
-    },
-    onSuccess: () => {
-      notify.success('Plan updated', 'Your subscription plan has been updated.');
-      queryClient.invalidateQueries({ queryKey: ['subscription', schoolId] });
-      fetch('/api/auth/refresh', { method: 'POST' })
-        .catch(() => null)
-        .finally(() => {
-          router.replace('/dashboard');
-        });
-    },
-    onError: (error: any) => {
-      const message = error?.response?.data?.error?.message || error?.message || 'Failed to update plan';
-      notify.error('Update failed', message);
-    },
-  });
+  const requestPlanChange = (planId: string) => {
+    const plan = plans?.find((item) => item.id === planId);
+    notify.info(
+      'Contact Super Admin',
+      `${plan?.name ?? 'This plan'} can only be activated, upgraded, downgraded, or renewed by the platform Super Admin.`,
+    );
+  };
 
   const planCards = useMemo(() => plans ?? [], [plans]);
   const dueNotice = useMemo(() => getDueNotice(subscription), [subscription]);
   const canRenewCurrent = useMemo(() => isSubscriptionExpired(subscription), [subscription]);
-  const isBusy = plansLoading || subLoading || upgradeMutation.isPending;
+  const isBusy = plansLoading || subLoading;
   const recommendedPlanId = planCards.length ? planCards[Math.min(1, planCards.length - 1)]?.id : null;
 
   return (
@@ -510,8 +480,8 @@ export default function PlansPage() {
                   isCurrent={currentPlanId === plan.id}
                   isRecommended={recommendedPlanId === plan.id}
                   canRenewCurrent={currentPlanId === plan.id && canRenewCurrent}
-                  isPending={upgradeMutation.isPending}
-                  onSelect={(planId) => upgradeMutation.mutate(planId)}
+                  isPending={false}
+                  onSelect={requestPlanChange}
                 />
               ))}
             </div>

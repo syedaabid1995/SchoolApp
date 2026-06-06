@@ -431,6 +431,8 @@ export const patchSecurityTestDependencies = () => {
     'studentPromotion',
     'studentPromotionHistory',
     'subscription',
+    'subscriptionInvoice',
+    'subscriptionPayment',
     'subscriptionPlanDef',
     'subscriptionPlanPermission',
     'supportTicket',
@@ -444,6 +446,7 @@ export const patchSecurityTestDependencies = () => {
     'tenantConfigOverride',
     'theme',
     'ticketComment',
+    'usageCounter',
     'user',
     'userRole',
   ];

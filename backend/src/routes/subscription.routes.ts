@@ -6,6 +6,7 @@ import {
   cancelSchoolSubscriptionApi,
   downgradeSchoolSubscriptionApi,
   extendSchoolSubscriptionTrialApi,
+  generateSchoolSubscriptionInvoiceApi,
   getAdminSchoolSubscriptionDetailApi,
   getAdminSubscriptionHistoryApi,
   getAdminSubscriptionInvoicesApi,
@@ -56,4 +57,5 @@ adminSubscriptionRouter.patch('/:schoolId/limits', overrideSchoolSubscriptionLim
 adminSubscriptionRouter.get('/:schoolId/history', getAdminSubscriptionHistoryApi);
 adminSubscriptionRouter.get('/:schoolId/usage', getAdminSubscriptionUsageApi);
 adminSubscriptionRouter.get('/:schoolId/invoices', getAdminSubscriptionInvoicesApi);
+adminSubscriptionRouter.post('/:schoolId/invoices/generate', generateSchoolSubscriptionInvoiceApi);
 adminSubscriptionRouter.post('/:schoolId/manual-payment', recordSchoolSubscriptionManualPaymentApi);

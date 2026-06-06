@@ -53,6 +53,12 @@ const hasBankDetails = (details?: BankDetailsInput) =>
         details.panNumber),
   );
 
+const addDays = (date: Date, days: number) => {
+  const next = new Date(date.getTime());
+  next.setDate(next.getDate() + days);
+  return next;
+};
+
 export const createSchoolAdmin = async (schoolId: string, adminEmail: string, bankDetails?: BankDetailsInput) => {
   return prisma.$transaction(async (tx) => {
     const school = await tx.school.findFirst({
@@ -254,17 +260,24 @@ export const createSchool = async (payload: SchoolCreateInput) => {
               : payload.subscriptionPlan === 'STANDARD'
                 ? 200
                 : 1000,
+          trialDays: 14,
         },
       }));
+
+    const startsAt = new Date();
+    const trialDays = planRow.trialDays ?? 0;
+    const endsAt = trialDays > 0 ? addDays(startsAt, trialDays) : startsAt;
+    const status = trialDays > 0 ? 'TRIAL' : 'PENDING';
 
     await tx.subscription.create({
       data: {
         schoolId: school.id,
         planName: planRow.name,
         planId: planRow.id,
-        status: 'ACTIVE',
-        startsAt: new Date(),
-        endsAt: null,
+        status,
+        startsAt,
+        endsAt,
+        nextDueAt: trialDays > 0 ? addDays(endsAt, 15) : startsAt,
         studentLimit: planRow.studentLimit,
         teacherLimit: planRow.teacherLimit,
       },
@@ -433,7 +446,7 @@ export const updateSchool = async (id: string, payload: SchoolUpdateInput) => {
       planName: payload.subscriptionPlan,
       status: 'ACTIVE',
       startsAt: new Date(),
-      endsAt: null,
+      billingCycle: 'MONTHLY',
     });
   }
   return updated;

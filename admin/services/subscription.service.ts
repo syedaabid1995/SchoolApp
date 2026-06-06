@@ -8,6 +8,7 @@ export type SubscriptionPlan = {
   features: string[];
   studentLimit: number;
   teacherLimit: number;
+  trialDays: number;
   createdAt: string;
   updatedAt: string;
 };
@@ -137,6 +138,42 @@ export type SubscriptionUsage = {
   modules: Array<{ key: string; enabled: boolean }>;
 };
 
+export type SubscriptionPayment = {
+  id: string;
+  amount: number;
+  paymentMode: string;
+  referenceNumber?: string | null;
+  paymentDate: string;
+  notes?: string | null;
+  proofUrl?: string | null;
+  receivedByUserId: string;
+  receivedByEmail?: string | null;
+  createdAt: string;
+};
+
+export type SubscriptionInvoice = {
+  id: string;
+  schoolId: string;
+  subscriptionId: string;
+  planId?: string | null;
+  planName?: string | null;
+  invoiceNumber: string;
+  billingPeriodStart: string;
+  billingPeriodEnd: string;
+  subtotal: number;
+  taxAmount: number;
+  discountAmount: number;
+  totalAmount: number;
+  paidAmount: number;
+  balanceAmount: number;
+  status: string;
+  dueDate: string;
+  paidAt?: string | null;
+  createdAt: string;
+  updatedAt: string;
+  payments: SubscriptionPayment[];
+};
+
 export type SchoolSubscriptionDetail = {
   school: {
     id: string;
@@ -174,8 +211,8 @@ export type SchoolSubscriptionDetail = {
     };
   } | null;
   history: SubscriptionHistoryItem[];
-  invoices: unknown[];
-  manualPayments: unknown[];
+  invoices: SubscriptionInvoice[];
+  manualPayments: SubscriptionPayment[];
   billingMessage?: string;
 };
 
@@ -337,7 +374,7 @@ export const getSubscriptionHistory = async (schoolId: string) => {
 };
 
 export const getSubscriptionInvoices = async (schoolId: string) => {
-  const { data } = await api.get<ApiEnvelope<{ items: unknown[]; total: number; message?: string }>>(
+  const { data } = await api.get<ApiEnvelope<{ items: SubscriptionInvoice[]; total: number; message?: string }>>(
     `/admin/subscriptions/${schoolId}/invoices`,
   );
   return unwrapData(data);
@@ -346,12 +383,13 @@ export const getSubscriptionInvoices = async (schoolId: string) => {
 export const recordManualPayment = async (
   schoolId: string,
   payload: {
+    invoiceId: string;
     amount: number;
-    currency: string;
-    method: string;
-    reference?: string | null;
-    paidAt: string;
+    paymentMode: string;
+    referenceNumber?: string | null;
+    paymentDate: string;
     notes?: string | null;
+    proofUrl?: string | null;
   },
 ) => {
   const { data } = await api.post<ApiEnvelope<{ detail: SchoolSubscriptionDetail; gatewayCharged: boolean; message: string }>>(
@@ -378,6 +416,7 @@ export const createSubscriptionPlan = async (payload: {
   features: string[];
   studentLimit: number;
   teacherLimit: number;
+  trialDays?: number;
 }) => {
   const { data } = await api.post<SubscriptionPlan>('/admin/subscription-plans', payload);
   return data;
@@ -392,6 +431,7 @@ export const updateSubscriptionPlan = async (
     features: string[];
     studentLimit: number;
     teacherLimit: number;
+    trialDays: number;
   }>,
 ) => {
   const { data } = await api.patch<SubscriptionPlan>(`/admin/subscription-plans/${id}`, payload);
@@ -399,7 +439,7 @@ export const updateSubscriptionPlan = async (
 };
 
 export const deleteSubscriptionPlan = async (id: string) => {
-  const { data } = await api.delete<SubscriptionPlan>(`/admin/subscription-plans/${id}`);
+  const { data } = await api.delete<{ success: boolean; id: string; message: string }>(`/admin/subscription-plans/${id}`);
   return data;
 };
 
@@ -427,6 +467,21 @@ export const updatePlanPermissions = async (planId: string, enabledCodes: string
 export const getSubscriptionMetrics = async (schoolId: string) => {
   const { data } = await api.get<SubscriptionMetrics>(`/admin/subscription-metrics/${schoolId}`);
   return data;
+};
+
+export const generateSubscriptionInvoice = async (
+  schoolId: string,
+  payload?: {
+    billingPeriodStart?: string;
+    billingPeriodEnd?: string;
+    dueDate?: string;
+    taxPercent?: number;
+    discountPercent?: number;
+    discountAmount?: number;
+  },
+) => {
+  const { data } = await api.post<ApiEnvelope<SubscriptionInvoice>>(`/admin/subscriptions/${schoolId}/invoices/generate`, payload ?? {});
+  return unwrapData(data);
 };
 
 export const upsertSubscription = async (payload: {

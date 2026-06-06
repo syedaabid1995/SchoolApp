@@ -215,7 +215,13 @@ const platformSections: NavSection[] = [
     items: [
       { href: '/dashboard/schools', label: 'Schools', icon: 'SC' },
       { href: '/dashboard/users', label: 'Users', icon: 'US' },
-      { href: '/dashboard/subscriptions', label: 'Subscriptions', icon: 'SB' },
+    ],
+  },
+  {
+    id: 'platform-subscriptions',
+    label: 'Subscriptions',
+    items: [
+      { href: '/dashboard/subscriptions', label: 'Subscriptions & Billing', icon: 'SB' },
     ],
   },
   {
@@ -452,6 +458,13 @@ export const Sidebar = ({
         ],
       },
       {
+        id: 'subscription',
+        label: 'Subscription',
+        items: [
+          ...(isSchoolAdmin ? [{ href: '/dashboard/plans', label: 'Plans', icon: 'PL' }] : []),
+        ],
+      },
+      {
         id: 'settings',
         label: 'Settings',
         items: [
@@ -461,7 +474,6 @@ export const Sidebar = ({
           { href: '/dashboard/base-setup', label: 'Base Setup', icon: 'BS', permissionPath: '/dashboard/settings' },
           { href: '/dashboard/sessions', label: 'Sessions', icon: 'SN', permissionPath: '/dashboard/settings' },
           { href: '/dashboard/holidays', label: 'Holidays', icon: 'HD', permissionPath: '/dashboard/settings' },
-          ...(isSchoolAdmin ? [{ href: '/dashboard/plans', label: 'Plans', icon: 'PL' }] : []),
           { href: '/dashboard/settings', label: 'System Setting', icon: 'SS' },
           { href: '/change-password', label: 'Change Password', icon: 'PW' },
         ],

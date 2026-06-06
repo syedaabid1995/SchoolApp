@@ -1,20 +1,20 @@
 'use client';
 
 import PageHeader from '../../../components/PageHeader';
-import SystemSetupTab from '../settings/system-setup';
+import AccessControlPage from '../settings/access/page';
 
 export default function RolePermissionsPage() {
   return (
     <div className="space-y-5 pb-12">
       <PageHeader
         title="Role Permissions"
-        subtitle="Manage role permission shortcuts and open detailed access control."
+        subtitle="Manage school role and employee permissions. Subscription plan modules remain the hard access limit."
         breadcrumbs={[
           { label: 'Dashboard', href: '/dashboard' },
           { label: 'Role Permissions' },
         ]}
       />
-      <SystemSetupTab section="roles" showOverview={false} showSectionMenu={false} />
+      <AccessControlPage />
     </div>
   );
 }

@@ -1,5 +1,6 @@
 'use client';
 
+import Link from 'next/link';
 import { useEffect, useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { EMPLOYEE_MANAGED_ROLES, type EmployeeManagedRole } from '../../../../config/employee-permissions';
@@ -73,6 +74,7 @@ export default function AccessControlPage() {
   });
   const schoolId = session?.schoolId ?? undefined;
 
+  const isSuperAdminRole = session?.role === 'SUPER_ADMIN';
   const canManage = session?.role === 'SCHOOL_ADMIN';
 
   const { data, isLoading } = useQuery({
@@ -121,6 +123,39 @@ export default function AccessControlPage() {
 
   const allCodes = data?.permissions.map((permission) => permission.code) ?? [];
   const isAllSelected = allCodes.length > 0 && allCodes.every((code) => editedCodes.includes(code));
+
+  if (isSuperAdminRole) {
+    return (
+      <section className="rounded-2xl border border-blue-100 bg-blue-50 p-6 shadow-sm">
+        <div className="flex max-w-3xl flex-col gap-4">
+          <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-white text-blue-700 shadow-sm">
+            <ShieldIcon />
+          </div>
+          <div>
+            <h1 className="text-xl font-bold text-blue-900">Role permissions are school-scoped</h1>
+            <p className="mt-2 text-sm leading-6 text-blue-800">
+              Super Admin controls which modules a subscription plan allows. School Admin assigns those allowed
+              permissions to roles and individual employees inside the school workspace.
+            </p>
+          </div>
+          <div className="flex flex-wrap gap-3">
+            <Link
+              href="/dashboard/subscriptions"
+              className="rounded-xl bg-blue-700 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-800"
+            >
+              Manage Plan Modules
+            </Link>
+            <Link
+              href="/dashboard/schools"
+              className="rounded-xl border border-blue-200 bg-white px-4 py-2 text-sm font-semibold text-blue-800 hover:bg-blue-100"
+            >
+              View Schools
+            </Link>
+          </div>
+        </div>
+      </section>
+    );
+  }
 
   if (!canManage) {
     return (

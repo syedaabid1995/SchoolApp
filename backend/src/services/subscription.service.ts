@@ -1,8 +1,9 @@
 import { prisma } from '../config/db';
-import type { Prisma } from '@prisma/client';
+import { Prisma } from '@prisma/client';
 import { HttpError } from '../middlewares/error.middleware';
 import { invalidateSchoolCache, invalidateSubscriptionCache } from './cache/cache.invalidation';
 import { createAuditLog } from './auditLog.service';
+import { getNextNumber } from './numberSequence.service';
 
 type BillingCycleInput = 'MONTHLY' | 'ANNUAL' | 'QUARTERLY' | 'YEARLY';
 type EffectiveDateInput = 'IMMEDIATE' | 'NEXT_BILLING_CYCLE';
@@ -32,10 +33,13 @@ export const getSubscription = async (schoolId: string) => {
 };
 
 const defaultLimits = {
-  STARTER: { students: 500, teachers: 50 },
-  STANDARD: { students: 2000, teachers: 200 },
-  PREMIUM: { students: 10000, teachers: 1000 },
+  STARTER: { students: 500, teachers: 50, trialDays: 14 },
+  STANDARD: { students: 2000, teachers: 200, trialDays: 14 },
+  PREMIUM: { students: 10000, teachers: 1000, trialDays: 14 },
 };
+
+const openInvoiceStatuses = ['UNPAID', 'PARTIAL', 'OVERDUE'] as const;
+const paidRestrictedStatusReasons = ['payment', 'subscription', 'overdue'];
 
 const addDays = (date: Date, days: number) => {
   const next = new Date(date.getTime());
@@ -60,6 +64,25 @@ const calculatePeriodEnd = (start: Date, billingCycle?: string) => addMonths(sta
 const safeCurrency = 'INR';
 
 const priceFromPlan = (plan?: { priceCents: number } | null) => (plan?.priceCents ?? 0) / 100;
+
+const money = (value: Prisma.Decimal.Value) => new Prisma.Decimal(value).toDecimalPlaces(2);
+
+const moneyNumber = (value: Prisma.Decimal.Value) => Number(new Prisma.Decimal(value).toFixed(2));
+
+const isRestrictedByPaymentReason = (reason?: string | null) => {
+  const normalized = (reason ?? '').toLowerCase();
+  return paidRestrictedStatusReasons.some((item) => normalized.includes(item));
+};
+
+const invoiceInclude = {
+  plan: true,
+  payments: {
+    orderBy: { paymentDate: 'desc' as const },
+    include: {
+      receivedBy: { select: { id: true, email: true } },
+    },
+  },
+};
 
 const requireSchool = async (schoolId: string) => {
   const school = await prisma.school.findFirst({
@@ -174,15 +197,27 @@ const ensurePlanByName = async (name: string) => {
       features: [],
       studentLimit: limits.students,
       teacherLimit: limits.teachers,
+      trialDays: limits.trialDays,
     },
   });
 };
 
 export const checkSubscriptionStatus = async (schoolId: string): Promise<'ACTIVE' | 'GRACE_PERIOD' | 'SUSPENDED'> => {
-  const subscription = await prisma.subscription.findUnique({
-    where: { schoolId },
-    include: { school: true }
-  });
+  const [subscription, overdueInvoice] = await Promise.all([
+    prisma.subscription.findUnique({
+      where: { schoolId },
+      include: { school: true },
+    }),
+    prisma.subscriptionInvoice.findFirst({
+      where: {
+        schoolId,
+        status: { in: [...openInvoiceStatuses] },
+        dueDate: { lt: new Date() },
+        balanceAmount: { gt: 0 },
+      },
+      select: { id: true },
+    }),
+  ]);
   
   if (!subscription) return 'SUSPENDED';
   
@@ -192,9 +227,16 @@ export const checkSubscriptionStatus = async (schoolId: string): Promise<'ACTIVE
   if (subscription.school.status === 'SUSPENDED') {
     return 'SUSPENDED';
   }
+
+  if (overdueInvoice) {
+    return 'SUSPENDED';
+  }
   
   // Check if subscription is expired
-  if (subscription.status === 'EXPIRED' || (subscription.nextDueAt && subscription.nextDueAt < now)) {
+  if (
+    ['EXPIRED', 'CANCELLED', 'PENDING'].includes(subscription.status) ||
+    (subscription.nextDueAt && subscription.nextDueAt < now)
+  ) {
     return 'SUSPENDED';
   }
   
@@ -306,6 +348,7 @@ export const getAdminSubscriptionSummary = async () => {
     expiredSubscriptions,
     overdueSubscriptions,
     revenueRows,
+    openInvoiceCount,
   ] = await Promise.all([
     prisma.school.count({ where: { deletedAt: null } }),
     prisma.subscription.count({ where: { status: 'ACTIVE' } }),
@@ -323,6 +366,7 @@ export const getAdminSubscriptionSummary = async () => {
       where: { status: 'ACTIVE' },
       select: { plan: { select: { priceCents: true } } },
     }),
+    prisma.subscriptionInvoice.count({ where: { status: { in: [...openInvoiceStatuses] }, balanceAmount: { gt: 0 } } }),
   ]);
 
   const estimatedMonthlyRevenue = revenueRows.reduce((total, item) => total + priceFromPlan(item.plan), 0);
@@ -336,7 +380,7 @@ export const getAdminSubscriptionSummary = async () => {
     expiredSubscriptions,
     overdueSubscriptions,
     estimatedMonthlyRevenue,
-    pendingManualPayments: 0,
+    pendingManualPayments: openInvoiceCount,
     currency: safeCurrency,
   };
 };
@@ -489,13 +533,161 @@ export const getAdminSubscriptionHistory = async (schoolId: string) => {
   };
 };
 
+const mapSubscriptionInvoice = (invoice: any) => ({
+  id: invoice.id,
+  schoolId: invoice.schoolId,
+  subscriptionId: invoice.subscriptionId,
+  planId: invoice.planId,
+  planName: invoice.plan?.name ?? null,
+  invoiceNumber: invoice.invoiceNumber,
+  billingPeriodStart: invoice.billingPeriodStart,
+  billingPeriodEnd: invoice.billingPeriodEnd,
+  subtotal: moneyNumber(invoice.subtotal),
+  taxAmount: moneyNumber(invoice.taxAmount),
+  discountAmount: moneyNumber(invoice.discountAmount),
+  totalAmount: moneyNumber(invoice.totalAmount),
+  paidAmount: moneyNumber(invoice.paidAmount),
+  balanceAmount: moneyNumber(invoice.balanceAmount),
+  status: invoice.status,
+  dueDate: invoice.dueDate,
+  paidAt: invoice.paidAt,
+  createdAt: invoice.createdAt,
+  updatedAt: invoice.updatedAt,
+  payments: (invoice.payments ?? []).map((payment: any) => ({
+    id: payment.id,
+    amount: moneyNumber(payment.amount),
+    paymentMode: payment.paymentMode,
+    referenceNumber: payment.referenceNumber,
+    paymentDate: payment.paymentDate,
+    notes: payment.notes,
+    proofUrl: payment.proofUrl,
+    receivedByUserId: payment.receivedByUserId,
+    receivedByEmail: payment.receivedBy?.email ?? null,
+    createdAt: payment.createdAt,
+  })),
+});
+
 export const getAdminSubscriptionInvoices = async (schoolId: string) => {
   await requireSchool(schoolId);
+  const invoices = await prisma.subscriptionInvoice.findMany({
+    where: { schoolId },
+    orderBy: { createdAt: 'desc' },
+    include: invoiceInclude,
+  });
   return {
-    items: [],
-    total: 0,
-    message: 'Billing records are not implemented yet. Manual payment notes are stored in audit history only.',
+    items: invoices.map(mapSubscriptionInvoice),
+    total: invoices.length,
   };
+};
+
+export const generateSchoolSubscriptionInvoice = async (params: {
+  schoolId: string;
+  billingPeriodStart?: Date;
+  billingPeriodEnd?: Date;
+  dueDate?: Date;
+  taxPercent?: number;
+  discountPercent?: number;
+  discountAmount?: number;
+  actor: SubscriptionActor;
+}) => {
+  await requireSchool(params.schoolId);
+  const subscription = await prisma.subscription.findUnique({
+    where: { schoolId: params.schoolId },
+    include: { plan: true },
+  });
+  if (!subscription) {
+    throw new HttpError(404, 'Subscription not found');
+  }
+  if (!subscription.plan) {
+    throw new HttpError(400, 'Subscription plan is not assigned');
+  }
+
+  const periodStart = params.billingPeriodStart ?? subscription.startsAt ?? new Date();
+  const periodEnd = params.billingPeriodEnd ?? subscription.endsAt ?? calculatePeriodEnd(periodStart, subscription.billingCycle);
+  if (periodEnd <= periodStart) {
+    throw new HttpError(400, 'Billing period end must be after billing period start');
+  }
+
+  const duplicate = await prisma.subscriptionInvoice.findFirst({
+    where: {
+      schoolId: params.schoolId,
+      subscriptionId: subscription.id,
+      billingPeriodStart: periodStart,
+      billingPeriodEnd: periodEnd,
+      status: { not: 'CANCELLED' },
+    },
+    select: { id: true, invoiceNumber: true },
+  });
+  if (duplicate) {
+    throw new HttpError(409, `Active invoice already exists for this billing period (${duplicate.invoiceNumber})`);
+  }
+
+  const subtotal = money(priceFromPlan(subscription.plan));
+  const taxPercent = params.taxPercent ?? 0;
+  const discountPercent = params.discountPercent ?? 0;
+  const taxAmount = money(subtotal.mul(taxPercent).div(100));
+  const percentDiscount = money(subtotal.mul(discountPercent).div(100));
+  const explicitDiscount = params.discountAmount === undefined ? new Prisma.Decimal(0) : money(params.discountAmount);
+  const discountAmount = percentDiscount.gt(explicitDiscount) ? percentDiscount : explicitDiscount;
+  if (discountAmount.gt(subtotal.plus(taxAmount))) {
+    throw new HttpError(400, 'Discount cannot exceed invoice subtotal plus tax');
+  }
+  const rawTotal = subtotal.plus(taxAmount).minus(discountAmount);
+  const totalAmount = money(rawTotal.isNegative() ? 0 : rawTotal);
+  const dueDate = params.dueDate ?? addDays(periodEnd, subscription.graceDays);
+
+  const invoice = await prisma.$transaction(async (tx) => {
+    const invoiceNumber = await getNextNumber({ schoolId: params.schoolId, type: 'INVOICE', prefix: 'SUB-INV' }, tx);
+    const created = await tx.subscriptionInvoice.create({
+      data: {
+        schoolId: params.schoolId,
+        subscriptionId: subscription.id,
+        planId: subscription.planId,
+        invoiceNumber,
+        billingPeriodStart: periodStart,
+        billingPeriodEnd: periodEnd,
+        subtotal,
+        taxAmount,
+        discountAmount,
+        totalAmount,
+        paidAmount: 0,
+        balanceAmount: totalAmount,
+        status: totalAmount.eq(0) ? 'PAID' : 'UNPAID',
+        dueDate,
+        paidAt: totalAmount.eq(0) ? new Date() : null,
+      },
+      include: invoiceInclude,
+    });
+    await tx.subscription.update({
+      where: { schoolId: params.schoolId },
+      data: {
+        startsAt: periodStart,
+        endsAt: periodEnd,
+        nextDueAt: dueDate,
+        status: totalAmount.eq(0) ? 'ACTIVE' : subscription.status,
+      },
+    });
+    return created;
+  });
+
+  await auditSubscriptionAction({
+    schoolId: params.schoolId,
+    subscriptionId: subscription.id,
+    actor: params.actor,
+    action: 'SUBSCRIPTION_INVOICE_GENERATED',
+    afterState: {
+      invoiceId: invoice.id,
+      invoiceNumber: invoice.invoiceNumber,
+      subtotal: moneyNumber(invoice.subtotal),
+      taxAmount: moneyNumber(invoice.taxAmount),
+      discountAmount: moneyNumber(invoice.discountAmount),
+      totalAmount: moneyNumber(invoice.totalAmount),
+      dueDate: invoice.dueDate,
+    },
+  });
+  await invalidateSubscriptionCache(params.schoolId);
+  await invalidateSchoolCache(params.schoolId);
+  return mapSubscriptionInvoice(invoice);
 };
 
 export const getAdminSchoolSubscriptionDetail = async (schoolId: string) => {
@@ -547,8 +739,8 @@ export const getAdminSchoolSubscriptionDetail = async (schoolId: string) => {
       : null,
     history: history.items,
     invoices: invoices.items,
-    manualPayments: [],
-    billingMessage: invoices.message,
+    manualPayments: invoices.items.flatMap((invoice: any) => invoice.payments ?? []),
+    billingMessage: invoices.total ? null : 'No subscription invoices have been generated yet.',
   };
 };
 
@@ -907,44 +1099,167 @@ export const overrideSchoolSubscriptionLimits = async (params: {
 
 export const recordSchoolSubscriptionManualPayment = async (params: {
   schoolId: string;
+  invoiceId: string;
   amount: number;
-  currency: string;
-  method: string;
-  reference?: string | null;
-  paidAt: Date;
+  paymentMode: string;
+  referenceNumber?: string | null;
+  paymentDate: Date;
   notes?: string | null;
+  proofUrl?: string | null;
   actor: SubscriptionActor;
 }) => {
-  const existing = await prisma.subscription.findUnique({ where: { schoolId: params.schoolId } });
-  if (!existing) {
-    throw new HttpError(404, 'Subscription not found');
+  if (params.amount <= 0) {
+    throw new HttpError(400, 'Payment amount must be greater than zero');
   }
-  const subscription = await prisma.subscription.update({
-    where: { schoolId: params.schoolId },
-    data: { paidAt: params.paidAt, status: existing.status === 'PAUSED' ? 'ACTIVE' : existing.status },
+  const invoice = await prisma.subscriptionInvoice.findFirst({
+    where: { id: params.invoiceId, schoolId: params.schoolId },
+    include: { subscription: { include: { school: true } }, plan: true },
   });
+  if (!invoice) {
+    throw new HttpError(404, 'Subscription invoice not found');
+  }
+  if (invoice.status === 'CANCELLED') {
+    throw new HttpError(409, 'Cannot record payment against a cancelled invoice');
+  }
+  if (invoice.status === 'PAID' || money(invoice.balanceAmount).lte(0)) {
+    throw new HttpError(409, 'Invoice is already paid');
+  }
+
+  const amount = money(params.amount);
+  const balanceBefore = money(invoice.balanceAmount);
+  if (amount.gt(balanceBefore)) {
+    throw new HttpError(400, 'Payment amount cannot exceed invoice balance');
+  }
+
+  const payment = await prisma.$transaction(async (tx) => {
+    const paidAmount = money(invoice.paidAmount).plus(amount);
+    const balanceAmount = balanceBefore.minus(amount);
+    const isFullyPaid = balanceAmount.lte(0);
+    const nextDueAt = isFullyPaid ? addDays(invoice.billingPeriodEnd, invoice.subscription.graceDays) : invoice.subscription.nextDueAt;
+
+    const createdPayment = await tx.subscriptionPayment.create({
+      data: {
+        schoolId: params.schoolId,
+        invoiceId: invoice.id,
+        subscriptionId: invoice.subscriptionId,
+        amount,
+        paymentMode: params.paymentMode as any,
+        referenceNumber: params.referenceNumber ?? null,
+        paymentDate: params.paymentDate,
+        notes: params.notes ?? null,
+        proofUrl: params.proofUrl ?? null,
+        receivedByUserId: params.actor.userId,
+      },
+    });
+
+    await tx.subscriptionInvoice.update({
+      where: { id: invoice.id },
+      data: {
+        paidAmount,
+        balanceAmount,
+        status: isFullyPaid ? 'PAID' : 'PARTIAL',
+        paidAt: isFullyPaid ? params.paymentDate : null,
+      },
+    });
+
+    await tx.subscription.update({
+      where: { id: invoice.subscriptionId },
+      data: {
+        paidAt: params.paymentDate,
+        nextDueAt,
+        endsAt: invoice.billingPeriodEnd,
+        status: isFullyPaid ? 'ACTIVE' : invoice.subscription.status === 'OVERDUE' ? 'OVERDUE' : invoice.subscription.status,
+      },
+    });
+
+    if (isFullyPaid) {
+      const remainingOverdue = await tx.subscriptionInvoice.count({
+        where: {
+          schoolId: params.schoolId,
+          id: { not: invoice.id },
+          status: { in: [...openInvoiceStatuses] },
+          dueDate: { lt: new Date() },
+          balanceAmount: { gt: 0 },
+        },
+      });
+      if (
+        remainingOverdue === 0 &&
+        invoice.subscription.school.status === 'SUSPENDED' &&
+        isRestrictedByPaymentReason(invoice.subscription.school.statusReason)
+      ) {
+        await tx.school.update({
+          where: { id: params.schoolId },
+          data: { status: 'ACTIVE', statusReason: null },
+        });
+      }
+    }
+
+    return { createdPayment, isFullyPaid, balanceAmount };
+  });
+
   await auditSubscriptionAction({
     schoolId: params.schoolId,
-    subscriptionId: subscription.id,
+    subscriptionId: invoice.subscriptionId,
     actor: params.actor,
     action: 'SUBSCRIPTION_MANUAL_PAYMENT_RECORDED',
     afterState: {
+      invoiceId: invoice.id,
+      invoiceNumber: invoice.invoiceNumber,
       amount: params.amount,
-      currency: params.currency,
-      method: params.method,
-      reference: params.reference ?? null,
-      paidAt: params.paidAt,
+      currency: safeCurrency,
+      paymentMode: params.paymentMode,
+      referenceNumber: params.referenceNumber ?? null,
+      paymentDate: params.paymentDate,
       notes: params.notes ?? null,
+      proofUrl: params.proofUrl ?? null,
       gatewayCharged: false,
-      reason: 'Manual payment note only. No billing gateway is connected.',
+      status: payment.isFullyPaid ? 'PAID' : 'PARTIAL',
+      balanceAmount: moneyNumber(payment.balanceAmount),
     },
   });
   await invalidateSubscriptionCache(params.schoolId);
+  await invalidateSchoolCache(params.schoolId);
   return {
     detail: await getAdminSchoolSubscriptionDetail(params.schoolId),
     gatewayCharged: false,
-    message: 'Manual payment recorded in audit history. No payment gateway was charged.',
+    payment: payment.createdPayment,
+    message: payment.isFullyPaid
+      ? 'Manual payment recorded and invoice fully paid. No payment gateway was charged.'
+      : 'Manual payment recorded as a partial invoice payment. No payment gateway was charged.',
   };
+};
+
+export const markOverdueSubscriptionInvoices = async (now = new Date()) => {
+  const overdueInvoices = await prisma.subscriptionInvoice.findMany({
+    where: {
+      status: { in: ['UNPAID', 'PARTIAL'] },
+      dueDate: { lt: now },
+      balanceAmount: { gt: 0 },
+    },
+    include: { subscription: { include: { school: true } } },
+  });
+
+  for (const invoice of overdueInvoices) {
+    await prisma.$transaction(async (tx) => {
+      await tx.subscriptionInvoice.update({
+        where: { id: invoice.id },
+        data: { status: 'OVERDUE' },
+      });
+      await tx.subscription.update({
+        where: { id: invoice.subscriptionId },
+        data: { status: 'OVERDUE', nextDueAt: invoice.dueDate },
+      });
+      await tx.school.update({
+        where: { id: invoice.schoolId },
+        data: {
+          status: 'SUSPENDED',
+          statusReason: 'Payment overdue - subscription invoice overdue',
+        },
+      });
+    });
+  }
+
+  return { count: overdueInvoices.length };
 };
 
 export const incrementUsage = async (schoolId: string, type: 'students' | 'teachers', delta = 1) => {
@@ -955,7 +1270,7 @@ export const incrementUsage = async (schoolId: string, type: 'students' | 'teach
   });
 };
 
-export const enforceLimits = async (schoolId: string, type: 'students' | 'teachers') => {
+export const enforceLimits = async (schoolId: string, type: 'students' | 'teachers', delta = 1) => {
   // Check subscription status first
   const status = await checkSubscriptionStatus(schoolId);
   
@@ -1004,11 +1319,18 @@ export const enforceLimits = async (schoolId: string, type: 'students' | 'teache
     throw new HttpError(403, 'Subscription inactive');
   }
 
-  const usage = await prisma.usageCounter.findUnique({ where: { schoolId } });
-  const count = usage ? usage[type] : 0;
+  const count =
+    type === 'students'
+      ? await prisma.student.count({ where: { schoolId, status: 'ENROLLED' } })
+      : await prisma.teacherProfile.count({ where: { schoolId, isActive: true } });
+  await prisma.usageCounter.upsert({
+    where: { schoolId },
+    update: { [type]: count },
+    create: { schoolId, students: type === 'students' ? count : 0, teachers: type === 'teachers' ? count : 0 },
+  });
   const limit = type === 'students' ? subscription.studentLimit : subscription.teacherLimit;
 
-  if (count >= limit) {
+  if (count + delta > limit) {
     throw new HttpError(403, `${type} limit exceeded`);
   }
 };

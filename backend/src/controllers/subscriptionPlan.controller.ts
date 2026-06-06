@@ -16,6 +16,7 @@ const createSchema = z.object({
   features: z.array(z.string().min(1)).default([]),
   studentLimit: z.number().int().min(1),
   teacherLimit: z.number().int().min(1),
+  trialDays: z.number().int().min(0).max(365).default(14),
 });
 
 const updateSchema = z.object({
@@ -25,6 +26,7 @@ const updateSchema = z.object({
   features: z.array(z.string().min(1)).optional(),
   studentLimit: z.number().int().min(1).optional(),
   teacherLimit: z.number().int().min(1).optional(),
+  trialDays: z.number().int().min(0).max(365).optional(),
 });
 
 const planPermissionSchema = z.object({
@@ -72,6 +74,7 @@ export const createSubscriptionPlanApi = async (req: Request, res: Response) => 
       features: payload.features,
       studentLimit: payload.studentLimit,
       teacherLimit: payload.teacherLimit,
+      trialDays: payload.trialDays,
     },
   });
   await invalidateSubscriptionCache();
@@ -126,14 +129,21 @@ export const updateSubscriptionPlanApi = async (req: Request, res: Response) => 
 
 export const deleteSubscriptionPlanApi = async (req: Request, res: Response) => {
   const { id } = req.params;
-  const usage = await prisma.subscription.count({ where: { planId: id } });
-  if (usage > 0) {
-    throw new HttpError(409, 'Plan is in use by existing subscriptions');
+  const existing = await prisma.subscriptionPlanDef.findUnique({
+    where: { id },
+    select: { id: true },
+  });
+  if (!existing) {
+    throw new HttpError(404, 'Plan not found');
   }
-  const plan = await prisma.subscriptionPlanDef.delete({ where: { id } });
+
+  await prisma.subscriptionPlanDef.delete({
+    where: { id },
+  });
   await invalidateSubscriptionCache();
   await invalidateSchoolCache();
-  res.status(200).json(plan);
+
+  res.status(200).json({ success: true, id, message: 'Subscription plan deleted' });
 };
 
 export const listPlanSchoolsApi = async (req: Request, res: Response) => {
@@ -206,6 +216,8 @@ export const updatePlanPermissionsApi = async (req: Request, res: Response) => {
       })),
     });
   });
+  await invalidateSubscriptionCache();
+  await invalidateSchoolCache();
 
   res.status(200).json({ success: true });
 };

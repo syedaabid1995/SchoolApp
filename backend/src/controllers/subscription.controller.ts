@@ -11,6 +11,7 @@ import {
   getAdminSubscriptionSummary,
   getAdminSubscriptionUsage,
   getSubscription,
+  generateSchoolSubscriptionInvoice,
   listAdminSchoolSubscriptions,
   overrideSchoolSubscriptionLimits,
   pauseSchoolSubscription,
@@ -108,12 +109,25 @@ const limitsSchema = reasonSchema.extend({
 });
 
 const manualPaymentSchema = z.object({
+  invoiceId: z.string().uuid(),
   amount: z.number().positive(),
-  currency: z.string().trim().min(3).max(3).default('INR'),
-  method: z.string().trim().min(1).max(60),
+  paymentMode: z.enum(['CASH', 'BANK_TRANSFER', 'UPI', 'CARD', 'CHEQUE', 'OTHER']).optional(),
+  method: z.string().trim().min(1).max(60).optional(),
+  referenceNumber: z.string().trim().max(120).optional().nullable(),
   reference: z.string().trim().max(120).optional().nullable(),
-  paidAt: z.coerce.date(),
+  paymentDate: z.coerce.date().optional(),
+  paidAt: z.coerce.date().optional(),
   notes: z.string().trim().max(500).optional().nullable(),
+  proofUrl: z.string().trim().url().optional().nullable(),
+});
+
+const invoiceGenerationSchema = z.object({
+  billingPeriodStart: z.coerce.date().optional(),
+  billingPeriodEnd: z.coerce.date().optional(),
+  dueDate: z.coerce.date().optional(),
+  taxPercent: z.number().min(0).max(100).default(0),
+  discountPercent: z.number().min(0).max(100).default(0),
+  discountAmount: z.number().min(0).optional(),
 });
 
 const actorFromRequest = (req: Request) => {
@@ -339,17 +353,35 @@ export const getAdminSubscriptionInvoicesApi = async (req: Request, res: Respons
   res.status(200).json({ success: true, data });
 };
 
+export const generateSchoolSubscriptionInvoiceApi = async (req: Request, res: Response) => {
+  const { schoolId } = schoolIdParamsSchema.parse(req.params);
+  const payload = invoiceGenerationSchema.parse(req.body ?? {});
+  const data = await generateSchoolSubscriptionInvoice({
+    schoolId,
+    billingPeriodStart: payload.billingPeriodStart,
+    billingPeriodEnd: payload.billingPeriodEnd,
+    dueDate: payload.dueDate,
+    taxPercent: payload.taxPercent,
+    discountPercent: payload.discountPercent,
+    discountAmount: payload.discountAmount,
+    actor: actorFromRequest(req),
+  });
+  res.status(201).json({ success: true, data });
+};
+
 export const recordSchoolSubscriptionManualPaymentApi = async (req: Request, res: Response) => {
   const { schoolId } = schoolIdParamsSchema.parse(req.params);
   const payload = manualPaymentSchema.parse(req.body);
+  const paymentMode = payload.paymentMode ?? payload.method?.toUpperCase().replace(/\s+/g, '_') ?? 'OTHER';
   const data = await recordSchoolSubscriptionManualPayment({
     schoolId,
+    invoiceId: payload.invoiceId,
     amount: payload.amount,
-    currency: payload.currency,
-    method: payload.method,
-    reference: payload.reference ?? null,
-    paidAt: payload.paidAt,
+    paymentMode: ['CASH', 'BANK_TRANSFER', 'UPI', 'CARD', 'CHEQUE', 'OTHER'].includes(paymentMode) ? paymentMode : 'OTHER',
+    referenceNumber: payload.referenceNumber ?? payload.reference ?? null,
+    paymentDate: payload.paymentDate ?? payload.paidAt ?? new Date(),
     notes: payload.notes ?? null,
+    proofUrl: payload.proofUrl ?? null,
     actor: actorFromRequest(req),
   });
   res.status(200).json({ success: true, data });

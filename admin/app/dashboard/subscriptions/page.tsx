@@ -3,16 +3,20 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import DashboardPageContainer from '../../../components/DashboardPageContainer';
 import FullPageLoader from '../../../components/FullPageLoader';
 import PageHeader from '../../../components/PageHeader';
 import { useNotify } from '../../../components/NotificationProvider';
-import { buildPlanPermissionGroups, formatPlanPermissionAction } from '../../../config/plan-module-permissions';
+import { PLAN_PERMISSION_MODULES, buildPlanPermissionGroups } from '../../../config/plan-module-permissions';
 import { getSession } from '../../../services/auth.service';
 import {
   assignSchoolPlan,
   cancelSubscription,
+  createSubscriptionPlan,
+  deleteSubscriptionPlan,
   downgradeSubscription,
   extendTrial,
+  generateSubscriptionInvoice,
   getSchoolSubscriptionDetail,
   getSchoolSubscriptions,
   getSubscriptionSummary,
@@ -43,6 +47,7 @@ type LifecycleAction =
   | 'cancel'
   | 'renew'
   | 'limits'
+  | 'generate-invoice'
   | 'manual-payment';
 
 const statusOptions = ['ACTIVE', 'TRIAL', 'PAUSED', 'CANCELLED', 'EXPIRED', 'OVERDUE', 'PENDING'];
@@ -82,9 +87,19 @@ const formatCurrency = (value?: number | null, currency = 'INR') =>
     maximumFractionDigits: 0,
   }).format(value ?? 0);
 
+const formatNumber = (value?: number | null) =>
+  Number.isFinite(Number(value)) ? Number(value).toLocaleString('en-IN') : '0';
+
 const usagePercent = (used?: number, limit?: number | null) => {
   if (!limit || limit <= 0) return 0;
   return Math.min(100, Math.round(((used ?? 0) / limit) * 100));
+};
+
+const daysUntil = (value?: string | null) => {
+  if (!value) return null;
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return null;
+  return Math.ceil((date.getTime() - Date.now()) / (1000 * 60 * 60 * 24));
 };
 
 const statusBadgeClass = (status?: string | null) => {
@@ -96,17 +111,151 @@ const statusBadgeClass = (status?: string | null) => {
   return 'bg-violet-50 text-violet-700 ring-violet-200';
 };
 
-function Badge({ children, className }: { children: ReactNode; className: string }) {
-  return <span className={`inline-flex rounded-full px-2.5 py-1 text-xs font-semibold ring-1 ${className}`}>{children}</span>;
+type ShellTone = 'blue' | 'emerald' | 'amber' | 'rose' | 'slate' | 'violet';
+
+const toneClasses: Record<ShellTone, { icon: string; panel: string; bar: string; text: string }> = {
+  blue: {
+    icon: 'bg-blue-50 text-blue-700 ring-blue-100',
+    panel: 'border-blue-100 bg-blue-50/70',
+    bar: 'bg-blue-500',
+    text: 'text-blue-700',
+  },
+  emerald: {
+    icon: 'bg-emerald-50 text-emerald-700 ring-emerald-100',
+    panel: 'border-emerald-100 bg-emerald-50/70',
+    bar: 'bg-emerald-500',
+    text: 'text-emerald-700',
+  },
+  amber: {
+    icon: 'bg-amber-50 text-amber-700 ring-amber-100',
+    panel: 'border-amber-100 bg-amber-50/70',
+    bar: 'bg-amber-500',
+    text: 'text-amber-700',
+  },
+  rose: {
+    icon: 'bg-rose-50 text-rose-700 ring-rose-100',
+    panel: 'border-rose-100 bg-rose-50/70',
+    bar: 'bg-rose-500',
+    text: 'text-rose-700',
+  },
+  slate: {
+    icon: 'bg-slate-100 text-slate-700 ring-slate-200',
+    panel: 'border-[var(--shell-border)] bg-[var(--shell-subtle)]',
+    bar: 'bg-slate-500',
+    text: 'text-[var(--shell-text)]',
+  },
+  violet: {
+    icon: 'bg-violet-50 text-violet-700 ring-violet-100',
+    panel: 'border-violet-100 bg-violet-50/70',
+    bar: 'bg-violet-500',
+    text: 'text-violet-700',
+  },
+};
+
+function Icon({ path, className = 'h-4 w-4' }: { path: ReactNode; className?: string }) {
+  return (
+    <svg
+      className={className}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      {path}
+    </svg>
+  );
 }
 
-function StatCard({ label, value, helper }: { label: string; value: ReactNode; helper: string }) {
+function Badge({ children, className }: { children: ReactNode; className: string }) {
+  return <span className={`inline-flex items-center rounded-full px-2.5 py-1 text-xs font-semibold ring-1 ${className}`}>{children}</span>;
+}
+
+function StatCard({
+  label,
+  value,
+  helper,
+  tone = 'slate',
+  icon,
+}: {
+  label: string;
+  value: ReactNode;
+  helper: string;
+  tone?: ShellTone;
+  icon: ReactNode;
+}) {
   return (
-    <div className="rounded-2xl border border-[var(--shell-border)] bg-[var(--shell-card)] p-5 shadow-sm">
-      <p className="text-xs font-semibold uppercase tracking-[0.16em] text-[var(--shell-muted)]">{label}</p>
-      <p className="mt-3 text-2xl font-bold text-[var(--shell-text)]">{value}</p>
-      <p className="mt-1 text-sm text-[var(--shell-muted)]">{helper}</p>
+    <div className="rounded-xl border border-[var(--shell-border)] bg-[var(--shell-card)] p-4 shadow-sm">
+      <div className="flex items-start justify-between gap-3">
+        <span className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-lg ring-1 ${toneClasses[tone].icon}`}>
+          {icon}
+        </span>
+        <p className="text-right text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--shell-muted)]">{label}</p>
+      </div>
+      <p className="mt-4 truncate text-2xl font-bold text-[var(--shell-text)]">{value}</p>
+      <p className="mt-1 text-sm leading-5 text-[var(--shell-muted)]">{helper}</p>
     </div>
+  );
+}
+
+function LifecycleHealthPanel({
+  active,
+  trial,
+  paused,
+  cancelled,
+  expired,
+  overdue,
+  total,
+}: {
+  active: number;
+  trial: number;
+  paused: number;
+  cancelled: number;
+  expired: number;
+  overdue: number;
+  total: number;
+}) {
+  const items = [
+    { label: 'Active', value: active, tone: 'emerald' as const },
+    { label: 'Trial', value: trial, tone: 'blue' as const },
+    { label: 'Paused', value: paused, tone: 'amber' as const },
+    { label: 'Cancelled', value: cancelled, tone: 'slate' as const },
+    { label: 'Expired', value: expired, tone: 'rose' as const },
+    { label: 'Overdue', value: overdue, tone: 'rose' as const },
+  ];
+
+  return (
+    <section className="rounded-xl border border-[var(--shell-border)] bg-[var(--shell-card)] p-4 shadow-sm">
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+        <div>
+          <p className="text-xs font-semibold uppercase tracking-[0.14em] text-[var(--shell-muted)]">Lifecycle mix</p>
+          <h2 className="mt-1 text-lg font-bold text-[var(--shell-text)]">Subscription health</h2>
+        </div>
+        <Badge className={overdue || expired ? 'bg-rose-50 text-rose-700 ring-rose-200' : 'bg-emerald-50 text-emerald-700 ring-emerald-200'}>
+          {overdue || expired ? `${overdue + expired} need review` : 'Healthy'}
+        </Badge>
+      </div>
+
+      <div className="mt-4 grid gap-3 md:grid-cols-3 xl:grid-cols-6">
+        {items.map((item) => {
+          const percent = total ? Math.round((item.value / total) * 100) : 0;
+          return (
+            <div key={item.label} className={`rounded-xl border p-3 ${toneClasses[item.tone].panel}`}>
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-xs font-semibold text-[var(--shell-muted)]">{item.label}</span>
+                <span className={`text-sm font-bold ${toneClasses[item.tone].text}`}>{item.value}</span>
+              </div>
+              <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-white/80 ring-1 ring-black/5">
+                <div className={`h-full rounded-full ${toneClasses[item.tone].bar}`} style={{ width: `${Math.max(percent, item.value ? 8 : 0)}%` }} />
+              </div>
+              <p className="mt-2 text-[11px] font-semibold text-[var(--shell-muted)]">{percent}% of schools</p>
+            </div>
+          );
+        })}
+      </div>
+    </section>
   );
 }
 
@@ -117,7 +266,7 @@ function UsageBar({ label, used, limit }: { label: string; used?: number; limit?
       <div className="flex items-center justify-between text-xs">
         <span className="font-semibold text-[var(--shell-text)]">{label}</span>
         <span className="text-[var(--shell-muted)]">
-          {used ?? 0} / {limit ?? 'N/A'}
+          {formatNumber(used)} / {limit ? formatNumber(limit) : 'N/A'}
         </span>
       </div>
       <div className="mt-2 h-2 rounded-full bg-slate-200">
@@ -143,11 +292,17 @@ const initialActionForm = {
   studentLimit: '',
   teacherLimit: '',
   storageLimitMb: '',
+  invoiceId: '',
+  billingPeriodStart: '',
+  billingPeriodEnd: '',
+  dueDate: '',
+  taxPercent: '',
+  discountPercent: '',
+  discountAmount: '',
   amount: '',
-  currency: 'INR',
-  method: 'UPI',
-  reference: '',
-  paidAt: new Date().toISOString().slice(0, 10),
+  paymentMode: 'UPI',
+  referenceNumber: '',
+  paymentDate: new Date().toISOString().slice(0, 10),
   notes: '',
   reason: '',
 };
@@ -162,7 +317,80 @@ const initialPlanForm = {
 };
 
 type PlanFormState = typeof initialPlanForm;
-type PlanModalMode = 'modules' | 'edit';
+type PlanModalMode = 'modules' | 'edit' | 'create';
+
+const initialSubscriptionFilters = {
+  page: 1,
+  limit: 20,
+  search: '',
+  status: '',
+  planId: '',
+  billingCycle: '',
+  trial: '',
+  overdue: '',
+};
+
+type PlanPermissionGroupView = ReturnType<typeof buildPlanPermissionGroups>[number];
+type PlanSectionView = { parent: string; codes: string[] };
+
+const buildPlanSectionDefinitions = (): PlanSectionView[] => {
+  const sections = new Map<string, Set<string>>();
+
+  PLAN_PERMISSION_MODULES.forEach((definition) => {
+    const sectionCodes = sections.get(definition.parent) ?? new Set<string>();
+    definition.codes.forEach((code) => sectionCodes.add(code));
+    sections.set(definition.parent, sectionCodes);
+  });
+
+  return Array.from(sections.entries()).map(([parent, codes]) => ({
+    parent,
+    codes: Array.from(codes),
+  }));
+};
+
+const planSectionDefinitions = buildPlanSectionDefinitions();
+
+const getGroupCodes = (group: PlanPermissionGroupView) =>
+  Array.from(new Set(group.modules.flatMap((module) => module.permissions.map((permission) => permission.code))));
+
+const getSectionState = (codes: string[], enabledSet: Set<string>) => {
+  const enabledCount = codes.filter((code) => enabledSet.has(code)).length;
+  return {
+    enabledCount,
+    isIncluded: codes.length > 0 && enabledCount === codes.length,
+    isPartial: enabledCount > 0 && enabledCount < codes.length,
+  };
+};
+
+const getSectionsFromGroups = (groups: PlanPermissionGroupView[]): PlanSectionView[] =>
+  groups.map((group) => ({ parent: group.parent, codes: getGroupCodes(group) }));
+
+const countIncludedSections = (sections: PlanSectionView[], enabledSet: Set<string>) =>
+  sections.filter((section) => getSectionState(section.codes, enabledSet).isIncluded).length;
+
+const buildPlanPayload = (form: PlanFormState) => {
+  const price = Number(form.price);
+  const studentLimit = Number(form.studentLimit);
+  const teacherLimit = Number(form.teacherLimit);
+  const features = form.features
+    .split('\n')
+    .map((feature) => feature.trim())
+    .filter(Boolean);
+
+  if (!form.name.trim()) throw new Error('Plan name is required.');
+  if (!Number.isFinite(price) || price < 0) throw new Error('Enter a valid plan price.');
+  if (!Number.isInteger(studentLimit) || studentLimit < 1) throw new Error('Student limit must be at least 1.');
+  if (!Number.isInteger(teacherLimit) || teacherLimit < 1) throw new Error('Teacher limit must be at least 1.');
+
+  return {
+    name: form.name.trim(),
+    status: form.status,
+    priceCents: Math.round(price * 100),
+    studentLimit,
+    teacherLimit,
+    features,
+  };
+};
 
 export default function SubscriptionsPage() {
   const router = useRouter();
@@ -176,16 +404,7 @@ export default function SubscriptionsPage() {
   const [editedPermissionCodes, setEditedPermissionCodes] = useState<string[]>([]);
   const [actionForm, setActionForm] = useState(initialActionForm);
   const [planForm, setPlanForm] = useState<PlanFormState>(initialPlanForm);
-  const [filters, setFilters] = useState({
-    page: 1,
-    limit: 20,
-    search: '',
-    status: '',
-    planId: '',
-    billingCycle: '',
-    trial: '',
-    overdue: '',
-  });
+  const [filters, setFilters] = useState(initialSubscriptionFilters);
 
   const { data: session, isLoading: isSessionLoading } = useQuery({
     queryKey: ['session'],
@@ -262,7 +481,7 @@ export default function SubscriptionsPage() {
   const { data: modulePermissions, isLoading: isModulePermissionsLoading } = useQuery({
     queryKey: ['subscription-plan-modules', modulePlanId],
     queryFn: () => getPlanPermissions(modulePlanId as string),
-    enabled: Boolean(modulePlanId) && isSuperAdmin,
+    enabled: Boolean(modulePlanId) && isSuperAdmin && planModalMode === 'modules',
     staleTime: 15_000,
   });
 
@@ -334,12 +553,25 @@ export default function SubscriptionsPage() {
           reason,
         });
       }
+      if (actionState.action === 'generate-invoice') {
+        return generateSubscriptionInvoice(schoolId, {
+          billingPeriodStart: actionForm.billingPeriodStart || undefined,
+          billingPeriodEnd: actionForm.billingPeriodEnd || undefined,
+          dueDate: actionForm.dueDate || undefined,
+          taxPercent: actionForm.taxPercent ? Number(actionForm.taxPercent) : 0,
+          discountPercent: actionForm.discountPercent ? Number(actionForm.discountPercent) : 0,
+          discountAmount: actionForm.discountAmount ? Number(actionForm.discountAmount) : undefined,
+        });
+      }
+      if (actionState.action === 'manual-payment' && !actionForm.invoiceId) {
+        throw new Error('Select or enter an invoice ID.');
+      }
       return recordManualPayment(schoolId, {
+        invoiceId: actionForm.invoiceId,
         amount: Number(actionForm.amount),
-        currency: actionForm.currency,
-        method: actionForm.method,
-        reference: actionForm.reference || null,
-        paidAt: actionForm.paidAt,
+        paymentMode: actionForm.paymentMode,
+        referenceNumber: actionForm.referenceNumber || null,
+        paymentDate: actionForm.paymentDate,
         notes: actionForm.notes || null,
       });
     },
@@ -375,38 +607,49 @@ export default function SubscriptionsPage() {
     },
   });
 
+  const planCreateMutation = useMutation({
+    mutationFn: async () => {
+      const plan = await createSubscriptionPlan(buildPlanPayload(planForm));
+      await updatePlanPermissions(plan.id, editedPermissionCodes);
+      return plan;
+    },
+    onSuccess: () => {
+      notify.success('Plan created', 'Plan details and module sections were saved.');
+      queryClient.invalidateQueries({ queryKey: ['subscription-plans'] });
+      queryClient.invalidateQueries({ queryKey: ['active-plans'] });
+      queryClient.invalidateQueries({ queryKey: ['subscription-lifecycle-summary'] });
+      closePlanModal();
+    },
+    onError: (error: any) => {
+      const message = error?.response?.data?.error?.message || error?.message || 'Unable to create plan.';
+      notify.error('Plan create failed', message);
+    },
+  });
+
+  const planDeleteMutation = useMutation({
+    mutationFn: (planId: string) => deleteSubscriptionPlan(planId),
+    onSuccess: () => {
+      notify.success('Plan deleted', 'The plan was removed from the catalog.');
+      queryClient.invalidateQueries({ queryKey: ['subscription-plans'] });
+      queryClient.invalidateQueries({ queryKey: ['active-plans'] });
+      queryClient.invalidateQueries({ queryKey: ['school-subscriptions'] });
+      queryClient.invalidateQueries({ queryKey: ['subscription-lifecycle-summary'] });
+    },
+    onError: (error: any) => {
+      const message = error?.response?.data?.error?.message || error?.message || 'Unable to delete plan.';
+      notify.error('Plan delete failed', message);
+    },
+  });
+
   const planEditMutation = useMutation({
     mutationFn: async () => {
       if (!modulePlanId) throw new Error('Select a plan.');
-      const price = Number(planForm.price);
-      const studentLimit = Number(planForm.studentLimit);
-      const teacherLimit = Number(planForm.teacherLimit);
-      const features = planForm.features
-        .split('\n')
-        .map((feature) => feature.trim())
-        .filter(Boolean);
-
-      if (!planForm.name.trim()) throw new Error('Plan name is required.');
-      if (!Number.isFinite(price) || price < 0) throw new Error('Enter a valid plan price.');
-      if (!Number.isInteger(studentLimit) || studentLimit < 1) throw new Error('Student limit must be at least 1.');
-      if (!Number.isInteger(teacherLimit) || teacherLimit < 1) throw new Error('Teacher limit must be at least 1.');
-
-      await updateSubscriptionPlan(modulePlanId, {
-        name: planForm.name.trim(),
-        status: planForm.status,
-        priceCents: Math.round(price * 100),
-        studentLimit,
-        teacherLimit,
-        features,
-      });
-
-      return updatePlanPermissions(modulePlanId, editedPermissionCodes);
+      return updateSubscriptionPlan(modulePlanId, buildPlanPayload(planForm));
     },
     onSuccess: () => {
-      notify.success('Plan updated', 'Plan details and module access were saved.');
+      notify.success('Plan updated', 'Plan details were saved.');
       queryClient.invalidateQueries({ queryKey: ['subscription-plans'] });
       queryClient.invalidateQueries({ queryKey: ['active-plans'] });
-      queryClient.invalidateQueries({ queryKey: ['subscription-plan-modules', modulePlanId] });
       queryClient.invalidateQueries({ queryKey: ['school-subscriptions'] });
       queryClient.invalidateQueries({ queryKey: ['subscription-lifecycle-summary'] });
       closePlanModal();
@@ -426,6 +669,9 @@ export default function SubscriptionsPage() {
   };
 
   const openAction = (item: SchoolSubscriptionListItem, action: LifecycleAction) => {
+    const openInvoice = action === 'manual-payment' && selectedSchoolId === item.schoolId
+      ? detail?.invoices?.find((invoice) => !['PAID', 'CANCELLED'].includes(invoice.status) && invoice.balanceAmount > 0)
+      : null;
     setActionState({ item, action });
     setActionForm({
       ...initialActionForm,
@@ -433,12 +679,25 @@ export default function SubscriptionsPage() {
       billingCycle: item.billingCycle ?? 'MONTHLY',
       studentLimit: item.studentLimit ? String(item.studentLimit) : '',
       teacherLimit: item.teacherLimit ? String(item.teacherLimit) : '',
+      invoiceId: openInvoice?.id ?? '',
+      amount: openInvoice ? String(openInvoice.balanceAmount) : '',
     });
   };
 
   const openPlanModules = (plan: SubscriptionPlan) => {
     setModulePlanId(plan.id);
     setPlanModalMode('modules');
+  };
+
+  const openPlanCreator = () => {
+    setPlanForm({
+      ...initialPlanForm,
+      status: 'ACTIVE',
+      price: '0',
+    });
+    setModulePlanId(null);
+    setEditedPermissionCodes([]);
+    setPlanModalMode('create');
   };
 
   const openPlanEditor = (plan: SubscriptionPlan) => {
@@ -454,6 +713,17 @@ export default function SubscriptionsPage() {
     setPlanModalMode('edit');
   };
 
+  const confirmDeletePlan = (plan: SubscriptionPlan) => {
+    if (
+      !window.confirm(
+        `Delete "${plan.name}"? Existing schools keep their current plan name, but this plan will no longer be available for assignment.`,
+      )
+    ) {
+      return;
+    }
+    planDeleteMutation.mutate(plan.id);
+  };
+
   const closePlanModal = () => {
     setPlanModalMode(null);
     setModulePlanId(null);
@@ -467,6 +737,17 @@ export default function SubscriptionsPage() {
   const pagination = subscriptions?.pagination;
   const totalPages = pagination?.totalPages ?? 1;
   const busy = isSessionLoading || isSummaryLoading || isSubscriptionsLoading || lifecycleMutation.isPending;
+  const totalSchools = summary?.totalSchools ?? pagination?.total ?? rows.length;
+  const activeCount = summary?.activeSubscriptions ?? 0;
+  const trialCount = summary?.trialSubscriptions ?? 0;
+  const pausedCount = summary?.pausedSubscriptions ?? 0;
+  const cancelledCount = summary?.cancelledSubscriptions ?? 0;
+  const expiredCount = summary?.expiredSubscriptions ?? 0;
+  const overdueCount = summary?.overdueSubscriptions ?? 0;
+  const liveCoverage = totalSchools ? Math.round(((activeCount + trialCount) / totalSchools) * 100) : 0;
+  const activeFilterKeys: Array<keyof typeof filters> = ['search', 'status', 'planId', 'billingCycle', 'trial', 'overdue'];
+  const activeFiltersCount = activeFilterKeys.filter((key) => String(filters[key] ?? '').trim()).length;
+  const clearFilters = () => setFilters({ ...initialSubscriptionFilters, limit: filters.limit });
 
   if (isSessionLoading || !session?.role) {
     return <FullPageLoader label="Checking access..." />;
@@ -477,46 +758,107 @@ export default function SubscriptionsPage() {
   }
 
   return (
-    <div className="space-y-6 pb-12">
+    <DashboardPageContainer maxWidthClassName="max-w-[96rem]" className="space-y-5">
       {busy ? <FullPageLoader label="Loading subscriptions..." /> : null}
-      <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-        <PageHeader
-          title="School Subscriptions"
-          subtitle="Manage plans, trials, renewals, limits, and subscription lifecycle for all schools."
-        />
-        <button
-          type="button"
-          onClick={() => refetch()}
-          className="rounded-xl border border-[var(--shell-border)] bg-[var(--shell-card)] px-4 py-2 text-sm font-semibold text-[var(--shell-text)] shadow-sm hover:bg-[var(--shell-hover)]"
-        >
-          Refresh
-        </button>
-      </div>
+      <PageHeader
+        title="School Subscriptions"
+        subtitle="Manage plan assignments, billing periods, invoices, payments, limits, and module access across every school."
+        actions={
+          <button
+            type="button"
+            onClick={() => refetch()}
+            className="inline-flex h-10 items-center gap-2 rounded-lg border border-[var(--shell-border)] bg-[var(--shell-card)] px-3 text-sm font-semibold text-[var(--shell-text)] shadow-sm hover:bg-[var(--shell-hover)]"
+          >
+            <Icon path={<><path d="M21 12a9 9 0 0 1-9 9 8.6 8.6 0 0 1-6-2.4" /><path d="M3 12a9 9 0 0 1 15-6.7" /><path d="M21 3v6h-6" /></>} />
+            Refresh
+          </button>
+        }
+      />
 
-      <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800">
-        Billing gateway integration is not connected. Revenue is estimated from plan prices, and manual payments are recorded as audit history only.
-      </div>
+      <section className="grid gap-4 xl:grid-cols-[1fr_24rem]">
+        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+          <StatCard
+            label="Total schools"
+            value={formatNumber(totalSchools)}
+            helper={`${liveCoverage}% active or trial`}
+            tone="blue"
+            icon={<Icon path={<><path d="M3 21h18" /><path d="M5 21V7l8-4 6 3v15" /><path d="M9 9h1" /><path d="M9 13h1" /><path d="M14 10h1" /><path d="M14 14h1" /></>} />}
+          />
+          <StatCard
+            label="Live plans"
+            value={formatNumber(activeCount + trialCount)}
+            helper={`${activeCount} active, ${trialCount} trial`}
+            tone="emerald"
+            icon={<Icon path={<><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" /><circle cx="9" cy="7" r="4" /><path d="m16 11 2 2 4-4" /></>} />}
+          />
+          <StatCard
+            label="Estimated MRR"
+            value={formatCurrency(summary?.estimatedMonthlyRevenue, summary?.currency)}
+            helper="Projected from plan prices"
+            tone="violet"
+            icon={<Icon path={<><path d="M3 7h18v13H3z" /><path d="M16 3v4" /><path d="M8 3v4" /><path d="M7 14h5" /><path d="M16 14h1" /></>} />}
+          />
+          <StatCard
+            label="Open invoices"
+            value={formatNumber(summary?.pendingManualPayments)}
+            helper="Unpaid, partial, or overdue"
+            tone={overdueCount || expiredCount ? 'rose' : 'amber'}
+            icon={<Icon path={<><path d="M7 3h10v18l-2-1-2 1-2-1-2 1-2-1z" /><path d="M9 8h6" /><path d="M9 12h6" /><path d="M9 16h4" /></>} />}
+          />
+        </div>
 
-      <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        <StatCard label="Active" value={summary?.activeSubscriptions ?? 0} helper="Currently active schools" />
-        <StatCard label="Trial" value={summary?.trialSubscriptions ?? 0} helper="Schools in trial" />
-        <StatCard label="Paused" value={summary?.pausedSubscriptions ?? 0} helper="Temporarily paused" />
-        <StatCard label="Cancelled" value={summary?.cancelledSubscriptions ?? 0} helper="Cancelled subscriptions" />
-        <StatCard label="Expired" value={summary?.expiredSubscriptions ?? 0} helper="Past period end" />
-        <StatCard label="Overdue" value={summary?.overdueSubscriptions ?? 0} helper="Past next due date" />
-        <StatCard label="Estimated MRR" value={formatCurrency(summary?.estimatedMonthlyRevenue, summary?.currency)} helper="Not payment gateway revenue" />
-        <StatCard label="Manual Payments" value={summary?.pendingManualPayments ?? 0} helper="Payment model not implemented" />
+        <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm leading-6 text-amber-800 shadow-sm">
+          <div className="flex items-start gap-3">
+            <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-amber-500 text-white">
+              <Icon path={<><path d="M12 9v4" /><path d="M12 17h.01" /><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z" /></>} />
+            </span>
+            <div>
+              <p className="font-bold text-amber-950">Offline billing mode</p>
+              <p className="mt-1">
+                Billing gateway integration is not connected. Super Admin can generate subscription invoices and record offline payments against those invoices.
+              </p>
+            </div>
+          </div>
+        </div>
       </section>
 
-      <section className="rounded-2xl border border-[var(--shell-border)] bg-[var(--shell-card)] p-5 shadow-sm">
-        <div className="grid gap-3 lg:grid-cols-6">
-          <label className="lg:col-span-2">
+      <LifecycleHealthPanel
+        active={activeCount}
+        trial={trialCount}
+        paused={pausedCount}
+        cancelled={cancelledCount}
+        expired={expiredCount}
+        overdue={overdueCount}
+        total={Math.max(totalSchools, 1)}
+      />
+
+      <section className="rounded-xl border border-[var(--shell-border)] bg-[var(--shell-card)] p-4 shadow-sm">
+        <div className="flex flex-col gap-3 border-b border-[var(--shell-border)] pb-4 md:flex-row md:items-center md:justify-between">
+          <div>
+            <h2 className="text-lg font-bold text-[var(--shell-text)]">Find subscriptions</h2>
+            <p className="text-sm text-[var(--shell-muted)]">
+              {activeFiltersCount ? `${activeFiltersCount} filter${activeFiltersCount === 1 ? '' : 's'} applied` : 'All schools are included'}
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={clearFilters}
+            disabled={!activeFiltersCount}
+            className="inline-flex h-9 items-center justify-center gap-2 rounded-lg border border-[var(--shell-border)] px-3 text-sm font-semibold text-[var(--shell-text)] disabled:cursor-not-allowed disabled:opacity-40"
+          >
+            <Icon path={<><path d="M3 6h18" /><path d="m8 6 8 12" /><path d="m16 6-8 12" /></>} />
+            Clear
+          </button>
+        </div>
+
+        <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-7">
+          <label className="xl:col-span-2">
             <span className="text-xs font-semibold uppercase tracking-[0.14em] text-[var(--shell-muted)]">Search</span>
             <input
               value={filters.search}
               onChange={(event) => setFilter('search', event.target.value)}
               placeholder="School name, code, plan"
-              className="mt-1 w-full rounded-xl border border-[var(--shell-border)] bg-[var(--shell-subtle)] px-3 py-2 text-sm text-[var(--shell-text)] outline-none focus:ring-2 focus:ring-blue-500"
+              className="mt-1 h-10 w-full rounded-lg border border-[var(--shell-border)] bg-[var(--shell-subtle)] px-3 text-sm text-[var(--shell-text)] outline-none focus:ring-2 focus:ring-blue-500"
             />
           </label>
           <FilterSelect label="Status" value={filters.status} onChange={(value) => setFilter('status', value)}>
@@ -537,6 +879,11 @@ export default function SubscriptionsPage() {
               <option key={cycle} value={cycle}>{formatLabel(cycle)}</option>
             ))}
           </FilterSelect>
+          <FilterSelect label="Trial" value={filters.trial} onChange={(value) => setFilter('trial', value)}>
+            <option value="">Any</option>
+            <option value="true">Trial only</option>
+            <option value="false">Non-trial</option>
+          </FilterSelect>
           <FilterSelect label="Overdue" value={filters.overdue} onChange={(value) => setFilter('overdue', value)}>
             <option value="">Any</option>
             <option value="true">Overdue</option>
@@ -545,25 +892,28 @@ export default function SubscriptionsPage() {
         </div>
       </section>
 
-      <section className="overflow-hidden rounded-2xl border border-[var(--shell-border)] bg-[var(--shell-card)] shadow-sm">
+      <section className="overflow-hidden rounded-xl border border-[var(--shell-border)] bg-[var(--shell-card)] shadow-sm">
         <div className="flex flex-col gap-3 border-b border-[var(--shell-border)] px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <h2 className="text-lg font-semibold text-[var(--shell-text)]">School Subscription Lifecycle</h2>
+            <h2 className="text-lg font-bold text-[var(--shell-text)]">School subscription lifecycle</h2>
             <p className="text-sm text-[var(--shell-muted)]">
               {pagination ? `${pagination.total} schools found` : 'Manage every tenant subscription'}
             </p>
           </div>
-          <FilterSelect label="Rows" value={String(filters.limit)} onChange={(value) => setFilter('limit', Number(value))}>
-            {[10, 20, 50, 100].map((size) => (
-              <option key={size} value={size}>{size}</option>
-            ))}
-          </FilterSelect>
+          <div className="flex items-end gap-3">
+            <Badge className="bg-[var(--shell-subtle)] text-[var(--shell-muted)] ring-[var(--shell-border)]">Page {filters.page} of {totalPages}</Badge>
+            <FilterSelect label="Rows" value={String(filters.limit)} onChange={(value) => setFilter('limit', Number(value))}>
+              {[10, 20, 50, 100].map((size) => (
+                <option key={size} value={size}>{size}</option>
+              ))}
+            </FilterSelect>
+          </div>
         </div>
 
         {isSubscriptionsError ? (
           <div className="p-8 text-center">
             <p className="text-sm font-semibold text-rose-600">Unable to load subscriptions.</p>
-            <button type="button" onClick={() => refetch()} className="mt-3 rounded-xl bg-blue-600 px-4 py-2 text-sm font-semibold text-white">
+            <button type="button" onClick={() => refetch()} className="mt-3 rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white">
               Retry
             </button>
           </div>
@@ -579,56 +929,80 @@ export default function SubscriptionsPage() {
                   <th className="px-5 py-3">Status</th>
                   <th className="px-5 py-3">Period</th>
                   <th className="px-5 py-3">Usage</th>
-                  <th className="px-5 py-3">Amount</th>
+                  <th className="px-5 py-3">Billing</th>
                   <th className="px-5 py-3 text-right">Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-[var(--shell-border)]">
-                {rows.map((item) => (
-                  <tr key={item.schoolId} className="hover:bg-[var(--shell-hover)]">
-                    <td className="px-5 py-4">
-                      <div className="font-semibold text-[var(--shell-text)]">{item.schoolName}</div>
-                      <div className="text-xs text-[var(--shell-muted)]">{item.schoolCode ?? 'No code'} - {formatLabel(item.schoolStatus)}</div>
-                    </td>
-                    <td className="px-5 py-4">
-                      <div className="font-semibold text-[var(--shell-text)]">{item.planName ?? 'No plan assigned'}</div>
-                      <div className="text-xs text-[var(--shell-muted)]">{formatLabel(item.billingCycle)}</div>
-                    </td>
-                    <td className="px-5 py-4">
-                      <Badge className={statusBadgeClass(item.status)}>{formatLabel(item.status)}</Badge>
-                    </td>
-                    <td className="px-5 py-4 text-[var(--shell-muted)]">
-                      <div>Ends: {formatDate(item.currentPeriodEnd)}</div>
-                      {item.trialEndsAt ? <div className="text-xs">Trial ends: {formatDate(item.trialEndsAt)}</div> : null}
-                    </td>
-                    <td className="min-w-[180px] px-5 py-4">
-                      <UsageBar label="Students" used={item.usage?.students} limit={item.studentLimit} />
-                      <div className="mt-2">
-                        <UsageBar label="Teachers" used={item.usage?.teachers} limit={item.teacherLimit} />
-                      </div>
-                    </td>
-                    <td className="px-5 py-4 text-[var(--shell-text)]">{formatCurrency(item.price, item.currency)}</td>
-                    <td className="px-5 py-4">
-                      <div className="flex flex-wrap justify-end gap-2">
-                        <ActionButton onClick={() => setSelectedSchoolId(item.schoolId)}>View</ActionButton>
-                        <ActionButton onClick={() => openAction(item, item.subscriptionId ? 'upgrade' : 'assign')}>{item.subscriptionId ? 'Change Plan' : 'Assign Plan'}</ActionButton>
-                        {item.status === 'TRIAL' ? <ActionButton onClick={() => openAction(item, 'extend-trial')}>Extend Trial</ActionButton> : <ActionButton onClick={() => openAction(item, 'start-trial')}>Start Trial</ActionButton>}
-                        {item.status === 'PAUSED' ? <ActionButton onClick={() => openAction(item, 'resume')}>Resume</ActionButton> : <ActionButton onClick={() => openAction(item, 'pause')}>Pause</ActionButton>}
-                        <ActionButton onClick={() => openAction(item, 'renew')}>Renew</ActionButton>
-                        <ActionButton onClick={() => openAction(item, 'limits')}>Limits</ActionButton>
-                        <ActionButton onClick={() => openAction(item, 'manual-payment')}>Payment</ActionButton>
-                        {item.status !== 'CANCELLED' ? <ActionButton danger onClick={() => openAction(item, 'cancel')}>Cancel</ActionButton> : null}
-                      </div>
-                    </td>
-                  </tr>
-                ))}
+                {rows.map((item) => {
+                  const daysRemaining = daysUntil(item.currentPeriodEnd);
+                  const periodTone = daysRemaining === null || daysRemaining > 14 ? 'text-[var(--shell-muted)]' : daysRemaining >= 0 ? 'text-amber-700' : 'text-rose-700';
+                  return (
+                    <tr key={item.schoolId} className="align-top hover:bg-[var(--shell-hover)]">
+                      <td className="min-w-[18rem] px-5 py-4">
+                        <div className="flex items-start gap-3">
+                          <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-blue-600 text-sm font-bold uppercase text-white">
+                            {(item.schoolName || 'SC').slice(0, 2)}
+                          </span>
+                          <div className="min-w-0">
+                            <div className="font-semibold text-[var(--shell-text)]">{item.schoolName}</div>
+                            <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-[var(--shell-muted)]">
+                              <span>{item.schoolCode ?? 'No code'}</span>
+                              <span className="h-1 w-1 rounded-full bg-[var(--shell-border)]" />
+                              <span>{formatLabel(item.schoolStatus)}</span>
+                            </div>
+                          </div>
+                        </div>
+                      </td>
+                      <td className="min-w-[12rem] px-5 py-4">
+                        <div className="font-semibold text-[var(--shell-text)]">{item.planName ?? 'No plan assigned'}</div>
+                        <div className="mt-1 text-xs text-[var(--shell-muted)]">{formatLabel(item.billingCycle)}</div>
+                      </td>
+                      <td className="px-5 py-4">
+                        <Badge className={statusBadgeClass(item.status)}>{formatLabel(item.status)}</Badge>
+                      </td>
+                      <td className="min-w-[13rem] px-5 py-4">
+                        <div className="font-semibold text-[var(--shell-text)]">Ends {formatDate(item.currentPeriodEnd)}</div>
+                        <div className={`mt-1 text-xs font-semibold ${periodTone}`}>
+                          {daysRemaining === null ? 'No period date' : daysRemaining >= 0 ? `${daysRemaining} days remaining` : `${Math.abs(daysRemaining)} days past end`}
+                        </div>
+                        {item.trialEndsAt ? <div className="mt-1 text-xs text-[var(--shell-muted)]">Trial ends {formatDate(item.trialEndsAt)}</div> : null}
+                      </td>
+                      <td className="min-w-[13rem] px-5 py-4">
+                        <UsageBar label="Students" used={item.usage?.students} limit={item.studentLimit} />
+                        <div className="mt-3">
+                          <UsageBar label="Teachers" used={item.usage?.teachers} limit={item.teacherLimit} />
+                        </div>
+                      </td>
+                      <td className="min-w-[9rem] px-5 py-4">
+                        <div className="font-semibold text-[var(--shell-text)]">{formatCurrency(item.price, item.currency)}</div>
+                        <div className="mt-1 text-xs text-[var(--shell-muted)]">{item.currency ?? 'INR'}</div>
+                      </td>
+                      <td className="min-w-[22rem] px-5 py-4">
+                        <div className="flex flex-wrap justify-end gap-2">
+                          <ActionButton icon={<Icon path={<path d="M2 12s3.5-6 10-6 10 6 10 6-3.5 6-10 6-10-6-10-6z" />} />} onClick={() => setSelectedSchoolId(item.schoolId)}>View</ActionButton>
+                          <ActionButton icon={<Icon path={<><path d="M4 7h16" /><path d="M4 12h16" /><path d="M4 17h10" /></>} />} onClick={() => openAction(item, item.subscriptionId ? 'upgrade' : 'assign')}>{item.subscriptionId ? 'Plan' : 'Assign'}</ActionButton>
+                          {item.status === 'TRIAL' ? <ActionButton onClick={() => openAction(item, 'extend-trial')}>Extend</ActionButton> : <ActionButton onClick={() => openAction(item, 'start-trial')}>Trial</ActionButton>}
+                          {item.status === 'PAUSED' ? <ActionButton onClick={() => openAction(item, 'resume')}>Resume</ActionButton> : <ActionButton onClick={() => openAction(item, 'pause')}>Pause</ActionButton>}
+                          <ActionButton onClick={() => openAction(item, 'renew')}>Renew</ActionButton>
+                          <ActionButton icon={<Icon path={<><path d="M7 3h10v18l-2-1-2 1-2-1-2 1-2-1z" /><path d="M9 9h6" /></>} />} onClick={() => openAction(item, 'generate-invoice')}>Invoice</ActionButton>
+                          <ActionButton onClick={() => openAction(item, 'limits')}>Limits</ActionButton>
+                          <ActionButton onClick={() => openAction(item, 'manual-payment')}>Payment</ActionButton>
+                          {item.status !== 'CANCELLED' ? <ActionButton danger onClick={() => openAction(item, 'cancel')}>Cancel</ActionButton> : null}
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>
         )}
 
         <div className="flex flex-col gap-3 border-t border-[var(--shell-border)] px-5 py-4 text-sm text-[var(--shell-muted)] sm:flex-row sm:items-center sm:justify-between">
-          <span>Page {filters.page} of {totalPages}</span>
+          <span>
+            Showing {rows.length} of {pagination?.total ?? rows.length} schools
+          </span>
           <div className="flex gap-2">
             <button
               type="button"
@@ -650,44 +1024,99 @@ export default function SubscriptionsPage() {
         </div>
       </section>
 
-      <section className="rounded-2xl border border-[var(--shell-border)] bg-[var(--shell-card)] p-5 shadow-sm">
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+      <section className="space-y-3">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
           <div>
-            <h2 className="text-lg font-semibold text-[var(--shell-text)]">Plan Catalog & Modules</h2>
-            <p className="mt-1 text-sm text-[var(--shell-muted)]">Set plan limits and control which school sidebar modules each plan unlocks.</p>
+            <p className="text-xs font-semibold uppercase tracking-[0.14em] text-[var(--shell-muted)]">Plan catalog</p>
+            <h2 className="text-lg font-bold text-[var(--shell-text)]">Limits and module access</h2>
           </div>
-          <p className="rounded-xl border border-blue-200 bg-blue-50 px-3 py-2 text-xs font-semibold text-blue-800">
-            Modules follow the School Admin sidebar parent and child names.
-          </p>
+          <div className="flex flex-wrap items-center gap-2">
+            <Badge className="bg-blue-50 text-blue-700 ring-blue-200">Modules follow School Admin sidebar names</Badge>
+            <button
+              type="button"
+              onClick={openPlanCreator}
+              className="inline-flex h-10 items-center justify-center gap-2 rounded-lg bg-blue-600 px-4 text-sm font-semibold text-white hover:bg-blue-700"
+            >
+              <Icon path={<><path d="M12 5v14" /><path d="M5 12h14" /></>} />
+              Create Plan
+            </button>
+          </div>
         </div>
-        <div className="mt-4 grid gap-3 md:grid-cols-3">
-          {(plans ?? []).map((plan) => (
-            <div key={plan.id} className="rounded-xl border border-[var(--shell-border)] bg-[var(--shell-subtle)] p-4">
-              <div className="flex items-center justify-between gap-3">
-                <p className="font-semibold text-[var(--shell-text)]">{plan.name}</p>
-                <Badge className={statusBadgeClass(plan.status)}>{formatLabel(plan.status)}</Badge>
-              </div>
-              <p className="mt-2 text-xl font-bold text-[var(--shell-text)]">{formatCurrency(plan.priceCents / 100)}</p>
-              <p className="text-xs text-[var(--shell-muted)]">Students {plan.studentLimit} - Teachers {plan.teacherLimit}</p>
-              <div className="mt-4 grid gap-2 sm:grid-cols-2 md:grid-cols-1 xl:grid-cols-2">
-                <button
-                  type="button"
-                  onClick={() => openPlanEditor(plan)}
-                  className="rounded-xl bg-blue-600 px-3 py-2 text-sm font-semibold text-white hover:bg-blue-700"
-                >
-                  Edit Plan
-                </button>
-                <button
-                  type="button"
-                  onClick={() => openPlanModules(plan)}
-                  className="rounded-xl border border-[var(--shell-border)] bg-[var(--shell-card)] px-3 py-2 text-sm font-semibold text-[var(--shell-text)] hover:bg-[var(--shell-hover)]"
-                >
-                  Modules
-                </button>
-              </div>
-            </div>
-          ))}
-        </div>
+
+        {(plans ?? []).length ? (
+          <div className="grid gap-4 lg:grid-cols-3">
+            {(plans ?? []).map((plan) => {
+              const featurePreview = (plan.features ?? []).slice(0, 3);
+              return (
+                <article key={plan.id} className="rounded-xl border border-[var(--shell-border)] bg-[var(--shell-card)] p-4 shadow-sm">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <h3 className="truncate text-lg font-bold text-[var(--shell-text)]">{plan.name}</h3>
+                      <p className="mt-1 text-sm font-semibold text-[var(--shell-muted)]">{formatCurrency(plan.priceCents / 100)} monthly</p>
+                    </div>
+                    <Badge className={statusBadgeClass(plan.status)}>{formatLabel(plan.status)}</Badge>
+                  </div>
+
+                  <div className="mt-4 grid grid-cols-2 gap-3">
+                    <div className="rounded-lg border border-[var(--shell-border)] bg-[var(--shell-subtle)] px-3 py-2">
+                      <p className="text-[11px] font-semibold uppercase text-[var(--shell-muted)]">Students</p>
+                      <p className="mt-1 text-lg font-bold text-blue-700">{formatNumber(plan.studentLimit)}</p>
+                    </div>
+                    <div className="rounded-lg border border-[var(--shell-border)] bg-[var(--shell-subtle)] px-3 py-2">
+                      <p className="text-[11px] font-semibold uppercase text-[var(--shell-muted)]">Teachers</p>
+                      <p className="mt-1 text-lg font-bold text-emerald-700">{formatNumber(plan.teacherLimit)}</p>
+                    </div>
+                  </div>
+
+                  <div className="mt-4 min-h-16 space-y-2">
+                    {featurePreview.length ? (
+                      featurePreview.map((feature) => (
+                        <p key={feature} className="flex items-start gap-2 text-sm leading-5 text-[var(--shell-muted)]">
+                          <span className="mt-1 h-1.5 w-1.5 shrink-0 rounded-full bg-blue-500" />
+                          {feature}
+                        </p>
+                      ))
+                    ) : (
+                      <p className="text-sm text-[var(--shell-muted)]">No feature summary added.</p>
+                    )}
+                  </div>
+
+                  <div className="mt-4 grid gap-2 sm:grid-cols-3">
+                    <button
+                      type="button"
+                      onClick={() => openPlanEditor(plan)}
+                      className="inline-flex h-10 items-center justify-center gap-2 rounded-lg bg-blue-600 px-3 text-sm font-semibold text-white hover:bg-blue-700"
+                    >
+                      <Icon path={<><path d="M12 20h9" /><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z" /></>} />
+                      Edit
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => openPlanModules(plan)}
+                      className="inline-flex h-10 items-center justify-center gap-2 rounded-lg border border-[var(--shell-border)] bg-[var(--shell-card)] px-3 text-sm font-semibold text-[var(--shell-text)] hover:bg-[var(--shell-hover)]"
+                    >
+                      <Icon path={<><path d="M4 4h7v7H4z" /><path d="M13 4h7v7h-7z" /><path d="M4 13h7v7H4z" /><path d="M13 13h7v7h-7z" /></>} />
+                      Modules
+                    </button>
+                    <button
+                      type="button"
+                      disabled={planDeleteMutation.isPending}
+                      onClick={() => confirmDeletePlan(plan)}
+                      className="inline-flex h-10 items-center justify-center gap-2 rounded-lg border border-rose-200 bg-rose-50 px-3 text-sm font-semibold text-rose-700 hover:bg-rose-100 disabled:opacity-50"
+                    >
+                      <Icon path={<><path d="M3 6h18" /><path d="M8 6V4h8v2" /><path d="M19 6l-1 14H6L5 6" /></>} />
+                      Delete
+                    </button>
+                  </div>
+                </article>
+              );
+            })}
+          </div>
+        ) : (
+          <div className="rounded-xl border border-dashed border-[var(--shell-border)] bg-[var(--shell-card)] p-8 text-center text-sm text-[var(--shell-muted)]">
+            No subscription plans found.
+          </div>
+        )}
       </section>
 
       {selectedSchoolId ? (
@@ -738,19 +1167,31 @@ export default function SubscriptionsPage() {
 
       {modulePlanId && planModalMode === 'edit' ? (
         <PlanEditModal
+          mode="edit"
           plan={selectedModulePlan}
           form={planForm}
-          permissions={modulePermissions?.permissions ?? []}
-          editedCodes={editedPermissionCodes}
-          loading={isModulePermissionsLoading}
           saving={planEditMutation.isPending}
           onFormChange={(patch) => setPlanForm((current) => ({ ...current, ...patch }))}
-          onPermissionChange={setEditedPermissionCodes}
           onClose={closePlanModal}
           onSubmit={() => planEditMutation.mutate()}
         />
       ) : null}
-    </div>
+
+      {planModalMode === 'create' ? (
+        <PlanEditModal
+          mode="create"
+          plan={null}
+          form={planForm}
+          saving={planCreateMutation.isPending}
+          moduleSections={planSectionDefinitions}
+          enabledCodes={editedPermissionCodes}
+          onFormChange={(patch) => setPlanForm((current) => ({ ...current, ...patch }))}
+          onModuleChange={setEditedPermissionCodes}
+          onClose={closePlanModal}
+          onSubmit={() => planCreateMutation.mutate()}
+        />
+      ) : null}
+    </DashboardPageContainer>
   );
 }
 
@@ -771,7 +1212,7 @@ function FilterSelect({
       <select
         value={value}
         onChange={(event) => onChange(event.target.value)}
-        className="mt-1 w-full rounded-xl border border-[var(--shell-border)] bg-[var(--shell-subtle)] px-3 py-2 text-sm text-[var(--shell-text)] outline-none focus:ring-2 focus:ring-blue-500"
+        className="mt-1 h-10 w-full rounded-lg border border-[var(--shell-border)] bg-[var(--shell-subtle)] px-3 text-sm text-[var(--shell-text)] outline-none focus:ring-2 focus:ring-blue-500"
       >
         {children}
       </select>
@@ -779,77 +1220,80 @@ function FilterSelect({
   );
 }
 
-function ActionButton({ children, onClick, danger = false }: { children: ReactNode; onClick: () => void; danger?: boolean }) {
+function ActionButton({
+  children,
+  onClick,
+  danger = false,
+  icon,
+}: {
+  children: ReactNode;
+  onClick: () => void;
+  danger?: boolean;
+  icon?: ReactNode;
+}) {
   return (
     <button
       type="button"
       onClick={onClick}
-      className={`rounded-lg border px-3 py-1.5 text-xs font-semibold ${
+      className={`inline-flex h-8 items-center gap-1.5 rounded-lg border px-2.5 text-xs font-semibold ${
         danger
           ? 'border-rose-200 bg-rose-50 text-rose-700'
           : 'border-[var(--shell-border)] bg-[var(--shell-subtle)] text-[var(--shell-text)] hover:bg-[var(--shell-hover)]'
       }`}
     >
+      {icon}
       {children}
     </button>
   );
 }
 
 function PlanEditModal({
+  mode,
   plan,
   form,
-  permissions,
-  editedCodes,
-  loading,
   saving,
+  moduleSections = [],
+  enabledCodes = [],
   onFormChange,
-  onPermissionChange,
+  onModuleChange,
   onClose,
   onSubmit,
 }: {
+  mode: 'create' | 'edit';
   plan: SubscriptionPlan | null;
   form: PlanFormState;
-  permissions: PlanPermissionItem[];
-  editedCodes: string[];
-  loading: boolean;
   saving: boolean;
+  moduleSections?: PlanSectionView[];
+  enabledCodes?: string[];
   onFormChange: (patch: Partial<PlanFormState>) => void;
-  onPermissionChange: (codes: string[]) => void;
+  onModuleChange?: (codes: string[]) => void;
   onClose: () => void;
   onSubmit: () => void;
 }) {
-  const groups = useMemo(() => buildPlanPermissionGroups(permissions), [permissions]);
-  const enabledSet = useMemo(() => new Set(editedCodes), [editedCodes]);
-  const allCodes = useMemo(() => Array.from(new Set(permissions.map((permission) => permission.code))), [permissions]);
-
-  const setCodes = (codes: string[]) => onPermissionChange(Array.from(new Set(codes)));
-  const toggleCode = (code: string) => {
-    setCodes(enabledSet.has(code) ? editedCodes.filter((item) => item !== code) : [...editedCodes, code]);
-  };
-  const toggleCodes = (codes: string[], enabled: boolean) => {
-    const next = new Set(editedCodes);
-    codes.forEach((code) => {
-      if (enabled) next.add(code);
-      else next.delete(code);
-    });
-    onPermissionChange(Array.from(next));
-  };
+  const isCreate = mode === 'create';
+  const enabledSet = useMemo(() => new Set(enabledCodes), [enabledCodes]);
+  const includedSectionCount = useMemo(() => countIncludedSections(moduleSections, enabledSet), [moduleSections, enabledSet]);
+  const allModuleCodes = useMemo(() => Array.from(new Set(moduleSections.flatMap((section) => section.codes))), [moduleSections]);
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/45 px-4 py-6">
+    <div className="fixed inset-0 z-50 flex justify-end bg-black/40">
+      <button type="button" aria-label="Close plan drawer" className="absolute inset-0 cursor-default" onClick={onClose} />
+      <aside className="relative flex h-full w-full max-w-3xl flex-col overflow-hidden bg-[var(--shell-card)] shadow-2xl">
       <form
         onSubmit={(event) => {
           event.preventDefault();
           onSubmit();
         }}
-        className="flex max-h-[92vh] w-full max-w-6xl flex-col overflow-hidden rounded-2xl border border-[var(--shell-border)] bg-[var(--shell-card)] shadow-2xl"
+        className="flex min-h-0 flex-1 flex-col"
       >
         <div className="flex flex-col gap-4 border-b border-[var(--shell-border)] p-5 lg:flex-row lg:items-start lg:justify-between">
           <div>
-            <p className="text-xs font-semibold uppercase tracking-[0.16em] text-[var(--shell-muted)]">Edit plan and modules</p>
-            <h2 className="mt-1 text-2xl font-bold text-[var(--shell-text)]">{plan?.name ?? 'Subscription Plan'}</h2>
+            <p className="text-xs font-semibold uppercase tracking-[0.16em] text-[var(--shell-muted)]">{isCreate ? 'Create plan' : 'Edit plan'}</p>
+            <h2 className="mt-1 text-2xl font-bold text-[var(--shell-text)]">{isCreate ? 'New Subscription Plan' : plan?.name ?? 'Subscription Plan'}</h2>
             <p className="mt-1 text-sm text-[var(--shell-muted)]">
-              Update plan pricing, limits, features, and the School Admin sidebar modules unlocked by this plan.
+              {isCreate
+                ? 'Set pricing, limits, features, and sidebar sections.'
+                : 'Update plan pricing, limits, and feature lines.'}
             </p>
           </div>
           <button type="button" onClick={onClose} className="rounded-xl border border-[var(--shell-border)] px-3 py-2 text-sm font-semibold text-[var(--shell-text)]">
@@ -857,9 +1301,9 @@ function PlanEditModal({
           </button>
         </div>
 
-        <div className="overflow-y-auto p-5">
-          <section className="grid gap-4 lg:grid-cols-5">
-            <div className="rounded-2xl border border-[var(--shell-border)] bg-[var(--shell-subtle)] p-4 lg:col-span-2">
+        <div className="flex-1 overflow-y-auto p-5">
+          <section className="rounded-xl border border-[var(--shell-border)] bg-[var(--shell-subtle)] p-4">
+            <div>
               <h3 className="text-base font-bold text-[var(--shell-text)]">Plan Details</h3>
               <div className="mt-4 space-y-4">
                 <label className="block">
@@ -931,132 +1375,123 @@ function PlanEditModal({
                 </label>
               </div>
             </div>
+          </section>
 
-            <div className="rounded-2xl border border-[var(--shell-border)] p-4 lg:col-span-3">
-              <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+          {isCreate ? (
+            <section className="mt-4 rounded-xl border border-[var(--shell-border)] bg-[var(--shell-subtle)] p-4">
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                 <div>
-                  <h3 className="text-base font-bold text-[var(--shell-text)]">Modules & Sidebar</h3>
-                  <p className="text-sm text-[var(--shell-muted)]">Enable the parent/child sidebar modules included in this plan.</p>
+                  <h3 className="text-base font-bold text-[var(--shell-text)]">Modules</h3>
+                  <p className="mt-1 text-sm text-[var(--shell-muted)]">
+                    {includedSectionCount} of {moduleSections.length} sections enabled
+                  </p>
                 </div>
-                <div className="flex gap-2">
+                <div className="flex flex-wrap gap-2">
                   <button
                     type="button"
-                    disabled={loading}
-                    onClick={() => setCodes(allCodes)}
-                    className="rounded-xl border border-[var(--shell-border)] px-3 py-2 text-xs font-semibold text-[var(--shell-text)] disabled:opacity-50"
+                    onClick={() => onModuleChange?.(allModuleCodes)}
+                    className="rounded-lg border border-[var(--shell-border)] bg-[var(--shell-card)] px-3 py-2 text-sm font-semibold text-[var(--shell-text)] hover:bg-[var(--shell-hover)]"
                   >
                     Enable All
                   </button>
                   <button
                     type="button"
-                    disabled={loading}
-                    onClick={() => onPermissionChange([])}
-                    className="rounded-xl border border-[var(--shell-border)] px-3 py-2 text-xs font-semibold text-[var(--shell-text)] disabled:opacity-50"
+                    onClick={() => onModuleChange?.([])}
+                    className="rounded-lg border border-[var(--shell-border)] bg-[var(--shell-card)] px-3 py-2 text-sm font-semibold text-[var(--shell-text)] hover:bg-[var(--shell-hover)]"
                   >
                     Disable All
                   </button>
                 </div>
               </div>
-
-              <div className="mt-4 max-h-[58vh] overflow-y-auto pr-1">
-                {loading ? (
-                  <div className="space-y-3">
-                    {Array.from({ length: 4 }).map((_, index) => (
-                      <div key={index} className="h-24 animate-pulse rounded-2xl bg-[var(--shell-subtle)]" />
-                    ))}
-                  </div>
-                ) : groups.length ? (
-                  <div className="space-y-4">
-                    {groups.map((group) => {
-                      const groupCodes = Array.from(new Set(group.modules.flatMap((module) => module.permissions.map((permission) => permission.code))));
-                      const groupEnabled = groupCodes.filter((code) => enabledSet.has(code)).length;
-                      const allGroupEnabled = groupEnabled === groupCodes.length;
-                      return (
-                        <div key={group.parent} className="rounded-2xl border border-[var(--shell-border)]">
-                          <div className="flex flex-col gap-2 border-b border-[var(--shell-border)] bg-[var(--shell-subtle)] px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
-                            <div>
-                              <p className="font-bold text-[var(--shell-text)]">{group.parent}</p>
-                              <p className="text-xs text-[var(--shell-muted)]">{groupEnabled}/{groupCodes.length} permissions enabled</p>
-                            </div>
-                            <button
-                              type="button"
-                              onClick={() => toggleCodes(groupCodes, !allGroupEnabled)}
-                              className="rounded-xl border border-[var(--shell-border)] bg-[var(--shell-card)] px-3 py-1.5 text-xs font-semibold text-[var(--shell-text)]"
-                            >
-                              {allGroupEnabled ? 'Disable Parent' : 'Enable Parent'}
-                            </button>
-                          </div>
-                          <div className="grid gap-3 p-3">
-                            {group.modules.map((module) => {
-                              const moduleCodes = module.permissions.map((permission) => permission.code);
-                              const moduleEnabled = moduleCodes.filter((code) => enabledSet.has(code)).length;
-                              return (
-                                <div key={`${group.parent}-${module.module}`} className="rounded-xl border border-[var(--shell-border)] bg-[var(--shell-card)] p-3">
-                                  <div className="flex items-start justify-between gap-3">
-                                    <div className="min-w-0">
-                                      <p className="font-semibold text-[var(--shell-text)]">{module.module}</p>
-                                      <p className="mt-1 truncate font-mono text-[11px] text-[var(--shell-muted)]">{module.path}</p>
-                                    </div>
-                                    <span className="rounded-full bg-[var(--shell-subtle)] px-2 py-1 text-xs font-semibold text-[var(--shell-muted)]">
-                                      {moduleEnabled}/{moduleCodes.length}
-                                    </span>
-                                  </div>
-                                  <div className="mt-3 flex flex-wrap gap-2">
-                                    {module.permissions.map((permission) => {
-                                      const enabled = enabledSet.has(permission.code);
-                                      return (
-                                        <button
-                                          key={permission.code}
-                                          type="button"
-                                          onClick={() => toggleCode(permission.code)}
-                                          title={permission.code}
-                                          className={`rounded-full px-3 py-1.5 text-xs font-semibold ${
-                                            enabled
-                                              ? 'bg-blue-600 text-white'
-                                              : 'border border-[var(--shell-border)] bg-[var(--shell-subtle)] text-[var(--shell-muted)]'
-                                          }`}
-                                        >
-                                          {formatPlanPermissionAction(permission)}
-                                        </button>
-                                      );
-                                    })}
-                                  </div>
-                                </div>
-                              );
-                            })}
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                ) : (
-                  <div className="rounded-2xl border border-dashed border-[var(--shell-border)] p-8 text-center text-sm text-[var(--shell-muted)]">
-                    No module permissions found for this plan.
-                  </div>
-                )}
+              <div className="mt-4">
+                <PlanSectionList
+                  sections={moduleSections}
+                  enabledCodes={enabledCodes}
+                  disabled={saving}
+                  onChange={(codes) => onModuleChange?.(codes)}
+                />
               </div>
-            </div>
-          </section>
+            </section>
+          ) : null}
         </div>
 
-        <div className="flex flex-col gap-3 border-t border-[var(--shell-border)] p-5 sm:flex-row sm:items-center sm:justify-between">
-          <p className="text-sm text-[var(--shell-muted)]">
-            {editedCodes.length} of {permissions.length} permissions enabled
-          </p>
-          <div className="flex justify-end gap-2">
-            <button type="button" onClick={onClose} className="rounded-xl border border-[var(--shell-border)] px-4 py-2 text-sm font-semibold text-[var(--shell-text)]">
-              Cancel
-            </button>
-            <button
-              type="submit"
-              disabled={saving || loading}
-              className="rounded-xl bg-blue-600 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50"
-            >
-              {saving ? 'Saving...' : 'Save Plan & Modules'}
-            </button>
-          </div>
+        <div className="flex shrink-0 justify-end gap-2 border-t border-[var(--shell-border)] p-5">
+          <button type="button" onClick={onClose} className="rounded-xl border border-[var(--shell-border)] px-4 py-2 text-sm font-semibold text-[var(--shell-text)]">
+            Cancel
+          </button>
+          <button
+            type="submit"
+            disabled={saving}
+            className="rounded-xl bg-blue-600 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50"
+          >
+            {saving ? 'Saving...' : isCreate ? 'Create Plan' : 'Save Plan'}
+          </button>
         </div>
       </form>
+      </aside>
+    </div>
+  );
+}
+
+function PlanSectionList({
+  sections,
+  enabledCodes,
+  disabled = false,
+  onChange,
+}: {
+  sections: PlanSectionView[];
+  enabledCodes: string[];
+  disabled?: boolean;
+  onChange: (codes: string[]) => void;
+}) {
+  const enabledSet = useMemo(() => new Set(enabledCodes), [enabledCodes]);
+
+  const toggleCodes = (codes: string[], enabled: boolean) => {
+    const next = new Set(enabledCodes);
+    codes.forEach((code) => {
+      if (enabled) next.add(code);
+      else next.delete(code);
+    });
+    onChange(Array.from(next));
+  };
+
+  if (!sections.length) {
+    return (
+      <div className="rounded-xl border border-dashed border-[var(--shell-border)] bg-[var(--shell-card)] p-8 text-center text-sm text-[var(--shell-muted)]">
+        No module sections found.
+      </div>
+    );
+  }
+
+  return (
+    <div className="overflow-hidden rounded-xl border border-[var(--shell-border)] bg-[var(--shell-card)]">
+      {sections.map((section) => {
+        const sectionState = getSectionState(section.codes, enabledSet);
+        return (
+          <div
+            key={section.parent}
+            className={`flex flex-col gap-3 border-b border-[var(--shell-border)] px-4 py-3 last:border-b-0 sm:flex-row sm:items-center sm:justify-between ${
+              sectionState.isIncluded ? 'bg-emerald-50/45' : sectionState.isPartial ? 'bg-amber-50/50' : 'bg-[var(--shell-card)]'
+            }`}
+          >
+            <h4 className="text-sm font-bold text-[var(--shell-text)]">{section.parent}</h4>
+            <button
+              type="button"
+              disabled={disabled}
+              onClick={() => toggleCodes(section.codes, !sectionState.isIncluded)}
+              className={`w-24 rounded-full px-3 py-1 text-xs font-semibold disabled:opacity-50 ${
+                sectionState.isIncluded
+                  ? 'bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200'
+                  : sectionState.isPartial
+                    ? 'bg-amber-50 text-amber-700 ring-1 ring-amber-200'
+                    : 'bg-slate-100 text-slate-600 ring-1 ring-slate-200'
+              }`}
+            >
+              {sectionState.isIncluded ? 'Enabled' : sectionState.isPartial ? 'Partial' : 'Disabled'}
+            </button>
+          </div>
+        );
+      })}
     </div>
   );
 }
@@ -1081,31 +1516,23 @@ function PlanModulesModal({
   onSubmit: () => void;
 }) {
   const groups = useMemo(() => buildPlanPermissionGroups(permissions), [permissions]);
+  const sections = useMemo(() => getSectionsFromGroups(groups), [groups]);
   const enabledSet = useMemo(() => new Set(editedCodes), [editedCodes]);
-  const allCodes = permissions.map((permission) => permission.code);
+  const allCodes = useMemo(() => Array.from(new Set(permissions.map((permission) => permission.code))), [permissions]);
+  const includedSectionCount = useMemo(() => countIncludedSections(sections, enabledSet), [sections, enabledSet]);
 
   const setCodes = (codes: string[]) => onChange(Array.from(new Set(codes)));
-  const toggleCode = (code: string) => {
-    setCodes(enabledSet.has(code) ? editedCodes.filter((item) => item !== code) : [...editedCodes, code]);
-  };
-  const toggleCodes = (codes: string[], enabled: boolean) => {
-    const next = new Set(editedCodes);
-    codes.forEach((code) => {
-      if (enabled) next.add(code);
-      else next.delete(code);
-    });
-    onChange(Array.from(next));
-  };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/45 px-4 py-6">
-      <section className="flex max-h-[92vh] w-full max-w-6xl flex-col overflow-hidden rounded-2xl border border-[var(--shell-border)] bg-[var(--shell-card)] shadow-2xl">
+    <div className="fixed inset-0 z-50 flex justify-end bg-black/40">
+      <button type="button" aria-label="Close modules drawer" className="absolute inset-0 cursor-default" onClick={onClose} />
+      <aside className="relative flex h-full w-full max-w-3xl flex-col overflow-hidden bg-[var(--shell-card)] shadow-2xl">
         <div className="flex flex-col gap-4 border-b border-[var(--shell-border)] p-5 lg:flex-row lg:items-start lg:justify-between">
           <div>
             <p className="text-xs font-semibold uppercase tracking-[0.16em] text-[var(--shell-muted)]">Plan modules and sidebar access</p>
             <h2 className="mt-1 text-2xl font-bold text-[var(--shell-text)]">{plan?.name ?? 'Subscription Plan'}</h2>
             <p className="mt-1 text-sm text-[var(--shell-muted)]">
-              Choose which School Admin sidebar parents and child modules are available for schools on this plan.
+              {includedSectionCount} of {sections.length} sections enabled
             </p>
           </div>
           <div className="flex flex-wrap gap-2">
@@ -1131,99 +1558,30 @@ function PlanModulesModal({
           </div>
         </div>
 
-        <div className="overflow-y-auto p-5">
+        <div className="flex-1 overflow-y-auto p-5">
           {loading ? (
             <div className="space-y-3">
               {Array.from({ length: 5 }).map((_, index) => (
-                <div key={index} className="h-28 animate-pulse rounded-2xl bg-[var(--shell-subtle)]" />
+                <div key={index} className="h-16 animate-pulse rounded-xl bg-[var(--shell-subtle)]" />
               ))}
             </div>
-          ) : groups.length ? (
-            <div className="space-y-5">
-              {groups.map((group) => {
-                const groupCodes = Array.from(new Set(group.modules.flatMap((module) => module.permissions.map((permission) => permission.code))));
-                const groupEnabled = groupCodes.filter((code) => enabledSet.has(code)).length;
-                const allGroupEnabled = groupEnabled === groupCodes.length;
-                return (
-                  <div key={group.parent} className="overflow-hidden rounded-2xl border border-[var(--shell-border)]">
-                    <div className="flex flex-col gap-3 border-b border-[var(--shell-border)] bg-[var(--shell-subtle)] px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
-                      <div>
-                        <h3 className="text-base font-bold text-[var(--shell-text)]">{group.parent}</h3>
-                        <p className="text-xs text-[var(--shell-muted)]">{groupEnabled}/{groupCodes.length} permissions enabled</p>
-                      </div>
-                      <button
-                        type="button"
-                        onClick={() => toggleCodes(groupCodes, !allGroupEnabled)}
-                        className="rounded-xl border border-[var(--shell-border)] bg-[var(--shell-card)] px-3 py-2 text-xs font-semibold text-[var(--shell-text)]"
-                      >
-                        {allGroupEnabled ? 'Disable Parent' : 'Enable Parent'}
-                      </button>
-                    </div>
-                    <div className="grid gap-3 p-4 xl:grid-cols-2">
-                      {group.modules.map((module) => {
-                        const moduleCodes = module.permissions.map((permission) => permission.code);
-                        const moduleEnabled = moduleCodes.filter((code) => enabledSet.has(code)).length;
-                        const allModuleEnabled = moduleEnabled === moduleCodes.length;
-                        return (
-                          <article key={`${group.parent}-${module.module}`} className="rounded-2xl border border-[var(--shell-border)] bg-[var(--shell-card)] p-4">
-                            <div className="flex items-start justify-between gap-3">
-                              <div className="min-w-0">
-                                <h4 className="font-bold text-[var(--shell-text)]">{module.module}</h4>
-                                <p className="mt-1 text-xs text-[var(--shell-muted)]">{module.description}</p>
-                                <p className="mt-2 truncate rounded-lg bg-[var(--shell-subtle)] px-2 py-1 font-mono text-[11px] text-[var(--shell-muted)]">{module.path}</p>
-                              </div>
-                              <button
-                                type="button"
-                                onClick={() => toggleCodes(moduleCodes, !allModuleEnabled)}
-                                className={`shrink-0 rounded-full px-3 py-1 text-xs font-semibold ${
-                                  allModuleEnabled
-                                    ? 'bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200'
-                                    : moduleEnabled
-                                      ? 'bg-amber-50 text-amber-700 ring-1 ring-amber-200'
-                                      : 'bg-slate-100 text-slate-600 ring-1 ring-slate-200'
-                                }`}
-                              >
-                                {moduleEnabled}/{moduleCodes.length}
-                              </button>
-                            </div>
-                            <div className="mt-4 flex flex-wrap gap-2">
-                              {module.permissions.map((permission) => {
-                                const enabled = enabledSet.has(permission.code);
-                                return (
-                                  <button
-                                    key={permission.code}
-                                    type="button"
-                                    onClick={() => toggleCode(permission.code)}
-                                    title={permission.code}
-                                    className={`rounded-full px-3 py-1.5 text-xs font-semibold transition ${
-                                      enabled
-                                        ? 'bg-blue-600 text-white shadow-sm'
-                                        : 'border border-[var(--shell-border)] bg-[var(--shell-subtle)] text-[var(--shell-muted)] hover:text-[var(--shell-text)]'
-                                    }`}
-                                  >
-                                    {formatPlanPermissionAction(permission)}
-                                  </button>
-                                );
-                              })}
-                            </div>
-                          </article>
-                        );
-                      })}
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
+          ) : sections.length ? (
+            <PlanSectionList
+              sections={sections}
+              enabledCodes={editedCodes}
+              disabled={saving || loading}
+              onChange={onChange}
+            />
           ) : (
-            <div className="rounded-2xl border border-dashed border-[var(--shell-border)] p-10 text-center text-sm text-[var(--shell-muted)]">
+            <div className="rounded-xl border border-dashed border-[var(--shell-border)] p-10 text-center text-sm text-[var(--shell-muted)]">
               No module permissions found for this plan.
             </div>
           )}
         </div>
 
-        <div className="flex flex-col gap-3 border-t border-[var(--shell-border)] p-5 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex shrink-0 flex-col gap-3 border-t border-[var(--shell-border)] p-5 sm:flex-row sm:items-center sm:justify-between">
           <p className="text-sm text-[var(--shell-muted)]">
-            {editedCodes.length} of {permissions.length} permissions enabled
+            {includedSectionCount} of {sections.length} sections enabled
           </p>
           <div className="flex justify-end gap-2">
             <button type="button" onClick={onClose} className="rounded-xl border border-[var(--shell-border)] px-4 py-2 text-sm font-semibold text-[var(--shell-text)]">
@@ -1239,7 +1597,7 @@ function PlanModulesModal({
             </button>
           </div>
         </div>
-      </section>
+      </aside>
     </div>
   );
 }
@@ -1301,6 +1659,7 @@ function SubscriptionDetailDrawer({
                 <ActionButton onClick={() => onAction('pause')}>Pause</ActionButton>
                 <ActionButton onClick={() => onAction('resume')}>Resume</ActionButton>
                 <ActionButton onClick={() => onAction('renew')}>Renew</ActionButton>
+                <ActionButton onClick={() => onAction('generate-invoice')}>Generate Invoice</ActionButton>
                 <ActionButton onClick={() => onAction('limits')}>Override Limits</ActionButton>
                 <ActionButton onClick={() => onAction('manual-payment')}>Manual Payment</ActionButton>
                 <ActionButton danger onClick={() => onAction('cancel')}>Cancel</ActionButton>
@@ -1309,9 +1668,31 @@ function SubscriptionDetailDrawer({
 
             <section className="rounded-2xl border border-[var(--shell-border)] p-4">
               <h3 className="text-sm font-semibold uppercase tracking-[0.14em] text-[var(--shell-muted)]">Billing records</h3>
-              <p className="mt-2 text-sm text-[var(--shell-muted)]">
-                {detail.billingMessage ?? 'No invoice or payment records are available.'}
-              </p>
+              {detail.invoices.length ? (
+                <div className="mt-3 space-y-2">
+                  {detail.invoices.map((invoice) => (
+                    <div key={invoice.id} className="rounded-xl bg-[var(--shell-subtle)] p-3">
+                      <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                        <div>
+                          <p className="font-semibold text-[var(--shell-text)]">{invoice.invoiceNumber}</p>
+                          <p className="text-xs text-[var(--shell-muted)]">
+                            {formatDate(invoice.billingPeriodStart)} to {formatDate(invoice.billingPeriodEnd)} - Due {formatDate(invoice.dueDate)}
+                          </p>
+                          <p className="mt-1 font-mono text-[11px] text-[var(--shell-muted)]">{invoice.id}</p>
+                        </div>
+                        <div className="text-right">
+                          <Badge className={statusBadgeClass(invoice.status)}>{formatLabel(invoice.status)}</Badge>
+                          <p className="mt-1 text-sm font-semibold text-[var(--shell-text)]">{formatCurrency(invoice.balanceAmount)}</p>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p className="mt-2 text-sm text-[var(--shell-muted)]">
+                  {detail.billingMessage ?? 'No invoice or payment records are available.'}
+                </p>
+              )}
             </section>
 
             <section className="rounded-2xl border border-[var(--shell-border)] p-4">
@@ -1449,16 +1830,34 @@ function ActionModal({
             </>
           ) : null}
 
+          {action === 'generate-invoice' ? (
+            <>
+              <FormInput label="Billing period start" type="date" value={form.billingPeriodStart} onChange={(value) => setForm({ ...form, billingPeriodStart: value })} />
+              <FormInput label="Billing period end" type="date" value={form.billingPeriodEnd} onChange={(value) => setForm({ ...form, billingPeriodEnd: value })} />
+              <FormInput label="Due date" type="date" value={form.dueDate} onChange={(value) => setForm({ ...form, dueDate: value })} />
+              <FormInput label="Tax percent" type="number" value={form.taxPercent} onChange={(value) => setForm({ ...form, taxPercent: value })} />
+              <FormInput label="Discount percent" type="number" value={form.discountPercent} onChange={(value) => setForm({ ...form, discountPercent: value })} />
+              <FormInput label="Discount amount" type="number" value={form.discountAmount} onChange={(value) => setForm({ ...form, discountAmount: value })} />
+              <p className="sm:col-span-2 rounded-xl border border-blue-200 bg-blue-50 p-3 text-sm text-blue-800">
+                Total is calculated on the backend from the assigned plan price, tax, and discount.
+              </p>
+            </>
+          ) : null}
+
           {action === 'manual-payment' ? (
             <>
+              <FormInput label="Invoice ID" value={form.invoiceId} onChange={(value) => setForm({ ...form, invoiceId: value })} />
               <FormInput label="Amount" type="number" value={form.amount} onChange={(value) => setForm({ ...form, amount: value })} />
-              <FormInput label="Currency" value={form.currency} onChange={(value) => setForm({ ...form, currency: value.toUpperCase().slice(0, 3) })} />
-              <FormInput label="Method" value={form.method} onChange={(value) => setForm({ ...form, method: value })} />
-              <FormInput label="Reference" value={form.reference} onChange={(value) => setForm({ ...form, reference: value })} />
-              <FormInput label="Paid date" type="date" value={form.paidAt} onChange={(value) => setForm({ ...form, paidAt: value })} />
+              <FormSelect label="Payment mode" value={form.paymentMode} onChange={(value) => setForm({ ...form, paymentMode: value })}>
+                {['CASH', 'BANK_TRANSFER', 'UPI', 'CARD', 'CHEQUE', 'OTHER'].map((mode) => (
+                  <option key={mode} value={mode}>{formatLabel(mode)}</option>
+                ))}
+              </FormSelect>
+              <FormInput label="Reference" value={form.referenceNumber} onChange={(value) => setForm({ ...form, referenceNumber: value })} />
+              <FormInput label="Payment date" type="date" value={form.paymentDate} onChange={(value) => setForm({ ...form, paymentDate: value })} />
               <FormInput label="Notes" value={form.notes} onChange={(value) => setForm({ ...form, notes: value })} />
               <p className="sm:col-span-2 rounded-xl border border-blue-200 bg-blue-50 p-3 text-sm text-blue-800">
-                This records a manual payment note. It does not charge a payment gateway.
+                This records an offline payment against the selected invoice. It does not charge a payment gateway.
               </p>
             </>
           ) : null}

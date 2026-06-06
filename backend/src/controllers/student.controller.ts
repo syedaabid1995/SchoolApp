@@ -941,7 +941,7 @@ export const importStudents = async (req: Request, res: Response) => {
     validRows.push(row);
   });
 
-  await enforceLimits(schoolId, 'students');
+  await enforceLimits(schoolId, 'students', validRows.length);
   let successCount = 0;
   await prisma.$transaction(async (tx) => {
     for (const row of validRows) {
