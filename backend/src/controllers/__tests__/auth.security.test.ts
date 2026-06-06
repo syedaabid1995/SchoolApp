@@ -17,6 +17,7 @@ import {
   verifyTwoFactor,
 } from '../auth.controller';
 import { HttpError } from '../../middlewares/error.middleware';
+import { loginIpRateLimit } from '../../middlewares/rate-limit.middleware';
 import { hashPassword } from '../../utils/password';
 import { hashToken } from '../../utils/token';
 import { hashOtp } from '../../utils/otp';
@@ -497,6 +498,20 @@ const invoke = async (handler: (req: Request, res: Response) => Promise<void>, r
     });
   }
   return res;
+};
+
+const invokeMiddleware = async (
+  middleware: (req: Request, res: Response, next: (err?: unknown) => void) => Promise<void>,
+  req: Request,
+) => {
+  const res = createResponse();
+  let nextError: unknown;
+  let nextCalled = false;
+  await middleware(req, res as unknown as Response, (err?: unknown) => {
+    nextCalled = true;
+    nextError = err;
+  });
+  return { nextCalled, nextError };
 };
 
 const loginRequest = (password = OLD_PASSWORD, schoolCode = 'SCHA') =>
@@ -1211,4 +1226,36 @@ test('rate limit blocks repeated login attempts', async () => {
 
   assert.equal(limited.statusCode, 429);
   assert.equal((limited.body as any).error.message, RATE_LIMIT_MESSAGE);
+});
+
+test('login IP limiter falls back to memory when Redis is closed in production', async () => {
+  env.NODE_ENV = 'production';
+  patchMethod(redis as any, 'incr', async () => {
+    throw new Error('Connection is closed.');
+  });
+
+  const middleware = loginIpRateLimit();
+  const req = createRequest({
+    body: {
+      email: EMAIL,
+      password: OLD_PASSWORD,
+      schoolCode: 'SCHA',
+      loginType: 'staff',
+    },
+    ip: '203.0.113.44',
+  });
+
+  const first = await invokeMiddleware(middleware, req);
+  assert.equal(first.nextCalled, true);
+  assert.equal(first.nextError, undefined);
+
+  for (let attempt = 1; attempt < 20; attempt += 1) {
+    const allowed = await invokeMiddleware(middleware, req);
+    assert.equal(allowed.nextError, undefined);
+  }
+
+  const limited = await invokeMiddleware(middleware, req);
+  assert.ok(limited.nextError instanceof HttpError);
+  assert.equal((limited.nextError as HttpError).statusCode, 429);
+  assert.equal((limited.nextError as HttpError).message, RATE_LIMIT_MESSAGE);
 });

@@ -37,6 +37,14 @@ type RateLimitResult = {
 };
 
 const memoryCounters = new Map<string, MemoryCounter>();
+let lastAuthLimiterFallbackLogAt = 0;
+
+const logAuthLimiterFallback = (err: unknown, key: string) => {
+  const now = Date.now();
+  if (now - lastAuthLimiterFallbackLogAt < 60_000) return;
+  lastAuthLimiterFallbackLogAt = now;
+  logger.warn({ err, key }, 'redis rate limiter unavailable; using memory fallback');
+};
 
 const firstHeaderValue = (value: string | string[] | undefined) =>
   Array.isArray(value) ? value[0] : value;
@@ -221,12 +229,8 @@ const consumeAuthBucket = async (key: string, limit: number, windowSeconds: numb
   try {
     return await consumeRedis(key, limit, windowSeconds);
   } catch (err) {
-    if (env.NODE_ENV === 'development') {
-      logger.warn({ err, key }, 'redis rate limiter unavailable; using development memory fallback');
-      return memoryConsume(key, limit, windowSeconds);
-    }
-    logger.error({ err, key }, 'redis rate limiter unavailable');
-    throw new HttpError(429, AUTH_RATE_LIMIT_MESSAGE);
+    logAuthLimiterFallback(err, key);
+    return memoryConsume(key, limit, windowSeconds);
   }
 };
 
@@ -234,12 +238,8 @@ const peekAuthBucket = async (key: string, limit: number) => {
   try {
     return await peekRedis(key, limit);
   } catch (err) {
-    if (env.NODE_ENV === 'development') {
-      logger.warn({ err, key }, 'redis rate limiter unavailable; using development memory fallback');
-      return memoryPeek(key, limit);
-    }
-    logger.error({ err, key }, 'redis rate limiter unavailable');
-    throw new HttpError(429, AUTH_RATE_LIMIT_MESSAGE);
+    logAuthLimiterFallback(err, key);
+    return memoryPeek(key, limit);
   }
 };
 
