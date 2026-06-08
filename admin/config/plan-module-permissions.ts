@@ -34,6 +34,13 @@ export const PLAN_PERMISSION_MODULES: PlanPermissionModuleDefinition[] = [
     codes: ['dashboard.overview'],
   },
   {
+    parent: 'Dashboard',
+    module: 'AI Assistant',
+    path: '/dashboard/assistant',
+    description: 'Controlled school ERP AI assistant for help, read-only lookup, and confirmed setup actions.',
+    codes: ['ai.assistant.view', 'ai.assistant.use', 'ai.assistant.execute', 'ai.assistant.admin'],
+  },
+  {
     parent: 'Reports',
     module: 'Reports',
     path: '/dashboard/reports',

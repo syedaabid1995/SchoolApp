@@ -34,6 +34,7 @@
     "jsonwebtoken": "^9.0.2",
     "multer": "^2.0.2",
     "nodemailer": "^8.0.7",
+    "openai": "^6.42.0",
     "otplib": "^13.4.0",
     "pdfkit": "^0.15.0",
     "pino": "^9.2.0",

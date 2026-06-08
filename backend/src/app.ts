@@ -62,6 +62,7 @@ import { transportRouter } from './routes/transport.routes';
 import { homeworkRouter } from './routes/homework.routes';
 import { libraryRouter } from './routes/library.routes';
 import { feeManagementRouter } from './routes/feeManagement.routes';
+import { aiAssistantRouter } from './routes/aiAssistant.routes';
 import { rateLimit } from './middlewares/rate-limit.middleware';
 import { apiVersionMiddleware } from './middlewares/version.middleware';
 
@@ -200,6 +201,7 @@ export const createApp = () => {
   app.use('/api/v1/compliance', dataComplianceRouter);
   app.use('/api/v1/tickets', ticketRouter);
   app.use('/api/v1/analytics', analyticsRouter);
+  app.use('/api/v1/ai-assistant', aiAssistantRouter);
   app.use('/api/v1/admin/schools', schoolAdminRouter);
   app.use('/api/v1/schools', schoolOnboardingRouter);
   app.use('/api/v1/admin/subscription-plans', subscriptionPlanRouter);

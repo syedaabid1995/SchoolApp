@@ -1059,7 +1059,7 @@ export default function AcademicSetupPage() {
             </Field>
             <Field label="Academic year">
               <select className={inputClass} value={classForm.academicYearId} onChange={(e) => setClassForm((p) => ({ ...p, academicYearId: e.target.value }))}>
-                <option value="">No academic year</option>
+                <option value="">Select academic year</option>
                 {(yearsQuery.data ?? []).map((year: { id: string; name: string }) => <option key={year.id} value={year.id}>{year.name}</option>)}
               </select>
             </Field>

@@ -329,6 +329,7 @@ export const Sidebar = ({
         label: 'Dashboard',
         items: [
           { href: '/dashboard', label: 'Dashboard', icon: 'DB' },
+          { href: '/dashboard/assistant', label: 'AI Assistant', icon: 'AI' },
         ],
       },
       {

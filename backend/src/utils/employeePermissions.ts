@@ -7,7 +7,7 @@ export type EmployeePermissionItem = {
   code: string;
   label: string;
   path: string;
-  group: 'Overview' | 'Plans' | 'Employees' | 'Academics' | 'Students' | 'Attendance' | 'Fees' | 'Payroll' | 'Support' | 'Audit' | 'Utilities';
+  group: 'Overview' | 'Plans' | 'AI Assistant' | 'Employees' | 'Academics' | 'Students' | 'Attendance' | 'Fees' | 'Payroll' | 'Support' | 'Audit' | 'Utilities';
 };
 
 export const EMPLOYEE_PERMISSION_CATALOG: EmployeePermissionItem[] = [
@@ -31,6 +31,10 @@ export const EMPLOYEE_PERMISSION_CATALOG: EmployeePermissionItem[] = [
   { code: 'compliance.export.review', label: 'Compliance Export - Review', path: '/dashboard/compliance', group: 'Audit' },
   { code: 'compliance.deletion.review', label: 'Compliance Deletion - Review', path: '/dashboard/compliance', group: 'Audit' },
   { code: 'plans.view', label: 'Plans', path: '/dashboard/plans', group: 'Plans' },
+  { code: 'ai.assistant.view', label: 'AI Assistant - View', path: '/dashboard/assistant', group: 'AI Assistant' },
+  { code: 'ai.assistant.use', label: 'AI Assistant - Chat', path: '/dashboard/assistant', group: 'AI Assistant' },
+  { code: 'ai.assistant.execute', label: 'AI Assistant - Execute Actions', path: '/dashboard/assistant', group: 'AI Assistant' },
+  { code: 'ai.assistant.admin', label: 'AI Assistant - Admin', path: '/dashboard/assistant', group: 'AI Assistant' },
   { code: 'settings.access', label: 'Institution & System Settings', path: '/dashboard/settings', group: 'Utilities' },
   { code: 'school.onboarding.view', label: 'School Onboarding - View', path: '/dashboard/onboarding', group: 'Utilities' },
   { code: 'school.onboarding.manage', label: 'School Onboarding - Manage', path: '/dashboard/onboarding', group: 'Utilities' },

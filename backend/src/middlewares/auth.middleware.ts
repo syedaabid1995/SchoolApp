@@ -318,6 +318,7 @@ export const resolvePermissionForPath = (path: string, method = 'GET') => {
   }
 
   const targets: Array<{ prefix: string; code: string }> = [
+    { prefix: '/api/v1/ai-assistant', code: 'ai.assistant.use' },
     { prefix: '/api/v1/schools', code: verb === 'GET' ? 'school.onboarding.view' : 'school.onboarding.manage' },
     { prefix: '/api/v1/teachers/onboarding', code: verb === 'GET' ? 'teacher.onboarding.view' : 'teacher.onboarding.manage' },
     { prefix: '/api/v1/teachers/', code: pathOnly.includes('/credentials/') ? 'teacher.credentials.manage' : pathOnly.includes('/onboarding') ? (verb === 'GET' ? 'teacher.onboarding.view' : 'teacher.onboarding.manage') : 'teachers.list' },

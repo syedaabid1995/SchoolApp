@@ -155,6 +155,8 @@ model School {
   feeNotifications               FeeNotification[]
   numberSequences                NumberSequence[]
   onboardingChecklist            SchoolOnboardingChecklist[]
+  aiConversations                AiConversation[]
+  aiPendingActions               AiPendingAction[]
 
   @@map("schools")
 }
@@ -250,6 +252,10 @@ model User {
   libraryIssuesCreated                   LibraryIssue[]                  @relation("LibraryIssueCreatedBy")
   libraryIssuesReturned                  LibraryIssue[]                  @relation("LibraryIssueReturnedBy")
   subscriptionPaymentsReceived           SubscriptionPayment[]           @relation("SubscriptionPaymentReceivedBy")
+  aiConversations                        AiConversation[]
+  aiMessages                             AiMessage[]
+  aiPendingActionsCreated                AiPendingAction[]               @relation("AiPendingActionCreatedBy")
+  aiPendingActionsExecuted               AiPendingAction[]               @relation("AiPendingActionExecutedBy")
 
   @@unique([schoolId, email])
   @@index([schoolId])
@@ -3807,6 +3813,71 @@ model AuditLog {
   @@index([entityType])
   @@index([entityId])
   @@map("audit_logs")
+}
+
+model AiConversation {
+  id        String   @id @default(uuid()) @db.Uuid
+  schoolId  String?  @map("school_id") @db.Uuid
+  userId    String   @map("user_id") @db.Uuid
+  title     String?
+  status    String   @default("ACTIVE")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  school         School?           @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  user           User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  messages       AiMessage[]
+  pendingActions AiPendingAction[]
+
+  @@index([schoolId])
+  @@index([userId])
+  @@index([status])
+  @@map("ai_conversations")
+}
+
+model AiMessage {
+  id             String   @id @default(uuid()) @db.Uuid
+  conversationId String   @map("conversation_id") @db.Uuid
+  userId         String?  @map("user_id") @db.Uuid
+  role           String
+  content        String
+  toolName       String?  @map("tool_name")
+  toolPayload    Json?    @map("tool_payload")
+  createdAt      DateTime @default(now()) @map("created_at")
+
+  conversation AiConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  user         User?          @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([conversationId])
+  @@index([userId])
+  @@index([role])
+  @@map("ai_messages")
+}
+
+model AiPendingAction {
+  id             String    @id @default(uuid()) @db.Uuid
+  conversationId String    @map("conversation_id") @db.Uuid
+  schoolId        String?   @map("school_id") @db.Uuid
+  toolName       String    @map("tool_name")
+  payload        Json
+  status         String    @default("PENDING")
+  risk           String    @default("LOW")
+  summary        String?
+  createdById    String    @map("created_by_id") @db.Uuid
+  executedById   String?   @map("executed_by_id") @db.Uuid
+  createdAt      DateTime  @default(now()) @map("created_at")
+  executedAt     DateTime? @map("executed_at")
+
+  conversation AiConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  school       School?        @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  createdBy    User           @relation("AiPendingActionCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+  executedBy   User?          @relation("AiPendingActionExecutedBy", fields: [executedById], references: [id], onDelete: SetNull)
+
+  @@index([conversationId])
+  @@index([schoolId])
+  @@index([createdById])
+  @@index([status])
+  @@map("ai_pending_actions")
 }
 
 model AuditExport {

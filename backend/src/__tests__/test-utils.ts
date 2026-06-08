@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { randomUUID } from 'node:crypto';
 import http from 'node:http';
 import jwt from 'jsonwebtoken';
 import type { AddressInfo } from 'node:net';
@@ -59,6 +60,9 @@ export type TestHttpResponse = {
 const users = new Map<string, TestUser>();
 let restoreFns: Array<() => void> = [];
 let auditExports: any[] = [];
+let aiConversations: any[] = [];
+let aiMessages: any[] = [];
+let aiPendingActions: any[] = [];
 let originalNodeEnv: typeof env.NODE_ENV | null = null;
 
 const defaultPermissionCodes = [
@@ -82,6 +86,10 @@ const defaultPermissionCodes = [
   'compliance.export.review',
   'compliance.deletion.review',
   'plans.view',
+  'ai.assistant.view',
+  'ai.assistant.use',
+  'ai.assistant.execute',
+  'ai.assistant.admin',
   'school.onboarding.view',
   'school.onboarding.manage',
   'school.onboarding.review',
@@ -232,6 +240,9 @@ export const createTestUser = (role: TestRole, schoolId?: string | null): TestUs
 
 export const seedSecurityUsers = () => {
   users.clear();
+  aiConversations = [];
+  aiMessages = [];
+  aiPendingActions = [];
   createTestUser('SUPER_ADMIN', null);
   createTestUser('SCHOOL_ADMIN', SCHOOL_A_ID);
   createTestUser('SCHOOL_ADMIN', SCHOOL_B_ID);
@@ -347,6 +358,29 @@ const makeRecord = (data: any = {}) => ({
   ...data,
 });
 
+const testClassForName = (name: unknown) => {
+  const normalized = String(name ?? '').trim().replace(/^(\d+)$/, 'Class $1');
+  const match = normalized.match(/^Class\s+(\d+)$/i);
+  if (!match) return null;
+  const classNumber = Number(match[1]);
+  if (classNumber < 1 || classNumber > 12) return null;
+  return {
+    id: classNumber === 1 ? TEST_CLASS_A_ID : `cdcdcdcd-cdcd-4cdc-8cdc-${String(classNumber).padStart(12, '0')}`,
+    schoolId: SCHOOL_A_ID,
+    name: `Class ${classNumber}`,
+  };
+};
+
+const testSectionForName = (name: unknown) => {
+  const normalized = String(name ?? '').trim().replace(/^section\s+/i, '').toUpperCase();
+  if (!['A', 'B'].includes(normalized)) return null;
+  return {
+    id: normalized === 'A' ? TEST_SECTION_A_ID : 'efefefef-efef-4efe-8efe-00000000000b',
+    schoolId: SCHOOL_A_ID,
+    name: normalized,
+  };
+};
+
 const patchDefaultDelegate = (delegate: any, name: string) => {
   if (!delegate) return;
   if ('count' in delegate) patchMethod(delegate, 'count', async () => 0);
@@ -376,6 +410,9 @@ export const patchSecurityTestDependencies = () => {
 
   const delegateNames = [
     'academicYear',
+    'aiConversation',
+    'aiMessage',
+    'aiPendingAction',
     'auditExport',
     'auditLog',
     'backupJob',
@@ -456,6 +493,65 @@ export const patchSecurityTestDependencies = () => {
   patchMethod(prisma as any, '$queryRaw', async () => []);
   patchMethod(prisma as any, '$transaction', async (input: any) => (Array.isArray(input) ? Promise.all(input) : input(prisma)));
 
+  patchMethod(prisma.aiConversation as any, 'create', async ({ data }: any) => {
+    const record = makeRecord({ id: randomUUID(), ...data });
+    aiConversations.push(record);
+    return record;
+  });
+  patchMethod(prisma.aiConversation as any, 'findFirst', async ({ where }: any = {}) =>
+    aiConversations.find((conversation) =>
+      (!where?.id || conversation.id === where.id) &&
+      (!where?.userId || conversation.userId === where.userId) &&
+      (!where?.schoolId || conversation.schoolId === where.schoolId)
+    ) ?? null,
+  );
+  patchMethod(prisma.aiMessage as any, 'create', async ({ data }: any) => {
+    const record = makeRecord({ id: randomUUID(), ...data });
+    aiMessages.push(record);
+    return record;
+  });
+  patchMethod(prisma.aiMessage as any, 'findFirst', async ({ where }: any = {}) => {
+    const rows = aiMessages.filter((message) =>
+      (!where?.conversationId || message.conversationId === where.conversationId) &&
+      (!where?.role || message.role === where.role)
+    );
+    return rows.at(-1) ?? null;
+  });
+  patchMethod(prisma.aiPendingAction as any, 'create', async ({ data }: any) => {
+    const record = makeRecord({ id: randomUUID(), status: 'PENDING', ...data });
+    aiPendingActions.push(record);
+    return record;
+  });
+  patchMethod(prisma.aiPendingAction as any, 'findFirst', async ({ where }: any = {}) => {
+    const rows = aiPendingActions.filter((action) =>
+      (!where?.id || action.id === where.id) &&
+      (!where?.conversationId || action.conversationId === where.conversationId) &&
+      (!where?.createdById || action.createdById === where.createdById) &&
+      (!where?.schoolId || action.schoolId === where.schoolId) &&
+      (!where?.status || action.status === where.status)
+    );
+    return rows.at(-1) ?? null;
+  });
+  patchMethod(prisma.aiPendingAction as any, 'update', async ({ where, data }: any) => {
+    const index = aiPendingActions.findIndex((action) => action.id === where?.id);
+    if (index === -1) return makeRecord({ id: where?.id, ...data });
+    aiPendingActions[index] = { ...aiPendingActions[index], ...data };
+    return aiPendingActions[index];
+  });
+  patchMethod(prisma.aiPendingAction as any, 'updateMany', async ({ where, data }: any = {}) => {
+    let count = 0;
+    aiPendingActions = aiPendingActions.map((action) => {
+      const matches =
+        (!where?.conversationId || action.conversationId === where.conversationId) &&
+        (!where?.createdById || action.createdById === where.createdById) &&
+        (!where?.status || action.status === where.status);
+      if (!matches) return action;
+      count += 1;
+      return { ...action, ...data };
+    });
+    return { count };
+  });
+
   patchMethod(prisma.school as any, 'findUnique', async ({ where }: any) => schoolFor(where?.id) ?? (where?.code === 'SCHA' ? schoolFor(SCHOOL_A_ID) : schoolFor(SCHOOL_B_ID)));
   patchMethod(prisma.school as any, 'findFirst', async ({ where }: any) => schoolFor(where?.id) ?? (where?.code === 'SCHA' ? schoolFor(SCHOOL_A_ID) : null));
   patchMethod(prisma.school as any, 'findMany', async ({ where }: any = {}) => {
@@ -471,6 +567,7 @@ export const patchSecurityTestDependencies = () => {
   patchMethod(prisma.academicYear as any, 'findFirst', async ({ where }: any = {}) => {
     if (where?.schoolId && where.schoolId !== SCHOOL_A_ID) return null;
     if (where?.id && where.id !== TEST_ACADEMIC_YEAR_A_ID && where.id?.not !== TEST_ACADEMIC_YEAR_A_ID) return null;
+    if (where?.name?.equals && String(where.name.equals).toLowerCase() !== '2026-2027') return null;
     return {
       id: TEST_ACADEMIC_YEAR_A_ID,
       schoolId: SCHOOL_A_ID,
@@ -480,22 +577,71 @@ export const patchSecurityTestDependencies = () => {
       isActive: true,
     };
   });
+  patchMethod(prisma.academicYear as any, 'findMany', async ({ where }: any = {}) => {
+    if (where?.schoolId && where.schoolId !== SCHOOL_A_ID) return [];
+    return [{
+      id: TEST_ACADEMIC_YEAR_A_ID,
+      schoolId: SCHOOL_A_ID,
+      name: '2026-2027',
+      startDate: new Date('2026-04-01T00:00:00.000Z'),
+      endDate: new Date('2027-03-31T00:00:00.000Z'),
+      isActive: true,
+    }];
+  });
   patchMethod(prisma.class as any, 'findFirst', async ({ where }: any = {}) => {
     if (where?.schoolId && where.schoolId !== SCHOOL_A_ID) return null;
     if (where?.id && where.id !== TEST_CLASS_A_ID) return null;
+    if (where?.name?.equals) return testClassForName(where.name.equals);
     return { id: TEST_CLASS_A_ID, schoolId: SCHOOL_A_ID, name: 'Class 1' };
+  });
+  patchMethod(prisma.class as any, 'findMany', async ({ where }: any = {}) => {
+    if (where?.schoolId && where.schoolId !== SCHOOL_A_ID) return [];
+    if (where?.classSections?.none) return [{ id: 'cdcdcdcd-cdcd-4cdc-8cdc-000000000003', schoolId: SCHOOL_A_ID, name: 'Class 3' }];
+    if (where?.assignSubjects?.none) return [{ id: 'cdcdcdcd-cdcd-4cdc-8cdc-000000000002', schoolId: SCHOOL_A_ID, name: 'Class 2' }];
+    return [1, 2, 3, 4, 5].map((value) => testClassForName(`Class ${value}`));
   });
   patchMethod(prisma.section as any, 'findFirst', async ({ where }: any = {}) => {
     if (where?.schoolId && where.schoolId !== SCHOOL_A_ID) return null;
+    if (where?.name?.equals) return testSectionForName(where.name.equals);
     if (!where?.id) return null;
-    if (where.id !== TEST_SECTION_A_ID) return null;
-    return { id: TEST_SECTION_A_ID, schoolId: SCHOOL_A_ID, name: 'A' };
+    if (where.id === TEST_SECTION_A_ID) return { id: TEST_SECTION_A_ID, schoolId: SCHOOL_A_ID, name: 'A' };
+    if (where.id === 'efefefef-efef-4efe-8efe-00000000000b') return { id: where.id, schoolId: SCHOOL_A_ID, name: 'B' };
+    return null;
+  });
+  patchMethod(prisma.section as any, 'findMany', async ({ where }: any = {}) => {
+    if (where?.schoolId && where.schoolId !== SCHOOL_A_ID) return [];
+    if (where?.classSections?.none) return [{ id: 'efefefef-efef-4efe-8efe-00000000000c', schoolId: SCHOOL_A_ID, name: 'C' }];
+    return ['A', 'B'].map((value) => testSectionForName(value));
+  });
+  patchMethod(prisma.subject as any, 'findMany', async ({ where }: any = {}) => {
+    if (where?.schoolId && where.schoolId !== SCHOOL_A_ID) return [];
+    return [
+      { id: '10101010-1010-4101-8101-101010101010', schoolId: SCHOOL_A_ID, name: 'English', code: 'ENG', type: 'THEORY' },
+      { id: '20202020-2020-4202-8202-202020202020', schoolId: SCHOOL_A_ID, name: 'Mathematics', code: 'MATH', type: 'THEORY' },
+    ];
   });
   patchMethod(prisma.classSection as any, 'findFirst', async ({ where }: any = {}) => {
     if (where?.schoolId && where.schoolId !== SCHOOL_A_ID) return null;
     if (where?.classId && where.classId !== TEST_CLASS_A_ID) return null;
     if (where?.sectionId && where.sectionId !== TEST_SECTION_A_ID) return null;
     return { id: 'class-section-a', schoolId: SCHOOL_A_ID, classId: TEST_CLASS_A_ID, sectionId: TEST_SECTION_A_ID };
+  });
+  patchMethod(prisma.classSection as any, 'findMany', async ({ where }: any = {}) => {
+    if (where?.schoolId && where.schoolId !== SCHOOL_A_ID) return [];
+    const className = where?.class?.name?.equals;
+    const cls = testClassForName(className ?? 'Class 1') ?? testClassForName('Class 1');
+    const sections = className && String(className).toLowerCase() === 'class 5' ? ['A'] : ['A', 'B'];
+    return sections.map((sectionNameValue) => {
+      const section = testSectionForName(sectionNameValue);
+      return {
+        id: `class-section-${String(sectionNameValue).toLowerCase()}`,
+        schoolId: SCHOOL_A_ID,
+        classId: cls?.id,
+        sectionId: section?.id,
+        class: { id: cls?.id, name: cls?.name },
+        section: { id: section?.id, name: section?.name },
+      };
+    });
   });
 
   patchMethod(prisma.userRole as any, 'findMany', async ({ where }: any) => roleRowsFor(where?.userId));
