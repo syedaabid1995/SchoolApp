@@ -53,7 +53,7 @@ export const EMPLOYEE_PERMISSION_CATALOG: PermissionCatalogItem[] = [
   { code: 'staff.timeline.view', label: 'Staff Timeline - View', path: '/dashboard/staff', group: 'Employees' },
   { code: 'staff.timeline.create', label: 'Staff Timeline - Create', path: '/dashboard/staff', group: 'Employees' },
   { code: 'staff.timeline.delete', label: 'Staff Timeline - Delete', path: '/dashboard/staff', group: 'Employees' },
-  { code: 'attendance.substitute.manage', label: 'Attendance Substitutions', path: '/dashboard/teachers/assign', group: 'Attendance' },
+  { code: 'attendance.substitute.manage', label: 'Attendance Substitutions', path: '/dashboard/academics', group: 'Attendance' },
   { code: 'academics.setup', label: 'Academic Setup', path: '/dashboard/academics', group: 'Academics' },
   { code: 'academic.class.view', label: 'Academic Classes - View', path: '/dashboard/academics', group: 'Academics' },
   { code: 'academic.class.create', label: 'Academic Classes - Create', path: '/dashboard/academics', group: 'Academics' },
@@ -190,6 +190,10 @@ export const EMPLOYEE_PERMISSION_CATALOG: PermissionCatalogItem[] = [
   { code: 'student.disabled.edit', label: 'Disabled Students - Edit', path: '/dashboard/students/disabled', group: 'Students' },
   { code: 'student.disabled.delete', label: 'Disabled Students - Delete', path: '/dashboard/students/disabled', group: 'Students' },
   { code: 'student.disabled.restore', label: 'Disabled Students - Restore', path: '/dashboard/students/disabled', group: 'Students' },
+  { code: 'homework.view', label: 'Homework - View', path: '/dashboard/homework', group: 'Students' },
+  { code: 'library.view', label: 'Library - View', path: '/dashboard/library', group: 'Utilities' },
+  { code: 'transport.view', label: 'Transport - View', path: '/dashboard/transport', group: 'Utilities' },
+  { code: 'dormitory.view', label: 'Dormitory - View', path: '/dashboard/dormitory', group: 'Utilities' },
   { code: 'idcards.view', label: 'ID Cards', path: '/dashboard/id-cards', group: 'Utilities' },
   {
     code: 'students.transfers',
@@ -244,10 +248,10 @@ export const getRequiredPermissionForPath = (pathname: string) => {
   if (pathname.startsWith('/dashboard/academics/exams')) return 'academics.exams';
   if (pathname.startsWith('/dashboard/academics/marks')) return 'academics.marks';
   if (pathname.startsWith('/dashboard/academics')) return 'academics.setup';
-  if (pathname.startsWith('/dashboard/dormitory')) return 'students.list';
-  if (pathname.startsWith('/dashboard/transport')) return 'students.list';
-  if (pathname.startsWith('/dashboard/homework')) return 'students.list';
-  if (pathname.startsWith('/dashboard/library')) return 'students.list';
+  if (pathname.startsWith('/dashboard/dormitory')) return 'dormitory.view';
+  if (pathname.startsWith('/dashboard/transport')) return 'transport.view';
+  if (pathname.startsWith('/dashboard/homework')) return 'homework.view';
+  if (pathname.startsWith('/dashboard/library')) return 'library.view';
 
   if (pathname.startsWith('/dashboard/students/add')) return 'students.add';
   if (pathname.startsWith('/dashboard/students/attendance')) return 'attendance.view';

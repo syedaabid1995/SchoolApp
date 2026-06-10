@@ -346,62 +346,242 @@ export const clearExamSeating = async (req: Request, schoolId: string, examId: s
   });
 };
 
-const examSlotKeys = (exam: { scheduledAt: Date | null; papers?: Array<{ scheduledAt: Date | null }> }) => {
-  const keys = new Set<string>();
-  if (exam.scheduledAt) keys.add(exam.scheduledAt.toISOString());
-  exam.papers?.forEach((paper) => {
-    if (paper.scheduledAt) keys.add(paper.scheduledAt.toISOString());
-  });
-  return keys;
+const examDateKey = (date?: Date | null) => {
+  if (!date) return null;
+  return date.toISOString().slice(0, 10);
 };
+
+const examDateRange = (date: Date) => {
+  const start = new Date(date);
+  start.setUTCHours(0, 0, 0, 0);
+  const end = new Date(start);
+  end.setUTCDate(end.getUTCDate() + 1);
+  return { start, end };
+};
+
+type AutoAssignInvigilatorsParams = {
+  examPaperIds?: string[];
+  centerIds?: string[];
+  dryRun?: boolean;
+};
+
+type AutoAssignCandidate = {
+  examPaperId: string;
+  subjectName: string;
+  scheduledAt: Date;
+  teacherId: string;
+  teacherName: string;
+  employeeNo?: string | null;
+  centerId: string;
+  centerName: string;
+  roomId: string;
+  roomName: string;
+};
+
+const teacherName = (teacher: { firstName: string; lastName: string }) => `${teacher.firstName} ${teacher.lastName}`.trim();
 
 export const listExamInvigilators = async (schoolId: string, examId: string) => {
   await getExamOrThrow(schoolId, examId);
   return prisma.examInvigilatorAssignment.findMany({
     where: { schoolId, examId },
-    orderBy: [{ center: { name: 'asc' } }, { room: { name: 'asc' } }],
-    include: { center: true, room: true, teacher: { include: { user: { select: { email: true } } } } },
+    orderBy: [{ examPaper: { scheduledAt: 'asc' } }, { center: { name: 'asc' } }, { room: { name: 'asc' } }],
+    include: {
+      center: true,
+      room: true,
+      examPaper: { include: { subject: true } },
+      teacher: { include: { user: { select: { email: true } } } },
+    },
   });
+};
+
+export const autoAssignExamInvigilators = async (
+  req: Request,
+  schoolId: string,
+  examId: string,
+  params: AutoAssignInvigilatorsParams,
+) => {
+  const exam = await getExamOrThrow(schoolId, examId);
+  const selectedPaperIds = new Set(params.examPaperIds ?? []);
+  const papers = exam.papers
+    .filter((paper) => !selectedPaperIds.size || selectedPaperIds.has(paper.id))
+    .map((paper) => ({ ...paper, effectiveScheduledAt: paper.scheduledAt ?? exam.scheduledAt }))
+    .filter((paper) => Boolean(paper.effectiveScheduledAt))
+    .sort((a, b) => a.effectiveScheduledAt!.getTime() - b.effectiveScheduledAt!.getTime());
+
+  if (!papers.length) {
+    throw new HttpError(400, 'No dated exam papers found for auto assignment');
+  }
+
+  const [rooms, teachers, existingAssignments] = await Promise.all([
+    prisma.examRoom.findMany({
+      where: {
+        schoolId,
+        isActive: true,
+        center: { isActive: true },
+        ...(params.centerIds?.length ? { centerId: { in: params.centerIds } } : {}),
+      },
+      include: { center: true },
+      orderBy: [{ center: { code: 'asc' } }, { code: 'asc' }],
+    }),
+    prisma.teacherProfile.findMany({
+      where: { schoolId, isActive: true, roleName: 'TEACHER' },
+      select: { id: true, firstName: true, lastName: true, employeeNo: true },
+      orderBy: [{ firstName: 'asc' }, { lastName: 'asc' }],
+    }),
+    prisma.examInvigilatorAssignment.findMany({
+      where: { schoolId },
+      include: { exam: true, examPaper: true },
+    }),
+  ]);
+
+  if (!rooms.length) throw new HttpError(400, 'No active exam rooms are available');
+  if (!teachers.length) throw new HttpError(400, 'No active teachers are available');
+
+  const existingRoomByPaper = new Set(existingAssignments.filter((entry) => entry.examPaperId).map((entry) => `${entry.examPaperId}:${entry.roomId}`));
+  const existingTeacherDates = new Map<string, Set<string>>();
+  const assignmentCounts = new Map<string, number>();
+  for (const assignment of existingAssignments) {
+    assignmentCounts.set(assignment.teacherId, (assignmentCounts.get(assignment.teacherId) ?? 0) + 1);
+    const dateKey = examDateKey(assignment.examPaper?.scheduledAt ?? assignment.exam.scheduledAt);
+    if (!dateKey) continue;
+    const dates = existingTeacherDates.get(assignment.teacherId) ?? new Set<string>();
+    dates.add(dateKey);
+    existingTeacherDates.set(assignment.teacherId, dates);
+  }
+
+  const planned: AutoAssignCandidate[] = [];
+  const warnings: string[] = [];
+  let skippedExisting = 0;
+
+  for (const paper of papers) {
+    const paperDate = examDateKey(paper.effectiveScheduledAt);
+    if (!paperDate) continue;
+    const plannedTeacherIdsForDate = new Set(planned.filter((entry) => examDateKey(entry.scheduledAt) === paperDate).map((entry) => entry.teacherId));
+
+    for (const room of rooms) {
+      if (existingRoomByPaper.has(`${paper.id}:${room.id}`)) {
+        skippedExisting += 1;
+        continue;
+      }
+
+      const availableTeachers = teachers
+        .filter((teacher) => !existingTeacherDates.get(teacher.id)?.has(paperDate))
+        .filter((teacher) => !plannedTeacherIdsForDate.has(teacher.id))
+        .sort((a, b) => {
+          const countDiff = (assignmentCounts.get(a.id) ?? 0) - (assignmentCounts.get(b.id) ?? 0);
+          if (countDiff) return countDiff;
+          return teacherName(a).localeCompare(teacherName(b));
+        });
+
+      const teacher = availableTeachers[0];
+      if (!teacher) {
+        warnings.push(`No available teacher for ${paper.subject.name} on ${paperDate} in ${room.center.name} / ${room.name}`);
+        continue;
+      }
+
+      plannedTeacherIdsForDate.add(teacher.id);
+      assignmentCounts.set(teacher.id, (assignmentCounts.get(teacher.id) ?? 0) + 1);
+      planned.push({
+        examPaperId: paper.id,
+        subjectName: paper.subject.name,
+        scheduledAt: paper.effectiveScheduledAt!,
+        teacherId: teacher.id,
+        teacherName: teacherName(teacher),
+        employeeNo: teacher.employeeNo,
+        centerId: room.centerId,
+        centerName: room.center.name,
+        roomId: room.id,
+        roomName: room.name,
+      });
+    }
+  }
+
+  if (!params.dryRun && planned.length) {
+    await prisma.examInvigilatorAssignment.createMany({
+      data: planned.map((entry) => ({
+        schoolId,
+        examId,
+        examPaperId: entry.examPaperId,
+        teacherId: entry.teacherId,
+        centerId: entry.centerId,
+        roomId: entry.roomId,
+      })),
+      skipDuplicates: true,
+    });
+    await logAudit(req, {
+      schoolId,
+      entityType: 'EXAM_INVIGILATOR',
+      entityId: examId,
+      action: 'AUTO_ASSIGN',
+      afterState: { examId, assignments: planned.length, skippedExisting, warnings: warnings.length },
+    });
+  }
+
+  return {
+    dryRun: params.dryRun ?? true,
+    summary: {
+      papers: papers.length,
+      rooms: rooms.length,
+      planned: planned.length,
+      skippedExisting,
+      warnings: warnings.length,
+    },
+    assignments: planned.map((entry) => ({
+      ...entry,
+      scheduledAt: entry.scheduledAt.toISOString(),
+    })),
+    warnings,
+  };
 };
 
 export const assignExamInvigilator = async (
   req: Request,
   schoolId: string,
   examId: string,
-  payload: { teacherId: string; roomId: string },
+  payload: { examPaperId: string; teacherId: string; roomId: string },
 ) => {
   const exam = await getExamOrThrow(schoolId, examId);
-  const [teacher, room, sameExamExisting, roomExisting, teacherAssignments] = await Promise.all([
-    prisma.teacherProfile.findFirst({ where: { id: payload.teacherId, schoolId, isActive: true } }),
+  const paper = exam.papers.find((item) => item.id === payload.examPaperId);
+  if (!paper) throw new HttpError(404, 'Exam paper not found');
+  const paperScheduledAt = paper.scheduledAt ?? exam.scheduledAt;
+  const paperDate = examDateKey(paperScheduledAt);
+  if (!paperDate) throw new HttpError(400, 'Exam paper date is required before assigning invigilators');
+
+  const [teacher, room, samePaperExisting, roomExisting] = await Promise.all([
+    prisma.teacherProfile.findFirst({ where: { id: payload.teacherId, schoolId, isActive: true, roleName: 'TEACHER' } }),
     prisma.examRoom.findFirst({ where: { id: payload.roomId, schoolId, isActive: true, center: { isActive: true } } }),
-    prisma.examInvigilatorAssignment.findFirst({ where: { schoolId, examId, teacherId: payload.teacherId } }),
-    prisma.examInvigilatorAssignment.findFirst({ where: { schoolId, examId, roomId: payload.roomId } }),
-    prisma.examInvigilatorAssignment.findMany({
-      where: { schoolId, teacherId: payload.teacherId, examId: { not: examId } },
-      include: { exam: { include: { papers: true } } },
-    }),
+    prisma.examInvigilatorAssignment.findFirst({ where: { schoolId, examPaperId: payload.examPaperId, teacherId: payload.teacherId } }),
+    prisma.examInvigilatorAssignment.findFirst({ where: { schoolId, examPaperId: payload.examPaperId, roomId: payload.roomId } }),
   ]);
   if (!teacher) throw new HttpError(404, 'Active invigilator not found');
   if (!room) throw new HttpError(404, 'Active exam room not found');
-  if (sameExamExisting) throw new HttpError(409, 'Invigilator is already assigned in this exam');
-  if (roomExisting) throw new HttpError(409, 'Room already has an invigilator for this exam');
+  if (samePaperExisting) throw new HttpError(409, 'Invigilator is already assigned for this paper');
+  if (roomExisting) throw new HttpError(409, 'Room already has an invigilator for this paper');
 
-  const currentSlots = examSlotKeys(exam);
-  const conflict = teacherAssignments.find((assignment) => {
-    const otherSlots = examSlotKeys(assignment.exam);
-    return [...currentSlots].some((slot) => otherSlots.has(slot));
+  const { start, end } = examDateRange(paperScheduledAt!);
+  const conflict = await prisma.examInvigilatorAssignment.findFirst({
+    where: {
+      schoolId,
+      teacherId: payload.teacherId,
+      OR: [
+        { examPaper: { scheduledAt: { gte: start, lt: end } } },
+        { examPaperId: null, exam: { scheduledAt: { gte: start, lt: end } } },
+      ],
+    },
+    select: { id: true },
   });
-  if (conflict) throw new HttpError(409, 'Invigilator is double-booked for an overlapping exam slot');
+  if (conflict) throw new HttpError(409, 'Invigilator is already assigned on this exam date');
 
   const assignment = await prisma.examInvigilatorAssignment.create({
     data: {
       schoolId,
       examId,
+      examPaperId: payload.examPaperId,
       teacherId: payload.teacherId,
       centerId: room.centerId,
       roomId: room.id,
     },
-    include: { center: true, room: true, teacher: true },
+    include: { center: true, room: true, examPaper: { include: { subject: true } }, teacher: true },
   });
   await logAudit(req, {
     schoolId,

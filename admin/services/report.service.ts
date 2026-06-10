@@ -40,7 +40,27 @@ export const updateExamGradingSettings = async (payload: ExamGradingSettings) =>
 };
 
 export const getExam = async (id: string) => {
-  const { data } = await api.get(`/exams/${id}`);
+  const { data } = await api.get<{
+    id: string;
+    academicYearId: string;
+    termId?: string | null;
+    classId?: string | null;
+    sectionId?: string | null;
+    name: string;
+    type?: string;
+    status?: 'DRAFT' | 'PUBLISHED' | 'CLOSED';
+    scheduledAt?: string | null;
+    resultPublishAt?: string | null;
+    papers: Array<{
+      id: string;
+      subjectId: string;
+      classId?: string;
+      scheduledAt?: string | null;
+      maxMarks: number;
+      passMarks: number;
+      subject?: { id: string; name: string; code?: string | null };
+    }>;
+  }>(`/exams/${id}`);
   return data;
 };
 
@@ -186,10 +206,40 @@ export const clearExamSeating = async (examId: string) => {
 
 export type ExamInvigilatorAssignment = {
   id: string;
+  examPaperId?: string | null;
   teacherId: string;
   center: ExamCenter;
   room: ExamRoom;
+  examPaper?: {
+    id: string;
+    scheduledAt?: string | null;
+    subject?: { id: string; name: string; code?: string | null };
+  } | null;
   teacher: { id: string; firstName: string; lastName: string; employeeNo?: string | null; user?: { email: string } };
+};
+
+export type AutoAssignInvigilatorsResult = {
+  dryRun: boolean;
+  summary: {
+    papers: number;
+    rooms: number;
+    planned: number;
+    skippedExisting: number;
+    warnings: number;
+  };
+  assignments: Array<{
+    examPaperId: string;
+    subjectName: string;
+    scheduledAt: string;
+    teacherId: string;
+    teacherName: string;
+    employeeNo?: string | null;
+    centerId: string;
+    centerName: string;
+    roomId: string;
+    roomName: string;
+  }>;
+  warnings: string[];
 };
 
 export const listExamInvigilators = async (examId: string, params?: { schoolId?: string }) => {
@@ -197,8 +247,16 @@ export const listExamInvigilators = async (examId: string, params?: { schoolId?:
   return data;
 };
 
-export const assignExamInvigilator = async (examId: string, payload: { teacherId: string; roomId: string; schoolId?: string }) => {
+export const assignExamInvigilator = async (examId: string, payload: { examPaperId: string; teacherId: string; roomId: string; schoolId?: string }) => {
   const { data } = await api.post<ExamInvigilatorAssignment>(`/exams/${examId}/invigilators/assign`, payload);
+  return data;
+};
+
+export const autoAssignExamInvigilators = async (
+  examId: string,
+  payload: { examPaperIds?: string[]; centerIds?: string[]; dryRun?: boolean; schoolId?: string },
+) => {
+  const { data } = await api.post<AutoAssignInvigilatorsResult>(`/exams/${examId}/invigilators/auto-assign`, payload);
   return data;
 };
 

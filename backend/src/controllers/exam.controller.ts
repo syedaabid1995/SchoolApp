@@ -261,7 +261,7 @@ export const getExam = async (req: Request, res: Response) => {
 
   const exam = await prisma.exam.findFirst({
     where: { id, schoolId },
-    include: { papers: true },
+    include: { papers: { include: { subject: true }, orderBy: { scheduledAt: 'asc' } } },
   });
 
   if (!exam) {

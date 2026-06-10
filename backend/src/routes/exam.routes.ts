@@ -19,6 +19,7 @@ import {
   updateExamGradingSettingsApi,
 } from '../controllers/examGrading.controller';
 import {
+  autoAssignExamInvigilatorsApi,
   assignExamInvigilatorApi,
   clearExamSeatingApi,
   createExamCenterApi,
@@ -59,6 +60,7 @@ examRouter.delete('/rooms/:roomId', deleteExamRoomApi);
 examRouter.post('/:examId/seating/generate', generateExamSeatingApi);
 examRouter.get('/:examId/seating', getExamSeatingApi);
 examRouter.delete('/:examId/seating', clearExamSeatingApi);
+examRouter.post('/:examId/invigilators/auto-assign', autoAssignExamInvigilatorsApi);
 examRouter.post('/:examId/invigilators/assign', assignExamInvigilatorApi);
 examRouter.get('/:examId/invigilators', listExamInvigilatorsApi);
 examRouter.delete('/:examId/invigilators/:assignmentId', removeExamInvigilatorApi);

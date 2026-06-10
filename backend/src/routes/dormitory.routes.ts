@@ -2,16 +2,20 @@ import { Router } from 'express';
 import { authMiddleware } from '../middlewares/auth.middleware';
 import { blockSuperAdminSchoolOperations } from '../middlewares/rbac.middleware';
 import {
+  createStudentDormitoryAssignment,
   createDormitory,
   createDormitoryRoom,
   createDormitoryRoomType,
+  deleteStudentDormitoryAssignment,
   deleteDormitory,
   deleteDormitoryRoom,
   deleteDormitoryRoomType,
   getStudentDormitoryReport,
+  listStudentDormitoryAssignments,
   listDormitories,
   listDormitoryRooms,
   listDormitoryRoomTypes,
+  updateStudentDormitoryAssignment,
   updateDormitory,
   updateDormitoryRoom,
   updateDormitoryRoomType,
@@ -23,6 +27,11 @@ dormitoryRouter.use(authMiddleware);
 dormitoryRouter.use(blockSuperAdminSchoolOperations('Super Admin cannot manage school dormitory operations'));
 
 dormitoryRouter.get('/report', getStudentDormitoryReport);
+
+dormitoryRouter.get('/student-assignments', listStudentDormitoryAssignments);
+dormitoryRouter.post('/student-assignments', createStudentDormitoryAssignment);
+dormitoryRouter.patch('/student-assignments/:id', updateStudentDormitoryAssignment);
+dormitoryRouter.delete('/student-assignments/:id', deleteStudentDormitoryAssignment);
 
 dormitoryRouter.get('/room-types', listDormitoryRoomTypes);
 dormitoryRouter.post('/room-types', createDormitoryRoomType);

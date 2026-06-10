@@ -82,6 +82,45 @@ const roomSchema = z.object({
   schoolId: uuidSchema.optional(),
 });
 
+const studentAssignmentSchema = z.object({
+  studentId: uuidSchema,
+  dormitoryId: uuidSchema,
+  roomId: uuidSchema.optional().nullable(),
+  active: z.boolean().optional(),
+  note: z.string().max(1000).optional().nullable(),
+  schoolId: uuidSchema.optional(),
+});
+
+const assertStudent = async (schoolId: string, studentId: string) => {
+  const found = await prisma.student.findFirst({
+    where: { id: studentId, schoolId },
+    select: { id: true },
+  });
+  if (!found) throw new HttpError(404, 'Student not found');
+};
+
+const assertRoomInDormitory = async (schoolId: string, dormitoryId: string, roomId?: string | null, currentAssignmentId?: string) => {
+  if (!roomId) return;
+
+  const room = await prisma.dormitoryRoom.findFirst({
+    where: { id: roomId, schoolId, dormitoryId },
+    select: { id: true, bedCount: true },
+  });
+  if (!room) throw new HttpError(400, 'Selected room does not belong to this dormitory');
+
+  const activeAssignments = await prisma.studentDormitoryAssignment.count({
+    where: {
+      schoolId,
+      roomId,
+      active: true,
+      ...(currentAssignmentId ? { id: { not: currentAssignmentId } } : {}),
+    },
+  });
+  if (activeAssignments >= room.bedCount) {
+    throw new HttpError(409, 'Selected room has no available beds');
+  }
+};
+
 export const listDormitories = async (req: Request, res: Response) => {
   const { schoolId } = requireDormitoryManager(req, getRequestedSchoolId(req));
   const search = typeof req.query.search === 'string' ? req.query.search.trim() : '';
@@ -360,6 +399,200 @@ export const deleteDormitoryRoom = async (req: Request, res: Response) => {
   }
 
   await prisma.dormitoryRoom.delete({ where: { id } });
+  res.status(204).send();
+};
+
+export const listStudentDormitoryAssignments = async (req: Request, res: Response) => {
+  const { schoolId } = requireDormitoryManager(req, getRequestedSchoolId(req));
+  const classId = typeof req.query.classId === 'string' ? req.query.classId : undefined;
+  const sectionId = typeof req.query.sectionId === 'string' ? req.query.sectionId : undefined;
+  const dormitoryId = typeof req.query.dormitoryId === 'string' ? req.query.dormitoryId : undefined;
+  const roomId = typeof req.query.roomId === 'string' ? req.query.roomId : undefined;
+  const search = typeof req.query.search === 'string' ? req.query.search.trim() : '';
+  const active = req.query.active === 'all' ? undefined : req.query.active === 'false' ? false : true;
+
+  if (classId) {
+    const foundClass = await prisma.class.findFirst({ where: { id: classId, schoolId }, select: { id: true } });
+    if (!foundClass) throw new HttpError(404, 'Class not found');
+  }
+  if (sectionId) {
+    const foundSection = await prisma.section.findFirst({ where: { id: sectionId, schoolId }, select: { id: true } });
+    if (!foundSection) throw new HttpError(404, 'Section not found');
+  }
+  if (dormitoryId) await assertDormitory(schoolId, dormitoryId);
+
+  const items = await prisma.studentDormitoryAssignment.findMany({
+    where: {
+      schoolId,
+      ...(active === undefined ? {} : { active }),
+      ...(dormitoryId ? { dormitoryId } : {}),
+      ...(roomId ? { roomId } : {}),
+      student: {
+        ...(classId ? { classId } : {}),
+        ...(sectionId ? { sectionId } : {}),
+        ...(search
+          ? {
+              OR: [
+                { fullName: { contains: search, mode: 'insensitive' } },
+                { admissionNo: { contains: search, mode: 'insensitive' } },
+                { rollNo: { contains: search, mode: 'insensitive' } },
+              ],
+            }
+          : {}),
+      },
+    },
+    include: {
+      student: {
+        select: {
+          id: true,
+          admissionNo: true,
+          rollNo: true,
+          fullName: true,
+          phone: true,
+          parentPhone: true,
+          class: { select: { id: true, name: true } },
+          section: { select: { id: true, name: true } },
+        },
+      },
+      dormitory: { select: { id: true, name: true } },
+      room: {
+        select: {
+          id: true,
+          roomNumber: true,
+          bedCount: true,
+          costPerBed: true,
+          roomType: { select: { id: true, name: true } },
+        },
+      },
+    },
+    orderBy: [{ student: { class: { name: 'asc' } } }, { student: { section: { name: 'asc' } } }, { student: { fullName: 'asc' } }],
+  });
+
+  res.status(200).json(items);
+};
+
+export const createStudentDormitoryAssignment = async (req: Request, res: Response) => {
+  const payload = studentAssignmentSchema.parse(req.body);
+  const { schoolId } = requireDormitoryManager(req, payload.schoolId);
+  const roomId = payload.roomId || null;
+
+  await assertStudent(schoolId, payload.studentId);
+  await assertDormitory(schoolId, payload.dormitoryId);
+
+  const existing = await prisma.studentDormitoryAssignment.findFirst({
+    where: { schoolId, studentId: payload.studentId, active: true },
+  });
+
+  await assertRoomInDormitory(schoolId, payload.dormitoryId, roomId, existing?.id);
+
+  const include = {
+    student: { select: { id: true, admissionNo: true, rollNo: true, fullName: true, phone: true, parentPhone: true, class: { select: { id: true, name: true } }, section: { select: { id: true, name: true } } } },
+    dormitory: { select: { id: true, name: true } },
+    room: { select: { id: true, roomNumber: true, bedCount: true, costPerBed: true, roomType: { select: { id: true, name: true } } } },
+  };
+
+  const item = existing
+    ? await prisma.studentDormitoryAssignment.update({
+        where: { id: existing.id },
+        data: {
+          dormitoryId: payload.dormitoryId,
+          roomId,
+          active: payload.active ?? true,
+          vacatedAt: payload.active === false ? new Date() : null,
+          note: nullableText(payload.note),
+        },
+        include,
+      })
+    : await prisma.studentDormitoryAssignment.create({
+        data: {
+          schoolId,
+          studentId: payload.studentId,
+          dormitoryId: payload.dormitoryId,
+          roomId,
+          active: payload.active ?? true,
+          vacatedAt: payload.active === false ? new Date() : null,
+          note: nullableText(payload.note),
+        },
+        include,
+      });
+
+  await logAudit(req, {
+    schoolId,
+    entityType: 'STUDENT_DORMITORY_ASSIGNMENT',
+    entityId: item.id,
+    action: existing ? 'UPDATE' : 'CREATE',
+    beforeState: existing,
+    afterState: item,
+  });
+
+  res.status(existing ? 200 : 201).json(item);
+};
+
+export const updateStudentDormitoryAssignment = async (req: Request, res: Response) => {
+  const payload = studentAssignmentSchema.partial().parse(req.body);
+  const { schoolId } = requireDormitoryManager(req, getRequestedSchoolId(req, payload.schoolId));
+  const id = req.params.id;
+
+  const existing = await prisma.studentDormitoryAssignment.findFirst({ where: { id, schoolId } });
+  if (!existing) throw new HttpError(404, 'Student dormitory assignment not found');
+
+  const dormitoryId = payload.dormitoryId ?? existing.dormitoryId;
+  const roomId = payload.roomId === undefined ? existing.roomId : payload.roomId || null;
+
+  if (payload.studentId) await assertStudent(schoolId, payload.studentId);
+  await assertDormitory(schoolId, dormitoryId);
+  await assertRoomInDormitory(schoolId, dormitoryId, roomId, id);
+
+  const item = await prisma.studentDormitoryAssignment.update({
+    where: { id },
+    data: {
+      studentId: payload.studentId ?? undefined,
+      dormitoryId: payload.dormitoryId ?? undefined,
+      roomId: payload.roomId === undefined ? undefined : roomId,
+      active: payload.active ?? undefined,
+      vacatedAt: payload.active === false ? new Date() : payload.active === true ? null : undefined,
+      note: payload.note === undefined ? undefined : nullableText(payload.note),
+    },
+    include: {
+      student: { select: { id: true, admissionNo: true, rollNo: true, fullName: true, phone: true, parentPhone: true, class: { select: { id: true, name: true } }, section: { select: { id: true, name: true } } } },
+      dormitory: { select: { id: true, name: true } },
+      room: { select: { id: true, roomNumber: true, bedCount: true, costPerBed: true, roomType: { select: { id: true, name: true } } } },
+    },
+  });
+
+  await logAudit(req, {
+    schoolId,
+    entityType: 'STUDENT_DORMITORY_ASSIGNMENT',
+    entityId: id,
+    action: 'UPDATE',
+    beforeState: existing,
+    afterState: item,
+  });
+
+  res.status(200).json(item);
+};
+
+export const deleteStudentDormitoryAssignment = async (req: Request, res: Response) => {
+  const { schoolId } = requireDormitoryManager(req, getRequestedSchoolId(req));
+  const id = req.params.id;
+
+  const existing = await prisma.studentDormitoryAssignment.findFirst({ where: { id, schoolId } });
+  if (!existing) throw new HttpError(404, 'Student dormitory assignment not found');
+
+  const item = await prisma.studentDormitoryAssignment.update({
+    where: { id },
+    data: { active: false, vacatedAt: new Date() },
+  });
+
+  await logAudit(req, {
+    schoolId,
+    entityType: 'STUDENT_DORMITORY_ASSIGNMENT',
+    entityId: id,
+    action: 'UPDATE',
+    beforeState: existing,
+    afterState: item,
+  });
+
   res.status(204).send();
 };
 

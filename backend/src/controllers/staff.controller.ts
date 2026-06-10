@@ -47,6 +47,14 @@ const defaultLeaveDays: Record<(typeof staffRoles)[number], Record<string, numbe
   LIBRARIAN: { 'Casual Leave': 12, 'Sick Leave': 10, 'Earned Leave': 15, 'Emergency Leave': 3 },
   STAFF: { 'Casual Leave': 10, 'Sick Leave': 8, 'Earned Leave': 12, 'Emergency Leave': 3 },
 };
+const staffTransactionOptions = { maxWait: 10000, timeout: 30000 } as const;
+
+const rethrowStaffTransactionError = (error: unknown): never => {
+  if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2028') {
+    throw new HttpError(504, 'Employee save timed out while writing staff setup. Please try again.');
+  }
+  throw error;
+};
 
 const requireSchoolAdmin = (req: Request) => {
   if (!req.auth?.userId) throw new HttpError(401, 'Unauthorized');
@@ -429,55 +437,57 @@ export const createStaff = async (req: Request, res: Response) => {
   const tempPassword = payload.password ?? crypto.randomBytes(9).toString('base64url');
   const passwordHash = await hashPassword(tempPassword);
 
-  const result = await prisma.$transaction(async (tx) => {
-    const user = await tx.user.create({
-      data: {
-        schoolId,
-        email: payload.email,
-        passwordHash,
-        status: 'ACTIVE',
-        mustChangePassword: !payload.password,
-        roles: { create: { roleId: role.id } },
-      },
-      select: { id: true, email: true, schoolId: true, status: true },
-    });
+  const result = await prisma
+    .$transaction(async (tx) => {
+      const user = await tx.user.create({
+        data: {
+          schoolId,
+          email: payload.email,
+          passwordHash,
+          status: 'ACTIVE',
+          mustChangePassword: !payload.password,
+          roles: { create: { roleId: role.id } },
+        },
+        select: { id: true, email: true, schoolId: true, status: true },
+      });
 
-    const employeeNo = requestedEmployeeNo ?? (await generateEmployeeNo(tx, schoolId, payload.roleName));
-    const staff = await tx.teacherProfile.create({
-      data: {
-        schoolId,
-        userId: user.id,
-        roleName: payload.roleName,
-        employeeNo,
-        firstName: payload.firstName,
-        lastName: payload.lastName,
-        departmentId: payload.departmentId ?? null,
-        designationId: payload.designationId ?? null,
-        fatherName: normalizeNullable(payload.fatherName),
-        motherName: normalizeNullable(payload.motherName),
-        gender: normalizeNullable(payload.gender),
-        dateOfBirth: payload.dateOfBirth ? dayStart(payload.dateOfBirth) : null,
-        dateOfJoining: payload.dateOfJoining ? dayStart(payload.dateOfJoining) : null,
-        phone: normalizeNullable(payload.phone),
-        emergencyMobile: normalizeNullable(payload.emergencyMobile),
-        photoUrl: normalizeNullable(payload.photoUrl),
-        drivingLicense: normalizeNullable(payload.drivingLicense),
-        address: normalizeNullable(payload.currentAddress),
-        currentAddress: normalizeNullable(payload.currentAddress),
-        permanentAddress: normalizeNullable(payload.permanentAddress),
-        qualifications: normalizeNullable(payload.qualifications),
-        experience: normalizeNullable(payload.experience),
-        maritalStatus: normalizeNullable(payload.maritalStatus),
-        isActive: true,
-      },
-    });
-    await createOfferLetterDocument(tx, { schoolId, staffId: staff.id, employeeNo, uploadedById: userId });
-    await upsertBankDetails(tx, staff.id, payload.bankDetails);
-    await upsertPayrollInfo(tx, staff.id, payload.payrollInfo);
-    await syncStaffLeaveBalances(tx, schoolId, staff.id, payload.roleName, payload.leaveBalances);
-    await replaceSocialLinks(tx, staff.id, payload.socialLinks);
-    return { user, staff };
-  });
+      const employeeNo = requestedEmployeeNo ?? (await generateEmployeeNo(tx, schoolId, payload.roleName));
+      const staff = await tx.teacherProfile.create({
+        data: {
+          schoolId,
+          userId: user.id,
+          roleName: payload.roleName,
+          employeeNo,
+          firstName: payload.firstName,
+          lastName: payload.lastName,
+          departmentId: payload.departmentId ?? null,
+          designationId: payload.designationId ?? null,
+          fatherName: normalizeNullable(payload.fatherName),
+          motherName: normalizeNullable(payload.motherName),
+          gender: normalizeNullable(payload.gender),
+          dateOfBirth: payload.dateOfBirth ? dayStart(payload.dateOfBirth) : null,
+          dateOfJoining: payload.dateOfJoining ? dayStart(payload.dateOfJoining) : null,
+          phone: normalizeNullable(payload.phone),
+          emergencyMobile: normalizeNullable(payload.emergencyMobile),
+          photoUrl: normalizeNullable(payload.photoUrl),
+          drivingLicense: normalizeNullable(payload.drivingLicense),
+          address: normalizeNullable(payload.currentAddress),
+          currentAddress: normalizeNullable(payload.currentAddress),
+          permanentAddress: normalizeNullable(payload.permanentAddress),
+          qualifications: normalizeNullable(payload.qualifications),
+          experience: normalizeNullable(payload.experience),
+          maritalStatus: normalizeNullable(payload.maritalStatus),
+          isActive: true,
+        },
+      });
+      await createOfferLetterDocument(tx, { schoolId, staffId: staff.id, employeeNo, uploadedById: userId });
+      await upsertBankDetails(tx, staff.id, payload.bankDetails);
+      await upsertPayrollInfo(tx, staff.id, payload.payrollInfo);
+      await syncStaffLeaveBalances(tx, schoolId, staff.id, payload.roleName, payload.leaveBalances);
+      await replaceSocialLinks(tx, staff.id, payload.socialLinks);
+      return { user, staff };
+    }, staffTransactionOptions)
+    .catch(rethrowStaffTransactionError);
   await incrementUsage(schoolId, 'teachers', 1);
 
   await logAudit(req, {
@@ -516,49 +526,51 @@ export const updateStaff = async (req: Request, res: Response) => {
   const existing = await prisma.teacherProfile.findFirst({ where: { id: req.params.id, schoolId }, include: { user: true } });
   if (!existing) throw new HttpError(404, 'Staff not found');
 
-  const updated = await prisma.$transaction(async (tx) => {
-    if (payload.email && payload.email !== existing.user.email) {
-      await tx.user.update({ where: { id: existing.userId }, data: { email: payload.email } });
-    }
-    if (payload.roleName && payload.roleName !== existing.roleName) {
-      const role = await tx.role.upsert({ where: { name: payload.roleName }, update: {}, create: { name: payload.roleName } });
-      await tx.userRole.deleteMany({ where: { userId: existing.userId } });
-      await tx.userRole.create({ data: { userId: existing.userId, roleId: role.id } });
-    }
-    const staff = await tx.teacherProfile.update({
-      where: { id: existing.id },
-      data: {
-        roleName: payload.roleName ?? undefined,
-        employeeNo: payload.employeeNo === undefined ? undefined : normalizeNullable(payload.employeeNo),
-        firstName: payload.firstName ?? undefined,
-        lastName: payload.lastName ?? undefined,
-        departmentId: payload.departmentId === undefined ? undefined : payload.departmentId,
-        designationId: payload.designationId === undefined ? undefined : payload.designationId,
-        fatherName: payload.fatherName === undefined ? undefined : normalizeNullable(payload.fatherName),
-        motherName: payload.motherName === undefined ? undefined : normalizeNullable(payload.motherName),
-        gender: payload.gender === undefined ? undefined : normalizeNullable(payload.gender),
-        dateOfBirth: payload.dateOfBirth === undefined ? undefined : payload.dateOfBirth ? dayStart(payload.dateOfBirth) : null,
-        dateOfJoining: payload.dateOfJoining === undefined ? undefined : payload.dateOfJoining ? dayStart(payload.dateOfJoining) : null,
-        phone: payload.phone === undefined ? undefined : normalizeNullable(payload.phone),
-        emergencyMobile: payload.emergencyMobile === undefined ? undefined : normalizeNullable(payload.emergencyMobile),
-        photoUrl: payload.photoUrl === undefined ? undefined : normalizeNullable(payload.photoUrl),
-        drivingLicense: payload.drivingLicense === undefined ? undefined : normalizeNullable(payload.drivingLicense),
-        address: payload.currentAddress === undefined ? undefined : normalizeNullable(payload.currentAddress),
-        currentAddress: payload.currentAddress === undefined ? undefined : normalizeNullable(payload.currentAddress),
-        permanentAddress: payload.permanentAddress === undefined ? undefined : normalizeNullable(payload.permanentAddress),
-        qualifications: payload.qualifications === undefined ? undefined : normalizeNullable(payload.qualifications),
-        experience: payload.experience === undefined ? undefined : normalizeNullable(payload.experience),
-        maritalStatus: payload.maritalStatus === undefined ? undefined : normalizeNullable(payload.maritalStatus),
-      },
-    });
-    await upsertBankDetails(tx, existing.id, payload.bankDetails);
-    await upsertPayrollInfo(tx, existing.id, payload.payrollInfo);
-    if (payload.leaveBalances !== undefined || payload.roleName) {
-      await syncStaffLeaveBalances(tx, schoolId, existing.id, (payload.roleName ?? existing.roleName) as RoleName, payload.leaveBalances);
-    }
-    await replaceSocialLinks(tx, existing.id, payload.socialLinks);
-    return staff;
-  });
+  const updated = await prisma
+    .$transaction(async (tx) => {
+      if (payload.email && payload.email !== existing.user.email) {
+        await tx.user.update({ where: { id: existing.userId }, data: { email: payload.email } });
+      }
+      if (payload.roleName && payload.roleName !== existing.roleName) {
+        const role = await tx.role.upsert({ where: { name: payload.roleName }, update: {}, create: { name: payload.roleName } });
+        await tx.userRole.deleteMany({ where: { userId: existing.userId } });
+        await tx.userRole.create({ data: { userId: existing.userId, roleId: role.id } });
+      }
+      const staff = await tx.teacherProfile.update({
+        where: { id: existing.id },
+        data: {
+          roleName: payload.roleName ?? undefined,
+          employeeNo: payload.employeeNo === undefined ? undefined : normalizeNullable(payload.employeeNo),
+          firstName: payload.firstName ?? undefined,
+          lastName: payload.lastName ?? undefined,
+          departmentId: payload.departmentId === undefined ? undefined : payload.departmentId,
+          designationId: payload.designationId === undefined ? undefined : payload.designationId,
+          fatherName: payload.fatherName === undefined ? undefined : normalizeNullable(payload.fatherName),
+          motherName: payload.motherName === undefined ? undefined : normalizeNullable(payload.motherName),
+          gender: payload.gender === undefined ? undefined : normalizeNullable(payload.gender),
+          dateOfBirth: payload.dateOfBirth === undefined ? undefined : payload.dateOfBirth ? dayStart(payload.dateOfBirth) : null,
+          dateOfJoining: payload.dateOfJoining === undefined ? undefined : payload.dateOfJoining ? dayStart(payload.dateOfJoining) : null,
+          phone: payload.phone === undefined ? undefined : normalizeNullable(payload.phone),
+          emergencyMobile: payload.emergencyMobile === undefined ? undefined : normalizeNullable(payload.emergencyMobile),
+          photoUrl: payload.photoUrl === undefined ? undefined : normalizeNullable(payload.photoUrl),
+          drivingLicense: payload.drivingLicense === undefined ? undefined : normalizeNullable(payload.drivingLicense),
+          address: payload.currentAddress === undefined ? undefined : normalizeNullable(payload.currentAddress),
+          currentAddress: payload.currentAddress === undefined ? undefined : normalizeNullable(payload.currentAddress),
+          permanentAddress: payload.permanentAddress === undefined ? undefined : normalizeNullable(payload.permanentAddress),
+          qualifications: payload.qualifications === undefined ? undefined : normalizeNullable(payload.qualifications),
+          experience: payload.experience === undefined ? undefined : normalizeNullable(payload.experience),
+          maritalStatus: payload.maritalStatus === undefined ? undefined : normalizeNullable(payload.maritalStatus),
+        },
+      });
+      await upsertBankDetails(tx, existing.id, payload.bankDetails);
+      await upsertPayrollInfo(tx, existing.id, payload.payrollInfo);
+      if (payload.leaveBalances !== undefined || payload.roleName) {
+        await syncStaffLeaveBalances(tx, schoolId, existing.id, (payload.roleName ?? existing.roleName) as RoleName, payload.leaveBalances);
+      }
+      await replaceSocialLinks(tx, existing.id, payload.socialLinks);
+      return staff;
+    }, staffTransactionOptions)
+    .catch(rethrowStaffTransactionError);
 
   res.status(200).json(updated);
 };

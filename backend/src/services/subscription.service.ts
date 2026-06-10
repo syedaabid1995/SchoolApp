@@ -40,6 +40,7 @@ const defaultLimits = {
 
 const openInvoiceStatuses = ['UNPAID', 'PARTIAL', 'OVERDUE'] as const;
 const paidRestrictedStatusReasons = ['payment', 'subscription', 'overdue'];
+const limitEligibleSubscriptionStatuses = ['ACTIVE', 'TRIAL'] as const;
 
 const addDays = (date: Date, days: number) => {
   const next = new Date(date.getTime());
@@ -1315,7 +1316,7 @@ export const enforceLimits = async (schoolId: string, type: 'students' | 'teache
     }
   }
   
-  if (!subscription || subscription.status !== 'ACTIVE') {
+  if (!subscription || !limitEligibleSubscriptionStatuses.includes(subscription.status as (typeof limitEligibleSubscriptionStatuses)[number])) {
     throw new HttpError(403, 'Subscription inactive');
   }
 

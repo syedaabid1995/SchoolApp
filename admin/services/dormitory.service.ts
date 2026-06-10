@@ -37,6 +37,11 @@ export type DormitoryRoom = {
 
 export type StudentDormitoryReportRow = {
   id: string;
+  studentId?: string;
+  dormitoryId?: string;
+  roomId?: string | null;
+  active?: boolean;
+  note?: string | null;
   student: {
     id: string;
     admissionNo: string;
@@ -55,6 +60,15 @@ export type StudentDormitoryReportRow = {
     costPerBed: string | number;
     roomType?: { id: string; name: string } | null;
   } | null;
+};
+
+export type StudentDormitoryAssignment = StudentDormitoryReportRow & {
+  studentId: string;
+  dormitoryId: string;
+  roomId?: string | null;
+  assignedAt?: string;
+  vacatedAt?: string | null;
+  active: boolean;
 };
 
 export const listDormitories = async (params?: { schoolId?: string; search?: string }) => {
@@ -142,6 +156,47 @@ export const updateDormitoryRoom = async (id: string, payload: Partial<{
 
 export const deleteDormitoryRoom = async (id: string, params?: { schoolId?: string }) => {
   await api.delete(`/dormitories/rooms/${id}`, { params });
+};
+
+export const listStudentDormitoryAssignments = async (params?: {
+  schoolId?: string;
+  classId?: string;
+  sectionId?: string;
+  dormitoryId?: string;
+  roomId?: string;
+  search?: string;
+  active?: 'true' | 'false' | 'all';
+}) => {
+  const { data } = await api.get<StudentDormitoryAssignment[]>('/dormitories/student-assignments', { params: sanitizeParams(params) });
+  return data;
+};
+
+export const createStudentDormitoryAssignment = async (payload: {
+  schoolId?: string;
+  studentId: string;
+  dormitoryId: string;
+  roomId?: string | null;
+  active?: boolean;
+  note?: string | null;
+}) => {
+  const { data } = await api.post<StudentDormitoryAssignment>('/dormitories/student-assignments', payload);
+  return data;
+};
+
+export const updateStudentDormitoryAssignment = async (id: string, payload: Partial<{
+  schoolId: string;
+  studentId: string;
+  dormitoryId: string;
+  roomId: string | null;
+  active: boolean;
+  note: string | null;
+}>) => {
+  const { data } = await api.patch<StudentDormitoryAssignment>(`/dormitories/student-assignments/${id}`, payload);
+  return data;
+};
+
+export const deleteStudentDormitoryAssignment = async (id: string, params?: { schoolId?: string }) => {
+  await api.delete(`/dormitories/student-assignments/${id}`, { params });
 };
 
 export const getStudentDormitoryReport = async (params: {

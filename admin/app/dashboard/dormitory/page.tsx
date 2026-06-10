@@ -7,27 +7,33 @@ import { useNotify } from '../../../components/NotificationProvider';
 import { getSession } from '../../../services/auth.service';
 import { listClasses, listSections } from '../../../services/academic.service';
 import { listSchools } from '../../../services/school.service';
+import { listStudents, type Student } from '../../../services/student.service';
 import {
+  createStudentDormitoryAssignment,
   createDormitory,
   createDormitoryRoom,
   createDormitoryRoomType,
+  deleteStudentDormitoryAssignment,
   deleteDormitory,
   deleteDormitoryRoom,
   deleteDormitoryRoomType,
   getStudentDormitoryReport,
+  listStudentDormitoryAssignments,
   listDormitories,
   listDormitoryRooms,
   listDormitoryRoomTypes,
+  updateStudentDormitoryAssignment,
   updateDormitory,
   updateDormitoryRoom,
   updateDormitoryRoomType,
   type Dormitory,
   type DormitoryRoom,
   type DormitoryRoomType,
+  type StudentDormitoryAssignment,
   type StudentDormitoryReportRow,
 } from '../../../services/dormitory.service';
 
-type TabId = 'dormitories' | 'room-types' | 'rooms' | 'report';
+type TabId = 'dormitories' | 'room-types' | 'rooms' | 'studentAssign' | 'report';
 
 type AcademicOption = {
   id: string;
@@ -39,12 +45,14 @@ const tabs: Array<{ id: TabId; label: string; description: string }> = [
   { id: 'dormitories', label: 'Dormitory', description: 'Hostel names, type, address, and intake' },
   { id: 'room-types', label: 'Room Type', description: 'Available room categories' },
   { id: 'rooms', label: 'Dormitory Rooms', description: 'Room number, beds, type, and cost' },
+  { id: 'studentAssign', label: 'Student Assign', description: 'Assign students to dormitory rooms' },
   { id: 'report', label: 'Student Report', description: 'Search students by class, section, and dormitory' },
 ];
 
 const emptyDormitoryForm = { id: '', name: '', type: '', intake: '120', address: '', description: '' };
 const emptyRoomTypeForm = { id: '', name: '', description: '' };
 const emptyRoomForm = { id: '', dormitoryId: '', roomTypeId: '', roomNumber: '', bedCount: '1', costPerBed: '0', description: '' };
+const emptyStudentAssignForm = { id: '', classId: '', sectionId: '', studentId: '', dormitoryId: '', roomId: '', note: '' };
 const emptyReportFilters = { classId: '', sectionId: '', dormitoryId: '' };
 
 const getErrorMessage = (error: unknown, fallback = 'Something went wrong') =>
@@ -158,6 +166,7 @@ export default function DormitoryPage() {
   const [dormitoryForm, setDormitoryForm] = useState(emptyDormitoryForm);
   const [roomTypeForm, setRoomTypeForm] = useState(emptyRoomTypeForm);
   const [roomForm, setRoomForm] = useState(emptyRoomForm);
+  const [studentAssignForm, setStudentAssignForm] = useState(emptyStudentAssignForm);
   const [reportFilters, setReportFilters] = useState(emptyReportFilters);
   const [submittedReportFilters, setSubmittedReportFilters] = useState(emptyReportFilters);
 
@@ -196,10 +205,31 @@ export default function DormitoryPage() {
     queryFn: () => listDormitoryRooms({ ...scopedParams, search }),
     enabled: canQuery,
   });
+  const studentAssignmentsQuery = useQuery({
+    queryKey: ['student-dormitory-assignments', effectiveSchoolId, search],
+    queryFn: () => listStudentDormitoryAssignments({ ...scopedParams, search }),
+    enabled: canQuery,
+  });
   const classesQuery = useQuery({
     queryKey: ['dormitory-classes', effectiveSchoolId],
     queryFn: () => listClasses(scopedParams),
     enabled: canQuery,
+  });
+  const studentAssignSectionsQuery = useQuery({
+    queryKey: ['dormitory-student-assign-sections', effectiveSchoolId, studentAssignForm.classId],
+    queryFn: () => listSections({ ...scopedParams, classId: studentAssignForm.classId }),
+    enabled: canQuery && Boolean(studentAssignForm.classId),
+  });
+  const studentsQuery = useQuery({
+    queryKey: ['dormitory-students', effectiveSchoolId, studentAssignForm.classId, studentAssignForm.sectionId],
+    queryFn: () =>
+      listStudents({
+        ...scopedParams,
+        status: 'ENROLLED',
+        classId: studentAssignForm.classId,
+        sectionId: studentAssignForm.sectionId,
+      }),
+    enabled: canQuery && Boolean(studentAssignForm.classId && studentAssignForm.sectionId),
   });
   const sectionsQuery = useQuery({
     queryKey: ['dormitory-sections', effectiveSchoolId, reportFilters.classId],
@@ -215,14 +245,23 @@ export default function DormitoryPage() {
   const dormitories = dormitoriesQuery.data ?? [];
   const roomTypes = roomTypesQuery.data ?? [];
   const rooms = roomsQuery.data ?? [];
+  const studentAssignments = studentAssignmentsQuery.data ?? [];
   const classes = (classesQuery.data ?? []) as AcademicOption[];
+  const studentAssignSections = (studentAssignSectionsQuery.data ?? []) as AcademicOption[];
+  const students = (studentsQuery.data ?? []) as Student[];
   const sections = (sectionsQuery.data ?? []) as AcademicOption[];
+
+  const studentAssignRooms = useMemo(
+    () => rooms.filter((room) => !studentAssignForm.dormitoryId || room.dormitoryId === studentAssignForm.dormitoryId),
+    [rooms, studentAssignForm.dormitoryId],
+  );
 
   const invalidateDormitory = async () => {
     await Promise.all([
       queryClient.invalidateQueries({ queryKey: ['dormitories'] }),
       queryClient.invalidateQueries({ queryKey: ['dormitory-room-types'] }),
       queryClient.invalidateQueries({ queryKey: ['dormitory-rooms'] }),
+      queryClient.invalidateQueries({ queryKey: ['student-dormitory-assignments'] }),
       queryClient.invalidateQueries({ queryKey: ['student-dormitory-report'] }),
     ]);
   };
@@ -299,6 +338,32 @@ export default function DormitoryPage() {
     onError,
   });
 
+  const studentAssignMutation = useMutation({
+    mutationFn: () =>
+      studentAssignForm.id
+        ? updateStudentDormitoryAssignment(studentAssignForm.id, {
+            ...scopedParams,
+            studentId: studentAssignForm.studentId,
+            dormitoryId: studentAssignForm.dormitoryId,
+            roomId: studentAssignForm.roomId || null,
+            active: true,
+            note: studentAssignForm.note || null,
+          })
+        : createStudentDormitoryAssignment({
+            ...scopedParams,
+            studentId: studentAssignForm.studentId,
+            dormitoryId: studentAssignForm.dormitoryId,
+            roomId: studentAssignForm.roomId || null,
+            active: true,
+            note: studentAssignForm.note || null,
+          }),
+    onSuccess: () => {
+      setStudentAssignForm(emptyStudentAssignForm);
+      onSuccess('Student dormitory assignment saved');
+    },
+    onError,
+  });
+
   const confirmDelete = (message: string, action: () => Promise<unknown>) => {
     if (!window.confirm(message)) return;
     action()
@@ -330,6 +395,15 @@ export default function DormitoryPage() {
     roomMutation.mutate();
   };
 
+  const validateStudentAssign = () => {
+    if (!effectiveSchoolId) return notify.error('Validation error', 'Select a school first.');
+    if (!studentAssignForm.classId) return notify.error('Validation error', 'Select class.');
+    if (!studentAssignForm.sectionId) return notify.error('Validation error', 'Select section.');
+    if (!studentAssignForm.studentId) return notify.error('Validation error', 'Select student.');
+    if (!studentAssignForm.dormitoryId) return notify.error('Validation error', 'Select dormitory.');
+    studentAssignMutation.mutate();
+  };
+
   const searchReport = () => {
     if (!reportFilters.classId || !reportFilters.sectionId || !reportFilters.dormitoryId) {
       return notify.error('Validation error', 'Select class, section, and dormitory.');
@@ -337,10 +411,23 @@ export default function DormitoryPage() {
     setSubmittedReportFilters(reportFilters);
   };
 
+  const editStudentAssignment = (assignment: StudentDormitoryAssignment) => {
+    setStudentAssignForm({
+      id: assignment.id,
+      classId: assignment.student.class?.id ?? '',
+      sectionId: assignment.student.section?.id ?? '',
+      studentId: assignment.student.id,
+      dormitoryId: assignment.dormitoryId,
+      roomId: assignment.roomId ?? '',
+      note: assignment.note ?? '',
+    });
+  };
+
   useEffect(() => {
     setDormitoryForm(emptyDormitoryForm);
     setRoomTypeForm(emptyRoomTypeForm);
     setRoomForm(emptyRoomForm);
+    setStudentAssignForm(emptyStudentAssignForm);
     setReportFilters(emptyReportFilters);
     setSubmittedReportFilters(emptyReportFilters);
     setSearch('');
@@ -377,12 +464,12 @@ export default function DormitoryPage() {
     <div className="space-y-5">
       <PageHeader
         title="Dormitory"
-        subtitle="Manage dormitories, room types, rooms, and student dormitory reports for the selected school."
+        subtitle="Manage dormitories, room types, rooms, student assignments, and dormitory reports."
         actions={pageActions}
       />
 
       <div className="rounded-2xl border border-slate-200 bg-white p-2 shadow-sm">
-        <div className="grid gap-2 md:grid-cols-4">
+        <div className="grid gap-2 md:grid-cols-5">
           {tabs.map((tab) => {
             const active = activeTab === tab.id;
             return (
@@ -542,6 +629,96 @@ export default function DormitoryPage() {
         />
       ) : null}
 
+      {effectiveSchoolId && activeTab === 'studentAssign' ? (
+        <SimpleCrudLayout
+          title={studentAssignForm.id ? 'Edit Student Dormitory' : 'Assign Student Dormitory'}
+          listTitle="Student Dormitory Assignments"
+          search={search}
+          setSearch={setSearch}
+          isLoading={studentAssignmentsQuery.isLoading}
+          emptyMessage="No student dormitory assignments found."
+          form={
+            <>
+              <Field label="Select class *">
+                <select
+                  className={inputClass}
+                  value={studentAssignForm.classId}
+                  onChange={(e) => setStudentAssignForm((p) => ({ ...p, classId: e.target.value, sectionId: '', studentId: '' }))}
+                >
+                  <option value="">Select class</option>
+                  {classes.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
+                </select>
+              </Field>
+              <Field label="Select section *">
+                <select
+                  className={inputClass}
+                  value={studentAssignForm.sectionId}
+                  disabled={!studentAssignForm.classId}
+                  onChange={(e) => setStudentAssignForm((p) => ({ ...p, sectionId: e.target.value, studentId: '' }))}
+                >
+                  <option value="">Select section</option>
+                  {studentAssignSections.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
+                </select>
+              </Field>
+              <Field label="Select student *">
+                <select
+                  className={inputClass}
+                  value={studentAssignForm.studentId}
+                  disabled={!studentAssignForm.sectionId}
+                  onChange={(e) => setStudentAssignForm((p) => ({ ...p, studentId: e.target.value }))}
+                >
+                  <option value="">{studentsQuery.isFetching ? 'Loading students...' : 'Select student'}</option>
+                  {students.map((student) => (
+                    <option key={student.id} value={student.id}>
+                      {student.fullName} ({student.admissionNo})
+                    </option>
+                  ))}
+                </select>
+              </Field>
+              <Field label="Select dormitory *">
+                <select
+                  className={inputClass}
+                  value={studentAssignForm.dormitoryId}
+                  onChange={(e) => setStudentAssignForm((p) => ({ ...p, dormitoryId: e.target.value, roomId: '' }))}
+                >
+                  <option value="">Select dormitory</option>
+                  {dormitories.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
+                </select>
+              </Field>
+              <Field label="Select room">
+                <select
+                  className={inputClass}
+                  value={studentAssignForm.roomId}
+                  disabled={!studentAssignForm.dormitoryId}
+                  onChange={(e) => setStudentAssignForm((p) => ({ ...p, roomId: e.target.value }))}
+                >
+                  <option value="">No specific room</option>
+                  {studentAssignRooms.map((item) => (
+                    <option key={item.id} value={item.id}>
+                      {item.roomNumber} - {item.roomType?.name ?? 'Room'} - {money(item.costPerBed)}
+                    </option>
+                  ))}
+                </select>
+              </Field>
+              <Field label="Note">
+                <textarea className={inputClass} rows={3} value={studentAssignForm.note} onChange={(e) => setStudentAssignForm((p) => ({ ...p, note: e.target.value }))} />
+              </Field>
+              <div className="flex flex-wrap gap-2">
+                <PrimaryButton disabled={studentAssignMutation.isPending} onClick={validateStudentAssign}>Save Assignment</PrimaryButton>
+                {studentAssignForm.id ? <SecondaryButton onClick={() => setStudentAssignForm(emptyStudentAssignForm)}>Cancel</SecondaryButton> : null}
+              </div>
+            </>
+          }
+          table={
+            <StudentAssignmentTable
+              rows={studentAssignments}
+              onEdit={editStudentAssignment}
+              onDelete={(item) => confirmDelete(`Remove dormitory assignment for "${item.student.fullName}"?`, () => deleteStudentDormitoryAssignment(item.id, scopedParams))}
+            />
+          }
+        />
+      ) : null}
+
       {effectiveSchoolId && activeTab === 'report' ? (
         <div className="space-y-5">
           <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
@@ -655,6 +832,35 @@ function RoomTable({ items, onEdit, onDelete }: { items: DormitoryRoom[]; onEdit
           <Cell>{item.bedCount}</Cell>
           <Cell>{money(item.costPerBed)}</Cell>
           <ActionCell onEdit={() => onEdit(item)} onDelete={() => onDelete(item)} />
+        </tr>
+      ))}
+    </DataTable>
+  );
+}
+
+function StudentAssignmentTable({
+  rows,
+  onEdit,
+  onDelete,
+}: {
+  rows: StudentDormitoryAssignment[];
+  onEdit: (item: StudentDormitoryAssignment) => void;
+  onDelete: (item: StudentDormitoryAssignment) => void;
+}) {
+  if (!rows.length) return <EmptyState message="No student dormitory assignments found." />;
+  return (
+    <DataTable headers={['Class (Sec.)', 'Admission No.', 'Student', 'Dormitory', 'Room', 'Room Type', 'Cost Per Bed', 'Note', 'Actions']}>
+      {rows.map((row) => (
+        <tr key={row.id}>
+          <Cell>{row.student.class?.name ?? '-'} {row.student.section?.name ? `(${row.student.section.name})` : ''}</Cell>
+          <Cell>{row.student.admissionNo}</Cell>
+          <Cell strong>{row.student.fullName}</Cell>
+          <Cell>{row.dormitory.name}</Cell>
+          <Cell>{row.room?.roomNumber ?? '-'}</Cell>
+          <Cell>{row.room?.roomType?.name ?? '-'}</Cell>
+          <Cell>{money(row.room?.costPerBed)}</Cell>
+          <Cell>{row.note || '-'}</Cell>
+          <ActionCell onEdit={() => onEdit(row)} onDelete={() => onDelete(row)} />
         </tr>
       ))}
     </DataTable>

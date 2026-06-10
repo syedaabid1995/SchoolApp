@@ -2,6 +2,7 @@ import type { Request, Response } from 'express';
 import { z } from 'zod';
 import { resolveSchoolId } from '../utils/tenant';
 import {
+  autoAssignExamInvigilators,
   assignExamInvigilator,
   buildHallTicketPdf,
   clearExamSeating,
@@ -57,8 +58,16 @@ const seatingGenerateSchema = z.object({
 
 const invigilatorAssignSchema = z.object({
   schoolId: z.string().uuid().optional(),
+  examPaperId: z.string().uuid(),
   teacherId: z.string().uuid(),
   roomId: z.string().uuid(),
+});
+
+const invigilatorAutoAssignSchema = z.object({
+  schoolId: z.string().uuid().optional(),
+  examPaperIds: z.array(z.string().uuid()).optional(),
+  centerIds: z.array(z.string().uuid()).optional(),
+  dryRun: z.boolean().optional().default(true),
 });
 
 type CenterCreateInput = z.infer<typeof centerCreateSchema>;
@@ -187,8 +196,19 @@ export const assignExamInvigilatorApi = async (req: Request, res: Response) => {
   const payload = invigilatorAssignSchema.parse(req.body);
   const schoolId = resolveSchoolId(req, payload.schoolId);
   res.status(201).json(await assignExamInvigilator(req, schoolId, req.params.examId, {
+    examPaperId: payload.examPaperId,
     teacherId: payload.teacherId,
     roomId: payload.roomId,
+  }));
+};
+
+export const autoAssignExamInvigilatorsApi = async (req: Request, res: Response) => {
+  const payload = invigilatorAutoAssignSchema.parse(req.body);
+  const schoolId = resolveSchoolId(req, payload.schoolId);
+  res.status(payload.dryRun ? 200 : 201).json(await autoAssignExamInvigilators(req, schoolId, req.params.examId, {
+    examPaperIds: payload.examPaperIds,
+    centerIds: payload.centerIds,
+    dryRun: payload.dryRun,
   }));
 };
 

@@ -7,26 +7,34 @@ import { useNotify } from '../../../components/NotificationProvider';
 import { getSession } from '../../../services/auth.service';
 import { listClasses, listSections } from '../../../services/academic.service';
 import { listSchools } from '../../../services/school.service';
+import { listStudents, type Student } from '../../../services/student.service';
 import {
   assignVehiclesToRoute,
+  createStudentTransportAssignment,
   createTransportRoute,
   createTransportVehicle,
+  deleteStudentTransportAssignment,
   deleteTransportAssignment,
   deleteTransportRoute,
   deleteTransportVehicle,
   getStudentTransportReport,
+  listStudentTransportAssignments,
   listTransportAssignments,
+  listTransportDrivers,
   listTransportRoutes,
   listTransportVehicles,
+  updateStudentTransportAssignment,
+  type StudentTransportAssignment,
   updateTransportRoute,
   updateTransportVehicle,
   type StudentTransportReportRow,
+  type TransportDriver,
   type TransportAssignment,
   type TransportRoute,
   type TransportVehicle,
 } from '../../../services/transport.service';
 
-type TabId = 'routes' | 'vehicles' | 'assign' | 'report';
+type TabId = 'routes' | 'vehicles' | 'routeAssign' | 'studentAssign' | 'report';
 
 type AcademicOption = {
   id: string;
@@ -43,8 +51,9 @@ type AssignmentGroup = {
 
 const tabs: Array<{ id: TabId; label: string; description: string }> = [
   { id: 'routes', label: 'Routes', description: 'Route title and fare' },
-  { id: 'vehicles', label: 'Vehicles', description: 'Vehicle and driver details' },
-  { id: 'assign', label: 'Assign Vehicle', description: 'Connect vehicles to routes' },
+  { id: 'vehicles', label: 'Vehicles', description: 'Vehicle and staff driver' },
+  { id: 'routeAssign', label: 'Route Vehicles', description: 'Connect vehicles to routes' },
+  { id: 'studentAssign', label: 'Student Assign', description: 'Assign students to transport' },
   { id: 'report', label: 'Student Transport Report', description: 'Search students using transport' },
 ];
 
@@ -54,12 +63,14 @@ const emptyVehicleForm = {
   vehicleNumber: '',
   vehicleModel: '',
   yearMade: '',
+  driverStaffId: '',
   driverName: '',
   driverLicense: '',
   driverContact: '',
   note: '',
 };
 const emptyAssignForm = { routeId: '', vehicleIds: [] as string[] };
+const emptyStudentAssignForm = { id: '', classId: '', sectionId: '', studentId: '', routeId: '', vehicleId: '', note: '' };
 const emptyReportFilters = { classId: '', sectionId: '', routeId: '', vehicleId: '' };
 
 const getErrorMessage = (error: unknown, fallback = 'Something went wrong') =>
@@ -71,6 +82,8 @@ const money = (value?: string | number | null) => {
   const numeric = Number(value ?? 0);
   return Number.isFinite(numeric) ? numeric.toFixed(2) : '0.00';
 };
+
+const driverFullName = (driver: TransportDriver) => `${driver.firstName} ${driver.lastName}`.trim();
 
 const inputClass =
   'w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none transition focus:border-purple-400 focus:ring-2 focus:ring-purple-100 disabled:bg-slate-50 disabled:text-slate-400';
@@ -165,8 +178,10 @@ export default function TransportPage() {
   const [routeForm, setRouteForm] = useState(emptyRouteForm);
   const [vehicleForm, setVehicleForm] = useState(emptyVehicleForm);
   const [assignForm, setAssignForm] = useState(emptyAssignForm);
+  const [studentAssignForm, setStudentAssignForm] = useState(emptyStudentAssignForm);
   const [reportFilters, setReportFilters] = useState(emptyReportFilters);
   const [submittedReportFilters, setSubmittedReportFilters] = useState(emptyReportFilters);
+  const [reportSearched, setReportSearched] = useState(false);
 
   const { data: session, isLoading: sessionLoading } = useQuery({ queryKey: ['session'], queryFn: getSession });
   const isSuperAdmin = session?.role === 'SUPER_ADMIN';
@@ -198,9 +213,19 @@ export default function TransportPage() {
     queryFn: () => listTransportVehicles({ ...scopedParams, search }),
     enabled: canQuery,
   });
+  const driversQuery = useQuery({
+    queryKey: ['transport-drivers', effectiveSchoolId],
+    queryFn: () => listTransportDrivers(scopedParams),
+    enabled: canQuery,
+  });
   const assignmentsQuery = useQuery({
     queryKey: ['transport-assignments', effectiveSchoolId, search],
     queryFn: () => listTransportAssignments({ ...scopedParams, search }),
+    enabled: canQuery,
+  });
+  const studentAssignmentsQuery = useQuery({
+    queryKey: ['student-transport-assignments', effectiveSchoolId, search],
+    queryFn: () => listStudentTransportAssignments({ ...scopedParams, search }),
     enabled: canQuery,
   });
   const classesQuery = useQuery({
@@ -208,21 +233,41 @@ export default function TransportPage() {
     queryFn: () => listClasses(scopedParams),
     enabled: canQuery,
   });
+  const studentAssignSectionsQuery = useQuery({
+    queryKey: ['transport-student-assign-sections', effectiveSchoolId, studentAssignForm.classId],
+    queryFn: () => listSections({ ...scopedParams, classId: studentAssignForm.classId }),
+    enabled: canQuery && Boolean(studentAssignForm.classId),
+  });
+  const studentsQuery = useQuery({
+    queryKey: ['transport-students', effectiveSchoolId, studentAssignForm.classId, studentAssignForm.sectionId],
+    queryFn: () =>
+      listStudents({
+        ...scopedParams,
+        status: 'ENROLLED',
+        classId: studentAssignForm.classId,
+        sectionId: studentAssignForm.sectionId,
+      }),
+    enabled: canQuery && Boolean(studentAssignForm.classId && studentAssignForm.sectionId),
+  });
   const sectionsQuery = useQuery({
     queryKey: ['transport-sections', effectiveSchoolId, reportFilters.classId],
     queryFn: () => listSections({ ...scopedParams, classId: reportFilters.classId }),
     enabled: canQuery && Boolean(reportFilters.classId),
   });
   const reportQuery = useQuery({
-    queryKey: ['student-transport-report', effectiveSchoolId, submittedReportFilters],
+    queryKey: ['student-transport-report', effectiveSchoolId, submittedReportFilters, reportSearched],
     queryFn: () => getStudentTransportReport({ ...scopedParams, ...submittedReportFilters }),
-    enabled: canQuery && Boolean(submittedReportFilters.classId && submittedReportFilters.sectionId && submittedReportFilters.routeId && submittedReportFilters.vehicleId),
+    enabled: canQuery && reportSearched,
   });
 
   const routes = routesQuery.data ?? [];
   const vehicles = vehiclesQuery.data ?? [];
+  const drivers = driversQuery.data ?? [];
   const assignments = assignmentsQuery.data ?? [];
+  const studentAssignments = studentAssignmentsQuery.data ?? [];
   const classes = (classesQuery.data ?? []) as AcademicOption[];
+  const studentAssignSections = (studentAssignSectionsQuery.data ?? []) as AcademicOption[];
+  const students = (studentsQuery.data ?? []) as Student[];
   const sections = (sectionsQuery.data ?? []) as AcademicOption[];
 
   const assignmentGroups = useMemo(() => {
@@ -248,11 +293,19 @@ export default function TransportPage() {
     return vehicles.filter((vehicle) => assignedVehicleIds.has(vehicle.id));
   }, [assignments, reportFilters.routeId, vehicles]);
 
+  const studentAssignVehicles = useMemo(() => {
+    if (!studentAssignForm.routeId) return vehicles;
+    const assignedVehicleIds = new Set(assignments.filter((item) => item.routeId === studentAssignForm.routeId).map((item) => item.vehicleId));
+    return vehicles.filter((vehicle) => assignedVehicleIds.has(vehicle.id));
+  }, [assignments, studentAssignForm.routeId, vehicles]);
+
   const invalidateTransport = async () => {
     await Promise.all([
       queryClient.invalidateQueries({ queryKey: ['transport-routes'] }),
       queryClient.invalidateQueries({ queryKey: ['transport-vehicles'] }),
+      queryClient.invalidateQueries({ queryKey: ['transport-drivers'] }),
       queryClient.invalidateQueries({ queryKey: ['transport-assignments'] }),
+      queryClient.invalidateQueries({ queryKey: ['student-transport-assignments'] }),
       queryClient.invalidateQueries({ queryKey: ['student-transport-report'] }),
     ]);
   };
@@ -314,6 +367,32 @@ export default function TransportPage() {
     onError,
   });
 
+  const studentAssignMutation = useMutation({
+    mutationFn: () =>
+      studentAssignForm.id
+        ? updateStudentTransportAssignment(studentAssignForm.id, {
+            ...scopedParams,
+            studentId: studentAssignForm.studentId,
+            routeId: studentAssignForm.routeId,
+            vehicleId: studentAssignForm.vehicleId || null,
+            active: true,
+            note: studentAssignForm.note || null,
+          })
+        : createStudentTransportAssignment({
+            ...scopedParams,
+            studentId: studentAssignForm.studentId,
+            routeId: studentAssignForm.routeId,
+            vehicleId: studentAssignForm.vehicleId || null,
+            active: true,
+            note: studentAssignForm.note || null,
+          }),
+    onSuccess: () => {
+      setStudentAssignForm(emptyStudentAssignForm);
+      onSuccess('Student transport assignment saved');
+    },
+    onError,
+  });
+
   const confirmDelete = (message: string, action: () => Promise<unknown>) => {
     if (!window.confirm(message)) return;
     action()
@@ -341,6 +420,17 @@ export default function TransportPage() {
     vehicleMutation.mutate();
   };
 
+  const selectDriver = (driverId: string) => {
+    const driver = drivers.find((item) => item.id === driverId);
+    setVehicleForm((current) => ({
+      ...current,
+      driverStaffId: driverId,
+      driverName: driver ? driverFullName(driver) : '',
+      driverLicense: driver?.drivingLicense ?? '',
+      driverContact: driver?.phone || driver?.emergencyMobile || '',
+    }));
+  };
+
   const validateAssign = () => {
     if (!effectiveSchoolId) return notify.error('Validation error', 'Select a school first.');
     if (!assignForm.routeId) return notify.error('Validation error', 'Select route.');
@@ -348,11 +438,18 @@ export default function TransportPage() {
     assignMutation.mutate();
   };
 
+  const validateStudentAssign = () => {
+    if (!effectiveSchoolId) return notify.error('Validation error', 'Select a school first.');
+    if (!studentAssignForm.classId) return notify.error('Validation error', 'Select class.');
+    if (!studentAssignForm.sectionId) return notify.error('Validation error', 'Select section.');
+    if (!studentAssignForm.studentId) return notify.error('Validation error', 'Select student.');
+    if (!studentAssignForm.routeId) return notify.error('Validation error', 'Select route.');
+    studentAssignMutation.mutate();
+  };
+
   const searchReport = () => {
-    if (!reportFilters.classId || !reportFilters.sectionId || !reportFilters.routeId || !reportFilters.vehicleId) {
-      return notify.error('Validation error', 'Select class, section, route, and vehicle.');
-    }
     setSubmittedReportFilters(reportFilters);
+    setReportSearched(true);
   };
 
   const toggleVehicle = (vehicleId: string) => {
@@ -369,12 +466,26 @@ export default function TransportPage() {
     setAssignForm({ routeId, vehicleIds: existingVehicleIds });
   };
 
+  const editStudentAssignment = (assignment: StudentTransportAssignment) => {
+    setStudentAssignForm({
+      id: assignment.id,
+      classId: assignment.student.class?.id ?? '',
+      sectionId: assignment.student.section?.id ?? '',
+      studentId: assignment.student.id,
+      routeId: assignment.routeId,
+      vehicleId: assignment.vehicleId ?? '',
+      note: assignment.note ?? '',
+    });
+  };
+
   useEffect(() => {
     setRouteForm(emptyRouteForm);
     setVehicleForm(emptyVehicleForm);
     setAssignForm(emptyAssignForm);
+    setStudentAssignForm(emptyStudentAssignForm);
     setReportFilters(emptyReportFilters);
     setSubmittedReportFilters(emptyReportFilters);
+    setReportSearched(false);
     setSearch('');
   }, [effectiveSchoolId]);
 
@@ -413,12 +524,12 @@ export default function TransportPage() {
     <div className="space-y-5">
       <PageHeader
         title="Transport"
-        subtitle="Manage transport routes, vehicles, route vehicle assignments, and student transport reports."
+        subtitle="Manage routes, vehicles, staff drivers, vehicle-route links, student assignments, and reports."
         actions={pageActions}
       />
 
       <div className="rounded-2xl border border-slate-200 bg-white p-2 shadow-sm">
-        <div className="grid gap-2 md:grid-cols-4">
+        <div className="grid gap-2 md:grid-cols-5">
           {tabs.map((tab) => {
             const active = activeTab === tab.id;
             return (
@@ -491,14 +602,26 @@ export default function TransportPage() {
               <Field label="Year made">
                 <input className={inputClass} type="number" min={1900} value={vehicleForm.yearMade} onChange={(e) => setVehicleForm((p) => ({ ...p, yearMade: e.target.value }))} />
               </Field>
-              <Field label="Driver name *">
-                <input className={inputClass} value={vehicleForm.driverName} onChange={(e) => setVehicleForm((p) => ({ ...p, driverName: e.target.value }))} />
+              <Field label="Driver from staff *">
+                <select className={inputClass} value={vehicleForm.driverStaffId} onChange={(e) => selectDriver(e.target.value)}>
+                  <option value="">{driversQuery.isLoading ? 'Loading staff...' : 'Select staff driver'}</option>
+                  {drivers.map((driver) => (
+                    <option key={driver.id} value={driver.id}>
+                      {driverFullName(driver)}{driver.employeeNo ? ` (${driver.employeeNo})` : ''}{driver.designation?.name ? ` - ${driver.designation.name}` : ''}
+                    </option>
+                  ))}
+                </select>
               </Field>
+              {vehicleForm.driverName && !vehicleForm.driverStaffId ? (
+                <div className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+                  Existing driver details are saved as text. Select a staff member to replace them.
+                </div>
+              ) : null}
               <Field label="Driver license *">
-                <input className={inputClass} value={vehicleForm.driverLicense} onChange={(e) => setVehicleForm((p) => ({ ...p, driverLicense: e.target.value }))} />
+                <input className={inputClass} value={vehicleForm.driverLicense} readOnly placeholder="Selected staff license" />
               </Field>
               <Field label="Driver contact *">
-                <input className={inputClass} value={vehicleForm.driverContact} onChange={(e) => setVehicleForm((p) => ({ ...p, driverContact: e.target.value }))} />
+                <input className={inputClass} value={vehicleForm.driverContact} readOnly placeholder="Selected staff contact" />
               </Field>
               <Field label="Note">
                 <textarea className={inputClass} rows={3} value={vehicleForm.note} onChange={(e) => setVehicleForm((p) => ({ ...p, note: e.target.value }))} />
@@ -517,6 +640,7 @@ export default function TransportPage() {
                 vehicleNumber: item.vehicleNumber,
                 vehicleModel: item.vehicleModel,
                 yearMade: item.yearMade ? String(item.yearMade) : '',
+                driverStaffId: '',
                 driverName: item.driverName,
                 driverLicense: item.driverLicense,
                 driverContact: item.driverContact,
@@ -528,10 +652,10 @@ export default function TransportPage() {
         />
       ) : null}
 
-      {effectiveSchoolId && activeTab === 'assign' ? (
+      {effectiveSchoolId && activeTab === 'routeAssign' ? (
         <SimpleCrudLayout
-          title="Add Assign Vehicle"
-          listTitle="Assign Vehicle List"
+          title="Assign Vehicles to Route"
+          listTitle="Route Vehicle Assignments"
           search={search}
           setSearch={setSearch}
           isLoading={assignmentsQuery.isLoading}
@@ -581,6 +705,92 @@ export default function TransportPage() {
         />
       ) : null}
 
+      {effectiveSchoolId && activeTab === 'studentAssign' ? (
+        <SimpleCrudLayout
+          title={studentAssignForm.id ? 'Edit Student Transport' : 'Assign Student Transport'}
+          listTitle="Student Transport Assignments"
+          search={search}
+          setSearch={setSearch}
+          isLoading={studentAssignmentsQuery.isLoading}
+          emptyMessage="No student transport assignments found."
+          form={
+            <>
+              <Field label="Select class *">
+                <select
+                  className={inputClass}
+                  value={studentAssignForm.classId}
+                  onChange={(e) => setStudentAssignForm((p) => ({ ...p, classId: e.target.value, sectionId: '', studentId: '' }))}
+                >
+                  <option value="">Select class</option>
+                  {classes.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
+                </select>
+              </Field>
+              <Field label="Select section *">
+                <select
+                  className={inputClass}
+                  value={studentAssignForm.sectionId}
+                  disabled={!studentAssignForm.classId}
+                  onChange={(e) => setStudentAssignForm((p) => ({ ...p, sectionId: e.target.value, studentId: '' }))}
+                >
+                  <option value="">Select section</option>
+                  {studentAssignSections.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
+                </select>
+              </Field>
+              <Field label="Select student *">
+                <select
+                  className={inputClass}
+                  value={studentAssignForm.studentId}
+                  disabled={!studentAssignForm.sectionId}
+                  onChange={(e) => setStudentAssignForm((p) => ({ ...p, studentId: e.target.value }))}
+                >
+                  <option value="">{studentsQuery.isFetching ? 'Loading students...' : 'Select student'}</option>
+                  {students.map((student) => (
+                    <option key={student.id} value={student.id}>
+                      {student.fullName} ({student.admissionNo})
+                    </option>
+                  ))}
+                </select>
+              </Field>
+              <Field label="Select route *">
+                <select
+                  className={inputClass}
+                  value={studentAssignForm.routeId}
+                  onChange={(e) => setStudentAssignForm((p) => ({ ...p, routeId: e.target.value, vehicleId: '' }))}
+                >
+                  <option value="">Select route</option>
+                  {routes.map((item) => <option key={item.id} value={item.id}>{item.title} - {money(item.fare)}</option>)}
+                </select>
+              </Field>
+              <Field label="Select vehicle">
+                <select
+                  className={inputClass}
+                  value={studentAssignForm.vehicleId}
+                  disabled={!studentAssignForm.routeId}
+                  onChange={(e) => setStudentAssignForm((p) => ({ ...p, vehicleId: e.target.value }))}
+                >
+                  <option value="">No specific vehicle</option>
+                  {studentAssignVehicles.map((item) => <option key={item.id} value={item.id}>{item.vehicleNumber} - {item.driverName}</option>)}
+                </select>
+              </Field>
+              <Field label="Note">
+                <textarea className={inputClass} rows={3} value={studentAssignForm.note} onChange={(e) => setStudentAssignForm((p) => ({ ...p, note: e.target.value }))} />
+              </Field>
+              <div className="flex flex-wrap gap-2">
+                <PrimaryButton disabled={studentAssignMutation.isPending} onClick={validateStudentAssign}>Save Assignment</PrimaryButton>
+                {studentAssignForm.id ? <SecondaryButton onClick={() => setStudentAssignForm(emptyStudentAssignForm)}>Cancel</SecondaryButton> : null}
+              </div>
+            </>
+          }
+          table={
+            <StudentAssignmentTable
+              rows={studentAssignments}
+              onEdit={editStudentAssignment}
+              onDelete={(item) => confirmDelete(`Remove transport assignment for "${item.student.fullName}"?`, () => deleteStudentTransportAssignment(item.id, scopedParams))}
+            />
+          }
+        />
+      ) : null}
+
       {effectiveSchoolId && activeTab === 'report' ? (
         <div className="space-y-5">
           <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
@@ -616,7 +826,7 @@ export default function TransportPage() {
 
           <ListCard title="Student Transport Report">
             {reportQuery.isFetching ? <LoadingSkeleton /> : (
-              <ReportTable rows={reportQuery.data ?? []} searched={Boolean(submittedReportFilters.classId)} />
+              <ReportTable rows={reportQuery.data ?? []} searched={reportSearched} />
             )}
           </ListCard>
         </div>
@@ -715,6 +925,34 @@ function AssignmentTable({ groups, onEdit, onDelete }: { groups: AssignmentGroup
   );
 }
 
+function StudentAssignmentTable({
+  rows,
+  onEdit,
+  onDelete,
+}: {
+  rows: StudentTransportAssignment[];
+  onEdit: (item: StudentTransportAssignment) => void;
+  onDelete: (item: StudentTransportAssignment) => void;
+}) {
+  if (!rows.length) return <EmptyState message="No student transport assignments found." />;
+  return (
+    <DataTable headers={['Class (Sec.)', 'Admission No.', 'Student', 'Route', 'Vehicle', 'Driver', 'Note', 'Actions']}>
+      {rows.map((row) => (
+        <tr key={row.id}>
+          <Cell>{row.student.class?.name ?? '-'} {row.student.section?.name ? `(${row.student.section.name})` : ''}</Cell>
+          <Cell>{row.student.admissionNo}</Cell>
+          <Cell strong>{row.student.fullName}</Cell>
+          <Cell>{row.route.title}</Cell>
+          <Cell>{row.vehicle?.vehicleNumber ?? '-'}</Cell>
+          <Cell>{row.vehicle?.driverName ?? '-'}</Cell>
+          <Cell>{row.note || '-'}</Cell>
+          <ActionCell onEdit={() => onEdit(row)} onDelete={() => onDelete(row)} />
+        </tr>
+      ))}
+    </DataTable>
+  );
+}
+
 function ReportTable({ rows, searched }: { rows: StudentTransportReportRow[]; searched: boolean }) {
   const sortedRows = useMemo(
     () =>
@@ -726,7 +964,7 @@ function ReportTable({ rows, searched }: { rows: StudentTransportReportRow[]; se
     [rows],
   );
 
-  if (!searched) return <EmptyState message="Select class, section, route, and vehicle to search." />;
+  if (!searched) return <EmptyState message="Select any filter or click Search to show all student transport records." />;
   if (!sortedRows.length) return <EmptyState message="No student transport records found for this criteria." />;
 
   return (

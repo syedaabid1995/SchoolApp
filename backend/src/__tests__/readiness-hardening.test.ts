@@ -32,6 +32,7 @@ import {
 import { listExamCentersApi } from '../controllers/examOperations.controller';
 import {
   assignExamInvigilator,
+  autoAssignExamInvigilators,
   buildHallTicketPdf,
   createExamCenter,
   createExamRoom,
@@ -1230,22 +1231,114 @@ test('invigilator double booking is blocked for overlapping exam slot', async ()
   seedSecurityUsers();
   const req = { auth: { userId: SCHOOL_ADMIN_A_ID, schoolId: SCHOOL_A_ID, role: 'SCHOOL_ADMIN' } } as any;
   const slot = new Date('2026-07-01T04:30:00.000Z');
-  const restoreExam = patch(prisma.exam as any, 'findFirst', async () => ({ id: EXAM_ID, schoolId: SCHOOL_A_ID, scheduledAt: slot, papers: [], school: { name: 'School A' } }));
+  const restoreExam = patch(prisma.exam as any, 'findFirst', async () => ({
+    id: EXAM_ID,
+    schoolId: SCHOOL_A_ID,
+    scheduledAt: null,
+    papers: [{ id: PAPER_ID, scheduledAt: slot, subject: { id: SUBJECT_ID, name: 'English' } }],
+    school: { name: 'School A' },
+  }));
   const restoreTeacher = patch(prisma.teacherProfile as any, 'findFirst', async () => ({ id: TEST_STAFF_PROFILE_A_ID, schoolId: SCHOOL_A_ID, isActive: true }));
   const restoreRoom = patch(prisma.examRoom as any, 'findFirst', async () => ({ id: ROOM_ID, schoolId: SCHOOL_A_ID, centerId: CENTER_ID, isActive: true }));
-  const restoreSameExam = patch(prisma.examInvigilatorAssignment as any, 'findFirst', async () => null);
-  const restoreAssignments = patch(prisma.examInvigilatorAssignment as any, 'findMany', async () => [{ exam: { scheduledAt: slot, papers: [] } }]);
+  const restoreSameExam = patch(prisma.examInvigilatorAssignment as any, 'findFirst', async ({ where }: any = {}) => {
+    if (where?.OR) return { id: 'same-day-assignment' };
+    return null;
+  });
 
   try {
     await assert.rejects(
-      () => assignExamInvigilator(req, SCHOOL_A_ID, EXAM_ID, { teacherId: TEST_STAFF_PROFILE_A_ID, roomId: ROOM_ID }),
-      (error: unknown) => error instanceof HttpError && error.statusCode === 409 && /double-booked/.test(error.message),
+      () => assignExamInvigilator(req, SCHOOL_A_ID, EXAM_ID, { examPaperId: PAPER_ID, teacherId: TEST_STAFF_PROFILE_A_ID, roomId: ROOM_ID }),
+      (error: unknown) => error instanceof HttpError && error.statusCode === 409 && /already assigned on this exam date/.test(error.message),
     );
   } finally {
-    restoreAssignments();
     restoreSameExam();
     restoreRoom();
     restoreTeacher();
+    restoreExam();
+    restoreSecurityTestDependencies();
+  }
+});
+
+test('invigilator can be assigned to another paper on a different date', async () => {
+  patchSecurityTestDependencies();
+  seedSecurityUsers();
+  const req = { auth: { userId: SCHOOL_ADMIN_A_ID, schoolId: SCHOOL_A_ID, role: 'SCHOOL_ADMIN' } } as any;
+  const paperDate = new Date('2026-07-02T04:30:00.000Z');
+  const otherDate = new Date('2026-07-01T04:30:00.000Z');
+  const restoreExam = patch(prisma.exam as any, 'findFirst', async () => ({
+    id: EXAM_ID,
+    schoolId: SCHOOL_A_ID,
+    scheduledAt: null,
+    papers: [{ id: PAPER_ID, scheduledAt: paperDate, subject: { id: SUBJECT_ID, name: 'Tamil' } }],
+    school: { name: 'School A' },
+  }));
+  const restoreTeacher = patch(prisma.teacherProfile as any, 'findFirst', async () => ({ id: TEST_STAFF_PROFILE_A_ID, schoolId: SCHOOL_A_ID, isActive: true }));
+  const restoreRoom = patch(prisma.examRoom as any, 'findFirst', async () => ({ id: ROOM_ID, schoolId: SCHOOL_A_ID, centerId: CENTER_ID, isActive: true }));
+  const restoreFindFirst = patch(prisma.examInvigilatorAssignment as any, 'findFirst', async () => null);
+  const restoreCreate = patch(prisma.examInvigilatorAssignment as any, 'create', async ({ data }: any) => ({
+    id: 'assignment-new',
+    ...data,
+    center: { id: CENTER_ID, name: 'Main Center' },
+    room: { id: ROOM_ID, name: 'Room 101' },
+    examPaper: { id: PAPER_ID, scheduledAt: paperDate, subject: { id: SUBJECT_ID, name: 'Tamil' } },
+    teacher: { id: TEST_STAFF_PROFILE_A_ID, firstName: 'Teacher', lastName: 'A' },
+  }));
+
+  try {
+    const result = await assignExamInvigilator(req, SCHOOL_A_ID, EXAM_ID, { examPaperId: PAPER_ID, teacherId: TEST_STAFF_PROFILE_A_ID, roomId: ROOM_ID });
+    assert.equal(result.examPaperId, PAPER_ID);
+    assert.equal(result.teacherId, TEST_STAFF_PROFILE_A_ID);
+  } finally {
+    restoreCreate();
+    restoreFindFirst();
+    restoreRoom();
+    restoreTeacher();
+    restoreExam();
+    restoreSecurityTestDependencies();
+  }
+});
+
+test('auto assign invigilators previews and saves teacher room assignments by paper date', async () => {
+  patchSecurityTestDependencies();
+  seedSecurityUsers();
+  const req = { auth: { userId: SCHOOL_ADMIN_A_ID, schoolId: SCHOOL_A_ID, role: 'SCHOOL_ADMIN' } } as any;
+  const paperDate = new Date('2026-07-02T04:30:00.000Z');
+  const createdRows: any[] = [];
+  const restoreExam = patch(prisma.exam as any, 'findFirst', async () => ({
+    id: EXAM_ID,
+    schoolId: SCHOOL_A_ID,
+    scheduledAt: null,
+    papers: [{ id: PAPER_ID, scheduledAt: paperDate, subject: { id: SUBJECT_ID, name: 'Tamil' } }],
+    school: { name: 'School A' },
+  }));
+  const restoreRooms = patch(prisma.examRoom as any, 'findMany', async () => [
+    { id: ROOM_ID, schoolId: SCHOOL_A_ID, centerId: CENTER_ID, name: 'Room 101', code: 'R101', isActive: true, center: { id: CENTER_ID, name: 'Main Center', code: 'MAIN' } },
+  ]);
+  const restoreTeachers = patch(prisma.teacherProfile as any, 'findMany', async () => [
+    { id: TEST_STAFF_PROFILE_A_ID, firstName: 'Teacher', lastName: 'A', employeeNo: 'T-001' },
+  ]);
+  const restoreExisting = patch(prisma.examInvigilatorAssignment as any, 'findMany', async () => []);
+  const restoreCreateMany = patch(prisma.examInvigilatorAssignment as any, 'createMany', async ({ data }: any) => {
+    createdRows.push(...data);
+    return { count: data.length };
+  });
+
+  try {
+    const preview = await autoAssignExamInvigilators(req, SCHOOL_A_ID, EXAM_ID, { dryRun: true });
+    assert.equal(preview.summary.planned, 1);
+    assert.equal(createdRows.length, 0);
+
+    const saved = await autoAssignExamInvigilators(req, SCHOOL_A_ID, EXAM_ID, { dryRun: false });
+    assert.equal(saved.summary.planned, 1);
+    assert.deepEqual(
+      createdRows.map((row) => ({ examPaperId: row.examPaperId, teacherId: row.teacherId, roomId: row.roomId })),
+      [{ examPaperId: PAPER_ID, teacherId: TEST_STAFF_PROFILE_A_ID, roomId: ROOM_ID }],
+    );
+  } finally {
+    restoreCreateMany();
+    restoreExisting();
+    restoreTeachers();
+    restoreRooms();
     restoreExam();
     restoreSecurityTestDependencies();
   }
@@ -1410,12 +1503,13 @@ test('exam seating generation allocates students deterministically by room grid'
 
 test('exam invigilator assignment rejects a second invigilator for the same room', async () => {
   patchSecurityTestDependencies();
+  const slot = new Date('2026-06-10T04:30:00.000Z');
   const restoreExam = patch(prisma.exam as any, 'findFirst', async () => ({
     id: EXAM_ID,
     schoolId: SCHOOL_A_ID,
     name: 'Mid Term',
-    scheduledAt: new Date('2026-06-10T04:30:00.000Z'),
-    papers: [],
+    scheduledAt: null,
+    papers: [{ id: PAPER_ID, scheduledAt: slot, subject: { id: SUBJECT_ID, name: 'English' } }],
     class: null,
     section: null,
     academicYear: null,
@@ -1430,19 +1524,18 @@ test('exam invigilator assignment rejects a second invigilator for the same room
     isActive: true,
   }));
   const restoreInvigilatorFindFirst = patch(prisma.examInvigilatorAssignment as any, 'findFirst', async ({ where }: any) => {
+    if (where?.OR) return null;
     if (where?.teacherId) return null;
-    if (where?.roomId) return { id: 'assignment-existing', schoolId: SCHOOL_A_ID, examId: EXAM_ID, roomId: where.roomId };
+    if (where?.roomId) return { id: 'assignment-existing', schoolId: SCHOOL_A_ID, examId: EXAM_ID, examPaperId: PAPER_ID, roomId: where.roomId };
     return null;
   });
-  const restoreInvigilatorFindMany = patch(prisma.examInvigilatorAssignment as any, 'findMany', async () => []);
 
   try {
     await assert.rejects(
-      () => assignExamInvigilator({} as any, SCHOOL_A_ID, EXAM_ID, { teacherId: TEST_STAFF_PROFILE_A_ID, roomId: 'room-a' }),
-      (error: unknown) => error instanceof HttpError && error.statusCode === 409 && /Room already has an invigilator/.test(error.message),
+      () => assignExamInvigilator({} as any, SCHOOL_A_ID, EXAM_ID, { examPaperId: PAPER_ID, teacherId: TEST_STAFF_PROFILE_A_ID, roomId: 'room-a' }),
+      (error: unknown) => error instanceof HttpError && error.statusCode === 409 && /Room already has an invigilator for this paper/.test(error.message),
     );
   } finally {
-    restoreInvigilatorFindMany();
     restoreInvigilatorFindFirst();
     restoreRoom();
     restoreExam();

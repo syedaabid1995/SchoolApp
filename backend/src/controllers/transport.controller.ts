@@ -58,6 +58,15 @@ const vehicleSchema = z.object({
   schoolId: uuidSchema.optional(),
 });
 
+const studentAssignmentSchema = z.object({
+  studentId: uuidSchema,
+  routeId: uuidSchema,
+  vehicleId: uuidSchema.optional().nullable(),
+  active: z.boolean().optional(),
+  note: z.string().max(1000).optional().nullable(),
+  schoolId: uuidSchema.optional(),
+});
+
 const assignmentSchema = z.object({
   routeId: uuidSchema,
   vehicleIds: z.array(uuidSchema).min(1),
@@ -87,6 +96,23 @@ const assertVehicle = async (schoolId: string, vehicleId: string) => {
   if (!found) throw new HttpError(404, 'Transport vehicle not found');
 };
 
+const assertStudent = async (schoolId: string, studentId: string) => {
+  const found = await prisma.student.findFirst({
+    where: { id: studentId, schoolId },
+    select: { id: true },
+  });
+  if (!found) throw new HttpError(404, 'Student not found');
+};
+
+const assertVehicleAssignedToRoute = async (schoolId: string, routeId: string, vehicleId?: string | null) => {
+  if (!vehicleId) return;
+  const found = await prisma.transportRouteVehicle.findFirst({
+    where: { schoolId, routeId, vehicleId },
+    select: { id: true },
+  });
+  if (!found) throw new HttpError(400, 'Selected vehicle is not assigned to this route');
+};
+
 const assertVehicles = async (schoolId: string, vehicleIds: string[]) => {
   const vehicles = await prisma.transportVehicle.findMany({
     where: { schoolId, id: { in: vehicleIds } },
@@ -95,6 +121,45 @@ const assertVehicles = async (schoolId: string, vehicleIds: string[]) => {
   if (vehicles.length !== vehicleIds.length) {
     throw new HttpError(404, 'One or more transport vehicles were not found');
   }
+};
+
+export const listTransportDrivers = async (req: Request, res: Response) => {
+  const { schoolId } = requireTransportManager(req, getRequestedSchoolId(req));
+  const search = typeof req.query.search === 'string' ? req.query.search.trim() : '';
+
+  const items = await prisma.teacherProfile.findMany({
+    where: {
+      schoolId,
+      isActive: true,
+      ...(search
+        ? {
+            OR: [
+              { firstName: { contains: search, mode: 'insensitive' } },
+              { lastName: { contains: search, mode: 'insensitive' } },
+              { employeeNo: { contains: search, mode: 'insensitive' } },
+              { phone: { contains: search, mode: 'insensitive' } },
+              { drivingLicense: { contains: search, mode: 'insensitive' } },
+            ],
+          }
+        : {}),
+    },
+    select: {
+      id: true,
+      employeeNo: true,
+      firstName: true,
+      lastName: true,
+      phone: true,
+      emergencyMobile: true,
+      drivingLicense: true,
+      roleName: true,
+      department: { select: { id: true, name: true } },
+      designation: { select: { id: true, name: true } },
+    },
+    orderBy: [{ firstName: 'asc' }, { lastName: 'asc' }],
+    take: 200,
+  });
+
+  res.status(200).json(items);
 };
 
 export const listTransportRoutes = async (req: Request, res: Response) => {
@@ -432,6 +497,195 @@ export const deleteTransportAssignment = async (req: Request, res: Response) => 
   if (!existing) throw new HttpError(404, 'Transport assignment not found');
 
   await prisma.transportRouteVehicle.delete({ where: { id } });
+  res.status(204).send();
+};
+
+export const listStudentTransportAssignments = async (req: Request, res: Response) => {
+  const { schoolId } = requireTransportManager(req, getRequestedSchoolId(req));
+  const classId = typeof req.query.classId === 'string' ? req.query.classId : undefined;
+  const sectionId = typeof req.query.sectionId === 'string' ? req.query.sectionId : undefined;
+  const routeId = typeof req.query.routeId === 'string' ? req.query.routeId : undefined;
+  const vehicleId = typeof req.query.vehicleId === 'string' ? req.query.vehicleId : undefined;
+  const search = typeof req.query.search === 'string' ? req.query.search.trim() : '';
+  const active = req.query.active === 'all' ? undefined : req.query.active === 'false' ? false : true;
+
+  if (classId) {
+    const foundClass = await prisma.class.findFirst({ where: { id: classId, schoolId }, select: { id: true } });
+    if (!foundClass) throw new HttpError(404, 'Class not found');
+  }
+  if (sectionId) {
+    const foundSection = await prisma.section.findFirst({ where: { id: sectionId, schoolId }, select: { id: true } });
+    if (!foundSection) throw new HttpError(404, 'Section not found');
+  }
+  if (routeId) await assertRoute(schoolId, routeId);
+  if (vehicleId) await assertVehicle(schoolId, vehicleId);
+
+  const items = await prisma.studentTransportAssignment.findMany({
+    where: {
+      schoolId,
+      ...(active === undefined ? {} : { active }),
+      ...(routeId ? { routeId } : {}),
+      ...(vehicleId ? { vehicleId } : {}),
+      student: {
+        ...(classId ? { classId } : {}),
+        ...(sectionId ? { sectionId } : {}),
+        ...(search
+          ? {
+              OR: [
+                { fullName: { contains: search, mode: 'insensitive' } },
+                { admissionNo: { contains: search, mode: 'insensitive' } },
+                { rollNo: { contains: search, mode: 'insensitive' } },
+              ],
+            }
+          : {}),
+      },
+    },
+    include: {
+      student: {
+        select: {
+          id: true,
+          admissionNo: true,
+          rollNo: true,
+          fullName: true,
+          phone: true,
+          class: { select: { id: true, name: true } },
+          section: { select: { id: true, name: true } },
+        },
+      },
+      route: { select: { id: true, title: true, fare: true } },
+      vehicle: { select: { id: true, vehicleNumber: true, driverName: true, driverContact: true } },
+    },
+    orderBy: [{ student: { class: { name: 'asc' } } }, { student: { section: { name: 'asc' } } }, { student: { fullName: 'asc' } }],
+  });
+
+  res.status(200).json(items);
+};
+
+export const createStudentTransportAssignment = async (req: Request, res: Response) => {
+  const payload = studentAssignmentSchema.parse(req.body);
+  const { schoolId } = requireTransportManager(req, payload.schoolId);
+  const vehicleId = payload.vehicleId || null;
+
+  await assertStudent(schoolId, payload.studentId);
+  await assertRoute(schoolId, payload.routeId);
+  if (vehicleId) await assertVehicle(schoolId, vehicleId);
+  await assertVehicleAssignedToRoute(schoolId, payload.routeId, vehicleId);
+
+  const existing = await prisma.studentTransportAssignment.findFirst({
+    where: { schoolId, studentId: payload.studentId, active: true },
+  });
+
+  const item = existing
+    ? await prisma.studentTransportAssignment.update({
+        where: { id: existing.id },
+        data: {
+          routeId: payload.routeId,
+          vehicleId,
+          active: payload.active ?? true,
+          droppedAt: payload.active === false ? new Date() : null,
+          note: nullableText(payload.note),
+        },
+        include: {
+          student: { select: { id: true, admissionNo: true, rollNo: true, fullName: true, phone: true, class: { select: { id: true, name: true } }, section: { select: { id: true, name: true } } } },
+          route: { select: { id: true, title: true, fare: true } },
+          vehicle: { select: { id: true, vehicleNumber: true, driverName: true, driverContact: true } },
+        },
+      })
+    : await prisma.studentTransportAssignment.create({
+        data: {
+          schoolId,
+          studentId: payload.studentId,
+          routeId: payload.routeId,
+          vehicleId,
+          active: payload.active ?? true,
+          droppedAt: payload.active === false ? new Date() : null,
+          note: nullableText(payload.note),
+        },
+        include: {
+          student: { select: { id: true, admissionNo: true, rollNo: true, fullName: true, phone: true, class: { select: { id: true, name: true } }, section: { select: { id: true, name: true } } } },
+          route: { select: { id: true, title: true, fare: true } },
+          vehicle: { select: { id: true, vehicleNumber: true, driverName: true, driverContact: true } },
+        },
+      });
+
+  await logAudit(req, {
+    schoolId,
+    entityType: 'STUDENT_TRANSPORT_ASSIGNMENT',
+    entityId: item.id,
+    action: existing ? 'UPDATE' : 'CREATE',
+    beforeState: existing,
+    afterState: item,
+  });
+
+  res.status(existing ? 200 : 201).json(item);
+};
+
+export const updateStudentTransportAssignment = async (req: Request, res: Response) => {
+  const payload = studentAssignmentSchema.partial().parse(req.body);
+  const { schoolId } = requireTransportManager(req, getRequestedSchoolId(req, payload.schoolId));
+  const id = req.params.id;
+
+  const existing = await prisma.studentTransportAssignment.findFirst({ where: { id, schoolId } });
+  if (!existing) throw new HttpError(404, 'Student transport assignment not found');
+
+  const routeId = payload.routeId ?? existing.routeId;
+  const vehicleId = payload.vehicleId === undefined ? existing.vehicleId : payload.vehicleId || null;
+
+  if (payload.studentId) await assertStudent(schoolId, payload.studentId);
+  await assertRoute(schoolId, routeId);
+  if (vehicleId) await assertVehicle(schoolId, vehicleId);
+  await assertVehicleAssignedToRoute(schoolId, routeId, vehicleId);
+
+  const item = await prisma.studentTransportAssignment.update({
+    where: { id },
+    data: {
+      studentId: payload.studentId ?? undefined,
+      routeId: payload.routeId ?? undefined,
+      vehicleId: payload.vehicleId === undefined ? undefined : vehicleId,
+      active: payload.active ?? undefined,
+      droppedAt: payload.active === false ? new Date() : payload.active === true ? null : undefined,
+      note: payload.note === undefined ? undefined : nullableText(payload.note),
+    },
+    include: {
+      student: { select: { id: true, admissionNo: true, rollNo: true, fullName: true, phone: true, class: { select: { id: true, name: true } }, section: { select: { id: true, name: true } } } },
+      route: { select: { id: true, title: true, fare: true } },
+      vehicle: { select: { id: true, vehicleNumber: true, driverName: true, driverContact: true } },
+    },
+  });
+
+  await logAudit(req, {
+    schoolId,
+    entityType: 'STUDENT_TRANSPORT_ASSIGNMENT',
+    entityId: id,
+    action: 'UPDATE',
+    beforeState: existing,
+    afterState: item,
+  });
+
+  res.status(200).json(item);
+};
+
+export const deleteStudentTransportAssignment = async (req: Request, res: Response) => {
+  const { schoolId } = requireTransportManager(req, getRequestedSchoolId(req));
+  const id = req.params.id;
+
+  const existing = await prisma.studentTransportAssignment.findFirst({ where: { id, schoolId } });
+  if (!existing) throw new HttpError(404, 'Student transport assignment not found');
+
+  const item = await prisma.studentTransportAssignment.update({
+    where: { id },
+    data: { active: false, droppedAt: new Date() },
+  });
+
+  await logAudit(req, {
+    schoolId,
+    entityType: 'STUDENT_TRANSPORT_ASSIGNMENT',
+    entityId: id,
+    action: 'UPDATE',
+    beforeState: existing,
+    afterState: item,
+  });
+
   res.status(204).send();
 };
 

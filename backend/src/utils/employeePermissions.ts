@@ -189,6 +189,10 @@ export const EMPLOYEE_PERMISSION_CATALOG: EmployeePermissionItem[] = [
   { code: 'student.disabled.edit', label: 'Disabled Students - Edit', path: '/dashboard/students/disabled', group: 'Students' },
   { code: 'student.disabled.delete', label: 'Disabled Students - Delete', path: '/dashboard/students/disabled', group: 'Students' },
   { code: 'student.disabled.restore', label: 'Disabled Students - Restore', path: '/dashboard/students/disabled', group: 'Students' },
+  { code: 'homework.view', label: 'Homework - View', path: '/dashboard/homework', group: 'Students' },
+  { code: 'library.view', label: 'Library - View', path: '/dashboard/library', group: 'Utilities' },
+  { code: 'transport.view', label: 'Transport - View', path: '/dashboard/transport', group: 'Utilities' },
+  { code: 'dormitory.view', label: 'Dormitory - View', path: '/dashboard/dormitory', group: 'Utilities' },
   { code: 'idcards.view', label: 'ID Cards', path: '/dashboard/id-cards', group: 'Utilities' },
   {
     code: 'students.transfers',
@@ -215,6 +219,7 @@ const DEFAULT_PERMISSION_BY_ROLE: Record<ManagedEmployeeRole, string[]> = {
     'academics.exams',
     'academics.marks',
     'students.list',
+    'homework.view',
     'leave.type.view',
     'leave.apply.view',
     'leave.apply.create',
@@ -227,7 +232,7 @@ const DEFAULT_PERMISSION_BY_ROLE: Record<ManagedEmployeeRole, string[]> = {
     'plans.view',
   ],
   ACCOUNTANT: ['dashboard.overview', 'students.list', 'fees.overview.view', 'fees.invoices.view', 'fees.collection.view', 'fees.collection.create', 'fees.receipts.print', 'fees.ledger.view', 'fees.reports.view', 'fees.reports.export', 'leave.type.view', 'leave.apply.view', 'leave.apply.create', 'leave.apply.edit', 'leave.apply.delete', 'leave.balance.view', 'idcards.view', 'support.view', 'plans.view'],
-  LIBRARIAN: ['dashboard.overview', 'students.list', 'leave.type.view', 'leave.apply.view', 'leave.apply.create', 'leave.apply.edit', 'leave.apply.delete', 'leave.balance.view', 'idcards.view', 'support.view', 'plans.view'],
+  LIBRARIAN: ['dashboard.overview', 'students.list', 'library.view', 'leave.type.view', 'leave.apply.view', 'leave.apply.create', 'leave.apply.edit', 'leave.apply.delete', 'leave.balance.view', 'idcards.view', 'support.view', 'plans.view'],
   STAFF: ['dashboard.overview', 'students.list', 'leave.type.view', 'leave.apply.view', 'leave.apply.create', 'leave.apply.edit', 'leave.apply.delete', 'leave.balance.view', 'idcards.view', 'support.view', 'plans.view'],
 };
 

@@ -511,6 +511,7 @@ export const listTimetableTeachers = async (params: {
     where: {
       schoolId: params.schoolId,
       isActive: true,
+      roleName: 'TEACHER',
       ...(params.query
         ? {
             OR: [

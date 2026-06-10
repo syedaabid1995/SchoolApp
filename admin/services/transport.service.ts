@@ -23,6 +23,19 @@ export type TransportVehicle = {
   _count?: { routeAssignments?: number; studentAssignments?: number };
 };
 
+export type TransportDriver = {
+  id: string;
+  employeeNo?: string | null;
+  firstName: string;
+  lastName: string;
+  phone?: string | null;
+  emergencyMobile?: string | null;
+  drivingLicense?: string | null;
+  roleName?: string | null;
+  department?: { id: string; name: string } | null;
+  designation?: { id: string; name: string } | null;
+};
+
 export type TransportAssignment = {
   id: string;
   schoolId: string;
@@ -42,6 +55,10 @@ export type TransportAssignment = {
 
 export type StudentTransportReportRow = {
   id: string;
+  routeId?: string;
+  vehicleId?: string | null;
+  active?: boolean;
+  note?: string | null;
   student: {
     id: string;
     admissionNo: string;
@@ -58,6 +75,20 @@ export type StudentTransportReportRow = {
   };
   route: { id: string; title: string; fare: string | number };
   vehicle?: { id: string; vehicleNumber: string; driverName?: string | null; driverContact?: string | null } | null;
+};
+
+export type StudentTransportAssignment = StudentTransportReportRow & {
+  studentId: string;
+  routeId: string;
+  vehicleId?: string | null;
+  assignedAt?: string;
+  droppedAt?: string | null;
+  active: boolean;
+};
+
+export const listTransportDrivers = async (params?: { schoolId?: string; search?: string }) => {
+  const { data } = await api.get<TransportDriver[]>('/transport/drivers', { params: sanitizeParams(params) });
+  return data;
 };
 
 export const listTransportRoutes = async (params?: { schoolId?: string; search?: string }) => {
@@ -133,6 +164,47 @@ export const updateTransportAssignment = async (id: string, payload: Partial<{ s
 
 export const deleteTransportAssignment = async (id: string, params?: { schoolId?: string }) => {
   await api.delete(`/transport/assignments/${id}`, { params });
+};
+
+export const listStudentTransportAssignments = async (params?: {
+  schoolId?: string;
+  classId?: string;
+  sectionId?: string;
+  routeId?: string;
+  vehicleId?: string;
+  search?: string;
+  active?: 'true' | 'false' | 'all';
+}) => {
+  const { data } = await api.get<StudentTransportAssignment[]>('/transport/student-assignments', { params: sanitizeParams(params) });
+  return data;
+};
+
+export const createStudentTransportAssignment = async (payload: {
+  schoolId?: string;
+  studentId: string;
+  routeId: string;
+  vehicleId?: string | null;
+  active?: boolean;
+  note?: string | null;
+}) => {
+  const { data } = await api.post<StudentTransportAssignment>('/transport/student-assignments', payload);
+  return data;
+};
+
+export const updateStudentTransportAssignment = async (id: string, payload: Partial<{
+  schoolId: string;
+  studentId: string;
+  routeId: string;
+  vehicleId: string | null;
+  active: boolean;
+  note: string | null;
+}>) => {
+  const { data } = await api.patch<StudentTransportAssignment>(`/transport/student-assignments/${id}`, payload);
+  return data;
+};
+
+export const deleteStudentTransportAssignment = async (id: string, params?: { schoolId?: string }) => {
+  await api.delete(`/transport/student-assignments/${id}`, { params });
 };
 
 export const getStudentTransportReport = async (params: {
