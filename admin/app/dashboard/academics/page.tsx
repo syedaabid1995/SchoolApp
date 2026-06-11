@@ -439,46 +439,48 @@ export default function AcademicSetupPage() {
 
   const { data: session, isLoading: sessionLoading } = useQuery({ queryKey: ['session'], queryFn: getSession });
   const isSchoolAdmin = session?.role === 'SCHOOL_ADMIN';
+  const permissionCodes = session?.permissionCodes ?? [];
+  const canManageAcademicSetup = isSchoolAdmin || permissionCodes.includes('academics.setup');
 
   const openForm = (tabId: TabId) => setExpandedForms((prev) => ({ ...prev, [tabId]: true }));
   const closeForm = (tabId: TabId) => setExpandedForms((prev) => ({ ...prev, [tabId]: false }));
   const isFormOpen = (tabId: TabId, isEditing = false) => Boolean(expandedForms[tabId]) || isEditing;
 
-  const classesQuery = useQuery({ queryKey: ['academic-setup-classes', search], queryFn: () => listSetupClasses({ search }), enabled: isSchoolAdmin });
-  const sectionsQuery = useQuery({ queryKey: ['academic-setup-sections', search], queryFn: () => listSetupSections({ search }), enabled: isSchoolAdmin });
-  const subjectsQuery = useQuery({ queryKey: ['academic-setup-subjects', search], queryFn: () => listSetupSubjects({ search }), enabled: isSchoolAdmin });
-  const roomsQuery = useQuery({ queryKey: ['academic-setup-rooms', search], queryFn: () => listClassRooms({ search }), enabled: isSchoolAdmin });
-  const allRoomsQuery = useQuery({ queryKey: ['academic-setup-rooms-all'], queryFn: () => listClassRooms(), enabled: isSchoolAdmin });
-  const periodsQuery = useQuery({ queryKey: ['academic-setup-time-periods'], queryFn: listTimePeriods, enabled: isSchoolAdmin });
-  const teachersQuery = useQuery({ queryKey: ['academic-setup-teachers'], queryFn: () => listTimetableTeachers(), enabled: isSchoolAdmin });
-  const yearsQuery = useQuery({ queryKey: ['academic-years'], queryFn: () => listAcademicYears(), enabled: isSchoolAdmin });
+  const classesQuery = useQuery({ queryKey: ['academic-setup-classes', search], queryFn: () => listSetupClasses({ search }), enabled: canManageAcademicSetup });
+  const sectionsQuery = useQuery({ queryKey: ['academic-setup-sections', search], queryFn: () => listSetupSections({ search }), enabled: canManageAcademicSetup });
+  const subjectsQuery = useQuery({ queryKey: ['academic-setup-subjects', search], queryFn: () => listSetupSubjects({ search }), enabled: canManageAcademicSetup });
+  const roomsQuery = useQuery({ queryKey: ['academic-setup-rooms', search], queryFn: () => listClassRooms({ search }), enabled: canManageAcademicSetup });
+  const allRoomsQuery = useQuery({ queryKey: ['academic-setup-rooms-all'], queryFn: () => listClassRooms(), enabled: canManageAcademicSetup });
+  const periodsQuery = useQuery({ queryKey: ['academic-setup-time-periods'], queryFn: listTimePeriods, enabled: canManageAcademicSetup });
+  const teachersQuery = useQuery({ queryKey: ['academic-setup-teachers'], queryFn: () => listTimetableTeachers(), enabled: canManageAcademicSetup });
+  const yearsQuery = useQuery({ queryKey: ['academic-years'], queryFn: () => listAcademicYears(), enabled: canManageAcademicSetup });
   const systemSettingsQuery = useQuery({
     queryKey: ['school-system-settings', session?.schoolId, 'academics-routine'],
     queryFn: () => getSchoolSystemSettings(),
-    enabled: isSchoolAdmin,
+    enabled: canManageAcademicSetup,
     refetchOnWindowFocus: false,
     staleTime: 30_000,
   });
   const assignedQuery = useQuery({
     queryKey: ['academic-setup-assign-subjects', assignClassId, assignSectionId],
     queryFn: () => listAssignSubjects({ classId: assignClassId, sectionId: assignSectionId }),
-    enabled: isSchoolAdmin && Boolean(assignClassId && assignSectionId),
+    enabled: canManageAcademicSetup && Boolean(assignClassId && assignSectionId),
   });
-  const classTeachersQuery = useQuery({ queryKey: ['academic-setup-class-teachers'], queryFn: listClassTeachers, enabled: isSchoolAdmin });
+  const classTeachersQuery = useQuery({ queryKey: ['academic-setup-class-teachers'], queryFn: listClassTeachers, enabled: canManageAcademicSetup });
   const routinesQuery = useQuery({
     queryKey: ['academic-setup-routines', routineClassId, routineSectionId],
     queryFn: () => listClassRoutines({ classId: routineClassId, sectionId: routineSectionId }),
-    enabled: isSchoolAdmin && Boolean(routineClassId && routineSectionId),
+    enabled: canManageAcademicSetup && Boolean(routineClassId && routineSectionId),
   });
   const teacherRoutinesQuery = useQuery({
     queryKey: ['academic-setup-routines-teacher', teacherRoutineTeacherId],
     queryFn: () => listClassRoutines({ teacherId: teacherRoutineTeacherId }),
-    enabled: isSchoolAdmin && Boolean(teacherRoutineTeacherId),
+    enabled: canManageAcademicSetup && Boolean(teacherRoutineTeacherId),
   });
   const routineAssignmentsQuery = useQuery({
     queryKey: ['academic-setup-routine-assign-subjects', routineClassId, routineSectionId],
     queryFn: () => listAssignSubjects({ classId: routineClassId, sectionId: routineSectionId }),
-    enabled: isSchoolAdmin && Boolean(routineClassId && routineSectionId),
+    enabled: canManageAcademicSetup && Boolean(routineClassId && routineSectionId),
   });
   const weekendDayValues = useMemo(() => {
     const configuredWeekends = systemSettingsQuery.data?.weekends ?? [{ id: 'friday', name: 'Friday', isWeekend: true }];
@@ -907,12 +909,12 @@ export default function AcademicSetupPage() {
     return <LoadingSkeleton />;
   }
 
-  if (!isSchoolAdmin) {
+  if (!canManageAcademicSetup) {
     return (
       <div>
-        <PageHeader title="Academic Setup" subtitle="This setup area is available only for School Admin accounts." />
+        <PageHeader title="Academic Setup" subtitle="Academic setup access is controlled by Role Permissions." />
         <section className="rounded-2xl border border-amber-200 bg-amber-50 p-6 text-sm font-semibold text-amber-800">
-          Academic setup is a School Admin workspace. Super Admin and lower roles cannot manage this data here.
+          Academic setup is not enabled for your role. Ask a School Admin to enable Academic Setup from Role Permissions.
         </section>
       </div>
     );

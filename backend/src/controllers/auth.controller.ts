@@ -105,6 +105,8 @@ const clearAuthCookies = (res: Response) => {
   }
 };
 
+const shouldReturnTokensInBody = (req: Request) => req.header('x-client-platform') === 'school-mobile';
+
 const getSchoolAccessState = async (schoolId: string): Promise<'ACTIVE' | 'PAYMENT_RESTRICTED' | 'SUSPENDED'> => {
   const school = await prisma.school.findUnique({
     where: { id: schoolId },
@@ -672,6 +674,7 @@ export const login = async (req: Request, res: Response) => {
     expiresIn: ACCESS_TOKEN_TTL,
     refreshTokenMaxAge,
     refreshTokenExpiresAt: refreshTokenExpiresAt.toISOString(),
+    ...(shouldReturnTokensInBody(req) ? { accessToken, refreshToken } : {}),
     mustChangePassword: user.mustChangePassword,
     subscriptionRestricted: payloadBase.subscriptionRestricted,
     user: {
@@ -819,6 +822,11 @@ export const verifyTwoFactor = async (req: Request, res: Response) => {
   res.cookie('refresh_token', refreshToken, refreshCookieOptions(refreshTokenMaxAge));
 
   res.status(200).json({
+    tokenType: 'Bearer',
+    expiresIn: ACCESS_TOKEN_TTL,
+    refreshTokenMaxAge,
+    refreshTokenExpiresAt: refreshTokenExpiresAt.toISOString(),
+    ...(shouldReturnTokensInBody(req) ? { accessToken, refreshToken } : {}),
     user: {
       id: user.id,
       name: displayNameFromUser(user),
@@ -1022,6 +1030,11 @@ export const verifyTotpLogin = async (req: Request, res: Response) => {
   res.cookie('refresh_token', refreshToken, refreshCookieOptions(refreshTokenMaxAge));
 
   res.status(200).json({
+    tokenType: 'Bearer',
+    expiresIn: ACCESS_TOKEN_TTL,
+    refreshTokenMaxAge,
+    refreshTokenExpiresAt: refreshTokenExpiresAt.toISOString(),
+    ...(shouldReturnTokensInBody(req) ? { accessToken, refreshToken } : {}),
     user: {
       id: user.id,
       name: displayNameFromUser(user),
@@ -1133,6 +1146,7 @@ export const refreshToken = async (req: Request, res: Response) => {
     expiresIn: ACCESS_TOKEN_TTL,
     refreshTokenMaxAge,
     refreshTokenExpiresAt: session.expiresAt.toISOString(),
+    ...(shouldReturnTokensInBody(req) ? { accessToken, refreshToken: nextRefreshToken } : {}),
   });
 };
 

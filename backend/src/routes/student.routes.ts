@@ -61,6 +61,9 @@ studentRouter.use((req: Request, _res: Response, next: NextFunction) => {
   if (req.auth?.role === 'SCHOOL_ADMIN' && req.auth.schoolId) {
     return next();
   }
+  if (req.path.startsWith('/attendance') && req.auth?.schoolId) {
+    return next();
+  }
   return next(new HttpError(403, 'Only School Admin can access student information'));
 });
 

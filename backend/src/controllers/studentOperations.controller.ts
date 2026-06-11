@@ -16,6 +16,12 @@ const requireSchoolAdmin = (req: Request) => {
   return { schoolId: req.auth.schoolId, userId: req.auth.userId };
 };
 
+const requireSchoolScopedUser = (req: Request) => {
+  if (!req.auth?.userId) throw new HttpError(401, 'Unauthorized');
+  if (!req.auth.schoolId) throw new HttpError(403, 'School scope is required');
+  return { schoolId: req.auth.schoolId, userId: req.auth.userId };
+};
+
 const dayStart = (value: string | Date) => {
   const date = value instanceof Date ? value : new Date(`${value}T00:00:00.000Z`);
   if (Number.isNaN(date.getTime())) throw new HttpError(400, 'Invalid date');
@@ -199,7 +205,7 @@ type AttendanceSavePayload = AttendanceQuery & {
 };
 
 export const loadStudentAttendance = async (req: Request, res: Response) => {
-  const { schoolId } = requireSchoolAdmin(req);
+  const { schoolId } = requireSchoolScopedUser(req);
   const query = attendanceQuerySchema.parse(req.query) as AttendanceQuery;
   await assertAcademicScope(schoolId, query);
   const date = dayStart(query.date);
@@ -255,7 +261,7 @@ export const loadStudentAttendance = async (req: Request, res: Response) => {
 };
 
 export const saveStudentAttendance = async (req: Request, res: Response) => {
-  const { schoolId, userId } = requireSchoolAdmin(req);
+  const { schoolId, userId } = requireSchoolScopedUser(req);
   const payload = attendanceSaveSchema.parse(req.body) as AttendanceSavePayload;
   await assertAcademicScope(schoolId, payload);
   const date = dayStart(payload.date);
@@ -375,7 +381,7 @@ type AttendanceReportQuery = {
 };
 
 export const getStudentAttendanceReport = async (req: Request, res: Response) => {
-  const { schoolId } = requireSchoolAdmin(req);
+  const { schoolId } = requireSchoolScopedUser(req);
   const query = reportQuerySchema.parse(req.query) as AttendanceReportQuery;
   await assertAcademicScope(schoolId, query);
   const start = new Date(Date.UTC(query.year, query.month - 1, 1));

@@ -1,6 +1,6 @@
 'use client';
 
-import { Fragment, useMemo, useState } from 'react';
+import { Fragment, useEffect, useMemo, useState } from 'react';
 import { useMutation, useQuery } from '@tanstack/react-query';
 import FullPageLoader from '../../../../components/FullPageLoader';
 import PageHeader from '../../../../components/PageHeader';
@@ -8,7 +8,6 @@ import { useNotify } from '../../../../components/NotificationProvider';
 import { getSession } from '../../../../services/auth.service';
 import { listAcademicYears } from '../../../../services/academic.service';
 import { listSetupClasses, listSetupSections } from '../../../../services/academic-setup.service';
-import { SchoolAdminOnly } from '../_components/SchoolAdminOnly';
 import {
   getStudentAttendanceReport,
   loadStudentAttendance,
@@ -134,9 +133,14 @@ export default function StudentAttendancePage() {
 
   const { data: session, isLoading: sessionLoading } = useQuery({ queryKey: ['session'], queryFn: getSession });
   const isSchoolAdmin = session?.role === 'SCHOOL_ADMIN';
-  const yearsQuery = useQuery({ queryKey: ['academic-years'], queryFn: () => listAcademicYears(), enabled: isSchoolAdmin });
-  const classesQuery = useQuery({ queryKey: ['setup-classes'], queryFn: () => listSetupClasses(), enabled: isSchoolAdmin });
-  const sectionsQuery = useQuery({ queryKey: ['setup-sections'], queryFn: () => listSetupSections(), enabled: isSchoolAdmin });
+  const permissionCodes = session?.permissionCodes ?? [];
+  const hasPermission = (code: string) => isSchoolAdmin || permissionCodes.includes(code);
+  const canViewAttendance = hasPermission('attendance.view') || hasPermission('attendance.report') || hasPermission('attendance.create') || hasPermission('attendance.edit');
+  const canMarkAttendance = hasPermission('attendance.create') || hasPermission('attendance.edit');
+  const canViewReport = hasPermission('attendance.report') || hasPermission('attendance.view');
+  const yearsQuery = useQuery({ queryKey: ['academic-years'], queryFn: () => listAcademicYears(), enabled: canViewAttendance });
+  const classesQuery = useQuery({ queryKey: ['setup-classes'], queryFn: () => listSetupClasses(), enabled: canViewAttendance });
+  const sectionsQuery = useQuery({ queryKey: ['setup-sections'], queryFn: () => listSetupSections(), enabled: canViewAttendance });
 
   const sections = useMemo(
     () =>
@@ -147,6 +151,12 @@ export default function StudentAttendancePage() {
   );
 
   const canSearch = Boolean(criteria.academicSessionId && criteria.classId && criteria.sectionId);
+
+  useEffect(() => {
+    if (activeTab === 'mark' && !canMarkAttendance && canViewReport) {
+      setActiveTab('report');
+    }
+  }, [activeTab, canMarkAttendance, canViewReport]);
 
   const attendanceQuery = useQuery({
     queryKey: ['student-attendance-load', criteria.academicSessionId, criteria.classId, criteria.sectionId, criteria.date],
@@ -202,7 +212,17 @@ export default function StudentAttendancePage() {
   });
 
   if (sessionLoading || !session?.role) return <FullPageLoader label="Checking attendance access..." />;
-  if (!isSchoolAdmin) return <SchoolAdminOnly moduleName="student attendance" />;
+  if (!canViewAttendance) {
+    return (
+      <section className="rounded-2xl border border-rose-100 bg-rose-50 p-8 text-center">
+        <p className="text-sm font-bold uppercase tracking-wide text-rose-600">Permission not available</p>
+        <h1 className="mt-2 text-2xl font-bold text-rose-950">Student attendance is not enabled for your role.</h1>
+        <p className="mt-2 text-sm text-rose-700">
+          Ask your school admin to enable Student Attendance permissions from Role Permissions.
+        </p>
+      </section>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-slate-100 pb-10">
@@ -214,8 +234,12 @@ export default function StudentAttendancePage() {
         />
 
         <div className="mb-5 flex flex-wrap gap-2">
-          <ShellButton variant={activeTab === 'mark' ? 'primary' : 'secondary'} onClick={() => setActiveTab('mark')}>Mark Attendance</ShellButton>
-          <ShellButton variant={activeTab === 'report' ? 'primary' : 'secondary'} onClick={() => setActiveTab('report')}>Attendance Report</ShellButton>
+          {canMarkAttendance ? (
+            <ShellButton variant={activeTab === 'mark' ? 'primary' : 'secondary'} onClick={() => setActiveTab('mark')}>Mark Attendance</ShellButton>
+          ) : null}
+          {canViewReport ? (
+            <ShellButton variant={activeTab === 'report' ? 'primary' : 'secondary'} onClick={() => setActiveTab('report')}>Attendance Report</ShellButton>
+          ) : null}
           <ShellButton variant="secondary" onClick={() => activeTab === 'report' && reportQuery.data ? exportCsv(reportQuery.data.rows) : window.print()}>Export / Print</ShellButton>
         </div>
 
@@ -265,7 +289,7 @@ export default function StudentAttendancePage() {
                 <p className="text-sm text-slate-500">{rows.length ? `${rows.length} students loaded.` : 'Load students to start marking attendance.'}</p>
               </div>
               <label className="inline-flex items-center gap-2 rounded-xl border border-violet-200 bg-violet-50 px-3 py-2 text-sm font-bold text-violet-700">
-                <input type="checkbox" checked={holiday} onChange={(event) => setHoliday(event.target.checked)} />
+                <input type="checkbox" checked={holiday} disabled={!canMarkAttendance} onChange={(event) => setHoliday(event.target.checked)} />
                 Mark Holiday
               </label>
             </div>
@@ -303,7 +327,7 @@ export default function StudentAttendancePage() {
                               <button
                                 type="button"
                                 key={status}
-                                disabled={holiday}
+                                disabled={holiday || !canMarkAttendance}
                                 onClick={() => setRows((current) => current.map((item) => item.id === row.id ? { ...item, status } : item))}
                                 className={`rounded-full border px-3 py-1 text-xs font-bold ${row.status === status ? statusClass[status] : 'border-slate-200 bg-white text-slate-500'}`}
                               >
@@ -313,7 +337,7 @@ export default function StudentAttendancePage() {
                           </div>
                         </td>
                         <td className="px-4 py-3">
-                          <input disabled={holiday} value={row.note ?? ''} onChange={(event) => setRows((current) => current.map((item) => item.id === row.id ? { ...item, note: event.target.value } : item))} className="w-full rounded-lg border border-slate-200 px-3 py-2" />
+                          <input disabled={holiday || !canMarkAttendance} value={row.note ?? ''} onChange={(event) => setRows((current) => current.map((item) => item.id === row.id ? { ...item, note: event.target.value } : item))} className="w-full rounded-lg border border-slate-200 px-3 py-2" />
                         </td>
                       </tr>
                     ))
@@ -324,7 +348,7 @@ export default function StudentAttendancePage() {
               </table>
             </div>
             <div className="mt-4 flex justify-end">
-              <ShellButton onClick={() => saveMutation.mutate()} disabled={!rows.length && !holiday}>Save Attendance</ShellButton>
+              <ShellButton onClick={() => saveMutation.mutate()} disabled={!canMarkAttendance || (!rows.length && !holiday)}>Save Attendance</ShellButton>
             </div>
           </section>
         ) : (

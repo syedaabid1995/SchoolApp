@@ -51,6 +51,50 @@ const updateEmployeePermissionsSchema = z.object({
   userId: z.string().uuid().optional(),
 });
 
+const assignedStudentsQuerySchema = z.object({
+  classId: z.string().uuid().optional(),
+  sectionId: z.string().uuid().optional(),
+});
+
+const assignedExamPapersQuerySchema = z.object({
+  examId: z.string().uuid().optional(),
+  classId: z.string().uuid().optional(),
+  sectionId: z.string().uuid().optional(),
+  subjectId: z.string().uuid().optional(),
+});
+
+const requireCurrentSchool = (req: Request) => {
+  const schoolId = req.auth?.schoolId;
+  if (!req.auth?.userId || !schoolId) {
+    throw new HttpError(401, 'Authenticated school context is required');
+  }
+  return { userId: req.auth.userId, schoolId, role: req.auth.role };
+};
+
+const isSchoolAdminRole = (role?: string | null) => role === 'SCHOOL_ADMIN';
+
+const getActiveTeacherForUser = async (schoolId: string, userId: string) => {
+  const teacher = await prisma.teacherProfile.findFirst({
+    where: { schoolId, userId, isActive: true },
+    select: { id: true },
+  });
+  if (!teacher) throw new HttpError(403, 'Employee profile is not assigned to this workflow');
+  return teacher;
+};
+
+const ensureClassSectionInAssignments = (
+  assignments: Array<{ classId: string; sectionId: string | null }>,
+  classId?: string,
+  sectionId?: string,
+) => {
+  if (!classId) return;
+  const allowed = assignments.some((assignment) => {
+    if (assignment.classId !== classId) return false;
+    return !sectionId || assignment.sectionId === null || assignment.sectionId === sectionId;
+  });
+  if (!allowed) throw new HttpError(403, 'Requested class/section is outside your assignment scope');
+};
+
 export const getMe = async (req: Request, res: Response) => {
   if (!req.auth?.userId) {
     throw new HttpError(401, 'Unauthorized');
@@ -62,7 +106,35 @@ export const getMe = async (req: Request, res: Response) => {
       id: true,
       email: true,
       schoolId: true,
-      teacherProfile: { select: { firstName: true, lastName: true } },
+      school: { select: { id: true, name: true, code: true, status: true, domainUrl: true, subdomain: true } },
+      teacherProfile: {
+        select: {
+          id: true,
+          employeeNo: true,
+          firstName: true,
+          lastName: true,
+          phone: true,
+          address: true,
+          roleName: true,
+          photoUrl: true,
+          isActive: true,
+          department: { select: { id: true, name: true } },
+          designation: { select: { id: true, name: true } },
+          classAssignments: {
+            select: {
+              id: true,
+              class: { select: { id: true, name: true } },
+              section: { select: { id: true, name: true } },
+            },
+          },
+          subjectAssignments: {
+            select: {
+              id: true,
+              subject: { select: { id: true, name: true, classId: true } },
+            },
+          },
+        },
+      },
       parentProfiles: { select: { firstName: true, lastName: true }, take: 1 },
       roles: { select: { role: { select: { name: true } } } },
     },
@@ -89,10 +161,140 @@ export const getMe = async (req: Request, res: Response) => {
     id: user.id,
     email: user.email,
     schoolId: user.schoolId,
+    school: user.school,
     role,
     displayName,
     permissionCodes,
+    teacherProfile: user.teacherProfile,
+    employeeProfile: user.teacherProfile,
   });
+};
+
+export const listMyAssignedStudentsApi = async (req: Request, res: Response) => {
+  const { userId, schoolId, role } = requireCurrentSchool(req);
+  const query = assignedStudentsQuerySchema.parse(req.query);
+
+  const whereBase = {
+    schoolId,
+    ...(query.classId ? { classId: query.classId } : {}),
+    ...(query.sectionId ? { sectionId: query.sectionId } : {}),
+    status: { not: 'DISABLED' as const },
+  };
+
+  const where = isSchoolAdminRole(role)
+    ? whereBase
+    : await (async () => {
+        const teacher = await getActiveTeacherForUser(schoolId, userId);
+        const assignments = await prisma.teacherClassAssignment.findMany({
+          where: { teacherId: teacher.id },
+          select: { classId: true, sectionId: true },
+        });
+
+        ensureClassSectionInAssignments(assignments, query.classId, query.sectionId);
+        if (assignments.length === 0) {
+          return { ...whereBase, id: { in: [] as string[] } };
+        }
+
+        return {
+          ...whereBase,
+          OR: assignments.map((assignment) => ({
+            classId: assignment.classId,
+            ...(assignment.sectionId ? { sectionId: assignment.sectionId } : {}),
+          })),
+        };
+      })();
+
+  const students = await prisma.student.findMany({
+    where,
+    orderBy: [{ classId: 'asc' }, { sectionId: 'asc' }, { rollNo: 'asc' }, { fullName: 'asc' }],
+    select: {
+      id: true,
+      admissionNo: true,
+      rollNo: true,
+      fullName: true,
+      photoUrl: true,
+      status: true,
+      classId: true,
+      sectionId: true,
+      academicSessionId: true,
+      class: { select: { id: true, name: true } },
+      section: { select: { id: true, name: true } },
+      academicSession: { select: { id: true, name: true, isActive: true } },
+    },
+  });
+
+  res.status(200).json(students);
+};
+
+export const listMyExamPapersApi = async (req: Request, res: Response) => {
+  const { userId, schoolId, role } = requireCurrentSchool(req);
+  const query = assignedExamPapersQuerySchema.parse(req.query);
+
+  const whereBase = {
+    exam: {
+      schoolId,
+      ...(query.examId ? { id: query.examId } : {}),
+      ...(query.sectionId ? { sectionId: query.sectionId } : {}),
+    },
+    ...(query.classId ? { classId: query.classId } : {}),
+    ...(query.subjectId ? { subjectId: query.subjectId } : {}),
+  };
+
+  const where = isSchoolAdminRole(role)
+    ? whereBase
+    : await (async () => {
+        const teacher = await getActiveTeacherForUser(schoolId, userId);
+        const assignments = await prisma.assignSubject.findMany({
+          where: { schoolId, teacherId: teacher.id },
+          select: { classId: true, sectionId: true, subjectId: true },
+        });
+
+        ensureClassSectionInAssignments(assignments, query.classId, query.sectionId);
+        if (query.subjectId && !assignments.some((item) => item.subjectId === query.subjectId)) {
+          throw new HttpError(403, 'Requested subject is outside your assignment scope');
+        }
+        if (assignments.length === 0) {
+          return { ...whereBase, id: { in: [] as string[] } };
+        }
+
+        return {
+          ...whereBase,
+          OR: assignments.map((assignment) => ({
+            classId: assignment.classId,
+            subjectId: assignment.subjectId,
+            exam: { sectionId: assignment.sectionId },
+          })),
+        };
+      })();
+
+  const papers = await prisma.examPaper.findMany({
+    where,
+    orderBy: [{ scheduledAt: 'asc' }, { createdAt: 'desc' }],
+    select: {
+      id: true,
+      maxMarks: true,
+      passMarks: true,
+      weightage: true,
+      scheduledAt: true,
+      class: { select: { id: true, name: true } },
+      subject: { select: { id: true, name: true } },
+      exam: {
+        select: {
+          id: true,
+          name: true,
+          type: true,
+          status: true,
+          scheduledAt: true,
+          resultPublishAt: true,
+          class: { select: { id: true, name: true } },
+          section: { select: { id: true, name: true } },
+        },
+      },
+      _count: { select: { marks: true } },
+    },
+  });
+
+  res.status(200).json(papers);
 };
 
 export const getUserById = async (req: Request, res: Response) => {

@@ -234,31 +234,33 @@ export default function TimetableManagementPage() {
 
   const { data: session, isLoading: sessionLoading } = useQuery({ queryKey: ['session'], queryFn: getSession });
   const isSchoolAdmin = session?.role === 'SCHOOL_ADMIN';
+  const permissionCodes = session?.permissionCodes ?? [];
+  const canManageTimetable = isSchoolAdmin || permissionCodes.includes('academics.setup');
 
   const settingsQuery = useQuery({
     queryKey: ['school-system-settings', session?.schoolId, 'timetable'],
     queryFn: () => getSchoolSystemSettings(),
-    enabled: isSchoolAdmin,
+    enabled: canManageTimetable,
     refetchOnWindowFocus: false,
   });
-  const classesQuery = useQuery({ queryKey: ['timetable-setup-classes'], queryFn: () => listSetupClasses(), enabled: isSchoolAdmin });
-  const roomsQuery = useQuery({ queryKey: ['timetable-class-rooms'], queryFn: () => listClassRooms(), enabled: isSchoolAdmin });
-  const periodsQuery = useQuery({ queryKey: ['timetable-time-periods'], queryFn: listTimePeriods, enabled: isSchoolAdmin });
-  const teachersQuery = useQuery({ queryKey: ['timetable-teachers'], queryFn: () => listTimetableTeachers(), enabled: isSchoolAdmin });
+  const classesQuery = useQuery({ queryKey: ['timetable-setup-classes'], queryFn: () => listSetupClasses(), enabled: canManageTimetable });
+  const roomsQuery = useQuery({ queryKey: ['timetable-class-rooms'], queryFn: () => listClassRooms(), enabled: canManageTimetable });
+  const periodsQuery = useQuery({ queryKey: ['timetable-time-periods'], queryFn: listTimePeriods, enabled: canManageTimetable });
+  const teachersQuery = useQuery({ queryKey: ['timetable-teachers'], queryFn: () => listTimetableTeachers(), enabled: canManageTimetable });
   const assignmentsQuery = useQuery({
     queryKey: ['timetable-assign-subjects', selectedClassId, selectedSectionId],
     queryFn: () => listAssignSubjects({ classId: selectedClassId, sectionId: selectedSectionId }),
-    enabled: isSchoolAdmin && Boolean(selectedClassId && selectedSectionId),
+    enabled: canManageTimetable && Boolean(selectedClassId && selectedSectionId),
   });
   const routinesQuery = useQuery({
     queryKey: ['timetable-routines', selectedClassId, selectedSectionId],
     queryFn: () => listClassRoutines({ classId: selectedClassId, sectionId: selectedSectionId }),
-    enabled: isSchoolAdmin && Boolean(selectedClassId && selectedSectionId),
+    enabled: canManageTimetable && Boolean(selectedClassId && selectedSectionId),
   });
   const teacherRoutinesQuery = useQuery({
     queryKey: ['timetable-routines-teacher', teacherId],
     queryFn: () => listClassRoutines({ teacherId }),
-    enabled: isSchoolAdmin && Boolean(teacherId),
+    enabled: canManageTimetable && Boolean(teacherId),
   });
 
   useEffect(() => {
@@ -775,12 +777,12 @@ export default function TimetableManagementPage() {
 
   if (sessionLoading) return <LoadingSkeleton />;
 
-  if (!isSchoolAdmin) {
+  if (!canManageTimetable) {
     return (
       <div>
-        <PageHeader title="Timetable" subtitle="Timetable setup is available only for School Admin accounts." />
+        <PageHeader title="Timetable" subtitle="Timetable access is controlled by Role Permissions." />
         <section className="rounded-2xl border border-amber-200 bg-amber-50 p-6 text-sm font-bold text-amber-800">
-          Please login as School Admin to manage weekend, rooms, periods, and timetable generation.
+          Timetable setup is not enabled for your role. Ask a School Admin to enable Academic Setup from Role Permissions.
         </section>
       </div>
     );

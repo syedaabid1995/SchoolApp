@@ -8,10 +8,10 @@ import { logAudit } from '../utils/audit';
 const uuidSchema = z.string().uuid();
 const timeSchema = z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/, 'Use HH:mm time format');
 
-const requireSchoolAdmin = (req: Request) => {
+const requireAcademicSetupUser = (req: Request) => {
   if (!req.auth?.userId) throw new HttpError(401, 'Unauthorized');
-  if (req.auth.role !== 'SCHOOL_ADMIN' || !req.auth.schoolId) {
-    throw new HttpError(403, 'Only School Admin can manage academic setup');
+  if (!req.auth.schoolId) {
+    throw new HttpError(403, 'School scope is required to manage academic setup');
   }
   return { schoolId: req.auth.schoolId, userId: req.auth.userId };
 };
@@ -171,7 +171,7 @@ const classSchema = z.object({
 const updateClassSchema = classSchema.partial();
 
 export const listSetupClasses = async (req: Request, res: Response) => {
-  const { schoolId } = requireSchoolAdmin(req);
+  const { schoolId } = requireAcademicSetupUser(req);
   const search = typeof req.query.search === 'string' ? req.query.search.trim() : '';
   const classes = await prisma.class.findMany({
     where: {
@@ -201,7 +201,7 @@ export const listSetupClasses = async (req: Request, res: Response) => {
 };
 
 export const createSetupClass = async (req: Request, res: Response) => {
-  const { schoolId } = requireSchoolAdmin(req);
+  const { schoolId } = requireAcademicSetupUser(req);
   const payload = classSchema.parse(req.body);
   const sectionIds = [...new Set(payload.sectionIds ?? [])];
 
@@ -251,7 +251,7 @@ export const createSetupClass = async (req: Request, res: Response) => {
 };
 
 export const updateSetupClass = async (req: Request, res: Response) => {
-  const { schoolId } = requireSchoolAdmin(req);
+  const { schoolId } = requireAcademicSetupUser(req);
   const payload = updateClassSchema.parse(req.body);
   const id = req.params.id;
   await assertClass(schoolId, id);
@@ -299,7 +299,7 @@ export const updateSetupClass = async (req: Request, res: Response) => {
 };
 
 export const deleteSetupClass = async (req: Request, res: Response) => {
-  const { schoolId } = requireSchoolAdmin(req);
+  const { schoolId } = requireAcademicSetupUser(req);
   const id = req.params.id;
   const existing = await prisma.class.findFirst({
     where: { id, schoolId },
@@ -318,7 +318,7 @@ export const deleteSetupClass = async (req: Request, res: Response) => {
 const sectionSchema = z.object({ name: z.string().min(1).max(80) });
 
 export const listSetupSections = async (req: Request, res: Response) => {
-  const { schoolId } = requireSchoolAdmin(req);
+  const { schoolId } = requireAcademicSetupUser(req);
   const classId = typeof req.query.classId === 'string' ? req.query.classId : undefined;
   const search = typeof req.query.search === 'string' ? req.query.search.trim() : '';
   const sections = await prisma.section.findMany({
@@ -337,7 +337,7 @@ export const listSetupSections = async (req: Request, res: Response) => {
 };
 
 export const createSetupSection = async (req: Request, res: Response) => {
-  const { schoolId } = requireSchoolAdmin(req);
+  const { schoolId } = requireAcademicSetupUser(req);
   const payload = sectionSchema.parse(req.body);
   const name = normalizeText(payload.name);
   const duplicate = await prisma.section.findFirst({
@@ -356,7 +356,7 @@ export const createSetupSection = async (req: Request, res: Response) => {
 };
 
 export const updateSetupSection = async (req: Request, res: Response) => {
-  const { schoolId } = requireSchoolAdmin(req);
+  const { schoolId } = requireAcademicSetupUser(req);
   const payload = sectionSchema.partial().parse(req.body);
   const id = req.params.id;
   await assertSection(schoolId, id);
@@ -380,7 +380,7 @@ export const updateSetupSection = async (req: Request, res: Response) => {
 };
 
 export const deleteSetupSection = async (req: Request, res: Response) => {
-  const { schoolId } = requireSchoolAdmin(req);
+  const { schoolId } = requireAcademicSetupUser(req);
   const id = req.params.id;
   const existing = await prisma.section.findFirst({
     where: { id, schoolId },
@@ -401,7 +401,7 @@ const subjectSchema = z.object({
 });
 
 export const listSetupSubjects = async (req: Request, res: Response) => {
-  const { schoolId } = requireSchoolAdmin(req);
+  const { schoolId } = requireAcademicSetupUser(req);
   const search = typeof req.query.search === 'string' ? req.query.search.trim() : '';
   const subjects = await prisma.subject.findMany({
     where: {
@@ -422,7 +422,7 @@ export const listSetupSubjects = async (req: Request, res: Response) => {
 };
 
 export const createSetupSubject = async (req: Request, res: Response) => {
-  const { schoolId } = requireSchoolAdmin(req);
+  const { schoolId } = requireAcademicSetupUser(req);
   const payload = subjectSchema.parse(req.body);
   const name = normalizeText(payload.name);
   const duplicateName = await prisma.subject.findFirst({
@@ -446,7 +446,7 @@ export const createSetupSubject = async (req: Request, res: Response) => {
 };
 
 export const updateSetupSubject = async (req: Request, res: Response) => {
-  const { schoolId } = requireSchoolAdmin(req);
+  const { schoolId } = requireAcademicSetupUser(req);
   const payload = subjectSchema.partial().parse(req.body);
   const id = req.params.id;
   await assertSubject(schoolId, id);
@@ -477,7 +477,7 @@ export const updateSetupSubject = async (req: Request, res: Response) => {
 };
 
 export const deleteSetupSubject = async (req: Request, res: Response) => {
-  const { schoolId } = requireSchoolAdmin(req);
+  const { schoolId } = requireAcademicSetupUser(req);
   const id = req.params.id;
   const existing = await prisma.subject.findFirst({
     where: { id, schoolId },
@@ -498,7 +498,7 @@ const roomSchema = z.object({
 });
 
 export const listClassRooms = async (req: Request, res: Response) => {
-  const { schoolId } = requireSchoolAdmin(req);
+  const { schoolId } = requireAcademicSetupUser(req);
   const search = typeof req.query.search === 'string' ? req.query.search.trim() : '';
   const rooms = await prisma.classRoom.findMany({
     where: { schoolId, ...(search ? { roomNumber: { contains: search, mode: 'insensitive' } } : {}) },
@@ -509,7 +509,7 @@ export const listClassRooms = async (req: Request, res: Response) => {
 };
 
 export const createClassRoom = async (req: Request, res: Response) => {
-  const { schoolId } = requireSchoolAdmin(req);
+  const { schoolId } = requireAcademicSetupUser(req);
   const payload = roomSchema.parse(req.body);
   const roomNumber = normalizeText(payload.roomNumber);
   const duplicate = await prisma.classRoom.findFirst({
@@ -528,7 +528,7 @@ export const createClassRoom = async (req: Request, res: Response) => {
 };
 
 export const updateClassRoom = async (req: Request, res: Response) => {
-  const { schoolId } = requireSchoolAdmin(req);
+  const { schoolId } = requireAcademicSetupUser(req);
   const payload = roomSchema.partial().parse(req.body);
   const id = req.params.id;
   const existing = await prisma.classRoom.findFirst({ where: { id, schoolId }, select: { id: true } });
@@ -556,7 +556,7 @@ export const updateClassRoom = async (req: Request, res: Response) => {
 };
 
 export const deleteClassRoom = async (req: Request, res: Response) => {
-  const { schoolId } = requireSchoolAdmin(req);
+  const { schoolId } = requireAcademicSetupUser(req);
   const id = req.params.id;
   const existing = await prisma.classRoom.findFirst({ where: { id, schoolId }, include: { _count: { select: { classRoutines: true } } } });
   if (!existing) throw new HttpError(404, 'Class room not found');
@@ -573,7 +573,7 @@ const timePeriodSchema = z.object({
 });
 
 export const listTimePeriods = async (req: Request, res: Response) => {
-  const { schoolId } = requireSchoolAdmin(req);
+  const { schoolId } = requireAcademicSetupUser(req);
   const periods = await prisma.timePeriod.findMany({
     where: { schoolId },
     include: { _count: { select: { classRoutines: true } } },
@@ -583,7 +583,7 @@ export const listTimePeriods = async (req: Request, res: Response) => {
 };
 
 export const createTimePeriod = async (req: Request, res: Response) => {
-  const { schoolId } = requireSchoolAdmin(req);
+  const { schoolId } = requireAcademicSetupUser(req);
   const payload = timePeriodSchema.parse(req.body);
   ensureEndAfterStart(payload.startTime, payload.endTime);
   await assertNoOverlappingTimePeriod(schoolId, payload.startTime, payload.endTime);
@@ -598,7 +598,7 @@ export const createTimePeriod = async (req: Request, res: Response) => {
 };
 
 export const updateTimePeriod = async (req: Request, res: Response) => {
-  const { schoolId } = requireSchoolAdmin(req);
+  const { schoolId } = requireAcademicSetupUser(req);
   const payload = timePeriodSchema.partial().parse(req.body);
   const id = req.params.id;
   const existing = await prisma.timePeriod.findFirst({ where: { id, schoolId }, select: { id: true, startTime: true, endTime: true } });
@@ -624,7 +624,7 @@ export const updateTimePeriod = async (req: Request, res: Response) => {
 };
 
 export const seedDefaultTimePeriods = async (req: Request, res: Response) => {
-  const { schoolId } = requireSchoolAdmin(req);
+  const { schoolId } = requireAcademicSetupUser(req);
   let createdCount = 0;
   let updatedCount = 0;
   const skipped: Array<{ name: string; reason: string }> = [];
@@ -664,7 +664,7 @@ export const seedDefaultTimePeriods = async (req: Request, res: Response) => {
 };
 
 export const deleteTimePeriod = async (req: Request, res: Response) => {
-  const { schoolId } = requireSchoolAdmin(req);
+  const { schoolId } = requireAcademicSetupUser(req);
   const id = req.params.id;
   const existing = await prisma.timePeriod.findFirst({ where: { id, schoolId }, include: { _count: { select: { classRoutines: true } } } });
   if (!existing) throw new HttpError(404, 'Time period not found');
@@ -681,7 +681,7 @@ const assignSubjectsSchema = z.object({
 });
 
 export const listAssignSubjects = async (req: Request, res: Response) => {
-  const { schoolId } = requireSchoolAdmin(req);
+  const { schoolId } = requireAcademicSetupUser(req);
   const classId = typeof req.query.classId === 'string' ? req.query.classId : undefined;
   const sectionId = typeof req.query.sectionId === 'string' ? req.query.sectionId : undefined;
   const items = await prisma.assignSubject.findMany({
@@ -698,7 +698,7 @@ export const listAssignSubjects = async (req: Request, res: Response) => {
 };
 
 export const saveAssignSubjects = async (req: Request, res: Response) => {
-  const { schoolId } = requireSchoolAdmin(req);
+  const { schoolId } = requireAcademicSetupUser(req);
   const payload = assignSubjectsSchema.parse(req.body);
   await assertClass(schoolId, payload.classId);
   await assertSection(schoolId, payload.sectionId);
@@ -734,7 +734,7 @@ export const saveAssignSubjects = async (req: Request, res: Response) => {
 };
 
 export const deleteAssignSubject = async (req: Request, res: Response) => {
-  const { schoolId } = requireSchoolAdmin(req);
+  const { schoolId } = requireAcademicSetupUser(req);
   const id = req.params.id;
   const existing = await prisma.assignSubject.findFirst({ where: { id, schoolId } });
   if (!existing) throw new HttpError(404, 'Assigned subject not found');
@@ -781,7 +781,7 @@ const assertClassTeacherAssignable = async (schoolId: string, classId: string, t
 };
 
 export const listClassTeachers = async (req: Request, res: Response) => {
-  const { schoolId } = requireSchoolAdmin(req);
+  const { schoolId } = requireAcademicSetupUser(req);
   const items = await prisma.classTeacher.findMany({
     where: { schoolId },
     include: {
@@ -795,7 +795,7 @@ export const listClassTeachers = async (req: Request, res: Response) => {
 };
 
 export const saveClassTeacher = async (req: Request, res: Response) => {
-  const { schoolId } = requireSchoolAdmin(req);
+  const { schoolId } = requireAcademicSetupUser(req);
   const payload = classTeacherSchema.parse(req.body);
   await assertClass(schoolId, payload.classId);
   await assertSection(schoolId, payload.sectionId);
@@ -819,7 +819,7 @@ export const saveClassTeacher = async (req: Request, res: Response) => {
 };
 
 export const updateClassTeacher = async (req: Request, res: Response) => {
-  const { schoolId } = requireSchoolAdmin(req);
+  const { schoolId } = requireAcademicSetupUser(req);
   const payload = classTeacherSchema.partial().parse(req.body);
   const id = req.params.id;
   const existing = await prisma.classTeacher.findFirst({ where: { id, schoolId }, select: { id: true, classId: true, sectionId: true, teacherId: true } });
@@ -840,7 +840,7 @@ export const updateClassTeacher = async (req: Request, res: Response) => {
 };
 
 export const deleteClassTeacher = async (req: Request, res: Response) => {
-  const { schoolId } = requireSchoolAdmin(req);
+  const { schoolId } = requireAcademicSetupUser(req);
   const id = req.params.id;
   const existing = await prisma.classTeacher.findFirst({ where: { id, schoolId } });
   if (!existing) throw new HttpError(404, 'Class teacher assignment not found');
@@ -946,7 +946,7 @@ const assertRoutineAvailability = async (
 };
 
 export const listClassRoutines = async (req: Request, res: Response) => {
-  const { schoolId } = requireSchoolAdmin(req);
+  const { schoolId } = requireAcademicSetupUser(req);
   const classId = typeof req.query.classId === 'string' ? req.query.classId : undefined;
   const sectionId = typeof req.query.sectionId === 'string' ? req.query.sectionId : undefined;
   const teacherId = typeof req.query.teacherId === 'string' ? req.query.teacherId : undefined;
@@ -959,7 +959,7 @@ export const listClassRoutines = async (req: Request, res: Response) => {
 };
 
 export const createClassRoutine = async (req: Request, res: Response) => {
-  const { schoolId } = requireSchoolAdmin(req);
+  const { schoolId } = requireAcademicSetupUser(req);
   const payload = routineSchema.parse(req.body);
   await validateRoutinePayload(schoolId, payload);
   await assertRoutineAvailability(schoolId, payload);
@@ -983,7 +983,7 @@ export const createClassRoutine = async (req: Request, res: Response) => {
 };
 
 export const updateClassRoutine = async (req: Request, res: Response) => {
-  const { schoolId } = requireSchoolAdmin(req);
+  const { schoolId } = requireAcademicSetupUser(req);
   const id = req.params.id;
   const existing = await prisma.classRoutine.findFirst({ where: { id, schoolId } });
   if (!existing) throw new HttpError(404, 'Routine not found');
@@ -1011,7 +1011,7 @@ export const updateClassRoutine = async (req: Request, res: Response) => {
 };
 
 export const generateClassRoutine = async (req: Request, res: Response) => {
-  const { schoolId } = requireSchoolAdmin(req);
+  const { schoolId } = requireAcademicSetupUser(req);
   const payload = generateRoutineSchema.parse(req.body);
   await assertClass(schoolId, payload.classId);
   await assertSection(schoolId, payload.sectionId);
@@ -1125,7 +1125,7 @@ export const generateClassRoutine = async (req: Request, res: Response) => {
 };
 
 export const deleteClassRoutine = async (req: Request, res: Response) => {
-  const { schoolId } = requireSchoolAdmin(req);
+  const { schoolId } = requireAcademicSetupUser(req);
   const id = req.params.id;
   const existing = await prisma.classRoutine.findFirst({ where: { id, schoolId } });
   if (!existing) throw new HttpError(404, 'Routine not found');
