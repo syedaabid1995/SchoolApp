@@ -18,7 +18,6 @@ import {
   type StudentCategory,
   type StudentGroup,
 } from '../../../../services/student-operations.service';
-import { SchoolAdminOnly } from '../_components/SchoolAdminOnly';
 
 type Mode = 'groups' | 'categories';
 
@@ -35,9 +34,15 @@ export default function StudentGroupsPage() {
   const [editing, setEditing] = useState<{ id: string; name: string } | null>(null);
   const { data: session, isLoading: sessionLoading } = useQuery({ queryKey: ['session'], queryFn: getSession });
   const isSchoolAdmin = session?.role === 'SCHOOL_ADMIN';
+  const permissionCodes = session?.permissionCodes ?? [];
+  const hasPermission = (code: string) => isSchoolAdmin || permissionCodes.includes(code);
+  const canView = hasPermission('student.group.view') || hasPermission('student.category.view');
+  const canCreate = mode === 'groups' ? hasPermission('student.group.create') : hasPermission('student.category.create');
+  const canEdit = mode === 'groups' ? hasPermission('student.group.edit') : hasPermission('student.category.edit');
+  const canDelete = mode === 'groups' ? hasPermission('student.group.delete') : hasPermission('student.category.delete');
 
-  const groupsQuery = useQuery({ queryKey: ['student-groups', search], queryFn: () => listStudentGroups({ search }), enabled: isSchoolAdmin });
-  const categoriesQuery = useQuery({ queryKey: ['student-categories', search], queryFn: () => listStudentCategories({ search }), enabled: isSchoolAdmin });
+  const groupsQuery = useQuery({ queryKey: ['student-groups', search], queryFn: () => listStudentGroups({ search }), enabled: canView });
+  const categoriesQuery = useQuery({ queryKey: ['student-categories', search], queryFn: () => listStudentCategories({ search }), enabled: canView });
 
   const invalidate = () => {
     queryClient.invalidateQueries({ queryKey: ['student-groups'] });
@@ -73,7 +78,13 @@ export default function StudentGroupsPage() {
   const loading = mode === 'groups' ? groupsQuery.isLoading : categoriesQuery.isLoading;
 
   if (sessionLoading || !session?.role) return <FullPageLoader label="Checking student setup access..." />;
-  if (!isSchoolAdmin) return <SchoolAdminOnly moduleName="student groups and categories" />;
+  if (!canView) {
+    return (
+      <section className="rounded-2xl border border-amber-200 bg-amber-50 p-6 text-sm font-semibold text-amber-800">
+        Student groups and categories are not enabled for your role. Ask a School Admin to update Role Permissions.
+      </section>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-slate-100 pb-10">
@@ -92,15 +103,15 @@ export default function StudentGroupsPage() {
         <div className="grid gap-5 lg:grid-cols-[380px_minmax(0,1fr)]">
           <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
             <h2 className="text-lg font-bold text-slate-950">{editing ? 'Edit' : 'Add'} {mode === 'groups' ? 'Group' : 'Category'}</h2>
-            <p className="mt-1 text-sm text-slate-500">Only School Admin can manage these records.</p>
+            <p className="mt-1 text-sm text-slate-500">Create and update access follows Role Permissions.</p>
             <div className="mt-5">
               <label className="text-sm font-semibold text-slate-700">Name</label>
               <input value={name} onChange={(event) => setName(event.target.value)} placeholder={mode === 'groups' ? 'Example: Blue House' : 'Example: General'} className="mt-2 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm" />
             </div>
             <div className="mt-5 flex gap-2">
-              <button disabled={saveMutation.isPending} onClick={() => saveMutation.mutate()} className="rounded-xl bg-[var(--theme-button-bg)] px-4 py-2 text-sm font-bold text-[var(--theme-button-text)] shadow-sm disabled:opacity-50">
+              {(editing ? canEdit : canCreate) ? <button disabled={saveMutation.isPending} onClick={() => saveMutation.mutate()} className="rounded-xl bg-[var(--theme-button-bg)] px-4 py-2 text-sm font-bold text-[var(--theme-button-text)] shadow-sm disabled:opacity-50">
                 {editing ? 'Update' : 'Save'}
-              </button>
+              </button> : null}
               {editing ? (
                 <button onClick={() => { setEditing(null); setName(''); }} className="rounded-xl border border-slate-200 px-4 py-2 text-sm font-bold text-slate-700">Cancel</button>
               ) : null}
@@ -137,8 +148,8 @@ export default function StudentGroupsPage() {
                         <td className="px-4 py-3">{item._count?.students ?? 0}</td>
                         <td className="px-4 py-3 text-right">
                           <div className="inline-flex gap-2">
-                            <button onClick={() => { setEditing(item); setName(item.name); }} className="rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-bold text-slate-700">Edit</button>
-                            <button onClick={() => window.confirm('Delete this record?') && deleteMutation.mutate(item)} className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-1.5 text-xs font-bold text-rose-700">Delete</button>
+                            {canEdit ? <button onClick={() => { setEditing(item); setName(item.name); }} className="rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-bold text-slate-700">Edit</button> : null}
+                            {canDelete ? <button onClick={() => window.confirm('Delete this record?') && deleteMutation.mutate(item)} className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-1.5 text-xs font-bold text-rose-700">Delete</button> : null}
                           </div>
                         </td>
                       </tr>

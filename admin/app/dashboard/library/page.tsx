@@ -175,6 +175,7 @@ export default function LibraryPage() {
   const { data: session, isLoading: sessionLoading } = useQuery({ queryKey: ['session'], queryFn: getSession });
   const isSuperAdmin = session?.role === 'SUPER_ADMIN';
   const isSchoolAdmin = session?.role === 'SCHOOL_ADMIN';
+  const permissionCodes = session?.permissionCodes ?? [];
   const schoolsQuery = useQuery({
     queryKey: ['schools', 'library'],
     queryFn: () => listSchools({ limit: 100, status: 'ACTIVE' }),
@@ -189,7 +190,7 @@ export default function LibraryPage() {
 
   const effectiveSchoolId = isSuperAdmin ? selectedSchoolId : session?.schoolId ?? '';
   const scopedParams = effectiveSchoolId ? { schoolId: effectiveSchoolId } : undefined;
-  const canUsePage = isSuperAdmin || isSchoolAdmin;
+  const canUsePage = isSuperAdmin || isSchoolAdmin || permissionCodes.includes('library.view');
   const canQuery = Boolean(canUsePage && effectiveSchoolId);
 
   useEffect(() => {

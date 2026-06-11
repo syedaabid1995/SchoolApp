@@ -255,9 +255,9 @@ export const getRequiredPermissionForPath = (pathname: string) => {
 
   if (pathname.startsWith('/dashboard/students/add')) return 'students.add';
   if (pathname.startsWith('/dashboard/students/attendance')) return 'attendance.view';
-  if (pathname.startsWith('/dashboard/students/groups')) return 'students.list';
-  if (pathname.startsWith('/dashboard/students/promotion')) return 'students.list';
-  if (pathname.startsWith('/dashboard/students/disabled')) return 'students.list';
+  if (pathname.startsWith('/dashboard/students/groups')) return 'student.group.view';
+  if (pathname.startsWith('/dashboard/students/promotion')) return 'student.promote.view';
+  if (pathname.startsWith('/dashboard/students/disabled')) return 'student.disabled.view';
   if (pathname.startsWith('/dashboard/students/transfers')) return 'students.transfers';
   if (pathname.startsWith('/dashboard/students')) return 'students.list';
   if (pathname.startsWith('/dashboard/id-cards')) return 'idcards.view';

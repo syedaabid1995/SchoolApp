@@ -19,7 +19,7 @@ const getRequestedSchoolId = (req: Request, bodySchoolId?: string | null) =>
 const requireLibraryManager = (req: Request, requestedSchoolId?: string | null) => {
   if (!req.auth?.userId) throw new HttpError(401, 'Unauthorized');
 
-  if (req.auth.role === 'SCHOOL_ADMIN' && req.auth.schoolId) {
+  if (req.auth.schoolId) {
     if (requestedSchoolId && requestedSchoolId !== req.auth.schoolId) {
       throw new HttpError(403, 'Tenant scope violation');
     }
@@ -31,7 +31,7 @@ const requireLibraryManager = (req: Request, requestedSchoolId?: string | null) 
     return { schoolId: requestedSchoolId, userId: req.auth.userId };
   }
 
-  throw new HttpError(403, 'Only school admins can manage library');
+  throw new HttpError(403, 'School scope is required to manage library');
 };
 
 const handleUniqueError = (err: unknown, message: string) => {

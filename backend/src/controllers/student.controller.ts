@@ -19,8 +19,8 @@ import { invalidateStudentCache, invalidateAttendanceCache } from '../services/c
 
 const requireSchoolAdmin = (req: Request) => {
   if (!req.auth?.userId) throw new HttpError(401, 'Unauthorized');
-  if (req.auth.role !== 'SCHOOL_ADMIN' || !req.auth.schoolId) {
-    throw new HttpError(403, 'Only School Admin can manage students');
+  if (!req.auth.schoolId) {
+    throw new HttpError(403, 'School scope is required to manage students');
   }
   return { schoolId: req.auth.schoolId, userId: req.auth.userId };
 };

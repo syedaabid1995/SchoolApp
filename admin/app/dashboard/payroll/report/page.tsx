@@ -6,7 +6,6 @@ import FullPageLoader from '../../../../components/FullPageLoader';
 import PageHeader from '../../../../components/PageHeader';
 import { getSession } from '../../../../services/auth.service';
 import { getPayrollReport, listStaff, type Payroll, type Staff } from '../../../../services/staff.service';
-import { SchoolAdminOnly } from '../../staff/_components/SchoolAdminOnly';
 
 const roles = ['SCHOOL_ADMIN', 'TEACHER', 'ACCOUNTANT', 'LIBRARIAN', 'STAFF'];
 
@@ -73,7 +72,9 @@ export default function PayrollReportPage() {
 
   const { data: session, isLoading: sessionLoading } = useQuery({ queryKey: ['session'], queryFn: getSession });
   const isSchoolAdmin = session?.role === 'SCHOOL_ADMIN';
-  const staffQuery = useQuery({ queryKey: ['staff-options-payroll-report', criteria.role], queryFn: () => listStaff({ limit: 100, role: criteria.role || undefined }), enabled: isSchoolAdmin });
+  const permissionCodes = session?.permissionCodes ?? [];
+  const canViewPayrollReport = isSchoolAdmin || permissionCodes.includes('payroll.report');
+  const staffQuery = useQuery({ queryKey: ['staff-options-payroll-report', criteria.role], queryFn: () => listStaff({ limit: 100, role: criteria.role || undefined }), enabled: canViewPayrollReport });
   const reportQuery = useQuery({
     queryKey: ['payroll-report', criteria],
     queryFn: () => getPayrollReport({ role: criteria.role || undefined, staffId: criteria.staffId || undefined, month: criteria.month, year: criteria.year }),
@@ -85,7 +86,13 @@ export default function PayrollReportPage() {
   const staffOptions = staffQuery.data?.items ?? [];
 
   if (sessionLoading || !session?.role) return <FullPageLoader label="Checking payroll report access..." />;
-  if (!isSchoolAdmin) return <SchoolAdminOnly moduleName="payroll report" />;
+  if (!canViewPayrollReport) {
+    return (
+      <section className="rounded-2xl border border-amber-200 bg-amber-50 p-6 text-sm font-semibold text-amber-800">
+        Payroll report is not enabled for your role. Ask a School Admin to update Role Permissions.
+      </section>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-slate-100 pb-10">

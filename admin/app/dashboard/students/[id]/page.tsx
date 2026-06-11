@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
-import { useParams, useRouter, useSearchParams } from 'next/navigation';
+import { useParams, useSearchParams } from 'next/navigation';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import PageHeader from '../../../../components/PageHeader';
 import FullPageLoader from '../../../../components/FullPageLoader';
@@ -51,7 +51,6 @@ const InfoRow = ({ label, value }: { label: string; value?: string | number | nu
 
 export default function StudentDetailPage() {
   const params = useParams();
-  const router = useRouter();
   const searchParams = useSearchParams();
   const queryClient = useQueryClient();
   const notify = useNotify();
@@ -64,17 +63,19 @@ export default function StudentDetailPage() {
 
   const { data: session, isLoading: isSessionLoading } = useQuery({ queryKey: ['session'], queryFn: getSession });
   const isSchoolAdmin = session?.role === 'SCHOOL_ADMIN';
-
-  useEffect(() => {
-    if (!isSessionLoading && session?.role && !isSchoolAdmin) {
-      router.replace('/dashboard');
-    }
-  }, [isSchoolAdmin, isSessionLoading, router, session?.role]);
+  const permissionCodes = session?.permissionCodes ?? [];
+  const hasPermission = (code: string) => isSchoolAdmin || permissionCodes.includes(code);
+  const canViewStudent = hasPermission('students.list') || hasPermission('student.view');
+  const canEditStudent = hasPermission('student.edit');
+  const canCreateDocument = hasPermission('student.document.create');
+  const canDeleteDocument = hasPermission('student.document.delete');
+  const canCreateTimeline = hasPermission('student.timeline.create');
+  const canDeleteTimeline = hasPermission('student.timeline.delete');
 
   const studentQuery = useQuery({
     queryKey: ['student', studentId],
     queryFn: () => getStudent(studentId),
-    enabled: Boolean(studentId) && isSchoolAdmin,
+    enabled: Boolean(studentId) && canViewStudent,
   });
   const student = studentQuery.data;
   const displayName = student ? student.fullName ?? `${student.firstName} ${student.lastName}`.trim() : '';
@@ -156,8 +157,15 @@ export default function StudentDetailPage() {
     },
   });
 
-  if (isSessionLoading || !session?.role || !isSchoolAdmin || studentQuery.isLoading) {
+  if (isSessionLoading || !session?.role || studentQuery.isLoading) {
     return <FullPageLoader label="Loading student details..." />;
+  }
+  if (!canViewStudent) {
+    return (
+      <section className="rounded-2xl border border-amber-200 bg-amber-50 p-6 text-sm font-semibold text-amber-800">
+        Student details are not enabled for your role. Ask a School Admin to update Role Permissions.
+      </section>
+    );
   }
 
   if (!student) {
@@ -195,7 +203,7 @@ export default function StudentDetailPage() {
                 <InfoRow label="Status" value={student.status} />
               </div>
               <div className="mt-5 flex gap-2">
-                <button onClick={() => setEditMode(true)} className="flex-1 rounded-xl bg-[var(--theme-button-bg)] px-4 py-2 text-sm font-bold text-[var(--theme-button-text)]">Edit</button>
+                {canEditStudent ? <button onClick={() => setEditMode(true)} className="flex-1 rounded-xl bg-[var(--theme-button-bg)] px-4 py-2 text-sm font-bold text-[var(--theme-button-text)]">Edit</button> : null}
                 <Link href="/dashboard/students" className="rounded-xl border border-slate-200 px-4 py-2 text-sm font-bold text-slate-700">Back</Link>
               </div>
             </div>
@@ -216,7 +224,7 @@ export default function StudentDetailPage() {
               </div>
             </div>
 
-            {editMode && (
+            {editMode && canEditStudent && (
               <section className="rounded-2xl border border-violet-100 bg-white p-5 shadow-sm">
                 <div className="mb-4 flex items-center justify-between">
                   <h2 className="text-lg font-bold text-slate-950">Edit Basic Profile</h2>
@@ -301,11 +309,11 @@ export default function StudentDetailPage() {
             {tab === 'documents' && (
               <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
                 <h2 className="mb-4 text-lg font-bold text-slate-950">Documents</h2>
-                <div className="mb-5 grid gap-3 md:grid-cols-[1fr_1fr_auto]">
+                {canCreateDocument ? <div className="mb-5 grid gap-3 md:grid-cols-[1fr_1fr_auto]">
                   <input value={documentForm.title} onChange={(event) => setDocumentForm({ ...documentForm, title: event.target.value })} placeholder="Document title" className="rounded-xl border border-slate-200 px-3 py-2 text-sm" />
                   <input type="file" accept=".pdf,.doc,.docx,image/*" onChange={(event) => setDocumentForm({ ...documentForm, file: event.target.files?.[0] ?? null })} className="rounded-xl border border-slate-200 px-3 py-2 text-sm" />
                   <button onClick={() => documentMutation.mutate()} disabled={documentMutation.isPending} className="rounded-xl bg-violet-600 px-4 py-2 text-sm font-bold text-white disabled:opacity-50">Upload</button>
-                </div>
+                </div> : null}
                 <div className="grid gap-3">
                   {student.documents?.length ? student.documents.map((document) => (
                     <div key={document.id} className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-slate-100 p-3">
@@ -315,7 +323,7 @@ export default function StudentDetailPage() {
                       </div>
                       <div className="flex gap-2">
                         <a href={resolveUploadUrl(document.url) ?? undefined} target="_blank" rel="noreferrer" className="rounded-lg border border-slate-200 px-3 py-2 text-sm font-semibold text-slate-700">Download</a>
-                        <button onClick={() => window.confirm('Delete this document?') && deleteDocumentMutation.mutate(document.id)} className="rounded-lg border border-red-200 px-3 py-2 text-sm font-semibold text-red-600">Delete</button>
+                        {canDeleteDocument ? <button onClick={() => window.confirm('Delete this document?') && deleteDocumentMutation.mutate(document.id)} className="rounded-lg border border-red-200 px-3 py-2 text-sm font-semibold text-red-600">Delete</button> : null}
                       </div>
                     </div>
                   )) : <p className="rounded-xl border border-dashed border-slate-200 p-8 text-center text-sm text-slate-500">No documents uploaded.</p>}
@@ -326,12 +334,12 @@ export default function StudentDetailPage() {
             {tab === 'timeline' && (
               <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
                 <h2 className="mb-4 text-lg font-bold text-slate-950">Timeline</h2>
-                <div className="mb-5 grid gap-3 md:grid-cols-[1fr_160px_auto]">
+                {canCreateTimeline ? <div className="mb-5 grid gap-3 md:grid-cols-[1fr_160px_auto]">
                   <input value={timelineForm.title} onChange={(event) => setTimelineForm({ ...timelineForm, title: event.target.value })} placeholder="Title" className="rounded-xl border border-slate-200 px-3 py-2 text-sm" />
                   <input type="date" value={timelineForm.timelineDate} onChange={(event) => setTimelineForm({ ...timelineForm, timelineDate: event.target.value })} className="rounded-xl border border-slate-200 px-3 py-2 text-sm" />
                   <button onClick={() => timelineMutation.mutate()} disabled={timelineMutation.isPending} className="rounded-xl bg-violet-600 px-4 py-2 text-sm font-bold text-white disabled:opacity-50">Add</button>
                   <textarea value={timelineForm.description} onChange={(event) => setTimelineForm({ ...timelineForm, description: event.target.value })} placeholder="Description" className="rounded-xl border border-slate-200 px-3 py-2 text-sm md:col-span-3" />
-                </div>
+                </div> : null}
                 <div className="space-y-3">
                   {student.timelines?.length ? student.timelines.map((item) => (
                     <div key={item.id} className="rounded-xl border border-slate-100 p-4">
@@ -341,9 +349,9 @@ export default function StudentDetailPage() {
                           <p className="text-xs font-semibold uppercase text-violet-600">{formatDate(item.timelineDate)}</p>
                           <p className="mt-2 text-sm text-slate-600">{item.description || '-'}</p>
                         </div>
-                        <button onClick={() => window.confirm('Delete this timeline item?') && deleteTimelineMutation.mutate(item.id)} className="rounded-lg border border-red-200 px-3 py-2 text-sm font-semibold text-red-600">
+                        {canDeleteTimeline ? <button onClick={() => window.confirm('Delete this timeline item?') && deleteTimelineMutation.mutate(item.id)} className="rounded-lg border border-red-200 px-3 py-2 text-sm font-semibold text-red-600">
                           <Icon path="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6M9 7h6" />
-                        </button>
+                        </button> : null}
                       </div>
                     </div>
                   )) : <p className="rounded-xl border border-dashed border-slate-200 p-8 text-center text-sm text-slate-500">No timeline items found.</p>}

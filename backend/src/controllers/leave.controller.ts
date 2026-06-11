@@ -22,7 +22,6 @@ const requireSchoolMember = (req: Request) => {
 
 const requireSchoolAdmin = (req: Request) => {
   const auth = requireSchoolMember(req);
-  if (auth.role !== 'SCHOOL_ADMIN') throw new HttpError(403, 'Only School Admin can manage leave records');
   return auth;
 };
 
@@ -384,7 +383,7 @@ export const listMyLeaveBalances = async (req: Request, res: Response) => {
 export const listLeaveApplications = async (req: Request, res: Response) => {
   const auth = assertRequestedSchool(req, z.string().uuid().optional().parse(req.query.schoolId));
   const query = listQuerySchema.parse(req.query);
-  const isAdmin = auth.role === 'SCHOOL_ADMIN' && !query.mine;
+  const isAdmin = !query.mine;
   const where: Prisma.LeaveApplicationWhereInput = {
     schoolId: auth.schoolId,
     ...(query.status ? { status: query.status } : {}),
@@ -413,7 +412,7 @@ export const getLeaveApplication = async (req: Request, res: Response) => {
   const auth = assertRequestedSchool(req, z.string().uuid().optional().parse(req.query.schoolId));
   const application = await prisma.leaveApplication.findFirst({ where: { id: req.params.id, schoolId: auth.schoolId }, include: appInclude });
   if (!application) throw new HttpError(404, 'Leave application not found');
-  if (auth.role !== 'SCHOOL_ADMIN') {
+  if (String(req.query.mine) === 'true') {
     const staff = await getOwnStaffProfile(auth.schoolId, auth.userId);
     if (application.staffId !== staff.id) throw new HttpError(403, 'Forbidden');
   }
@@ -462,7 +461,7 @@ export const updateLeaveApplication = async (req: Request, res: Response) => {
   const payload = applicationUpdateSchema.parse(req.body);
   const existing = await prisma.leaveApplication.findFirst({ where: { id: req.params.id, schoolId: auth.schoolId }, include: { staff: true } });
   if (!existing) throw new HttpError(404, 'Leave application not found');
-  if (auth.role !== 'SCHOOL_ADMIN') {
+  if (String(req.query.mine) === 'true') {
     const staff = await getOwnStaffProfile(auth.schoolId, auth.userId);
     if (existing.staffId !== staff.id) throw new HttpError(403, 'Forbidden');
     if (existing.status !== 'PENDING') throw new HttpError(409, 'Only pending leave can be edited');
@@ -502,7 +501,7 @@ export const deleteLeaveApplication = async (req: Request, res: Response) => {
   const auth = assertRequestedSchool(req, z.string().uuid().optional().parse(req.query.schoolId));
   const existing = await prisma.leaveApplication.findFirst({ where: { id: req.params.id, schoolId: auth.schoolId } });
   if (!existing) throw new HttpError(404, 'Leave application not found');
-  if (auth.role !== 'SCHOOL_ADMIN') {
+  if (String(req.query.mine) === 'true') {
     const staff = await getOwnStaffProfile(auth.schoolId, auth.userId);
     if (existing.staffId !== staff.id) throw new HttpError(403, 'Forbidden');
     if (existing.status !== 'PENDING') throw new HttpError(409, 'Only pending leave can be deleted');

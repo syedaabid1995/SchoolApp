@@ -6,9 +6,8 @@ import FullPageLoader from '../../../../components/FullPageLoader';
 import PageHeader from '../../../../components/PageHeader';
 import { useNotify } from '../../../../components/NotificationProvider';
 import { getSession } from '../../../../services/auth.service';
-import { listAcademicYears } from '../../../../services/academic.service';
-import { listSetupClasses, listSetupSections } from '../../../../services/academic-setup.service';
 import {
+  getStudentAttendanceOptions,
   getStudentAttendanceReport,
   loadStudentAttendance,
   saveStudentAttendance,
@@ -138,16 +137,18 @@ export default function StudentAttendancePage() {
   const canViewAttendance = hasPermission('attendance.view') || hasPermission('attendance.report') || hasPermission('attendance.create') || hasPermission('attendance.edit');
   const canMarkAttendance = hasPermission('attendance.create') || hasPermission('attendance.edit');
   const canViewReport = hasPermission('attendance.report') || hasPermission('attendance.view');
-  const yearsQuery = useQuery({ queryKey: ['academic-years'], queryFn: () => listAcademicYears(), enabled: canViewAttendance });
-  const classesQuery = useQuery({ queryKey: ['setup-classes'], queryFn: () => listSetupClasses(), enabled: canViewAttendance });
-  const sectionsQuery = useQuery({ queryKey: ['setup-sections'], queryFn: () => listSetupSections(), enabled: canViewAttendance });
+  const optionsQuery = useQuery({
+    queryKey: ['student-attendance-options'],
+    queryFn: getStudentAttendanceOptions,
+    enabled: canViewAttendance,
+  });
 
   const sections = useMemo(
     () =>
-      (sectionsQuery.data ?? []).filter((section) =>
+      (optionsQuery.data?.sections ?? []).filter((section) =>
         criteria.classId ? section.classSections?.some((link) => link.classId === criteria.classId) || section.classId === criteria.classId : true,
       ),
-    [criteria.classId, sectionsQuery.data],
+    [criteria.classId, optionsQuery.data?.sections],
   );
 
   const canSearch = Boolean(criteria.academicSessionId && criteria.classId && criteria.sectionId);
@@ -251,11 +252,11 @@ export default function StudentAttendancePage() {
           <div className="grid gap-3 md:grid-cols-5">
             <select value={criteria.academicSessionId} onChange={(event) => setCriteria({ ...criteria, academicSessionId: event.target.value })} className="rounded-xl border border-slate-200 px-3 py-2 text-sm">
               <option value="">Select Session</option>
-              {(yearsQuery.data ?? []).map((year: any) => <option key={year.id} value={year.id}>{year.name}</option>)}
+              {(optionsQuery.data?.academicYears ?? []).map((year) => <option key={year.id} value={year.id}>{year.name}</option>)}
             </select>
             <select value={criteria.classId} onChange={(event) => setCriteria({ ...criteria, classId: event.target.value, sectionId: '' })} className="rounded-xl border border-slate-200 px-3 py-2 text-sm">
               <option value="">Select Class</option>
-              {(classesQuery.data ?? []).map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
+              {(optionsQuery.data?.classes ?? []).map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
             </select>
             <select value={criteria.sectionId} onChange={(event) => setCriteria({ ...criteria, sectionId: event.target.value })} className="rounded-xl border border-slate-200 px-3 py-2 text-sm">
               <option value="">Select Section</option>

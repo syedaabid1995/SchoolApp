@@ -14,8 +14,8 @@ const uploadRoot = path.join(process.cwd(), 'uploads', 'imports');
 
 const requireSchoolAdmin = (req: Request) => {
   if (!req.auth?.userId) throw new HttpError(401, 'Unauthorized');
-  if (req.auth.role !== 'SCHOOL_ADMIN' || !req.auth.schoolId) {
-    throw new HttpError(403, 'Only School Admin can manage imports');
+  if (!req.auth.schoolId) {
+    throw new HttpError(403, 'School scope is required to manage imports');
   }
   return req.auth;
 };

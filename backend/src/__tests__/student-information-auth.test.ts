@@ -47,16 +47,25 @@ test('Student Information rejects Super Admin because it is School Admin scoped'
   });
 
   expectForbidden(response);
-  assert.match(response.text, /Only School Admin/i);
+  assert.match(response.text, /School scope is required|Only School Admin/i);
 });
 
-test('Student Information rejects teacher, parent, and student roles', async () => {
-  for (const role of ['TEACHER', 'PARENT', 'STUDENT'] as const) {
+test('Student Information rejects parent and student roles', async () => {
+  for (const role of ['PARENT', 'STUDENT'] as const) {
     const response = await server.request('GET', '/api/v1/students/students', {
       user: getUser(role),
     });
     expectForbidden(response);
   }
+});
+
+test('Teacher can use Student Information when the role grants student list access', async () => {
+  const response = await server.request('GET', '/api/v1/students/students', {
+    user: getUser('TEACHER'),
+  });
+
+  expectSuccess(response);
+  expectNoSensitiveFields(response.body);
 });
 
 test('School Admin can list own-school student records without sensitive fields', async () => {
@@ -94,4 +103,3 @@ test('School Admin cannot use body schoolId to create students in another school
   expectForbidden(response);
   assert.match(response.text, /Tenant scope violation/i);
 });
-

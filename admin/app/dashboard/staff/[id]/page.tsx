@@ -17,7 +17,6 @@ import {
   type Payroll,
   type Staff,
 } from '../../../../services/staff.service';
-import { SchoolAdminOnly } from '../_components/SchoolAdminOnly';
 
 type TabKey = 'profile' | 'payroll' | 'leaves' | 'documents' | 'timeline';
 
@@ -78,7 +77,14 @@ export default function StaffDetailPage() {
 
   const { data: session, isLoading: sessionLoading } = useQuery({ queryKey: ['session'], queryFn: getSession });
   const isSchoolAdmin = session?.role === 'SCHOOL_ADMIN';
-  const staffQuery = useQuery({ queryKey: ['staff-detail', staffId], queryFn: () => getStaff(staffId), enabled: Boolean(isSchoolAdmin && staffId) });
+  const permissionCodes = session?.permissionCodes ?? [];
+  const hasPermission = (code: string) => isSchoolAdmin || permissionCodes.includes(code);
+  const canViewStaff = hasPermission('staff.view');
+  const canCreateDocument = hasPermission('staff.document.create');
+  const canDeleteDocument = hasPermission('staff.document.delete');
+  const canCreateTimeline = hasPermission('staff.timeline.create');
+  const canDeleteTimeline = hasPermission('staff.timeline.delete');
+  const staffQuery = useQuery({ queryKey: ['staff-detail', staffId], queryFn: () => getStaff(staffId), enabled: Boolean(canViewStaff && staffId) });
   const staff = staffQuery.data;
   const name = fullName(staff);
   const leaveBalances = staff?.leaveBalances ?? [];
@@ -128,7 +134,13 @@ export default function StaffDetailPage() {
   });
 
   if (sessionLoading || !session?.role) return <FullPageLoader label="Checking staff access..." />;
-  if (!isSchoolAdmin) return <SchoolAdminOnly moduleName="staff details" />;
+  if (!canViewStaff) {
+    return (
+      <section className="rounded-2xl border border-amber-200 bg-amber-50 p-6 text-sm font-semibold text-amber-800">
+        Staff details are not enabled for your role. Ask a School Admin to update Role Permissions.
+      </section>
+    );
+  }
   if (staffQuery.isLoading) return <FullPageLoader label="Loading staff details..." />;
 
   if (!staff) {
@@ -319,11 +331,11 @@ export default function StaffDetailPage() {
                     </Link>
                   </div>
                 </div>
-                <div className="grid gap-3 md:grid-cols-[1fr_1fr_auto]">
+                {canCreateDocument ? <div className="grid gap-3 md:grid-cols-[1fr_1fr_auto]">
                   <input value={documentForm.title} onChange={(event) => setDocumentForm({ ...documentForm, title: event.target.value })} placeholder="Document title" className="rounded-xl border border-slate-200 px-3 py-2 text-sm" />
                   <input type="file" onChange={(event) => setDocumentForm({ ...documentForm, file: event.target.files?.[0] ?? null })} className="rounded-xl border border-slate-200 px-3 py-2 text-sm" />
                   <button onClick={() => documentMutation.mutate()} disabled={documentMutation.isPending} className="rounded-xl bg-[var(--theme-button-bg)] px-4 py-2 text-sm font-bold text-[var(--theme-button-text)] disabled:opacity-50">Upload</button>
-                </div>
+                </div> : null}
                 <div className="grid gap-3">
                   {uploadedDocuments.length ? uploadedDocuments.map((doc) => {
                     const isInternalDocument = doc.fileUrl.startsWith('/dashboard/');
@@ -339,7 +351,7 @@ export default function StaffDetailPage() {
                           ) : (
                             <a href={doc.fileUrl} target="_blank" rel="noreferrer" className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-bold">Download</a>
                           )}
-                          <button onClick={() => window.confirm('Delete this document?') && deleteDocumentMutation.mutate(doc.id)} className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-1.5 text-xs font-bold text-rose-700">Delete</button>
+                          {canDeleteDocument ? <button onClick={() => window.confirm('Delete this document?') && deleteDocumentMutation.mutate(doc.id)} className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-1.5 text-xs font-bold text-rose-700">Delete</button> : null}
                         </div>
                       </div>
                     );
@@ -350,13 +362,13 @@ export default function StaffDetailPage() {
 
             {tab === 'timeline' ? (
               <section className="space-y-4 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-                <div className="grid gap-3 md:grid-cols-[1fr_160px_120px]">
+                {canCreateTimeline ? <div className="grid gap-3 md:grid-cols-[1fr_160px_120px]">
                   <input value={timelineForm.title} onChange={(event) => setTimelineForm({ ...timelineForm, title: event.target.value })} placeholder="Timeline title" className="rounded-xl border border-slate-200 px-3 py-2 text-sm" />
                   <input type="date" value={timelineForm.date} onChange={(event) => setTimelineForm({ ...timelineForm, date: event.target.value })} className="rounded-xl border border-slate-200 px-3 py-2 text-sm" />
                   <input type="time" value={timelineForm.time} onChange={(event) => setTimelineForm({ ...timelineForm, time: event.target.value })} className="rounded-xl border border-slate-200 px-3 py-2 text-sm" />
                   <textarea value={timelineForm.description} onChange={(event) => setTimelineForm({ ...timelineForm, description: event.target.value })} placeholder="Description" className="rounded-xl border border-slate-200 px-3 py-2 text-sm md:col-span-3" />
                   <button onClick={() => timelineMutation.mutate()} disabled={timelineMutation.isPending} className="rounded-xl bg-[var(--theme-button-bg)] px-4 py-2 text-sm font-bold text-[var(--theme-button-text)] disabled:opacity-50 md:col-span-3">Add Timeline</button>
-                </div>
+                </div> : null}
                 <div className="space-y-3">
                   {staff.timelines?.length ? staff.timelines.map((item) => (
                     <div key={item.id} className="rounded-xl border border-slate-100 bg-slate-50 p-4">
@@ -365,7 +377,7 @@ export default function StaffDetailPage() {
                           <p className="font-semibold text-slate-950">{item.title}</p>
                           <p className="text-xs text-slate-500">{formatDate(item.timelineAt)}</p>
                         </div>
-                        <button onClick={() => window.confirm('Delete this timeline item?') && deleteTimelineMutation.mutate(item.id)} className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-1.5 text-xs font-bold text-rose-700">Delete</button>
+                        {canDeleteTimeline ? <button onClick={() => window.confirm('Delete this timeline item?') && deleteTimelineMutation.mutate(item.id)} className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-1.5 text-xs font-bold text-rose-700">Delete</button> : null}
                       </div>
                       {item.description ? <p className="mt-2 text-sm text-slate-600">{item.description}</p> : null}
                     </div>

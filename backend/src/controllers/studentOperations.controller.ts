@@ -10,8 +10,8 @@ const dateOnlySchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Use date format 
 
 const requireSchoolAdmin = (req: Request) => {
   if (!req.auth?.userId) throw new HttpError(401, 'Unauthorized');
-  if (req.auth.role !== 'SCHOOL_ADMIN' || !req.auth.schoolId) {
-    throw new HttpError(403, 'Only School Admin can manage student operations');
+  if (!req.auth.schoolId) {
+    throw new HttpError(403, 'School scope is required to manage student operations');
   }
   return { schoolId: req.auth.schoolId, userId: req.auth.userId };
 };
@@ -60,6 +60,36 @@ const assertAcademicScope = async (
 
 const groupSchema = z.object({ name: z.string().trim().min(1).max(80) });
 const categorySchema = z.object({ name: z.string().trim().min(1).max(80) });
+
+export const listStudentAttendanceOptions = async (req: Request, res: Response) => {
+  const { schoolId } = requireSchoolScopedUser(req);
+  const [academicYears, classes, sections] = await Promise.all([
+    prisma.academicYear.findMany({
+      where: { schoolId },
+      select: { id: true, name: true, startDate: true, endDate: true, isActive: true },
+      orderBy: [{ isActive: 'desc' }, { startDate: 'desc' }, { name: 'asc' }],
+    }),
+    prisma.class.findMany({
+      where: { schoolId },
+      select: { id: true, name: true, academicYearId: true },
+      orderBy: { name: 'asc' },
+    }),
+    prisma.section.findMany({
+      where: { schoolId },
+      select: {
+        id: true,
+        name: true,
+        classId: true,
+        classSections: {
+          select: { classId: true },
+        },
+      },
+      orderBy: { name: 'asc' },
+    }),
+  ]);
+
+  res.status(200).json({ academicYears, classes, sections });
+};
 
 export const listStudentGroups = async (req: Request, res: Response) => {
   const { schoolId } = requireSchoolAdmin(req);

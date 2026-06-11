@@ -13,6 +13,7 @@ import FullPageLoader from '../../components/FullPageLoader';
 import { getSession } from '../../services/auth.service';
 import { getSubscription } from '../../services/subscription.service';
 import { getTeacherTimetable } from '../../services/academic.service';
+import AccessDeniedPanel from '../../components/AccessDeniedPanel';
 import SuperAdminDashboardClient from '../../components/dashboard/SuperAdminDashboardClient';
 import {
   DashboardHero,
@@ -37,15 +38,17 @@ const formatPercent = (value: unknown) => `${formatNumber(value)}%`;
 export default function DashboardPage() {
   const { data: session, isLoading: isSessionLoading } = useQuery({ queryKey: ['session'], queryFn: getSession });
   const isSuperAdmin = session?.role === 'SUPER_ADMIN';
-  const isSchoolAdmin = session?.role === 'SCHOOL_ADMIN';
   const isTeacher = session?.role === 'TEACHER';
+  const permissionCodes = session?.permissionCodes ?? [];
+  const hasPermission = (code: string) => permissionCodes.includes(code);
+  const canViewDashboard = Boolean(isSuperAdmin || hasPermission('dashboard.overview'));
   const schoolId = session?.schoolId ?? undefined;
   const [loadHeavy, setLoadHeavy] = useState(false);
 
   const metricsQuery = useQuery({
     queryKey: ['admin-dashboard'],
     queryFn: getAdminDashboardMetrics,
-    enabled: Boolean(session) && !isSuperAdmin,
+    enabled: canViewDashboard && !isSuperAdmin,
     refetchOnWindowFocus: false,
     staleTime: 30_000,
   });
@@ -53,7 +56,7 @@ export default function DashboardPage() {
   const weeklyQuery = useQuery({
     queryKey: ['weekly-analytics'],
     queryFn: getWeeklyAnalytics,
-    enabled: Boolean(session) && !isSuperAdmin && loadHeavy,
+    enabled: canViewDashboard && !isSuperAdmin && loadHeavy,
     refetchOnWindowFocus: false,
     staleTime: 60_000,
   });
@@ -61,7 +64,7 @@ export default function DashboardPage() {
   const performanceQuery = useQuery({
     queryKey: ['performance-metrics'],
     queryFn: getPerformanceMetrics,
-    enabled: Boolean(session) && !isSuperAdmin && loadHeavy,
+    enabled: canViewDashboard && !isSuperAdmin && loadHeavy,
     refetchOnWindowFocus: false,
     staleTime: 60_000,
   });
@@ -69,7 +72,7 @@ export default function DashboardPage() {
   const auditQuery = useQuery({
     queryKey: ['recent-audit-logs'],
     queryFn: () => listAuditLogs({ limit: 5 }),
-    enabled: Boolean(session) && !isSuperAdmin && loadHeavy,
+    enabled: canViewDashboard && !isSuperAdmin && loadHeavy && hasPermission('audit.view'),
     refetchOnWindowFocus: false,
     staleTime: 60_000,
   });
@@ -77,7 +80,7 @@ export default function DashboardPage() {
   const subscriptionQuery = useQuery({
     queryKey: ['subscription', schoolId],
     queryFn: () => getSubscription(schoolId),
-    enabled: Boolean(schoolId) && isSchoolAdmin,
+    enabled: Boolean(schoolId) && canViewDashboard && hasPermission('plans.view'),
     refetchOnWindowFocus: false,
     staleTime: 60_000,
   });
@@ -85,7 +88,7 @@ export default function DashboardPage() {
   const teacherScheduleQuery = useQuery({
     queryKey: ['teacher-timetable-home', schoolId],
     queryFn: () => getTeacherTimetable({ schoolId }),
-    enabled: Boolean(schoolId && isTeacher),
+    enabled: Boolean(schoolId && isTeacher && canViewDashboard && hasPermission('academics.setup')),
     refetchOnWindowFocus: false,
     staleTime: 60_000,
   });
@@ -152,10 +155,16 @@ export default function DashboardPage() {
     if (isTeacher) {
       return [
         { title: 'Timetable', href: '/dashboard/timetable', icon: 'TT', description: 'Open class schedule', tone: 'blue' as const },
-        { title: 'Mark Attendance', href: '/dashboard/attendance/students/mark', icon: 'AT', description: 'Start attendance workflow', tone: 'emerald' as const },
+        { title: 'Mark Attendance', href: '/dashboard/students/attendance', icon: 'AT', description: 'Start attendance workflow', tone: 'emerald' as const },
         { title: 'Upload Marks', href: '/dashboard/academics/marks', icon: 'MK', description: 'Update assessment records', tone: 'violet' as const },
         { title: 'Reports', href: '/dashboard/reports', icon: 'RP', description: 'Review assigned reports', tone: 'slate' as const },
-      ];
+      ].filter((action) => {
+        if (action.href === '/dashboard/timetable') return hasPermission('academics.setup');
+        if (action.href === '/dashboard/students/attendance') return hasPermission('attendance.view');
+        if (action.href === '/dashboard/academics/marks') return hasPermission('academics.marks');
+        if (action.href === '/dashboard/reports') return hasPermission('reports.view');
+        return false;
+      });
     }
 
     return [
@@ -163,8 +172,14 @@ export default function DashboardPage() {
       { title: 'Classes', href: '/dashboard/academics', icon: 'CL', description: 'Manage classes and sections', tone: 'emerald' as const },
       { title: 'Homework', href: '/dashboard/homework', icon: 'HW', description: 'Create and evaluate homework', tone: 'violet' as const },
       { title: 'Reports', href: '/dashboard/reports', icon: 'RP', description: 'Open school reports center', tone: 'slate' as const },
-    ];
-  }, [isTeacher]);
+    ].filter((action) => {
+      if (action.href === '/dashboard/students/add') return hasPermission('students.add');
+      if (action.href === '/dashboard/academics') return hasPermission('academics.setup');
+      if (action.href === '/dashboard/homework') return hasPermission('homework.view');
+      if (action.href === '/dashboard/reports') return hasPermission('reports.view');
+      return true;
+    });
+  }, [isTeacher, permissionCodes]);
 
   if (isSessionLoading) {
     return <FullPageLoader label="Loading dashboard..." />;
@@ -172,6 +187,10 @@ export default function DashboardPage() {
 
   if (isSuperAdmin) {
     return <SuperAdminDashboardClient />;
+  }
+
+  if (!canViewDashboard) {
+    return <AccessDeniedPanel />;
   }
 
   if (metricsQuery.isLoading) {
@@ -190,10 +209,12 @@ export default function DashboardPage() {
         subtitle={isTeacher ? 'Your schedule, class activity, and reporting shortcuts are ready in one place.' : 'A single view for students, attendance, academics, and daily school operations.'}
         actions={(
           <>
+            {hasPermission('reports.view') ? (
             <Link href="/dashboard/reports" prefetch={false} className="rounded-lg bg-slate-950 px-4 py-2 text-sm font-bold text-white shadow-sm hover:bg-slate-800">
               Reports
             </Link>
-            {isSchoolAdmin ? (
+            ) : null}
+            {hasPermission('students.add') ? (
               <Link href="/dashboard/students/add" prefetch={false} className="rounded-lg border border-[var(--shell-border)] bg-[var(--shell-card)] px-4 py-2 text-sm font-bold text-[var(--shell-text)] hover:bg-[var(--shell-hover)]">
                 Add Student
               </Link>
@@ -209,12 +230,12 @@ export default function DashboardPage() {
       </DashboardHero>
 
       <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-        {quickActions.map((action) => (
+        {quickActions.length ? quickActions.map((action) => (
           <QuickActionTile key={action.title} {...action} />
-        ))}
+        )) : <EmptyPanel message="No quick actions are enabled for your role." />}
       </section>
 
-      {isSchoolAdmin ? (
+      {hasPermission('plans.view') ? (
         <SectionPanel
           title="Current Plan"
           subtitle="Subscription status and operating limits for this school."
@@ -228,7 +249,7 @@ export default function DashboardPage() {
         </SectionPanel>
       ) : null}
 
-      {isTeacher ? (
+      {isTeacher && hasPermission('academics.setup') ? (
         <SectionPanel title="Today's Periods" subtitle={teacherSchedule?.version ? `Version: ${teacherSchedule.version.name}` : 'No published timetable for today.'}>
           <div className="space-y-3">
             {(teacherSchedule?.periods ?? []).map((period) => (
@@ -277,6 +298,7 @@ export default function DashboardPage() {
             </div>
           </SectionPanel>
 
+          {hasPermission('audit.view') ? (
           <SectionPanel title="Recent Activity" subtitle="Latest audit events from the school workspace.">
             {auditItems.length ? (
               <div className="space-y-3">
@@ -296,6 +318,7 @@ export default function DashboardPage() {
               <EmptyPanel message="No recent activity found." />
             )}
           </SectionPanel>
+          ) : null}
         </div>
       </section>
     </div>

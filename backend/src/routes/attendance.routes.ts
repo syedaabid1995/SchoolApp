@@ -37,10 +37,10 @@ attendanceRouter.use(authMiddleware);
 attendanceRouter.use(blockSuperAdminSchoolOperations('Super Admin cannot manage student attendance'));
 
 // Attendance P1 endpoints
-attendanceRouter.post('/sessions', requireRole('SCHOOL_ADMIN', 'TEACHER'), createAttendanceSessionApi);
-attendanceRouter.patch('/sessions/:id', requireRole('SCHOOL_ADMIN', 'TEACHER'), updateAttendanceSessionApi);
-attendanceRouter.post('/sessions/:id/lock', requireRole('SCHOOL_ADMIN'), lockAttendanceSessionApi);
-attendanceRouter.get('/summary', requireRole('SCHOOL_ADMIN', 'TEACHER'), attendanceSummaryApi);
+attendanceRouter.post('/sessions', requirePermission('attendance.create', 'attendance.edit'), createAttendanceSessionApi);
+attendanceRouter.patch('/sessions/:id', requirePermission('attendance.edit'), updateAttendanceSessionApi);
+attendanceRouter.post('/sessions/:id/lock', requirePermission('attendance.edit'), lockAttendanceSessionApi);
+attendanceRouter.get('/summary', requirePermission('attendance.view', 'attendance.report'), attendanceSummaryApi);
 attendanceRouter.post('/teacher/self', requireRole('SCHOOL_ADMIN', 'TEACHER', 'ACCOUNTANT', 'LIBRARIAN', 'STAFF'), markTeacherSelfAttendanceApi);
 attendanceRouter.get('/teacher/self', requireRole('SCHOOL_ADMIN', 'TEACHER', 'ACCOUNTANT', 'LIBRARIAN', 'STAFF'), listTeacherSelfAttendanceApi);
 attendanceRouter.post('/substitutions', requirePermission('attendance.substitute.manage'), createAttendanceSubstitutionApi);

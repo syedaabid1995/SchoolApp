@@ -58,8 +58,8 @@ const rethrowStaffTransactionError = (error: unknown): never => {
 
 const requireSchoolAdmin = (req: Request) => {
   if (!req.auth?.userId) throw new HttpError(401, 'Unauthorized');
-  if (req.auth.role !== 'SCHOOL_ADMIN' || !req.auth.schoolId) {
-    throw new HttpError(403, 'Only School Admin can manage staff');
+  if (!req.auth.schoolId) {
+    throw new HttpError(403, 'School scope is required to manage staff');
   }
   return { schoolId: req.auth.schoolId, userId: req.auth.userId };
 };
@@ -395,7 +395,7 @@ export const listStaff = async (req: Request, res: Response) => {
     .parse(req.query);
   const where: Prisma.TeacherProfileWhereInput = {
     schoolId,
-    ...(query.role ? { user: { roles: { some: { role: { name: query.role } } } } } : {}),
+    ...(query.role ? { roleName: query.role } : {}),
     ...(query.staffId ? { employeeNo: { contains: query.staffId, mode: 'insensitive' } } : {}),
     ...(query.search
       ? {

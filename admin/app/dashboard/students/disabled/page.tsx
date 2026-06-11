@@ -9,7 +9,6 @@ import { useNotify } from '../../../../components/NotificationProvider';
 import { getSession } from '../../../../services/auth.service';
 import { listSetupClasses, listSetupSections } from '../../../../services/academic-setup.service';
 import { deleteDisabledStudent, listDisabledStudents, restoreDisabledStudent } from '../../../../services/student-operations.service';
-import { SchoolAdminOnly } from '../_components/SchoolAdminOnly';
 
 export default function DisabledStudentsPage() {
   const notify = useNotify();
@@ -17,12 +16,17 @@ export default function DisabledStudentsPage() {
   const [filters, setFilters] = useState({ classId: '', sectionId: '', search: '' });
   const { data: session, isLoading: sessionLoading } = useQuery({ queryKey: ['session'], queryFn: getSession });
   const isSchoolAdmin = session?.role === 'SCHOOL_ADMIN';
-  const classesQuery = useQuery({ queryKey: ['setup-classes'], queryFn: () => listSetupClasses(), enabled: isSchoolAdmin });
-  const sectionsQuery = useQuery({ queryKey: ['setup-sections'], queryFn: () => listSetupSections(), enabled: isSchoolAdmin });
+  const permissionCodes = session?.permissionCodes ?? [];
+  const hasPermission = (code: string) => isSchoolAdmin || permissionCodes.includes(code);
+  const canViewDisabled = hasPermission('student.disabled.view');
+  const canRestoreDisabled = hasPermission('student.disabled.restore');
+  const canDeleteDisabled = hasPermission('student.disabled.delete');
+  const classesQuery = useQuery({ queryKey: ['setup-classes'], queryFn: () => listSetupClasses(), enabled: canViewDisabled });
+  const sectionsQuery = useQuery({ queryKey: ['setup-sections'], queryFn: () => listSetupSections(), enabled: canViewDisabled });
   const studentsQuery = useQuery({
     queryKey: ['disabled-students', filters],
     queryFn: () => listDisabledStudents({ classId: filters.classId || undefined, sectionId: filters.sectionId || undefined, search: filters.search || undefined }),
-    enabled: isSchoolAdmin,
+    enabled: canViewDisabled,
   });
 
   const sections = useMemo(
@@ -50,7 +54,13 @@ export default function DisabledStudentsPage() {
   });
 
   if (sessionLoading || !session?.role) return <FullPageLoader label="Checking disabled student access..." />;
-  if (!isSchoolAdmin) return <SchoolAdminOnly moduleName="disabled student records" />;
+  if (!canViewDisabled) {
+    return (
+      <section className="rounded-2xl border border-amber-200 bg-amber-50 p-6 text-sm font-semibold text-amber-800">
+        Disabled student records are not enabled for your role. Ask a School Admin to update Role Permissions.
+      </section>
+    );
+  }
 
   const students = studentsQuery.data ?? [];
 
@@ -119,8 +129,8 @@ export default function DisabledStudentsPage() {
                         <div className="inline-flex flex-wrap justify-end gap-2">
                           <Link href={`/dashboard/students/${student.id}`} className="rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-bold text-slate-700">View</Link>
                           <Link href={`/dashboard/students/add?id=${student.id}`} className="rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-bold text-slate-700">Edit</Link>
-                          <button onClick={() => window.confirm('Restore this student?') && restoreMutation.mutate(student.id)} className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-1.5 text-xs font-bold text-emerald-700">Restore</button>
-                          <button onClick={() => window.confirm('Delete this disabled student permanently?') && deleteMutation.mutate(student.id)} className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-1.5 text-xs font-bold text-rose-700">Delete</button>
+                          {canRestoreDisabled ? <button onClick={() => window.confirm('Restore this student?') && restoreMutation.mutate(student.id)} className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-1.5 text-xs font-bold text-emerald-700">Restore</button> : null}
+                          {canDeleteDisabled ? <button onClick={() => window.confirm('Delete this disabled student permanently?') && deleteMutation.mutate(student.id)} className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-1.5 text-xs font-bold text-rose-700">Delete</button> : null}
                         </div>
                       </td>
                     </tr>

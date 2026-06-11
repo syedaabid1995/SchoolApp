@@ -275,8 +275,7 @@ export const Sidebar = ({
   const searchParams = useSearchParams();
   const { logoUrl } = useContext(ThemeContext);
   const isPlatform = isSuperAdmin(role);
-  const isSchoolAdmin = role === 'SCHOOL_ADMIN';
-  const isEmployee = ['TEACHER', 'ACCOUNTANT', 'LIBRARIAN', 'STAFF'].includes(role ?? '');
+  const hasAnyRole = Boolean(role);
   const allowedCodes = useMemo(() => new Set(permissionCodes), [permissionCodes]);
   const [openSections, setOpenSections] = useState<Record<string, boolean>>({});
 
@@ -310,9 +309,9 @@ export const Sidebar = ({
   const isAllowedNavItem = (href: string) => {
     if (href === '/change-password') return true;
     if (isPlatform) return true;
-    if (!isEmployee && !isSchoolAdmin) return true;
+    if (!hasAnyRole) return false;
     const code = getRequiredPermissionForPath(hrefPath(href));
-    if (!code) return isSchoolAdmin;
+    if (!code) return false;
     return allowedCodes.has(code);
   };
 
@@ -366,7 +365,7 @@ export const Sidebar = ({
           { href: '/dashboard/students/attendance', label: 'Student Attendance', icon: 'SA' },
           { href: '/dashboard/staff/attendance', label: 'Staff Attendance', icon: 'EA' },
           { href: '/dashboard/leave/my', label: 'Apply Leave', icon: 'LV' },
-          ...(isSchoolAdmin ? [{ href: '/dashboard/leave/requests', label: 'Leave Management', icon: 'LM' }] : []),
+          { href: '/dashboard/leave/requests', label: 'Leave Management', icon: 'LM' },
         ],
       },
       {
@@ -441,7 +440,7 @@ export const Sidebar = ({
         label: 'Reports',
         items: [
           { href: '/dashboard/reports', label: 'Reports', icon: 'RP' },
-          ...(isSchoolAdmin ? [{ href: '/dashboard/audit', label: 'Audit Logs', icon: 'LG' }] : []),
+          { href: '/dashboard/audit', label: 'Audit Logs', icon: 'LG' },
         ],
       },
       {
@@ -456,7 +455,7 @@ export const Sidebar = ({
         id: 'subscription',
         label: 'Subscription',
         items: [
-          ...(isSchoolAdmin ? [{ href: '/dashboard/plans', label: 'Plans', icon: 'PL' }] : []),
+          { href: '/dashboard/plans', label: 'Plans', icon: 'PL' },
         ],
       },
       {
@@ -478,7 +477,7 @@ export const Sidebar = ({
     return sections
       .map((section) => ({ ...section, items: filterItems(section.items) }))
       .filter((section) => section.items.length > 0);
-  }, [isSchoolAdmin, isEmployee, isPlatform, allowedCodes]);
+  }, [hasAnyRole, isPlatform, allowedCodes]);
 
   const sections = isPlatform ? platformSections : schoolSections;
 

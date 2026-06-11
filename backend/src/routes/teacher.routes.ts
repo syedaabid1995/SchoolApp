@@ -1,6 +1,7 @@
 import { Router } from 'express';
+import type { NextFunction, Request, Response } from 'express';
 import { authMiddleware } from '../middlewares/auth.middleware';
-import { requireRole } from '../middlewares/rbac.middleware';
+import { HttpError } from '../middlewares/error.middleware';
 import { createTeacherApi, listTeachersApi, updateTeacherApi, deleteTeacherApi, getTeacherApi } from '../controllers/teacher.controller';
 import {
   confirmTeacherCredentialManualShareApi,
@@ -14,7 +15,10 @@ import {
 export const teacherRouter = Router();
 
 teacherRouter.use(authMiddleware);
-teacherRouter.use(requireRole('SCHOOL_ADMIN'));
+teacherRouter.use((req: Request, _res: Response, next: NextFunction) => {
+  if (req.auth?.schoolId) return next();
+  return next(new HttpError(403, 'School scope is required to manage teachers'));
+});
 
 teacherRouter.get('/onboarding', listTeacherOnboardingApi);
 teacherRouter.post('/', createTeacherApi);

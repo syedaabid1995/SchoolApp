@@ -49,6 +49,7 @@ const updateEmployeePermissionsSchema = z.object({
   enabledCodes: z.array(z.string()).default([]),
   schoolId: z.string().uuid().optional(),
   userId: z.string().uuid().optional(),
+  scopeCodes: z.array(z.string()).optional(),
 });
 
 const assignedStudentsQuerySchema = z.object({
@@ -62,6 +63,17 @@ const assignedExamPapersQuerySchema = z.object({
   sectionId: z.string().uuid().optional(),
   subjectId: z.string().uuid().optional(),
 });
+
+const parseScopeCodes = (value: unknown) => {
+  if (Array.isArray(value)) {
+    return value.flatMap((item) => parseScopeCodes(item));
+  }
+  if (typeof value !== 'string') return [];
+  return value
+    .split(',')
+    .map((item) => item.trim())
+    .filter(Boolean);
+};
 
 const requireCurrentSchool = (req: Request) => {
   const schoolId = req.auth?.schoolId;
@@ -529,12 +541,15 @@ export const listEmployeePermissionsApi = async (req: Request, res: Response) =>
   const roleName = managedRoleSchema.parse((req.query.roleName as string | undefined) ?? 'TEACHER');
   const schoolId = resolveSchoolId(req, req.query.schoolId as string | undefined);
   const userId = req.query.userId as string | undefined;
+  const validCodes = new Set(EMPLOYEE_PERMISSION_CATALOG.map((permission) => permission.code));
+  const scopeCodes = parseScopeCodes(req.query.scopeCodes).filter((code) => validCodes.has(code));
+  const scopedCodeSet = scopeCodes.length ? new Set(scopeCodes) : null;
   const planCodes = new Set(await getPlanPermissionCodesForSchool(schoolId));
   const enabledCodes = userId
     ? await getEffectivePermissionCodesForUser(schoolId, userId, roleName)
     : await getEffectivePermissionCodesForRole(schoolId, roleName);
   const allowedPermissions = planCodes.size
-    ? EMPLOYEE_PERMISSION_CATALOG.filter((permission) => planCodes.has(permission.code))
+    ? EMPLOYEE_PERMISSION_CATALOG.filter((permission) => planCodes.has(permission.code) && (!scopedCodeSet || scopedCodeSet.has(permission.code)))
     : [];
 
   const subscription = await prisma.subscription.findUnique({
@@ -542,38 +557,75 @@ export const listEmployeePermissionsApi = async (req: Request, res: Response) =>
     select: { planName: true },
   });
 
-  const users = await prisma.user.findMany({
-    where: {
-      schoolId,
-      roles: {
-        some: { role: { name: roleName } },
+  const [staffProfiles, roleUsers] = await Promise.all([
+    prisma.teacherProfile.findMany({
+      where: { schoolId, isActive: true, roleName },
+      select: {
+        id: true,
+        firstName: true,
+        lastName: true,
+        user: {
+          select: { id: true, email: true, status: true, createdAt: true },
+        },
       },
-    },
-    select: {
-      id: true,
-      email: true,
-      status: true,
-      createdAt: true,
-      teacherProfile: {
-        select: { id: true, firstName: true, lastName: true },
+      orderBy: { createdAt: 'desc' },
+    }),
+    prisma.user.findMany({
+      where: {
+        schoolId,
+        roles: { some: { role: { name: roleName } } },
+        teacherProfile: null,
       },
-    },
-    orderBy: { createdAt: 'desc' },
-  });
+      select: { id: true, email: true, status: true, createdAt: true },
+      orderBy: { createdAt: 'desc' },
+    }),
+  ]);
+
+  const employeeMap = new Map<
+    string,
+    {
+      id: string;
+      userId: string;
+      staffProfileId: string | null;
+      email: string;
+      status: string;
+      createdAt: Date;
+      displayName: string;
+    }
+  >();
+
+  for (const profile of staffProfiles) {
+    employeeMap.set(profile.user.id, {
+      id: profile.user.id,
+      userId: profile.user.id,
+      staffProfileId: profile.id,
+      email: profile.user.email,
+      status: profile.user.status,
+      createdAt: profile.user.createdAt,
+      displayName: `${profile.firstName} ${profile.lastName}`.trim() || profile.user.email,
+    });
+  }
+
+  for (const user of roleUsers) {
+    if (employeeMap.has(user.id)) continue;
+    employeeMap.set(user.id, {
+      id: user.id,
+      userId: user.id,
+      staffProfileId: null,
+      email: user.email,
+      status: user.status,
+      createdAt: user.createdAt,
+      displayName: user.email,
+    });
+  }
+
+  const employees = Array.from(employeeMap.values()).sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
 
   res.status(200).json({
     roleName,
     planName: subscription?.planName ?? null,
-    employees: users.map((user) => ({
-      id: user.teacherProfile?.id ?? user.id,
-      userId: user.id,
-      email: user.email,
-      status: user.status,
-      createdAt: user.createdAt,
-      displayName: user.teacherProfile
-        ? `${user.teacherProfile.firstName} ${user.teacherProfile.lastName}`.trim()
-        : user.email,
-    })),
+    scopeCodes,
+    employees,
     permissions: allowedPermissions.map((permission) => ({
       ...permission,
       enabled: enabledCodes.includes(permission.code),
@@ -586,14 +638,20 @@ export const updateEmployeePermissionsApi = async (req: Request, res: Response) 
   const schoolId = resolveSchoolId(req, payload.schoolId);
   const validCodes = new Set(EMPLOYEE_PERMISSION_CATALOG.map((permission) => permission.code));
   const planCodes = new Set(await getPlanPermissionCodesForSchool(schoolId));
-  const enabledCodes = payload.enabledCodes.filter((code) => validCodes.has(code) && planCodes.has(code));
+  const scopeCodes = (payload.scopeCodes ?? []).filter((code) => validCodes.has(code) && planCodes.has(code));
+  const targetCodes = scopeCodes.length ? scopeCodes : EMPLOYEE_PERMISSION_CATALOG.map((permission) => permission.code);
+  const targetCodeSet = new Set(targetCodes);
+  const enabledCodes = payload.enabledCodes.filter((code) => targetCodeSet.has(code) && validCodes.has(code) && planCodes.has(code));
 
   if (payload.userId) {
     const targetUser = await prisma.user.findFirst({
       where: {
         id: payload.userId,
         schoolId,
-        roles: { some: { role: { name: payload.roleName } } },
+        OR: [
+          { roles: { some: { role: { name: payload.roleName } } } },
+          { teacherProfile: { isActive: true, roleName: payload.roleName } },
+        ],
       },
       select: { id: true },
     });
@@ -604,15 +662,19 @@ export const updateEmployeePermissionsApi = async (req: Request, res: Response) 
 
     await prisma.$transaction(async (tx) => {
       await tx.employeeUserPermission.deleteMany({
-        where: { schoolId, userId: payload.userId },
+        where: {
+          schoolId,
+          userId: payload.userId,
+          ...(scopeCodes.length ? { permissionCode: { in: scopeCodes } } : {}),
+        },
       });
 
       await tx.employeeUserPermission.createMany({
-        data: EMPLOYEE_PERMISSION_CATALOG.map((permission) => ({
+        data: targetCodes.map((permissionCode) => ({
           schoolId,
           userId: payload.userId!,
-          permissionCode: permission.code,
-          enabled: enabledCodes.includes(permission.code),
+          permissionCode,
+          enabled: enabledCodes.includes(permissionCode),
         })),
       });
     });
@@ -622,7 +684,7 @@ export const updateEmployeePermissionsApi = async (req: Request, res: Response) 
       entityType: 'USER',
       entityId: payload.userId,
       action: 'UPDATE',
-      afterState: { roleName: payload.roleName, enabledCodes },
+      afterState: { roleName: payload.roleName, enabledCodes, scopeCodes },
     });
 
     res.status(200).json({ success: true });
@@ -631,15 +693,19 @@ export const updateEmployeePermissionsApi = async (req: Request, res: Response) 
 
   await prisma.$transaction(async (tx) => {
     await tx.employeeRolePermission.deleteMany({
-      where: { schoolId, roleName: payload.roleName },
+      where: {
+        schoolId,
+        roleName: payload.roleName,
+        ...(scopeCodes.length ? { permissionCode: { in: scopeCodes } } : {}),
+      },
     });
 
     await tx.employeeRolePermission.createMany({
-      data: EMPLOYEE_PERMISSION_CATALOG.map((permission) => ({
+      data: targetCodes.map((permissionCode) => ({
         schoolId,
         roleName: payload.roleName as ManagedEmployeeRole,
-        permissionCode: permission.code,
-        enabled: enabledCodes.includes(permission.code),
+        permissionCode,
+        enabled: enabledCodes.includes(permissionCode),
       })),
     });
   });
@@ -649,7 +715,7 @@ export const updateEmployeePermissionsApi = async (req: Request, res: Response) 
     entityType: 'USER',
     entityId: payload.roleName,
     action: 'UPDATE',
-    afterState: { roleName: payload.roleName, enabledCodes },
+    afterState: { roleName: payload.roleName, enabledCodes, scopeCodes },
   });
 
   res.status(200).json({ success: true });

@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { useEffect, useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 import { useMutation, useQuery } from '@tanstack/react-query';
 import { useRouter } from 'next/navigation';
 import FullPageLoader from '../../../../components/FullPageLoader';
@@ -115,17 +115,13 @@ export default function AddStudentPage() {
 
   const { data: session, isLoading: isSessionLoading } = useQuery({ queryKey: ['session'], queryFn: getSession });
   const isSchoolAdmin = session?.role === 'SCHOOL_ADMIN';
+  const permissionCodes = session?.permissionCodes ?? [];
+  const canCreateStudent = isSchoolAdmin || permissionCodes.includes('students.add') || permissionCodes.includes('student.create');
 
-  useEffect(() => {
-    if (!isSessionLoading && session?.role && !isSchoolAdmin) {
-      router.replace('/dashboard');
-    }
-  }, [isSchoolAdmin, isSessionLoading, router, session?.role]);
-
-  const yearsQuery = useQuery({ queryKey: ['academic-years'], queryFn: () => listAcademicYears(), enabled: isSchoolAdmin });
-  const classesQuery = useQuery({ queryKey: ['setup-classes'], queryFn: () => listSetupClasses(), enabled: isSchoolAdmin });
-  const sectionsQuery = useQuery({ queryKey: ['setup-sections'], queryFn: () => listSetupSections(), enabled: isSchoolAdmin });
-  const siblingsQuery = useQuery({ queryKey: ['students', 'sibling-options'], queryFn: () => listStudents(), enabled: isSchoolAdmin });
+  const yearsQuery = useQuery({ queryKey: ['academic-years'], queryFn: () => listAcademicYears(), enabled: canCreateStudent });
+  const classesQuery = useQuery({ queryKey: ['setup-classes'], queryFn: () => listSetupClasses(), enabled: canCreateStudent });
+  const sectionsQuery = useQuery({ queryKey: ['setup-sections'], queryFn: () => listSetupSections(), enabled: canCreateStudent });
+  const siblingsQuery = useQuery({ queryKey: ['students', 'sibling-options'], queryFn: () => listStudents(), enabled: canCreateStudent });
 
   const sections = sectionsQuery.data ?? [];
   const classSections = useMemo(
@@ -226,8 +222,15 @@ export default function AddStudentPage() {
     }
   };
 
-  if (isSessionLoading || !session?.role || !isSchoolAdmin) {
+  if (isSessionLoading || !session?.role) {
     return <FullPageLoader label="Checking student access..." />;
+  }
+  if (!canCreateStudent) {
+    return (
+      <section className="rounded-2xl border border-amber-200 bg-amber-50 p-6 text-sm font-semibold text-amber-800">
+        Student admission is not enabled for your role. Ask a School Admin to update Role Permissions.
+      </section>
+    );
   }
 
   return (

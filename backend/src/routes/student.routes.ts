@@ -40,6 +40,7 @@ import {
   deleteStudentGroup,
   disableStudent,
   getStudentAttendanceReport,
+  listStudentAttendanceOptions,
   listDisabledStudents,
   listStudentCategories,
   listStudentGroups,
@@ -58,17 +59,15 @@ export const studentRouter = Router();
 
 studentRouter.use(authMiddleware);
 studentRouter.use((req: Request, _res: Response, next: NextFunction) => {
-  if (req.auth?.role === 'SCHOOL_ADMIN' && req.auth.schoolId) {
+  if (req.auth?.schoolId) {
     return next();
   }
-  if (req.path.startsWith('/attendance') && req.auth?.schoolId) {
-    return next();
-  }
-  return next(new HttpError(403, 'Only School Admin can access student information'));
+  return next(new HttpError(403, 'School scope is required to access student information'));
 });
 
 studentRouter.get('/students/import/sample', downloadStudentImportSample);
 studentRouter.post('/students/import', uploadStudentImportMiddleware, importStudents);
+studentRouter.get('/attendance/options', listStudentAttendanceOptions);
 studentRouter.get('/attendance', loadStudentAttendance);
 studentRouter.post('/attendance', saveStudentAttendance);
 studentRouter.get('/attendance/report', getStudentAttendanceReport);

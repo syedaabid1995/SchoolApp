@@ -10,7 +10,8 @@ import {
   getLoginBrandingSettings,
 } from '../services/branding.service';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
-import { EMPLOYEE_MANAGED_ROLES, getRequiredPermissionForPath } from '../config/employee-permissions';
+import { getRequiredPermissionForPath } from '../config/employee-permissions';
+import AccessDeniedPanel from './AccessDeniedPanel';
 
 export default function DashboardClientLayout({ 
   children, 
@@ -35,7 +36,9 @@ export default function DashboardClientLayout({
   const searchParams = useSearchParams();
   const isSubscriptionRestricted = Boolean(session?.subscriptionRestricted);
   const permissionCodes = session?.permissionCodes ?? [];
-  const isSuperAdmin = session?.role === 'SUPER_ADMIN';
+  const effectiveRole = session?.role ?? role;
+  const hasAnyRole = Boolean(effectiveRole);
+  const isSuperAdmin = effectiveRole === 'SUPER_ADMIN';
   const superAdminAllowedPaths = [
     '/dashboard',
     '/dashboard/analytics',
@@ -73,7 +76,6 @@ export default function DashboardClientLayout({
     '/dashboard/holidays',
     '/dashboard/sms-settings',
   ];
-  const isManagedEmployeeRole = EMPLOYEE_MANAGED_ROLES.includes((session?.role ?? '') as (typeof EMPLOYEE_MANAGED_ROLES)[number]);
   const requiredPermission = getRequiredPermissionForPath(pathname);
   const isSuperAdminLayout = isSuperAdmin || role === 'SUPER_ADMIN';
   const settingsTab = searchParams.get('tab') ?? '';
@@ -82,9 +84,9 @@ export default function DashboardClientLayout({
     pathname === '/dashboard/settings' &&
     (!settingsTab ||
       settingsTab === 'security' ||
-      (session?.role === 'SCHOOL_ADMIN' && ['brand', 'branding', 'theme'].includes(settingsTab)));
+      (effectiveRole === 'SCHOOL_ADMIN' && ['brand', 'branding', 'theme'].includes(settingsTab)));
   const isSafeSchoolSetupRoute =
-    session?.role === 'SCHOOL_ADMIN' && schoolSetupAllowedPaths.some((allowedPath) => pathname === allowedPath);
+    effectiveRole === 'SCHOOL_ADMIN' && schoolSetupAllowedPaths.some((allowedPath) => pathname === allowedPath);
   const { data: shellBranding } = useQuery({
     queryKey: ['login-branding-settings', 'platform-shell'],
     queryFn: () => getLoginBrandingSettings(),
@@ -99,11 +101,12 @@ export default function DashboardClientLayout({
     defaultThemeMode: 'system' as DashboardThemeMode,
   };
   const canAccessRoute =
-    isAccountRoute ||
-    !isManagedEmployeeRole ||
-    isSafeSettingsTab ||
-    isSafeSchoolSetupRoute ||
-    (requiredPermission ? permissionCodes.includes(requiredPermission) : false);
+    hasAnyRole &&
+    (isAccountRoute ||
+      isSuperAdmin ||
+      isSafeSettingsTab ||
+      isSafeSchoolSetupRoute ||
+      (requiredPermission ? permissionCodes.includes(requiredPermission) : false));
   const canAccessSuperAdminRoute =
     isAccountRoute ||
     !isSuperAdmin ||
@@ -205,14 +208,14 @@ export default function DashboardClientLayout({
     );
   }
 
-  if (isManagedEmployeeRole && !canAccessRoute) {
+  if (!isSuperAdmin && !canAccessRoute) {
     return (
       <div
         className={`dashboard-shell dashboard-shell-${resolvedThemeMode} flex h-screen bg-[var(--shell-bg)] text-[var(--shell-text)]`}
         style={shellStyle}
       >
         <Sidebar
-          role={role}
+          role={effectiveRole}
           isOpen={isSidebarOpen}
           onClose={() => setIsSidebarOpen(false)}
           schoolName={session?.schoolName ?? undefined}
@@ -222,7 +225,7 @@ export default function DashboardClientLayout({
         />
         <div className="flex flex-1 flex-col h-screen">
           <Header
-            role={role}
+            role={effectiveRole}
             email={email}
             displayName={session && 'displayName' in session ? session.displayName ?? null : null}
             permissionCodes={permissionCodes}
@@ -233,12 +236,7 @@ export default function DashboardClientLayout({
             consoleTitle={platformSettings.consoleName}
           />
           <main className="flex-1 overflow-y-auto bg-[var(--shell-bg)] p-4 transition-all duration-200 sm:p-6">
-            <section className="mx-auto max-w-3xl rounded-2xl border border-[var(--shell-border)] bg-[var(--shell-card)] p-8 text-center">
-              <h1 className="text-2xl font-semibold text-[var(--shell-text)]">Permission Not Available</h1>
-              <p className="mt-2 text-sm text-[var(--shell-muted)]">
-                The requested page is not available for your role. Contact your school admin.
-              </p>
-            </section>
+            <AccessDeniedPanel />
           </main>
         </div>
       </div>
@@ -254,9 +252,9 @@ export default function DashboardClientLayout({
       className={`dashboard-shell dashboard-shell-${resolvedThemeMode} ${isSuperAdminLayout ? 'super-admin-console' : ''} flex h-screen bg-[var(--shell-bg)] text-[var(--shell-text)]`}
       style={shellStyle}
     >
-      <Sidebar 
-        role={role} 
-        isOpen={isSidebarOpen} 
+      <Sidebar
+        role={effectiveRole}
+        isOpen={isSidebarOpen}
         onClose={() => setIsSidebarOpen(false)}
         schoolName={session?.schoolName ?? undefined}
         permissionCodes={permissionCodes}
@@ -264,9 +262,9 @@ export default function DashboardClientLayout({
         platformSubtitle={platformSettings.consoleName}
       />
       <div className="flex flex-1 flex-col h-screen">
-        <Header 
-          role={role} 
-          email={email} 
+        <Header
+          role={effectiveRole}
+          email={email}
           displayName={session && 'displayName' in session ? session.displayName ?? null : null}
           permissionCodes={permissionCodes}
           onMenuToggle={() => setIsSidebarOpen(!isSidebarOpen)} 

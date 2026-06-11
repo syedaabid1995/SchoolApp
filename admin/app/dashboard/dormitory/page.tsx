@@ -173,6 +173,7 @@ export default function DormitoryPage() {
   const { data: session, isLoading: sessionLoading } = useQuery({ queryKey: ['session'], queryFn: getSession });
   const isSuperAdmin = session?.role === 'SUPER_ADMIN';
   const isSchoolAdmin = session?.role === 'SCHOOL_ADMIN';
+  const permissionCodes = session?.permissionCodes ?? [];
   const schoolsQuery = useQuery({
     queryKey: ['schools', 'dormitory'],
     queryFn: () => listSchools({ limit: 100, status: 'ACTIVE' }),
@@ -187,7 +188,7 @@ export default function DormitoryPage() {
 
   const effectiveSchoolId = isSuperAdmin ? selectedSchoolId : session?.schoolId ?? '';
   const scopedParams = effectiveSchoolId ? { schoolId: effectiveSchoolId } : undefined;
-  const canUsePage = isSuperAdmin || isSchoolAdmin;
+  const canUsePage = isSuperAdmin || isSchoolAdmin || permissionCodes.includes('dormitory.view');
   const canQuery = Boolean(canUsePage && effectiveSchoolId);
 
   const dormitoriesQuery = useQuery({

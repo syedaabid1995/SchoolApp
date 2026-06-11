@@ -1,8 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { useEffect, useMemo, useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import FullPageLoader from '../../../components/FullPageLoader';
 import { useNotify } from '../../../components/NotificationProvider';
@@ -75,7 +74,6 @@ const SkeletonRows = () => (
 );
 
 export default function StudentsPage() {
-  const router = useRouter();
   const queryClient = useQueryClient();
   const notify = useNotify();
   const [filters, setFilters] = useState({
@@ -98,12 +96,12 @@ export default function StudentsPage() {
 
   const { data: session, isLoading: isSessionLoading } = useQuery({ queryKey: ['session'], queryFn: getSession });
   const isSchoolAdmin = session?.role === 'SCHOOL_ADMIN';
-
-  useEffect(() => {
-    if (!isSessionLoading && session?.role && !isSchoolAdmin) {
-      router.replace('/dashboard');
-    }
-  }, [isSchoolAdmin, isSessionLoading, router, session?.role]);
+  const permissionCodes = session?.permissionCodes ?? [];
+  const hasPermission = (code: string) => isSchoolAdmin || permissionCodes.includes(code);
+  const canViewStudents = hasPermission('students.list') || hasPermission('student.view');
+  const canCreateStudent = hasPermission('students.add') || hasPermission('student.create');
+  const canImportStudents = hasPermission('student.import');
+  const canDeleteStudent = hasPermission('student.delete');
 
   const studentsQuery = useQuery({
     queryKey: ['students', filters],
@@ -115,11 +113,11 @@ export default function StudentsPage() {
         sectionId: filters.sectionId || undefined,
         academicSessionId: filters.academicSessionId || undefined,
       }),
-    enabled: isSchoolAdmin,
+    enabled: canViewStudents,
   });
-  const yearsQuery = useQuery({ queryKey: ['academic-years'], queryFn: () => listAcademicYears(), enabled: isSchoolAdmin });
-  const classesQuery = useQuery({ queryKey: ['setup-classes'], queryFn: () => listSetupClasses(), enabled: isSchoolAdmin });
-  const sectionsQuery = useQuery({ queryKey: ['setup-sections'], queryFn: () => listSetupSections(), enabled: isSchoolAdmin });
+  const yearsQuery = useQuery({ queryKey: ['academic-years'], queryFn: () => listAcademicYears(), enabled: canViewStudents });
+  const classesQuery = useQuery({ queryKey: ['setup-classes'], queryFn: () => listSetupClasses(), enabled: canViewStudents });
+  const sectionsQuery = useQuery({ queryKey: ['setup-sections'], queryFn: () => listSetupSections(), enabled: canViewStudents });
 
   const sections = sectionsQuery.data ?? [];
   const students = studentsQuery.data ?? [];
@@ -181,8 +179,15 @@ export default function StudentsPage() {
     URL.revokeObjectURL(url);
   };
 
-  if (isSessionLoading || !session?.role || !isSchoolAdmin) {
+  if (isSessionLoading || !session?.role) {
     return <FullPageLoader label="Checking student access..." />;
+  }
+  if (!canViewStudents) {
+    return (
+      <section className="rounded-2xl border border-amber-200 bg-amber-50 p-6 text-sm font-semibold text-amber-800">
+        Student information is not enabled for your role. Ask a School Admin to update Role Permissions.
+      </section>
+    );
   }
 
   return (
@@ -206,14 +211,14 @@ export default function StudentsPage() {
             <Icon path="M6 9V2h12v7M6 18H4a2 2 0 01-2-2v-5a2 2 0 012-2h16a2 2 0 012 2v5a2 2 0 01-2 2h-2M6 14h12v8H6v-8z" />
             Print
           </button>
-          <button onClick={() => setImportOpen(true)} className="inline-flex items-center gap-2 rounded-xl border border-violet-200 bg-violet-50 px-3 py-2 text-sm font-semibold text-violet-700 shadow-sm hover:bg-violet-100">
+          {canImportStudents ? <button onClick={() => setImportOpen(true)} className="inline-flex items-center gap-2 rounded-xl border border-violet-200 bg-violet-50 px-3 py-2 text-sm font-semibold text-violet-700 shadow-sm hover:bg-violet-100">
             <Icon path="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1M12 4v12m0-12l-4 4m4-4l4 4" />
             Import
-          </button>
-          <Link href="/dashboard/students/add" className="inline-flex items-center gap-2 rounded-xl bg-[var(--theme-button-bg)] px-4 py-2 text-sm font-semibold text-[var(--theme-button-text)] shadow-sm hover:opacity-90">
+          </button> : null}
+          {canCreateStudent ? <Link href="/dashboard/students/add" className="inline-flex items-center gap-2 rounded-xl bg-[var(--theme-button-bg)] px-4 py-2 text-sm font-semibold text-[var(--theme-button-text)] shadow-sm hover:opacity-90">
             <Icon path="M12 4v16m8-8H4" />
             Add Student
-          </Link>
+          </Link> : null}
         </div>
 
         <section className="mb-5 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
@@ -302,14 +307,14 @@ export default function StudentsPage() {
                               <Icon path="M15 12a3 3 0 11-6 0 3 3 0 016 0z M2.458 12C3.732 7.943 7.523 5 12 5c4.477 0 8.268 2.943 9.542 7-1.274 4.057-5.065 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
                               View
                             </Link>
-                            <Link href={`/dashboard/students/${student.id}?edit=1`} className="flex items-center gap-2 rounded-lg px-3 py-2 text-sm text-slate-700 hover:bg-slate-50">
+                            {hasPermission('student.edit') ? <Link href={`/dashboard/students/${student.id}?edit=1`} className="flex items-center gap-2 rounded-lg px-3 py-2 text-sm text-slate-700 hover:bg-slate-50">
                               <Icon path="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z" />
                               Edit
-                            </Link>
-                            <button onClick={() => { setOpenActionId(null); if (window.confirm(`Delete ${name}? This cannot be undone.`)) deleteMutation.mutate(student.id); }} className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm text-red-600 hover:bg-red-50">
+                            </Link> : null}
+                            {canDeleteStudent ? <button onClick={() => { setOpenActionId(null); if (window.confirm(`Delete ${name}? This cannot be undone.`)) deleteMutation.mutate(student.id); }} className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm text-red-600 hover:bg-red-50">
                               <Icon path="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6M9 7h6m2 0H7m3 0V5a2 2 0 012-2h0a2 2 0 012 2v2" />
                               Delete
-                            </button>
+                            </button> : null}
                           </div>
                         )}
                       </td>

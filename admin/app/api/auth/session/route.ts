@@ -23,14 +23,25 @@ export async function GET() {
     let subscriptionRestricted = Boolean(payload?.subscriptionRestricted);
     let displayName: string | null = null;
     let permissionCodes: string[] = [];
+    let resolvedRole = (payload?.role as string | undefined) ?? null;
+    let resolvedSchoolId = (payload?.schoolId as string | undefined) ?? null;
     try {
       const res = await fetch(`${API_BASE}/users/me`, {
         headers: { Authorization: `Bearer ${token}` },
         cache: 'no-store',
       });
       if (res.ok) {
-        const data = (await res.json()) as { displayName?: string | null; permissionCodes?: string[] };
+        const data = (await res.json()) as {
+          displayName?: string | null;
+          permissionCodes?: string[];
+          role?: string | null;
+          schoolId?: string | null;
+          employeeProfile?: { roleName?: string | null } | null;
+          teacherProfile?: { roleName?: string | null } | null;
+        };
         displayName = data.displayName ?? null;
+        resolvedRole = data.employeeProfile?.roleName ?? data.teacherProfile?.roleName ?? data.role ?? resolvedRole;
+        resolvedSchoolId = data.schoolId ?? resolvedSchoolId;
         permissionCodes = Array.isArray(data.permissionCodes) ? data.permissionCodes : [];
       }
     } catch {
@@ -65,13 +76,14 @@ export async function GET() {
       }
     }
     return NextResponse.json({
-      role: (payload?.role as string | undefined) ?? null,
-      schoolId: (payload?.schoolId as string | undefined) ?? null,
+      role: resolvedRole,
+      schoolId: resolvedSchoolId,
       email: (payload?.email as string | undefined) ?? null,
       subscriptionRestricted,
       mustChangePassword,
       displayName,
       permissionCodes,
+      hasDashboardAccess: Boolean(resolvedRole && (resolvedRole === 'SUPER_ADMIN' || permissionCodes.length > 0)),
     });
   } catch {
     return NextResponse.json({
@@ -82,6 +94,7 @@ export async function GET() {
       mustChangePassword: false,
       displayName: null,
       permissionCodes: [],
+      hasDashboardAccess: false,
     });
   }
 }

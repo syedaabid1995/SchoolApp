@@ -14,7 +14,6 @@ import {
   payPayroll,
   type Staff,
 } from '../../../services/staff.service';
-import { SchoolAdminOnly } from '../staff/_components/SchoolAdminOnly';
 
 const roles = ['SCHOOL_ADMIN', 'TEACHER', 'ACCOUNTANT', 'LIBRARIAN', 'STAFF'];
 
@@ -99,11 +98,17 @@ export default function PayrollPage() {
 
   const { data: session, isLoading: sessionLoading } = useQuery({ queryKey: ['session'], queryFn: getSession });
   const isSchoolAdmin = session?.role === 'SCHOOL_ADMIN';
-  const staffQuery = useQuery({ queryKey: ['staff-options-payroll', criteria.role], queryFn: () => listStaff({ limit: 100, role: criteria.role || undefined }), enabled: isSchoolAdmin });
+  const permissionCodes = session?.permissionCodes ?? [];
+  const hasPermission = (code: string) => isSchoolAdmin || permissionCodes.includes(code);
+  const canViewPayroll = hasPermission('payroll.view');
+  const canGeneratePayroll = hasPermission('payroll.generate');
+  const canPayPayroll = hasPermission('payroll.pay');
+  const canViewPayrollReport = hasPermission('payroll.report');
+  const staffQuery = useQuery({ queryKey: ['staff-options-payroll', criteria.role], queryFn: () => listStaff({ limit: 100, role: criteria.role || undefined }), enabled: canViewPayroll });
   const payrollQuery = useQuery({
     queryKey: ['staff-payroll', criteria],
     queryFn: () => listPayroll({ role: criteria.role || undefined, staffId: criteria.staffId || undefined, month: criteria.month, year: criteria.year }),
-    enabled: isSchoolAdmin,
+    enabled: canViewPayroll,
   });
 
   const rows = useMemo(() => payrollQuery.data ?? [], [payrollQuery.data]);
@@ -156,7 +161,13 @@ export default function PayrollPage() {
   });
 
   if (sessionLoading || !session?.role) return <FullPageLoader label="Checking payroll access..." />;
-  if (!isSchoolAdmin) return <SchoolAdminOnly moduleName="payroll" />;
+  if (!canViewPayroll) {
+    return (
+      <section className="rounded-2xl border border-amber-200 bg-amber-50 p-6 text-sm font-semibold text-amber-800">
+        Payroll is not enabled for your role. Ask a School Admin to update Role Permissions.
+      </section>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-slate-100 pb-10">
@@ -165,7 +176,7 @@ export default function PayrollPage() {
           title="Payroll"
           subtitle="Generate monthly payroll, calculate earnings and deductions, and record payments."
           breadcrumbs={[{ label: 'Dashboard', href: '/dashboard' }, { label: 'Payroll' }]}
-          actions={<Link href="/dashboard/payroll/report" className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-bold text-slate-700">Payroll Report</Link>}
+          actions={canViewPayrollReport ? <Link href="/dashboard/payroll/report" className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-bold text-slate-700">Payroll Report</Link> : null}
         />
 
         <section className="mb-5 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
@@ -231,9 +242,9 @@ export default function PayrollPage() {
                       <td className="px-4 py-3"><span className={`rounded-full border px-2.5 py-1 text-xs font-bold ${statusBadge(row.status)}`}>{String(row.status).replace('_', ' ')}</span></td>
                       <td className="px-4 py-3 text-right">
                         <div className="inline-flex flex-wrap justify-end gap-2">
-                          <button onClick={() => openGenerate(row)} className="rounded-lg border border-violet-200 bg-violet-50 px-3 py-1.5 text-xs font-bold text-violet-700">{row.payroll ? 'Regenerate' : 'Generate Payroll'}</button>
+                          {canGeneratePayroll ? <button onClick={() => openGenerate(row)} className="rounded-lg border border-violet-200 bg-violet-50 px-3 py-1.5 text-xs font-bold text-violet-700">{row.payroll ? 'Regenerate' : 'Generate Payroll'}</button> : null}
                           {row.payroll && row.payroll.status !== 'PAID' ? (
-                            <button onClick={() => window.confirm('Proceed to pay this payroll?') && payMutation.mutate({ id: row.payroll!.id })} className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-1.5 text-xs font-bold text-emerald-700">Proceed To Pay</button>
+                            canPayPayroll ? <button onClick={() => window.confirm('Proceed to pay this payroll?') && payMutation.mutate({ id: row.payroll!.id })} className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-1.5 text-xs font-bold text-emerald-700">Proceed To Pay</button> : null
                           ) : null}
                         </div>
                       </td>

@@ -5,6 +5,8 @@ import { HttpError } from './error.middleware';
 import { prisma } from '../config/db';
 import { getEffectivePermissionCodesForUser } from '../utils/employeePermissions';
 
+type PermissionRequirement = string | string[];
+
 export type AuthContext = {
   userId: string;
   schoolId: string | null;
@@ -126,11 +128,11 @@ export const authMiddleware = async (req: Request, _res: Response, next: NextFun
     role,
   };
 
-  if (schoolId && role && ['SCHOOL_ADMIN', 'TEACHER', 'ACCOUNTANT', 'LIBRARIAN', 'STAFF'].includes(role)) {
-    const permissionCode = resolvePermissionForPath(req.originalUrl, req.method);
-    if (permissionCode) {
+  if (schoolId && role && ['SCHOOL_ADMIN', 'TEACHER', 'ACCOUNTANT', 'LIBRARIAN', 'STAFF', 'PARENT', 'STUDENT'].includes(role)) {
+    const permissionRequirement = resolvePermissionForPath(req.originalUrl, req.method);
+    if (permissionRequirement) {
       const permissionCodes = await getEffectivePermissionCodesForUser(schoolId, decoded.sub, role);
-      if (!permissionCodes.includes(permissionCode)) {
+      if (!hasPermissionRequirement(permissionCodes, permissionRequirement)) {
         next(new HttpError(403, 'Access blocked by plan permissions'));
         return;
       }
@@ -139,6 +141,113 @@ export const authMiddleware = async (req: Request, _res: Response, next: NextFun
 
   next();
 };
+
+const hasPermissionRequirement = (permissionCodes: string[], requirement: PermissionRequirement) => {
+  if (Array.isArray(requirement)) return requirement.some((code) => permissionCodes.includes(code));
+  return permissionCodes.includes(requirement);
+};
+
+const studentLookupPermissions = [
+  'students.list',
+  'student.view',
+  'attendance.view',
+  'attendance.create',
+  'attendance.report',
+  'dormitory.view',
+  'transport.view',
+  'library.view',
+  'homework.view',
+  'fees.assignments.view',
+  'fees.collection.view',
+  'fees.invoice-generate.view',
+  'fees.invoices.view',
+  'exam.seating.view',
+  'exam.hallticket.view',
+  'academics.marks',
+  'reports.view',
+  'reports.students.view',
+  'reports.attendance.view',
+  'reports.transport.view',
+  'reports.dormitory.view',
+  'reports.fees.view',
+];
+
+const academicLookupPermissions = [
+  'academics.setup',
+  'student.view',
+  'students.list',
+  'students.add',
+  'attendance.view',
+  'attendance.create',
+  'attendance.report',
+  'staff.attendance.view',
+  'staff.attendance.create',
+  'dormitory.view',
+  'transport.view',
+  'library.view',
+  'homework.view',
+  'fees.assignments.view',
+  'fees.invoice-generate.view',
+  'fees.collection.view',
+  'exam.center.view',
+  'exam.room.view',
+  'exam.seating.view',
+  'exam.invigilator.view',
+  'exam.hallticket.view',
+  'academics.exams',
+  'academics.marks',
+  'reports.view',
+  'reports.students.view',
+  'reports.attendance.view',
+  'reports.academics.view',
+  'reports.exams.view',
+  'reports.transport.view',
+  'reports.dormitory.view',
+  'reports.fees.view',
+];
+
+const teacherLookupPermissions = [
+  'teachers.list',
+  'staff.view',
+  'staff.attendance.view',
+  'staff.attendance.create',
+  'academic.assign_subject.view',
+  'academic.assign_subject.create',
+  'academic.class_teacher.view',
+  'academic.class_teacher.create',
+  'academic.routine.view',
+  'academic.routine.create',
+  'exam.invigilator.view',
+  'exam.invigilator.manage',
+  'idcards.view',
+  'reports.view',
+  'reports.staff.view',
+  'reports.academics.view',
+  'reports.exams.view',
+];
+
+const staffLookupPermissions = [
+  'staff.view',
+  'teachers.list',
+  'staff.attendance.view',
+  'staff.attendance.create',
+  'transport.view',
+  'academic.assign_subject.view',
+  'academic.assign_subject.create',
+  'academic.class_teacher.view',
+  'academic.class_teacher.create',
+  'academic.routine.view',
+  'academic.routine.create',
+  'exam.invigilator.view',
+  'exam.invigilator.manage',
+  'idcards.view',
+  'payroll.view',
+  'payroll.generate',
+  'reports.view',
+  'reports.staff.view',
+  'reports.payroll.view',
+  'reports.transport.view',
+];
 
 export const resolvePermissionForPath = (path: string, method = 'GET') => {
   const pathOnly = path.split('?')[0] ?? path;
@@ -184,8 +293,9 @@ export const resolvePermissionForPath = (path: string, method = 'GET') => {
     if (verb === 'POST') return 'student.create';
     if (verb === 'PATCH' || verb === 'PUT') return 'student.edit';
     if (verb === 'DELETE') return 'student.delete';
-    return 'student.view';
+    return studentLookupPermissions;
   }
+  if (pathOnly.startsWith('/api/v1/imports')) return 'student.import';
 
   if (pathOnly.startsWith('/api/v1/staff/attendance/report')) return 'staff.attendance.report';
   if (pathOnly.startsWith('/api/v1/staff/attendance')) return verb === 'POST' ? 'staff.attendance.create' : 'staff.attendance.view';
@@ -207,7 +317,7 @@ export const resolvePermissionForPath = (path: string, method = 'GET') => {
     if (verb === 'POST') return 'staff.create';
     if (verb === 'PATCH' || verb === 'PUT') return 'staff.edit';
     if (verb === 'DELETE') return 'staff.delete';
-    return 'staff.view';
+    return staffLookupPermissions;
   }
 
   if (pathOnly.startsWith('/api/v1/fees')) {
@@ -285,10 +395,12 @@ export const resolvePermissionForPath = (path: string, method = 'GET') => {
   if (pathOnly.startsWith('/api/v1/leave/balances')) return 'leave.balance.view';
   if (/^\/api\/v1\/leave\/(applications|requests)\/[^/]+\/(status|approve|reject)$/.test(pathOnly)) return 'leave.approve.edit';
   if (/^\/api\/v1\/leave\/(applications|requests)/.test(pathOnly)) {
+    const isMineRequest = /[?&]mine=true(?:&|$)/.test(path);
     if (verb === 'POST') return 'leave.apply.create';
-    if (verb === 'PATCH' || verb === 'PUT') return 'leave.apply.edit';
-    if (verb === 'DELETE') return 'leave.apply.delete';
-    return 'leave.apply.view';
+    if (verb === 'GET') return isMineRequest ? 'leave.apply.view' : 'leave.approve.view';
+    if (verb === 'PATCH' || verb === 'PUT') return isMineRequest ? 'leave.apply.edit' : 'leave.approve.edit';
+    if (verb === 'DELETE') return isMineRequest ? 'leave.apply.delete' : 'leave.approve.delete';
+    return isMineRequest ? 'leave.apply.view' : 'leave.approve.view';
   }
 
   if (pathOnly.startsWith('/api/v1/exams/centers')) {
@@ -317,15 +429,15 @@ export const resolvePermissionForPath = (path: string, method = 'GET') => {
     return 'compliance.view';
   }
 
-  const targets: Array<{ prefix: string; code: string }> = [
+  const targets: Array<{ prefix: string; code: PermissionRequirement }> = [
     { prefix: '/api/v1/ai-assistant', code: 'ai.assistant.use' },
     { prefix: '/api/v1/schools', code: verb === 'GET' ? 'school.onboarding.view' : 'school.onboarding.manage' },
     { prefix: '/api/v1/teachers/onboarding', code: verb === 'GET' ? 'teacher.onboarding.view' : 'teacher.onboarding.manage' },
-    { prefix: '/api/v1/teachers/', code: pathOnly.includes('/credentials/') ? 'teacher.credentials.manage' : pathOnly.includes('/onboarding') ? (verb === 'GET' ? 'teacher.onboarding.view' : 'teacher.onboarding.manage') : 'teachers.list' },
+    { prefix: '/api/v1/teachers/', code: pathOnly.includes('/credentials/') ? 'teacher.credentials.manage' : pathOnly.includes('/onboarding') ? (verb === 'GET' ? 'teacher.onboarding.view' : 'teacher.onboarding.manage') : verb === 'POST' ? 'teachers.add' : teacherLookupPermissions },
     { prefix: '/api/v1/academics/timetable/teacher', code: 'attendance.view' },
-    { prefix: '/api/v1/teachers', code: 'teachers.list' },
-    { prefix: '/api/v1/teacher-assignments', code: 'teachers.list' },
-    { prefix: '/api/v1/academic-setup', code: 'academics.setup' },
+    { prefix: '/api/v1/teachers', code: verb === 'POST' ? 'teachers.add' : teacherLookupPermissions },
+    { prefix: '/api/v1/teacher-assignments', code: teacherLookupPermissions },
+    { prefix: '/api/v1/academic-setup', code: verb === 'GET' ? academicLookupPermissions : 'academics.setup' },
     { prefix: '/api/v1/dormitories', code: 'dormitory.view' },
     { prefix: '/api/v1/transport', code: 'transport.view' },
     { prefix: '/api/v1/homework', code: 'homework.view' },
@@ -335,8 +447,9 @@ export const resolvePermissionForPath = (path: string, method = 'GET') => {
     { prefix: '/api/v1/attendance-summary', code: 'attendance.view' },
     { prefix: '/api/v1/attendance-approval', code: 'attendance.view' },
     { prefix: '/api/v1/leave', code: 'leave.apply.view' },
-    { prefix: '/api/v1/academics', code: 'academics.setup' },
+    { prefix: '/api/v1/academics', code: verb === 'GET' ? academicLookupPermissions : 'academics.setup' },
     { prefix: '/api/v1/exams', code: 'academics.exams' },
+    { prefix: '/api/v1/users/school-users', code: 'settings.access' },
     { prefix: '/api/v1/users/employee-permissions', code: 'settings.access' },
     { prefix: '/api/v1/audit-logs', code: 'audit.view' },
     { prefix: '/api/v1/tickets', code: 'support.view' },

@@ -142,6 +142,7 @@ export default function HomeworkPage() {
   const { data: session, isLoading: sessionLoading } = useQuery({ queryKey: ['session'], queryFn: getSession });
   const isSuperAdmin = session?.role === 'SUPER_ADMIN';
   const isSchoolAdmin = session?.role === 'SCHOOL_ADMIN';
+  const permissionCodes = session?.permissionCodes ?? [];
   const schoolsQuery = useQuery({
     queryKey: ['schools', 'homework'],
     queryFn: () => listSchools({ limit: 100, status: 'ACTIVE' }),
@@ -156,7 +157,7 @@ export default function HomeworkPage() {
 
   const effectiveSchoolId = isSuperAdmin ? selectedSchoolId : session?.schoolId ?? '';
   const scopedParams = effectiveSchoolId ? { schoolId: effectiveSchoolId } : undefined;
-  const canUsePage = isSuperAdmin || isSchoolAdmin;
+  const canUsePage = isSuperAdmin || isSchoolAdmin || permissionCodes.includes('homework.view');
   const canQuery = Boolean(canUsePage && effectiveSchoolId);
 
   const classesQuery = useQuery({

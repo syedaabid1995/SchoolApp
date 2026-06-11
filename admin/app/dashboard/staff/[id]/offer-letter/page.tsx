@@ -7,7 +7,6 @@ import FullPageLoader from '../../../../../components/FullPageLoader';
 import PageHeader from '../../../../../components/PageHeader';
 import { getSession } from '../../../../../services/auth.service';
 import { getStaff, type Staff } from '../../../../../services/staff.service';
-import { SchoolAdminOnly } from '../../_components/SchoolAdminOnly';
 
 const fullName = (staff?: Staff | null) => (staff ? staff.fullName ?? `${staff.firstName ?? ''} ${staff.lastName ?? ''}`.trim() : '');
 
@@ -38,11 +37,19 @@ export default function OfferLetterPage() {
   const staffId = params.id as string;
   const { data: session, isLoading: sessionLoading } = useQuery({ queryKey: ['session'], queryFn: getSession });
   const isSchoolAdmin = session?.role === 'SCHOOL_ADMIN';
-  const staffQuery = useQuery({ queryKey: ['staff-detail', staffId], queryFn: () => getStaff(staffId), enabled: Boolean(isSchoolAdmin && staffId) });
+  const permissionCodes = session?.permissionCodes ?? [];
+  const canViewOfferLetter = isSchoolAdmin || permissionCodes.includes('staff.view') || permissionCodes.includes('staff.document.view');
+  const staffQuery = useQuery({ queryKey: ['staff-detail', staffId], queryFn: () => getStaff(staffId), enabled: Boolean(canViewOfferLetter && staffId) });
   const staff = staffQuery.data;
 
   if (sessionLoading || !session?.role) return <FullPageLoader label="Checking staff access..." />;
-  if (!isSchoolAdmin) return <SchoolAdminOnly moduleName="offer letters" />;
+  if (!canViewOfferLetter) {
+    return (
+      <section className="rounded-2xl border border-amber-200 bg-amber-50 p-6 text-sm font-semibold text-amber-800">
+        Offer letters are not enabled for your role. Ask a School Admin to update Role Permissions.
+      </section>
+    );
+  }
   if (staffQuery.isLoading) return <FullPageLoader label="Preparing offer letter..." />;
 
   if (!staff) {

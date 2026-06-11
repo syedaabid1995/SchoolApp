@@ -15,7 +15,6 @@ import {
   type StaffAttendanceReportRow,
   type StaffAttendanceStatus,
 } from '../../../../services/staff.service';
-import { SchoolAdminOnly } from '../_components/SchoolAdminOnly';
 
 const roles = ['SCHOOL_ADMIN', 'TEACHER', 'ACCOUNTANT', 'LIBRARIAN', 'STAFF'];
 const statuses: StaffAttendanceStatus[] = ['PRESENT', 'LATE', 'ABSENT', 'HOLIDAY', 'HALF_DAY', 'LEAVE'];
@@ -105,7 +104,12 @@ export default function StaffAttendancePage() {
 
   const { data: session, isLoading: sessionLoading } = useQuery({ queryKey: ['session'], queryFn: getSession });
   const isSchoolAdmin = session?.role === 'SCHOOL_ADMIN';
-  const staffQuery = useQuery({ queryKey: ['staff-options', criteria.role], queryFn: () => listStaff({ limit: 100, role: criteria.role || undefined }), enabled: isSchoolAdmin });
+  const permissionCodes = session?.permissionCodes ?? [];
+  const hasPermission = (code: string) => isSchoolAdmin || permissionCodes.includes(code);
+  const canViewAttendance = hasPermission('staff.attendance.view') || hasPermission('staff.attendance.report') || hasPermission('staff.attendance.create') || hasPermission('staff.attendance.edit');
+  const canMarkAttendance = hasPermission('staff.attendance.create') || hasPermission('staff.attendance.edit');
+  const canViewReport = hasPermission('staff.attendance.report') || hasPermission('staff.attendance.view');
+  const staffQuery = useQuery({ queryKey: ['staff-options', criteria.role], queryFn: () => listStaff({ limit: 100, role: criteria.role || undefined }), enabled: canViewAttendance });
 
   const attendanceQuery = useQuery({
     queryKey: ['staff-attendance', criteria.role, criteria.staffId, criteria.date],
@@ -144,7 +148,14 @@ export default function StaffAttendancePage() {
   });
 
   if (sessionLoading || !session?.role) return <FullPageLoader label="Checking attendance access..." />;
-  if (!isSchoolAdmin) return <SchoolAdminOnly moduleName="staff attendance" />;
+  if (!canViewAttendance) {
+    return (
+      <section className="rounded-2xl border border-amber-200 bg-amber-50 p-6 text-sm font-semibold text-amber-800">
+        Staff attendance is not enabled for your role. Ask a School Admin to update Role Permissions.
+      </section>
+    );
+  }
+  const visibleTab = canMarkAttendance ? activeTab : 'report';
 
   return (
     <div className="min-h-screen bg-slate-100 pb-10">
@@ -153,12 +164,12 @@ export default function StaffAttendancePage() {
           title="Staff Attendance"
           subtitle="Mark staff attendance and inspect monthly attendance reports."
           breadcrumbs={[{ label: 'Dashboard', href: '/dashboard' }, { label: 'Staff', href: '/dashboard/staff' }, { label: 'Attendance' }]}
-          actions={<ShellButton onClick={() => activeTab === 'report' && reportQuery.data ? exportCsv(reportQuery.data.rows) : window.print()}>Export / Print</ShellButton>}
+          actions={<ShellButton onClick={() => visibleTab === 'report' && reportQuery.data ? exportCsv(reportQuery.data.rows) : window.print()}>Export / Print</ShellButton>}
         />
 
         <div className="mb-5 flex flex-wrap gap-2">
-          <ShellButton active={activeTab === 'mark'} onClick={() => setActiveTab('mark')}>Mark Attendance</ShellButton>
-          <ShellButton active={activeTab === 'report'} onClick={() => setActiveTab('report')}>Attendance Report</ShellButton>
+          {canMarkAttendance ? <ShellButton active={visibleTab === 'mark'} onClick={() => setActiveTab('mark')}>Mark Attendance</ShellButton> : null}
+          {canViewReport ? <ShellButton active={visibleTab === 'report'} onClick={() => setActiveTab('report')}>Attendance Report</ShellButton> : null}
         </div>
 
         <section className="mb-5 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
@@ -175,7 +186,7 @@ export default function StaffAttendancePage() {
               <option value="">All Staff</option>
               {staffOptions.map((staff) => <option key={staff.id} value={staff.id}>{staffName(staff)} ({staff.employeeNo ?? '-'})</option>)}
             </select>
-            {activeTab === 'mark' ? (
+            {visibleTab === 'mark' ? (
               <input type="date" value={criteria.date} onChange={(event) => setCriteria({ ...criteria, date: event.target.value })} className="rounded-xl border border-slate-200 px-3 py-2 text-sm" />
             ) : (
               <>
@@ -187,7 +198,7 @@ export default function StaffAttendancePage() {
             )}
           </div>
           <div className="mt-4 flex flex-wrap gap-2">
-            {activeTab === 'mark' ? (
+            {visibleTab === 'mark' ? (
               <ShellButton active onClick={loadRows} disabled={attendanceQuery.isFetching}>Load Staff</ShellButton>
             ) : (
               <>
@@ -198,7 +209,7 @@ export default function StaffAttendancePage() {
           </div>
         </section>
 
-        {activeTab === 'mark' ? (
+        {visibleTab === 'mark' && canMarkAttendance ? (
           <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
             <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
               <div>
@@ -206,7 +217,7 @@ export default function StaffAttendancePage() {
                 <p className="text-sm text-slate-500">{rows.length ? `${rows.length} staff loaded` : 'Load staff to mark attendance.'}</p>
               </div>
               <label className="flex items-center gap-2 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-sm font-bold text-amber-700">
-                <input type="checkbox" checked={holiday} onChange={(event) => setHoliday(event.target.checked)} />
+                <input type="checkbox" checked={holiday} onChange={(event) => setHoliday(event.target.checked)} disabled={!canMarkAttendance} />
                 Mark Holiday
               </label>
             </div>
@@ -234,12 +245,12 @@ export default function StaffAttendancePage() {
                         <td className="px-4 py-3">{row.employeeNo ?? row.staffNo ?? '-'}</td>
                         <td className="px-4 py-3">{String(row.role ?? row.roleName ?? '').replace('_', ' ')}</td>
                         <td className="px-4 py-3">
-                          <select disabled={holiday} value={row.status} onChange={(event) => setRows((current) => current.map((item) => item.id === row.id ? { ...item, status: event.target.value as StaffAttendanceStatus } : item))} className="rounded-xl border border-slate-200 px-3 py-2 text-sm disabled:bg-slate-50">
+                          <select disabled={holiday || !canMarkAttendance} value={row.status} onChange={(event) => setRows((current) => current.map((item) => item.id === row.id ? { ...item, status: event.target.value as StaffAttendanceStatus } : item))} className="rounded-xl border border-slate-200 px-3 py-2 text-sm disabled:bg-slate-50">
                             {statuses.map((status) => <option key={status} value={status}>{statusLabels[status]}</option>)}
                           </select>
                         </td>
                         <td className="px-4 py-3">
-                          <input disabled={holiday} value={row.note ?? ''} onChange={(event) => setRows((current) => current.map((item) => item.id === row.id ? { ...item, note: event.target.value } : item))} className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm disabled:bg-slate-50" />
+                          <input disabled={holiday || !canMarkAttendance} value={row.note ?? ''} onChange={(event) => setRows((current) => current.map((item) => item.id === row.id ? { ...item, note: event.target.value } : item))} className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm disabled:bg-slate-50" />
                         </td>
                       </tr>
                     ))
@@ -250,7 +261,7 @@ export default function StaffAttendancePage() {
               </table>
             </div>
             <div className="mt-4 flex justify-end">
-              <ShellButton active onClick={() => saveMutation.mutate()} disabled={saveMutation.isPending || (!holiday && !rows.length)}>Save Attendance</ShellButton>
+              <ShellButton active onClick={() => saveMutation.mutate()} disabled={!canMarkAttendance || saveMutation.isPending || (!holiday && !rows.length)}>Save Attendance</ShellButton>
             </div>
           </section>
         ) : (

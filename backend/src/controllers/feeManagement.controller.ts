@@ -91,7 +91,7 @@ const getRequestedSchoolId = (req: Request, bodySchoolId?: string | null) =>
 const requireFeeManager = (req: Request, requestedSchoolId?: string | null) => {
   if (!req.auth?.userId) throw new HttpError(401, 'Unauthorized');
 
-  if (req.auth.role === 'SCHOOL_ADMIN' || req.auth.role === 'ACCOUNTANT') {
+  if (req.auth.schoolId) {
     if (!req.auth.schoolId) throw new HttpError(403, 'School scope is required');
     if (requestedSchoolId && requestedSchoolId !== req.auth.schoolId) throw new HttpError(403, 'Tenant scope violation');
     return { schoolId: req.auth.schoolId, userId: req.auth.userId };
@@ -102,7 +102,7 @@ const requireFeeManager = (req: Request, requestedSchoolId?: string | null) => {
     return { schoolId: requestedSchoolId, userId: req.auth.userId };
   }
 
-  throw new HttpError(403, 'Only School Admin or Accountant can manage fees');
+  throw new HttpError(403, 'School scope is required to manage fees');
 };
 
 const resolveAcademicSessionId = async (schoolId: string, requested?: string | null) => {
@@ -427,7 +427,7 @@ const assertDiscountReferences = async (scope: FeeTenantScope, payload: Normaliz
 };
 
 const requireDiscountApprover = (req: Request) => {
-  if (req.auth?.role !== 'SCHOOL_ADMIN') throw new HttpError(403, 'Only School Admin can approve or reject discounts');
+  if (!req.auth?.schoolId && req.auth?.role !== 'SUPER_ADMIN') throw new HttpError(403, 'School scope is required to approve or reject discounts');
 };
 
 const assertDiscountApprovalAllowed = (req: Request, status: FeeDiscountStatus) => {
@@ -3697,5 +3697,4 @@ export const exportFeeReports = async (req: Request, res: Response) => {
   });
   res.send(Buffer.concat(chunks));
 };
-
 

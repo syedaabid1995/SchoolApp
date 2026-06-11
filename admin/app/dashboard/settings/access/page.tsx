@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { useEffect, useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { EMPLOYEE_MANAGED_ROLES, type EmployeeManagedRole } from '../../../../config/employee-permissions';
+import { PLAN_PERMISSION_MODULES, buildPlanPermissionGroups } from '../../../../config/plan-module-permissions';
 import { getSession } from '../../../../services/auth.service';
 import { getEmployeePermissions, updateEmployeePermissions } from '../../../../services/user.service';
 import { useNotify } from '../../../../components/NotificationProvider';
@@ -58,11 +59,23 @@ const roleColors: Record<ManagedRole, string> = {
   STAFF: 'bg-gray-100 text-gray-800 border-gray-200',
 };
 
+const moduleParents = Array.from(new Set(PLAN_PERMISSION_MODULES.map((module) => module.parent)));
+
+const getScopeCodesForParent = (parent: string) =>
+  Array.from(
+    new Set(
+      PLAN_PERMISSION_MODULES
+        .filter((module) => module.parent === parent)
+        .flatMap((module) => module.codes),
+    ),
+  );
+
 export default function AccessControlPage() {
   const notify = useNotify();
   const queryClient = useQueryClient();
   const [selectedRole, setSelectedRole] = useState<ManagedRole>('TEACHER');
   const [selectedEmployeeId, setSelectedEmployeeId] = useState('');
+  const [selectedParent, setSelectedParent] = useState(moduleParents[0] ?? 'Dashboard');
   const [editedCodes, setEditedCodes] = useState<string[]>([]);
 
   const { data: session } = useQuery({
@@ -76,24 +89,19 @@ export default function AccessControlPage() {
 
   const isSuperAdminRole = session?.role === 'SUPER_ADMIN';
   const canManage = session?.role === 'SCHOOL_ADMIN';
+  const scopeCodes = useMemo(() => getScopeCodesForParent(selectedParent), [selectedParent]);
 
   const { data, isLoading } = useQuery({
-    queryKey: ['employee-permissions', selectedRole, schoolId, selectedEmployeeId],
-    queryFn: () => getEmployeePermissions(selectedRole, schoolId, selectedEmployeeId || undefined),
+    queryKey: ['employee-permissions', selectedRole, schoolId, selectedEmployeeId, selectedParent],
+    queryFn: () => getEmployeePermissions(selectedRole, schoolId, selectedEmployeeId || undefined, scopeCodes),
     enabled: Boolean(canManage && schoolId),
     refetchOnWindowFocus: false,
-    refetchOnMount: false,
-    staleTime: 60_000,
+    refetchOnMount: 'always',
+    staleTime: 0,
   });
 
-  const groupedPermissions = useMemo(() => {
-    const source = data?.permissions ?? [];
-    return source.reduce<Record<string, typeof source>>((acc, item) => {
-      if (!acc[item.group]) acc[item.group] = [];
-      acc[item.group].push(item);
-      return acc;
-    }, {});
-  }, [data]);
+  const moduleGroups = useMemo(() => buildPlanPermissionGroups(data?.permissions ?? []), [data?.permissions]);
+  const selectedGroup = moduleGroups.find((group) => group.parent === selectedParent) ?? moduleGroups[0] ?? null;
 
   useEffect(() => {
     if (!data) return;
@@ -107,22 +115,22 @@ export default function AccessControlPage() {
         enabledCodes: editedCodes,
         schoolId,
         userId: selectedEmployeeId || undefined,
+        scopeCodes,
       }),
     onSuccess: async () => {
       notify.success('Permissions updated');
       await queryClient.invalidateQueries({ queryKey: ['employee-permissions', selectedRole, schoolId] });
+      await queryClient.invalidateQueries({ queryKey: ['session'] });
     },
     onError: (error: unknown) => {
       notify.error(error instanceof Error ? error.message : 'Failed to update permissions');
     },
   });
 
-  const toggleCode = (code: string) => {
-    setEditedCodes((prev) => (prev.includes(code) ? prev.filter((item) => item !== code) : [...prev, code]));
-  };
-
   const allCodes = data?.permissions.map((permission) => permission.code) ?? [];
   const isAllSelected = allCodes.length > 0 && allCodes.every((code) => editedCodes.includes(code));
+  const enabledSet = useMemo(() => new Set(editedCodes), [editedCodes]);
+  const selectedEnabledCount = allCodes.filter((code) => enabledSet.has(code)).length;
 
   if (isSuperAdminRole) {
     return (
@@ -186,7 +194,7 @@ export default function AccessControlPage() {
             </h1>
           </div>
           <p className="text-slate-600 text-lg">
-            Manage role-based permissions and control access to different parts of the system.
+            Manage page and feature access for each role. Internal API permissions are handled automatically.
           </p>
           {data?.planName ? (
             <p className="mt-3 inline-flex items-center rounded-full border border-blue-100 bg-blue-50 px-3 py-1 text-xs font-medium text-blue-700">
@@ -308,7 +316,7 @@ export default function AccessControlPage() {
             </p>
           </div>
         </div>
-        
+
         {isLoading ? (
           <div className="flex items-center justify-center py-12">
             <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
@@ -377,94 +385,158 @@ export default function AccessControlPage() {
 
       {/* Permissions Section */}
       <section className="rounded-2xl border border-slate/10 bg-white p-6 shadow-sm hover:shadow-md transition-shadow">
-        <div className="flex items-center gap-3 mb-6">
-          <div className="p-2 rounded-lg bg-orange-100 text-orange-600">
-            <SettingsIcon />
+        <div className="mb-6 flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+          <div className="flex items-center gap-3">
+            <div className="p-2 rounded-lg bg-orange-100 text-orange-600">
+              <SettingsIcon />
+            </div>
+            <div>
+              <h2 className="text-xl font-semibold text-slate-800">Feature Access</h2>
+              <p className="text-sm text-slate-500">
+                Enable the pages and modules this role can use. Supporting lookups are allowed automatically inside enabled features.
+              </p>
+            </div>
           </div>
-          <div>
-            <h2 className="text-xl font-semibold text-slate-800">Permission Settings</h2>
-            <p className="text-sm text-slate-500">Control access to sidebar items and URL endpoints</p>
+          <div className="flex flex-wrap gap-2">
+            <button
+              type="button"
+              onClick={() => setEditedCodes(allCodes)}
+              disabled={isLoading || !allCodes.length}
+              className="rounded-xl border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-700 disabled:opacity-50"
+            >
+              Enable Section
+            </button>
+            <button
+              type="button"
+              onClick={() => setEditedCodes([])}
+              disabled={isLoading || !allCodes.length}
+              className="rounded-xl border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-700 disabled:opacity-50"
+            >
+              Disable Section
+            </button>
           </div>
         </div>
-        
-        <div className="space-y-6">
-          {Object.entries(groupedPermissions).map(([group, items]) => {
-            const groupEnabledCount = items.filter(item => editedCodes.includes(item.code)).length;
-            const groupProgress = (groupEnabledCount / items.length) * 100;
-            
+
+        <div className="mb-6 grid gap-2 md:grid-cols-2 xl:grid-cols-4">
+          {moduleParents.map((parent) => {
+            const active = parent === selectedParent;
             return (
-              <div key={group} className="rounded-xl border border-slate-200 overflow-hidden hover:border-slate-300 transition-colors">
-                <div className="bg-slate-50 px-6 py-4 border-b border-slate-200">
-                  <div className="flex items-center justify-between">
-                    <h3 className="font-semibold text-slate-800">{group}</h3>
-                    <div className="flex items-center gap-3">
-                      <span className="text-sm text-slate-600">
-                        {groupEnabledCount}/{items.length} enabled
-                      </span>
-                      <div className="w-16 h-2 bg-slate-200 rounded-full overflow-hidden">
-                        <div 
-                          className="h-full bg-gradient-to-r from-blue-500 to-green-500 transition-all duration-300"
-                          style={{ width: `${groupProgress}%` }}
-                        ></div>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-                <div className="p-4 space-y-3">
-                  {items.map((permission) => {
-                    const enabled = editedCodes.includes(permission.code);
-                    return (
-                      <div key={permission.code} className={`group flex items-center justify-between gap-4 rounded-xl border p-4 transition-all duration-200 hover:shadow-sm ${
-                        enabled 
-                          ? 'border-green-200 bg-green-50/50' 
-                          : 'border-slate-200 bg-white hover:border-slate-300'
-                      }`}>
-                        <div className="min-w-0 flex-1">
-                          <div className="flex items-center gap-2 mb-1">
-                            <p className={`font-medium transition-colors ${
-                              enabled ? 'text-green-800' : 'text-slate-800'
-                            }`}>
-                              {permission.label}
-                            </p>
-                            {enabled && (
-                              <div className="w-5 h-5 rounded-full bg-green-500 flex items-center justify-center">
-                                <CheckIcon />
-                              </div>
-                            )}
-                          </div>
-                          <p className={`text-xs font-mono transition-colors ${
-                            enabled ? 'text-green-600' : 'text-slate-500'
-                          }`}>
-                            {permission.path}
-                          </p>
-                        </div>
-                        <button
-                          type="button"
-                          onClick={() => toggleCode(permission.code)}
-                          className={`relative h-6 w-11 rounded-full p-1 transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-offset-2 ${
-                            enabled
-                              ? 'bg-green-500 focus:ring-green-500'
-                              : 'bg-gray-500 focus:ring-gray-500'
-                          }`}
-                        >
-                          <span
-                            className={`block h-4 w-4 rounded-full bg-white shadow-lg transition-transform duration-200 ${
-                              enabled ? 'translate-x-5' : 'translate-x-0'
-                            }`}
-                          />
-                        </button>
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
+              <button
+                key={parent}
+                type="button"
+                onClick={() => setSelectedParent(parent)}
+                className={`rounded-xl border px-4 py-3 text-left transition ${
+                  active
+                    ? 'border-blue-200 bg-blue-50 text-blue-800 shadow-sm'
+                    : 'border-slate-200 bg-white text-slate-700 hover:border-blue-200 hover:bg-blue-50/40'
+                }`}
+              >
+                <span className="block text-sm font-bold">{parent}</span>
+                <span className="mt-1 block text-xs text-slate-500">
+                  {PLAN_PERMISSION_MODULES.filter((module) => module.parent === parent).length} modules
+                </span>
+              </button>
             );
           })}
         </div>
 
+        <div className="rounded-xl border border-slate-200">
+          <div className="flex flex-col gap-3 border-b border-slate-200 bg-slate-50 px-5 py-4 md:flex-row md:items-center md:justify-between">
+            <div>
+              <h3 className="font-semibold text-slate-800">{selectedParent}</h3>
+              <p className="text-sm text-slate-500">
+                {selectedEnabledCount}/{allCodes.length} internal access rules enabled through selected modules.
+              </p>
+            </div>
+            <div className="h-2 w-full overflow-hidden rounded-full bg-slate-200 md:w-36">
+              <div
+                className="h-full rounded-full bg-gradient-to-r from-blue-500 to-green-500 transition-all duration-300"
+                style={{ width: allCodes.length ? `${Math.round((selectedEnabledCount / allCodes.length) * 100)}%` : '0%' }}
+              />
+            </div>
+          </div>
+
+          {isLoading ? (
+            <div className="space-y-3 p-5">
+              {Array.from({ length: 4 }).map((_, index) => (
+                <div key={index} className="h-20 animate-pulse rounded-xl bg-slate-100" />
+              ))}
+            </div>
+          ) : selectedGroup ? (
+            <div className="grid gap-4 p-5 lg:grid-cols-2">
+              {selectedGroup.modules.map((module) => {
+                const moduleCodes = module.permissions.map((permission) => permission.code);
+                const enabledCount = moduleCodes.filter((code) => enabledSet.has(code)).length;
+                const moduleIncluded = moduleCodes.length > 0 && enabledCount === moduleCodes.length;
+                const modulePartial = enabledCount > 0 && enabledCount < moduleCodes.length;
+                return (
+                  <div
+                    key={`${module.module}-${module.path}`}
+                    className={`rounded-xl border p-5 transition ${
+                      moduleIncluded
+                        ? 'border-emerald-200 bg-emerald-50/60'
+                        : modulePartial
+                          ? 'border-amber-200 bg-amber-50/60'
+                          : 'border-slate-200 bg-white hover:border-blue-200'
+                    }`}
+                  >
+                    <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
+                      <div>
+                        <div className="flex flex-wrap items-center gap-2">
+                          <h4 className="font-semibold text-slate-900">{module.module}</h4>
+                          <span
+                            className={`rounded-full px-2.5 py-1 text-xs font-semibold ${
+                              moduleIncluded
+                                ? 'bg-emerald-100 text-emerald-700'
+                                : modulePartial
+                                  ? 'bg-amber-100 text-amber-700'
+                                  : 'bg-slate-100 text-slate-600'
+                            }`}
+                          >
+                            {moduleIncluded ? 'Enabled' : modulePartial ? 'Partial' : 'Disabled'}
+                          </span>
+                        </div>
+                        <p className="mt-1 text-sm text-slate-500">{module.description}</p>
+                        <p className="mt-1 text-xs font-mono text-slate-400">{module.path}</p>
+                        <p className="mt-3 text-xs font-medium text-slate-500">
+                          Includes {moduleCodes.length} internal access rule{moduleCodes.length === 1 ? '' : 's'} needed for this feature.
+                        </p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const next = new Set(editedCodes);
+                          moduleCodes.forEach((code) => {
+                            if (moduleIncluded) next.delete(code);
+                            else next.add(code);
+                          });
+                          setEditedCodes(Array.from(next));
+                        }}
+                        className={`w-28 rounded-full px-3 py-1 text-xs font-semibold ${
+                          moduleIncluded
+                            ? 'bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200'
+                            : modulePartial
+                              ? 'bg-amber-50 text-amber-700 ring-1 ring-amber-200'
+                              : 'bg-slate-100 text-slate-600 ring-1 ring-slate-200'
+                        }`}
+                      >
+                        {moduleIncluded ? 'Enabled' : modulePartial ? 'Partial' : 'Disabled'}
+                      </button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          ) : (
+            <div className="p-10 text-center text-sm text-slate-500">
+              No permissions are available for this module in the current subscription plan.
+            </div>
+          )}
+        </div>
+
         <div className="mt-8 flex items-center justify-between pt-6 border-t border-slate-200">
           <div className="text-sm text-slate-600">
-            {editedCodes.length} of {allCodes.length} permissions enabled
+            Saving updates only <span className="font-semibold text-slate-800">{selectedParent}</span> feature access.
           </div>
           <button
             type="button"

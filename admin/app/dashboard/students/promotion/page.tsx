@@ -9,7 +9,6 @@ import { getSession } from '../../../../services/auth.service';
 import { listAcademicYears } from '../../../../services/academic.service';
 import { listSetupClasses, listSetupSections } from '../../../../services/academic-setup.service';
 import { previewStudentPromotion, promoteStudents, type StudentPromotionResult } from '../../../../services/student-operations.service';
-import { SchoolAdminOnly } from '../_components/SchoolAdminOnly';
 
 export default function StudentPromotionPage() {
   const notify = useNotify();
@@ -26,9 +25,13 @@ export default function StudentPromotionPage() {
 
   const { data: session, isLoading: sessionLoading } = useQuery({ queryKey: ['session'], queryFn: getSession });
   const isSchoolAdmin = session?.role === 'SCHOOL_ADMIN';
-  const yearsQuery = useQuery({ queryKey: ['academic-years'], queryFn: () => listAcademicYears(), enabled: isSchoolAdmin });
-  const classesQuery = useQuery({ queryKey: ['setup-classes'], queryFn: () => listSetupClasses(), enabled: isSchoolAdmin });
-  const sectionsQuery = useQuery({ queryKey: ['setup-sections'], queryFn: () => listSetupSections(), enabled: isSchoolAdmin });
+  const permissionCodes = session?.permissionCodes ?? [];
+  const hasPermission = (code: string) => isSchoolAdmin || permissionCodes.includes(code);
+  const canViewPromotion = hasPermission('student.promote.view');
+  const canCreatePromotion = hasPermission('student.promote.create');
+  const yearsQuery = useQuery({ queryKey: ['academic-years'], queryFn: () => listAcademicYears(), enabled: canViewPromotion });
+  const classesQuery = useQuery({ queryKey: ['setup-classes'], queryFn: () => listSetupClasses(), enabled: canViewPromotion });
+  const sectionsQuery = useQuery({ queryKey: ['setup-sections'], queryFn: () => listSetupSections(), enabled: canViewPromotion });
 
   const fromSections = useMemo(
     () => (sectionsQuery.data ?? []).filter((section) => (form.fromClassId ? section.classSections?.some((link) => link.classId === form.fromClassId) || section.classId === form.fromClassId : true)),
@@ -80,7 +83,13 @@ export default function StudentPromotionPage() {
   });
 
   if (sessionLoading || !session?.role) return <FullPageLoader label="Checking promotion access..." />;
-  if (!isSchoolAdmin) return <SchoolAdminOnly moduleName="student promotion" />;
+  if (!canViewPromotion) {
+    return (
+      <section className="rounded-2xl border border-amber-200 bg-amber-50 p-6 text-sm font-semibold text-amber-800">
+        Student promotion is not enabled for your role. Ask a School Admin to update Role Permissions.
+      </section>
+    );
+  }
 
   const students = previewQuery.data?.students ?? [];
 
@@ -173,7 +182,7 @@ export default function StudentPromotionPage() {
             </table>
           </div>
           <div className="mt-4 flex justify-end">
-            <button disabled={!students.length || promoteMutation.isPending} onClick={() => window.confirm('Promote selected students?') && promoteMutation.mutate()} className="rounded-xl bg-[var(--theme-button-bg)] px-5 py-2 text-sm font-bold text-[var(--theme-button-text)] shadow-sm disabled:opacity-50">
+            <button disabled={!canCreatePromotion || !students.length || promoteMutation.isPending} onClick={() => window.confirm('Promote selected students?') && promoteMutation.mutate()} className="rounded-xl bg-[var(--theme-button-bg)] px-5 py-2 text-sm font-bold text-[var(--theme-button-text)] shadow-sm disabled:opacity-50">
               Promote Students
             </button>
           </div>

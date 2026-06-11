@@ -226,6 +226,7 @@ export const getSession = async () => {
       mustChangePassword: false,
       schoolName: null,
       permissionCodes: [],
+      hasDashboardAccess: false,
     };
   }
   return res.json() as Promise<{
@@ -237,5 +238,6 @@ export const getSession = async () => {
     displayName?: string | null;
     schoolName?: string | null;
     permissionCodes?: string[];
+    hasDashboardAccess?: boolean;
   }>;
 };

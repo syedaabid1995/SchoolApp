@@ -52,13 +52,21 @@ test('academic setup rejects Super Admin because this is School Admin setup', as
   expectForbidden(response);
 });
 
-test('academic setup rejects teacher and parent roles', async () => {
-  for (const role of ['TEACHER', 'PARENT', 'STUDENT'] as const) {
+test('academic setup rejects parent and student roles', async () => {
+  for (const role of ['PARENT', 'STUDENT'] as const) {
     const response = await server.request('GET', '/api/v1/academic-setup/classes', {
       user: getUser(role),
     });
     expectForbidden(response);
   }
+});
+
+test('Teacher can read academic setup data when the role grants timetable or academic feature access', async () => {
+  const response = await server.request('GET', '/api/v1/academic-setup/classes', {
+    user: getUser('TEACHER'),
+  });
+
+  expectSuccess(response);
 });
 
 test('School Admin can list and create school-scoped academic setup data', async () => {
@@ -68,7 +76,7 @@ test('School Admin can list and create school-scoped academic setup data', async
 
   const createResponse = await server.request('POST', '/api/v1/academic-setup/sections', {
     user: schoolAdmin,
-    body: { name: 'A' },
+    body: { name: 'Security Test Section' },
   });
   expectSuccess(createResponse);
 });

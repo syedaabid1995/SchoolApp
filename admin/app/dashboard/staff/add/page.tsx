@@ -24,7 +24,6 @@ import {
   type StaffPayload,
   type StaffRole,
 } from '../../../../services/staff.service';
-import { SchoolAdminOnly } from '../_components/SchoolAdminOnly';
 
 type Preset = {
   key: string;
@@ -128,11 +127,16 @@ export default function AddStaffPage() {
 
   const { data: session, isLoading: sessionLoading } = useQuery({ queryKey: ['session'], queryFn: getSession });
   const isSchoolAdmin = session?.role === 'SCHOOL_ADMIN';
-  const departmentsQuery = useQuery({ queryKey: ['staff-departments'], queryFn: listDepartments, enabled: isSchoolAdmin });
-  const designationsQuery = useQuery({ queryKey: ['staff-designations'], queryFn: listDesignations, enabled: isSchoolAdmin });
-  const leaveTypesQuery = useQuery({ queryKey: ['leave-types'], queryFn: listLeaveTypes, enabled: isSchoolAdmin });
-  const leaveDefinesQuery = useQuery({ queryKey: ['leave-defines'], queryFn: listLeaveDefines, enabled: isSchoolAdmin });
-  const staffQuery = useQuery({ queryKey: ['staff-detail', editId], queryFn: () => getStaff(editId!), enabled: Boolean(isSchoolAdmin && editId) });
+  const permissionCodes = session?.permissionCodes ?? [];
+  const hasPermission = (code: string) => isSchoolAdmin || permissionCodes.includes(code);
+  const canCreateStaff = hasPermission('staff.create');
+  const canEditStaff = hasPermission('staff.edit');
+  const canUseStaffForm = editId ? canEditStaff : canCreateStaff;
+  const departmentsQuery = useQuery({ queryKey: ['staff-departments'], queryFn: listDepartments, enabled: canUseStaffForm });
+  const designationsQuery = useQuery({ queryKey: ['staff-designations'], queryFn: listDesignations, enabled: canUseStaffForm });
+  const leaveTypesQuery = useQuery({ queryKey: ['leave-types'], queryFn: listLeaveTypes, enabled: canUseStaffForm });
+  const leaveDefinesQuery = useQuery({ queryKey: ['leave-defines'], queryFn: listLeaveDefines, enabled: canUseStaffForm });
+  const staffQuery = useQuery({ queryKey: ['staff-detail', editId], queryFn: () => getStaff(editId!), enabled: Boolean(canUseStaffForm && editId) });
 
   const leaveRows = useMemo(() => {
     const defines = (leaveDefinesQuery.data ?? []).filter((item) => item.roleName === form.roleName);
@@ -319,7 +323,13 @@ export default function AddStaffPage() {
   };
 
   if (sessionLoading || !session?.role) return <FullPageLoader label="Checking staff access..." />;
-  if (!isSchoolAdmin) return <SchoolAdminOnly moduleName="staff management" />;
+  if (!canUseStaffForm) {
+    return (
+      <section className="rounded-2xl border border-amber-200 bg-amber-50 p-6 text-sm font-semibold text-amber-800">
+        Employee {editId ? 'editing' : 'creation'} is not enabled for your role. Ask a School Admin to update Role Permissions.
+      </section>
+    );
+  }
 
   const inputClass = 'w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-900 outline-none transition focus:border-[var(--theme-button-bg)] focus:ring-4 focus:ring-violet-100';
   const labelClass = 'mb-1 block text-xs font-bold uppercase tracking-wide text-slate-500';

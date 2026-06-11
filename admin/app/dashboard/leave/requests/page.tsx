@@ -25,7 +25,6 @@ import {
   type LeaveStatus,
   type LeaveType,
 } from '../../../../services/leave.service';
-import { SchoolAdminOnly } from '../../staff/_components/SchoolAdminOnly';
 
 type TabKey = 'requests' | 'types' | 'defines';
 
@@ -71,16 +70,30 @@ export default function LeaveRequestsPage() {
 
   const { data: session, isLoading: sessionLoading } = useQuery({ queryKey: ['session'], queryFn: getSession });
   const isSchoolAdmin = session?.role === 'SCHOOL_ADMIN';
+  const permissionCodes = session?.permissionCodes ?? [];
+  const hasPermission = (code: string) => isSchoolAdmin || permissionCodes.includes(code);
+  const canViewLeaveRequests = hasPermission('leave.approve.view');
+  const canEditLeaveRequests = hasPermission('leave.approve.edit');
+  const canDeleteLeaveRequests = hasPermission('leave.approve.delete');
+  const canViewLeaveTypes = hasPermission('leave.type.view');
+  const canCreateLeaveTypes = hasPermission('leave.type.create');
+  const canEditLeaveTypes = hasPermission('leave.type.edit');
+  const canDeleteLeaveTypes = hasPermission('leave.type.delete');
+  const canViewLeaveDefines = hasPermission('leave.define.view');
+  const canCreateLeaveDefines = hasPermission('leave.define.create');
+  const canEditLeaveDefines = hasPermission('leave.define.edit');
+  const canDeleteLeaveDefines = hasPermission('leave.define.delete');
+  const canUseLeaveManagement = canViewLeaveRequests || canViewLeaveTypes || canViewLeaveDefines;
 
-  const typesQuery = useQuery({ queryKey: ['leave-types'], queryFn: listLeaveTypes, enabled: isSchoolAdmin });
-  const definesQuery = useQuery({ queryKey: ['leave-defines'], queryFn: listLeaveDefines, enabled: isSchoolAdmin });
-  const staffQuery = useQuery({ queryKey: ['leave-staff-options', filters.roleName], queryFn: () => listStaff({ limit: 100, role: filters.roleName || undefined }), enabled: isSchoolAdmin });
+  const typesQuery = useQuery({ queryKey: ['leave-types'], queryFn: listLeaveTypes, enabled: canViewLeaveTypes || canViewLeaveDefines });
+  const definesQuery = useQuery({ queryKey: ['leave-defines'], queryFn: listLeaveDefines, enabled: canViewLeaveDefines });
+  const staffQuery = useQuery({ queryKey: ['leave-staff-options', filters.roleName], queryFn: () => listStaff({ limit: 100, role: filters.roleName || undefined }), enabled: canViewLeaveRequests });
   const requestsQuery = useQuery({
     queryKey: ['leave-applications', filters],
     queryFn: () => listLeaveApplications({ status: filters.status as LeaveStatus || undefined, roleName: filters.roleName || undefined, staffId: filters.staffId || undefined, search: filters.search || undefined }),
-    enabled: isSchoolAdmin,
+    enabled: canViewLeaveRequests,
   });
-  const detailQuery = useQuery({ queryKey: ['leave-application-detail', selectedId], queryFn: () => getLeaveApplication(selectedId), enabled: Boolean(isSchoolAdmin && selectedId) });
+  const detailQuery = useQuery({ queryKey: ['leave-application-detail', selectedId], queryFn: () => getLeaveApplication(selectedId), enabled: Boolean(canViewLeaveRequests && selectedId) });
 
   const requests = useMemo(() => requestsQuery.data ?? [], [requestsQuery.data]);
   const types = typesQuery.data ?? [];
@@ -159,7 +172,13 @@ export default function LeaveRequestsPage() {
   };
 
   if (sessionLoading || !session?.role) return <FullPageLoader label="Checking leave access..." />;
-  if (!isSchoolAdmin) return <SchoolAdminOnly moduleName="leave management" />;
+  if (!canUseLeaveManagement) {
+    return (
+      <section className="rounded-2xl border border-amber-200 bg-amber-50 p-6 text-sm font-semibold text-amber-800">
+        Leave management is not enabled for your role. Ask a School Admin to update Role Permissions.
+      </section>
+    );
+  }
 
   const selected = detailQuery.data;
 
@@ -174,18 +193,18 @@ export default function LeaveRequestsPage() {
         />
 
         <div className="mb-5 flex flex-wrap gap-2">
-          {[
-            ['requests', 'Approve Leave Request'],
-            ['types', 'Leave Type'],
-            ['defines', 'Leave Define'],
-          ].map(([key, label]) => (
+          {([
+            ['requests', 'Approve Leave Request', canViewLeaveRequests],
+            ['types', 'Leave Type', canViewLeaveTypes],
+            ['defines', 'Leave Define', canViewLeaveDefines],
+          ] as Array<[TabKey, string, boolean]>).filter((item) => item[2]).map(([key, label]) => (
             <button key={key} onClick={() => setTab(key as TabKey)} className={`rounded-xl px-4 py-2 text-sm font-bold shadow-sm ${tab === key ? 'bg-[var(--theme-button-bg)] text-[var(--theme-button-text)]' : 'border border-slate-200 bg-white text-slate-700'}`}>
               {label}
             </button>
           ))}
         </div>
 
-        {tab === 'types' ? (
+        {tab === 'types' && canViewLeaveTypes ? (
           <div className="grid gap-5 xl:grid-cols-[360px_1fr]">
             <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
               <h2 className="text-lg font-bold text-slate-950">{typeForm.id ? 'Edit Leave Type' : 'Add Leave Type'}</h2>
@@ -194,15 +213,15 @@ export default function LeaveRequestsPage() {
                 <input type="number" value={typeForm.totalDays} onChange={(event) => setTypeForm({ ...typeForm, totalDays: Number(event.target.value) })} placeholder="Total days" className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm" />
                 <div className="flex justify-end gap-2">
                   {typeForm.id ? <button onClick={() => setTypeForm({ id: '', name: '', totalDays: 0 })} className="rounded-xl border border-slate-200 px-4 py-2 text-sm font-bold">Cancel</button> : null}
-                  <button onClick={() => typeMutation.mutate()} disabled={typeMutation.isPending} className="rounded-xl bg-[var(--theme-button-bg)] px-5 py-2 text-sm font-bold text-[var(--theme-button-text)] disabled:opacity-50">Save</button>
+                  {(typeForm.id ? canEditLeaveTypes : canCreateLeaveTypes) ? <button onClick={() => typeMutation.mutate()} disabled={typeMutation.isPending} className="rounded-xl bg-[var(--theme-button-bg)] px-5 py-2 text-sm font-bold text-[var(--theme-button-text)] disabled:opacity-50">Save</button> : null}
                 </div>
               </div>
             </section>
-            <LeaveTypeTable items={types} loading={typesQuery.isLoading} onEdit={(item) => setTypeForm({ id: item.id, name: item.name, totalDays: item.totalDays })} onDelete={(id) => window.confirm('Delete this leave type?') && deleteTypeMutation.mutate(id)} />
+            <LeaveTypeTable items={types} loading={typesQuery.isLoading} canEdit={canEditLeaveTypes} canDelete={canDeleteLeaveTypes} onEdit={(item) => setTypeForm({ id: item.id, name: item.name, totalDays: item.totalDays })} onDelete={(id) => window.confirm('Delete this leave type?') && deleteTypeMutation.mutate(id)} />
           </div>
         ) : null}
 
-        {tab === 'defines' ? (
+        {tab === 'defines' && canViewLeaveDefines ? (
           <div className="grid gap-5 xl:grid-cols-[420px_1fr]">
             <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
               <h2 className="text-lg font-bold text-slate-950">{defineForm.id ? 'Edit Leave Define' : 'Add Leave Define'}</h2>
@@ -217,15 +236,15 @@ export default function LeaveRequestsPage() {
                 <input type="number" value={defineForm.days} onChange={(event) => setDefineForm({ ...defineForm, days: Number(event.target.value) })} placeholder="Days" className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm" />
                 <div className="flex justify-end gap-2">
                   {defineForm.id ? <button onClick={() => setDefineForm({ id: '', roleName: 'TEACHER', leaveTypeId: '', days: 0 })} className="rounded-xl border border-slate-200 px-4 py-2 text-sm font-bold">Cancel</button> : null}
-                  <button onClick={() => defineMutation.mutate()} disabled={defineMutation.isPending} className="rounded-xl bg-[var(--theme-button-bg)] px-5 py-2 text-sm font-bold text-[var(--theme-button-text)] disabled:opacity-50">Save</button>
+                  {(defineForm.id ? canEditLeaveDefines : canCreateLeaveDefines) ? <button onClick={() => defineMutation.mutate()} disabled={defineMutation.isPending} className="rounded-xl bg-[var(--theme-button-bg)] px-5 py-2 text-sm font-bold text-[var(--theme-button-text)] disabled:opacity-50">Save</button> : null}
                 </div>
               </div>
             </section>
-            <LeaveDefineTable items={defines} loading={definesQuery.isLoading} onEdit={(item) => setDefineForm({ id: item.id, roleName: String(item.roleName), leaveTypeId: item.leaveTypeId, days: item.days })} onDelete={(id) => window.confirm('Delete this leave define?') && deleteDefineMutation.mutate(id)} />
+            <LeaveDefineTable items={defines} loading={definesQuery.isLoading} canEdit={canEditLeaveDefines} canDelete={canDeleteLeaveDefines} onEdit={(item) => setDefineForm({ id: item.id, roleName: String(item.roleName), leaveTypeId: item.leaveTypeId, days: item.days })} onDelete={(id) => window.confirm('Delete this leave define?') && deleteDefineMutation.mutate(id)} />
           </div>
         ) : null}
 
-        {tab === 'requests' ? (
+        {tab === 'requests' && canViewLeaveRequests ? (
           <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
             <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
               <div>
@@ -279,8 +298,8 @@ export default function LeaveRequestsPage() {
                         <td className="px-4 py-3"><span className={`rounded-full border px-2.5 py-1 text-xs font-bold ${statusClass[item.status]}`}>{item.status}</span></td>
                         <td className="px-4 py-3 text-right">
                           <div className="inline-flex gap-2">
-                            <button onClick={() => openDetail(item.id)} className="rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-bold">View/Edit</button>
-                            <button onClick={() => window.confirm('Delete this leave request?') && deleteRequestMutation.mutate(item.id)} className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-1.5 text-xs font-bold text-rose-700">Delete</button>
+                            <button onClick={() => openDetail(item.id)} className="rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-bold">{canEditLeaveRequests ? 'View/Edit' : 'View'}</button>
+                            {canDeleteLeaveRequests ? <button onClick={() => window.confirm('Delete this leave request?') && deleteRequestMutation.mutate(item.id)} className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-1.5 text-xs font-bold text-rose-700">Delete</button> : null}
                           </div>
                         </td>
                       </tr>
@@ -346,9 +365,9 @@ export default function LeaveRequestsPage() {
                     <input value={statusForm.note} onChange={(event) => setStatusForm({ ...statusForm, note: event.target.value })} placeholder="Review note" className="rounded-xl border border-slate-200 px-3 py-2 text-sm" />
                   </div>
                   <div className="mt-5 flex justify-end">
-                    <button onClick={() => statusMutation.mutate()} disabled={statusMutation.isPending} className="rounded-xl bg-[var(--theme-button-bg)] px-5 py-2 text-sm font-bold text-[var(--theme-button-text)] disabled:opacity-50">
+                    {canEditLeaveRequests ? <button onClick={() => statusMutation.mutate()} disabled={statusMutation.isPending} className="rounded-xl bg-[var(--theme-button-bg)] px-5 py-2 text-sm font-bold text-[var(--theme-button-text)] disabled:opacity-50">
                       Save Leave Status
-                    </button>
+                    </button> : null}
                   </div>
                 </>
               )}
@@ -369,7 +388,7 @@ function Info({ label, value }: { label: string; value?: string | number | null 
   );
 }
 
-function LeaveTypeTable({ items, loading, onEdit, onDelete }: { items: LeaveType[]; loading: boolean; onEdit: (item: LeaveType) => void; onDelete: (id: string) => void }) {
+function LeaveTypeTable({ items, loading, canEdit, canDelete, onEdit, onDelete }: { items: LeaveType[]; loading: boolean; canEdit: boolean; canDelete: boolean; onEdit: (item: LeaveType) => void; onDelete: (id: string) => void }) {
   return (
     <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
       <h2 className="mb-4 text-lg font-bold text-slate-950">Leave Type List</h2>
@@ -384,7 +403,7 @@ function LeaveTypeTable({ items, loading, onEdit, onDelete }: { items: LeaveType
                 <tr key={item.id}>
                   <td className="px-4 py-3 font-semibold">{item.name}</td>
                   <td className="px-4 py-3">{item.totalDays}</td>
-                  <td className="px-4 py-3 text-right"><button onClick={() => onEdit(item)} className="mr-2 rounded-lg border px-3 py-1.5 text-xs font-bold">Edit</button><button onClick={() => onDelete(item.id)} className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-1.5 text-xs font-bold text-rose-700">Delete</button></td>
+                  <td className="px-4 py-3 text-right">{canEdit ? <button onClick={() => onEdit(item)} className="mr-2 rounded-lg border px-3 py-1.5 text-xs font-bold">Edit</button> : null}{canDelete ? <button onClick={() => onDelete(item.id)} className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-1.5 text-xs font-bold text-rose-700">Delete</button> : null}</td>
                 </tr>
               )) : <tr><td colSpan={3} className="px-4 py-10 text-center text-slate-500">No leave types found.</td></tr>}
           </tbody>
@@ -394,7 +413,7 @@ function LeaveTypeTable({ items, loading, onEdit, onDelete }: { items: LeaveType
   );
 }
 
-function LeaveDefineTable({ items, loading, onEdit, onDelete }: { items: LeaveDefine[]; loading: boolean; onEdit: (item: LeaveDefine) => void; onDelete: (id: string) => void }) {
+function LeaveDefineTable({ items, loading, canEdit, canDelete, onEdit, onDelete }: { items: LeaveDefine[]; loading: boolean; canEdit: boolean; canDelete: boolean; onEdit: (item: LeaveDefine) => void; onDelete: (id: string) => void }) {
   return (
     <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
       <h2 className="mb-4 text-lg font-bold text-slate-950">Leave Define List</h2>
@@ -410,7 +429,7 @@ function LeaveDefineTable({ items, loading, onEdit, onDelete }: { items: LeaveDe
                   <td className="px-4 py-3 font-semibold">{String(item.roleName).replace('_', ' ')}</td>
                   <td className="px-4 py-3">{item.leaveType?.name ?? '-'}</td>
                   <td className="px-4 py-3">{item.days}</td>
-                  <td className="px-4 py-3 text-right"><button onClick={() => onEdit(item)} className="mr-2 rounded-lg border px-3 py-1.5 text-xs font-bold">Edit</button><button onClick={() => onDelete(item.id)} className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-1.5 text-xs font-bold text-rose-700">Delete</button></td>
+                  <td className="px-4 py-3 text-right">{canEdit ? <button onClick={() => onEdit(item)} className="mr-2 rounded-lg border px-3 py-1.5 text-xs font-bold">Edit</button> : null}{canDelete ? <button onClick={() => onDelete(item.id)} className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-1.5 text-xs font-bold text-rose-700">Delete</button> : null}</td>
                 </tr>
               )) : <tr><td colSpan={4} className="px-4 py-10 text-center text-slate-500">No leave definitions found.</td></tr>}
           </tbody>

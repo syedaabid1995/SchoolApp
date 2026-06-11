@@ -31,8 +31,8 @@ export const staffRouter = Router();
 
 staffRouter.use(authMiddleware);
 staffRouter.use((req: Request, _res: Response, next: NextFunction) => {
-  if (req.auth?.role === 'SCHOOL_ADMIN' && req.auth.schoolId) return next();
-  return next(new HttpError(403, 'Only School Admin can manage staff'));
+  if (req.auth?.schoolId) return next();
+  return next(new HttpError(403, 'School scope is required to manage staff'));
 });
 
 staffRouter.get('/departments', listDepartments);

@@ -8,7 +8,6 @@ import PageHeader from '../../../components/PageHeader';
 import { useNotify } from '../../../components/NotificationProvider';
 import { getSession } from '../../../services/auth.service';
 import { deleteStaff, listStaff, type Staff } from '../../../services/staff.service';
-import { SchoolAdminOnly } from './_components/SchoolAdminOnly';
 
 const roles = ['SCHOOL_ADMIN', 'TEACHER', 'ACCOUNTANT', 'LIBRARIAN', 'STAFF'];
 const pageSizeOptions = [10, 20, 50];
@@ -115,11 +114,17 @@ export default function StaffDirectoryPage() {
   const [limit, setLimit] = useState(10);
   const { data: session, isLoading: sessionLoading } = useQuery({ queryKey: ['session'], queryFn: getSession });
   const isSchoolAdmin = session?.role === 'SCHOOL_ADMIN';
+  const permissionCodes = session?.permissionCodes ?? [];
+  const hasPermission = (code: string) => isSchoolAdmin || permissionCodes.includes(code);
+  const canViewStaff = hasPermission('staff.view');
+  const canCreateStaff = hasPermission('staff.create');
+  const canEditStaff = hasPermission('staff.edit');
+  const canDeleteStaff = hasPermission('staff.delete');
 
   const staffQuery = useQuery({
     queryKey: ['staff', filters, page, limit],
     queryFn: () => listStaff({ page, limit, role: filters.role || undefined, staffId: filters.staffId || undefined, search: filters.search || undefined }),
-    enabled: isSchoolAdmin,
+    enabled: canViewStaff,
   });
 
   const rows = useMemo(() => staffQuery.data?.items ?? [], [staffQuery.data]);
@@ -166,7 +171,13 @@ export default function StaffDirectoryPage() {
   }, [rows]);
 
   if (sessionLoading || !session?.role) return <FullPageLoader label="Checking staff access..." />;
-  if (!isSchoolAdmin) return <SchoolAdminOnly moduleName="staff management" />;
+  if (!canViewStaff) {
+    return (
+      <section className="rounded-2xl border border-amber-200 bg-amber-50 p-6 text-sm font-semibold text-amber-800">
+        Staff directory is not enabled for your role. Ask a School Admin to update Role Permissions.
+      </section>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-slate-100 pb-8">
@@ -175,7 +186,7 @@ export default function StaffDirectoryPage() {
           title="Employee List"
           subtitle="Manage employee profiles, payroll readiness, documents, and staff login roles."
           breadcrumbs={[{ label: 'Dashboard', href: '/dashboard' }, { label: 'Employees' }]}
-          actions={<Link href="/dashboard/staff/add?type=teacher" className="rounded-xl bg-[var(--theme-button-bg)] px-4 py-2 text-sm font-bold text-[var(--theme-button-text)]">Add Teacher</Link>}
+          actions={canCreateStaff ? <Link href="/dashboard/staff/add?type=teacher" className="rounded-xl bg-[var(--theme-button-bg)] px-4 py-2 text-sm font-bold text-[var(--theme-button-text)]">Add Teacher</Link> : null}
         />
 
         <section className="rounded-2xl border border-slate-200 bg-white shadow-sm">
@@ -266,8 +277,8 @@ export default function StaffDirectoryPage() {
                         <td className="px-4 py-3 text-right">
                           <div className="inline-flex gap-2">
                             <ActionLink href={`/dashboard/staff/${staff.id}`} icon="eye" label="View employee" />
-                            <ActionLink href={`/dashboard/staff/add?id=${staff.id}`} icon="edit" label="Edit employee" />
-                            <ActionButton icon="trash" label="Delete employee" onClick={() => window.confirm('Delete this employee record?') && deleteMutation.mutate(staff.id)} />
+                            {canEditStaff ? <ActionLink href={`/dashboard/staff/add?id=${staff.id}`} icon="edit" label="Edit employee" /> : null}
+                            {canDeleteStaff ? <ActionButton icon="trash" label="Delete employee" onClick={() => window.confirm('Delete this employee record?') && deleteMutation.mutate(staff.id)} /> : null}
                           </div>
                         </td>
                       </tr>

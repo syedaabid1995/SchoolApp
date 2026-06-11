@@ -52,6 +52,17 @@ export type AttendanceReportResponse = {
   rows: AttendanceReportRow[];
 };
 
+export type StudentAttendanceOptions = {
+  academicYears: Array<{ id: string; name: string; startDate: string; endDate: string; isActive: boolean }>;
+  classes: Array<{ id: string; name: string; academicYearId?: string | null }>;
+  sections: Array<{
+    id: string;
+    name: string;
+    classId?: string | null;
+    classSections?: Array<{ classId: string }>;
+  }>;
+};
+
 export type PromotionPreview = {
   currentSession?: { id: string; name: string } | null;
   suggestedPromoteSession?: { id: string; name: string } | null;
@@ -96,6 +107,11 @@ export const updateStudentCategory = async (id: string, payload: { name: string 
 
 export const deleteStudentCategory = async (id: string) => {
   await api.delete(`/students/categories/${id}`);
+};
+
+export const getStudentAttendanceOptions = async () => {
+  const { data } = await api.get<StudentAttendanceOptions>('/students/attendance/options');
+  return data;
 };
 
 export const loadStudentAttendance = async (params: {

@@ -64,9 +64,11 @@ export type EmployeePermissionItem = {
 export type EmployeePermissionPayload = {
   roleName: EmployeeManagedRole | 'SCHOOL_ADMIN';
   planName?: string | null;
+  scopeCodes?: string[];
   employees: Array<{
     id: string;
     userId?: string;
+    staffProfileId?: string | null;
     email: string;
     status: string;
     createdAt: string;
@@ -78,10 +80,16 @@ export type EmployeePermissionPayload = {
 export const getEmployeePermissions = async (
   roleName: EmployeeManagedRole | 'SCHOOL_ADMIN',
   schoolId?: string,
-  userId?: string
+  userId?: string,
+  scopeCodes?: string[],
 ) => {
   const { data } = await api.get<EmployeePermissionPayload>('/users/employee-permissions', {
-    params: { roleName, ...(schoolId ? { schoolId } : {}), ...(userId ? { userId } : {}) },
+    params: {
+      roleName,
+      ...(schoolId ? { schoolId } : {}),
+      ...(userId ? { userId } : {}),
+      ...(scopeCodes?.length ? { scopeCodes: scopeCodes.join(',') } : {}),
+    },
   });
   return data;
 };
@@ -91,6 +99,7 @@ export const updateEmployeePermissions = async (payload: {
   enabledCodes: string[];
   schoolId?: string;
   userId?: string;
+  scopeCodes?: string[];
 }) => {
   const { data } = await api.put<{ success: boolean }>('/users/employee-permissions', payload);
   return data;

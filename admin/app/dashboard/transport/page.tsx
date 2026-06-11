@@ -186,6 +186,7 @@ export default function TransportPage() {
   const { data: session, isLoading: sessionLoading } = useQuery({ queryKey: ['session'], queryFn: getSession });
   const isSuperAdmin = session?.role === 'SUPER_ADMIN';
   const isSchoolAdmin = session?.role === 'SCHOOL_ADMIN';
+  const permissionCodes = session?.permissionCodes ?? [];
   const schoolsQuery = useQuery({
     queryKey: ['schools', 'transport'],
     queryFn: () => listSchools({ limit: 100, status: 'ACTIVE' }),
@@ -200,7 +201,7 @@ export default function TransportPage() {
 
   const effectiveSchoolId = isSuperAdmin ? selectedSchoolId : session?.schoolId ?? '';
   const scopedParams = effectiveSchoolId ? { schoolId: effectiveSchoolId } : undefined;
-  const canUsePage = isSuperAdmin || isSchoolAdmin;
+  const canUsePage = isSuperAdmin || isSchoolAdmin || permissionCodes.includes('transport.view');
   const canQuery = Boolean(canUsePage && effectiveSchoolId);
 
   const routesQuery = useQuery({
