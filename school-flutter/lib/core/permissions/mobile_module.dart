@@ -94,6 +94,14 @@ const mobileModules = <MobileModule>[
     description: 'Classes, sections, subjects, and setup.',
   ),
   MobileModule(
+    key: 'staff',
+    title: 'Staff',
+    icon: Icons.badge_outlined,
+    requiredPermissions: ['staff.view', 'teachers.list'],
+    fallbackRoles: ['SCHOOL_ADMIN', 'PRINCIPAL'],
+    description: 'Staff directory, setup, attendance, and payroll.',
+  ),
+  MobileModule(
     key: 'teachers',
     title: 'Teachers',
     icon: Icons.co_present_outlined,

@@ -9,6 +9,9 @@ import '../../features/auth/presentation/mfa_screen.dart';
 import '../../features/dashboard/presentation/dashboard_screen.dart';
 import '../../features/module/presentation/module_placeholder_screen.dart';
 import '../../features/profile/presentation/profile_screen.dart';
+import '../../features/staff/data/staff_models.dart';
+import '../../features/staff/presentation/staff_form_screen.dart';
+import '../../features/staff/presentation/staff_screen.dart';
 import '../auth/auth_session.dart';
 
 final appRouterProvider = Provider<GoRouter>((ref) {
@@ -46,11 +49,22 @@ final appRouterProvider = Provider<GoRouter>((ref) {
         builder: (context, state) => const ProfileScreen(),
       ),
       GoRoute(
+        path: '/staff/new',
+        builder: (context, state) => const StaffFormScreen(),
+      ),
+      GoRoute(
+        path: '/staff/:id/edit',
+        builder: (context, state) => StaffFormScreen(
+          staff: state.extra is StaffMember ? state.extra as StaffMember : null,
+        ),
+      ),
+      GoRoute(
         path: '/module/:moduleKey',
         builder: (context, state) => ModulePlaceholderScreen(
           moduleKey: state.pathParameters['moduleKey'] ?? '',
         ),
       ),
+      GoRoute(path: '/staff', builder: (context, state) => const StaffScreen()),
     ],
     errorBuilder: (context, state) => Scaffold(
       appBar: AppBar(title: const Text('Not found')),

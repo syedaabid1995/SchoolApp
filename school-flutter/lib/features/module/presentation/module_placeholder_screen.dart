@@ -6,6 +6,7 @@ import '../../../core/theme/prototype_colors.dart';
 import '../../../core/widgets/prototype_widgets.dart';
 import '../../../shared/models/mobile_dashboard_data.dart';
 import '../../../shared/services/mobile_data_repository.dart';
+import '../../staff/presentation/staff_screen.dart';
 
 class ModulePlaceholderScreen extends StatelessWidget {
   const ModulePlaceholderScreen({super.key, required this.moduleKey});
@@ -17,6 +18,7 @@ class ModulePlaceholderScreen extends StatelessWidget {
     return switch (moduleKey) {
       'my-attendance' => const _MyAttendanceScreen(),
       'student-attendance' => const _StudentAttendanceScreen(),
+      'staff' => const StaffScreen(),
       'my-timetable' || 'timetable' => const _TimetableScreen(),
       'my-classes' => const _MyClassesScreen(),
       'exams' || 'marks-entry' => const _ExamsScreen(),

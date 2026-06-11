@@ -505,6 +505,7 @@ class PrototypeRow extends StatelessWidget {
     required this.subtitle,
     this.tag,
     this.highlight = false,
+    this.onTap,
   });
 
   final IconData icon;
@@ -512,68 +513,76 @@ class PrototypeRow extends StatelessWidget {
   final String subtitle;
   final Widget? tag;
   final bool highlight;
+  final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: highlight ? PrototypeColors.blueSoft : Colors.white,
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(
-          color: highlight
-              ? PrototypeColors.blueBorder
-              : PrototypeColors.border,
+        onTap: onTap,
+        child: Container(
+          padding: const EdgeInsets.all(14),
+          decoration: BoxDecoration(
+            color: highlight ? PrototypeColors.blueSoft : Colors.white,
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(
+              color: highlight
+                  ? PrototypeColors.blueBorder
+                  : PrototypeColors.border,
+            ),
+            boxShadow: const [
+              BoxShadow(
+                color: Color(0x0F1A56F0),
+                blurRadius: 8,
+                offset: Offset(0, 2),
+              ),
+            ],
+          ),
+          child: Row(
+            children: [
+              Container(
+                width: 44,
+                height: 44,
+                decoration: BoxDecoration(
+                  color: PrototypeColors.blueSoft,
+                  borderRadius: BorderRadius.circular(13),
+                  border: Border.all(color: PrototypeColors.blueBorder),
+                ),
+                child: Icon(icon, color: PrototypeColors.blue, size: 21),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      title,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      subtitle,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        fontSize: 12,
+                        color: PrototypeColors.muted,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              if (tag != null) ...[const SizedBox(width: 10), tag!],
+            ],
+          ),
         ),
-        boxShadow: const [
-          BoxShadow(
-            color: Color(0x0F1A56F0),
-            blurRadius: 8,
-            offset: Offset(0, 2),
-          ),
-        ],
-      ),
-      child: Row(
-        children: [
-          Container(
-            width: 44,
-            height: 44,
-            decoration: BoxDecoration(
-              color: PrototypeColors.blueSoft,
-              borderRadius: BorderRadius.circular(13),
-              border: Border.all(color: PrototypeColors.blueBorder),
-            ),
-            child: Icon(icon, color: PrototypeColors.blue, size: 21),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  title,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    fontSize: 14,
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-                const SizedBox(height: 2),
-                Text(
-                  subtitle,
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    fontSize: 12,
-                    color: PrototypeColors.muted,
-                  ),
-                ),
-              ],
-            ),
-          ),
-          if (tag != null) ...[const SizedBox(width: 10), tag!],
-        ],
       ),
     );
   }
