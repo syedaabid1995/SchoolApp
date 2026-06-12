@@ -1,5 +1,45 @@
 import { prisma } from '../config/db';
-import { Prisma } from '@prisma/client';
+import { attendanceReadService } from '../modules/attendance/services/attendance-read.service';
+import type { StudentDailyAttendance } from '../modules/attendance/models/attendance-read-model';
+
+const blankCounts = () => ({ total: 0, present: 0, late: 0, absent: 0, excused: 0 });
+
+const applyStatus = (counts: ReturnType<typeof blankCounts>, status: string) => {
+  counts.total += 1;
+  if (status === 'PRESENT') counts.present += 1;
+  if (status === 'LATE') counts.late += 1;
+  if (status === 'ABSENT') counts.absent += 1;
+  if (status === 'EXCUSED') counts.excused += 1;
+};
+
+const dateFromKey = (date: string) => new Date(`${date}T00:00:00.000Z`);
+
+const groupDaily = (records: StudentDailyAttendance[]) => {
+  const grouped = new Map<string, ReturnType<typeof blankCounts>>();
+  records.forEach((record) => {
+    const counts = grouped.get(record.date) ?? blankCounts();
+    applyStatus(counts, record.status);
+    grouped.set(record.date, counts);
+  });
+
+  return Array.from(grouped.entries())
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([date, counts]) => ({ date: dateFromKey(date), ...counts }));
+};
+
+const groupByClass = (records: StudentDailyAttendance[]) => {
+  const grouped = new Map<string | null, ReturnType<typeof blankCounts>>();
+  records.forEach((record) => {
+    const classId = record.classId ?? null;
+    const counts = grouped.get(classId) ?? blankCounts();
+    applyStatus(counts, record.status);
+    grouped.set(classId, counts);
+  });
+
+  return Array.from(grouped.entries())
+    .sort(([a], [b]) => String(a ?? '').localeCompare(String(b ?? '')))
+    .map(([classId, counts]) => ({ classId, ...counts }));
+};
 
 export const getAttendanceSummary = async (params: {
   schoolId: string;
@@ -9,17 +49,21 @@ export const getAttendanceSummary = async (params: {
 }) => {
   const { schoolId, dateFrom, dateTo, classId } = params;
 
-  const statusCounts = await prisma.attendanceRecord.groupBy({
-    by: ['status'],
-    where: {
-      session: {
-        schoolId,
-        date: { gte: dateFrom, lte: dateTo },
-      },
-      ...(classId ? { student: { classId } } : {}),
-    },
-    _count: { _all: true },
-  });
+  const [records, byClassRecords] = await Promise.all([
+    attendanceReadService.getStudentAttendance({
+      schoolId,
+      classId,
+      fromDate: dateFrom,
+      toDate: dateTo,
+      source: 'period-attendance',
+    }),
+    attendanceReadService.getStudentAttendance({
+      schoolId,
+      fromDate: dateFrom,
+      toDate: dateTo,
+      source: 'period-attendance',
+    }),
+  ]);
 
   const approvalCounts = await prisma.attendanceSession.groupBy({
     by: ['approvalStatus'],
@@ -30,67 +74,10 @@ export const getAttendanceSummary = async (params: {
     _count: { _all: true },
   });
 
-  const classFilter = classId ? Prisma.sql`AND st.class_id = ${classId}::uuid` : Prisma.empty;
-
-  const daily = await prisma.$queryRaw<
-    Array<{
-      date: Date;
-      total: number;
-      present: number;
-      late: number;
-      absent: number;
-      excused: number;
-    }>
-  >`
-    SELECT
-      DATE(s.date) as date,
-      COUNT(r.id)::int as total,
-      SUM(CASE WHEN r.status = 'PRESENT' THEN 1 ELSE 0 END)::int as present,
-      SUM(CASE WHEN r.status = 'LATE' THEN 1 ELSE 0 END)::int as late,
-      SUM(CASE WHEN r.status = 'ABSENT' THEN 1 ELSE 0 END)::int as absent,
-      SUM(CASE WHEN r.status = 'EXCUSED' THEN 1 ELSE 0 END)::int as excused
-    FROM attendance_records r
-    JOIN attendance_sessions s ON s.id = r.session_id
-    JOIN students st ON st.id = r.student_id
-    WHERE s.school_id = ${schoolId}::uuid
-      AND s.date >= ${dateFrom}
-      AND s.date <= ${dateTo}
-      ${classFilter}
-    GROUP BY DATE(s.date)
-    ORDER BY DATE(s.date) ASC
-  `;
-
-  const byClass = await prisma.$queryRaw<
-    Array<{
-      class_id: string | null;
-      total: number;
-      present: number;
-      late: number;
-      absent: number;
-      excused: number;
-    }>
-  >`
-    SELECT
-      st.class_id,
-      COUNT(r.id)::int as total,
-      SUM(CASE WHEN r.status = 'PRESENT' THEN 1 ELSE 0 END)::int as present,
-      SUM(CASE WHEN r.status = 'LATE' THEN 1 ELSE 0 END)::int as late,
-      SUM(CASE WHEN r.status = 'ABSENT' THEN 1 ELSE 0 END)::int as absent,
-      SUM(CASE WHEN r.status = 'EXCUSED' THEN 1 ELSE 0 END)::int as excused
-    FROM attendance_records r
-    JOIN attendance_sessions s ON s.id = r.session_id
-    JOIN students st ON st.id = r.student_id
-    WHERE s.school_id = ${schoolId}::uuid
-      AND s.date >= ${dateFrom}
-      AND s.date <= ${dateTo}
-    GROUP BY st.class_id
-    ORDER BY st.class_id ASC
-  `;
-
-  const statusMap = statusCounts.reduce<Record<string, number>>((acc, row) => {
-    acc[row.status] = row._count._all;
+  const totals = records.reduce((acc, record) => {
+    applyStatus(acc, record.status);
     return acc;
-  }, {});
+  }, blankCounts());
 
   const approvalMap = approvalCounts.reduce<Record<string, number>>((acc, row) => {
     acc[row.approvalStatus] = row._count._all;
@@ -99,25 +86,18 @@ export const getAttendanceSummary = async (params: {
 
   return {
     totals: {
-      total: Object.values(statusMap).reduce((sum, val) => sum + val, 0),
-      present: statusMap.PRESENT ?? 0,
-      late: statusMap.LATE ?? 0,
-      absent: statusMap.ABSENT ?? 0,
-      excused: statusMap.EXCUSED ?? 0,
+      total: totals.total,
+      present: totals.present,
+      late: totals.late,
+      absent: totals.absent,
+      excused: totals.excused,
     },
     approvals: {
       pending: approvalMap.PENDING ?? 0,
       approved: approvalMap.APPROVED ?? 0,
       rejected: approvalMap.REJECTED ?? 0,
     },
-    daily,
-    byClass: byClass.map((row) => ({
-      classId: row.class_id,
-      total: row.total,
-      present: row.present,
-      late: row.late,
-      absent: row.absent,
-      excused: row.excused,
-    })),
+    daily: groupDaily(records),
+    byClass: groupByClass(byClassRecords),
   };
 };

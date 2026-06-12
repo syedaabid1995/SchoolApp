@@ -2,6 +2,7 @@ import { prisma } from '../config/db';
 import { HttpError } from '../middlewares/error.middleware';
 import { createAuditLog } from './auditLog.service';
 import { sendAccountCreatedWhatsapp } from './accountOnboardingWhatsapp.service';
+import { timetableReadService } from '../modules/timetable/services/timetable-read.service';
 
 type Actor = {
   userId: string;
@@ -64,16 +65,15 @@ export const getTeacherForOnboarding = async (schoolId: string, teacherId: strin
 
 const calculateFlags = async (schoolId: string, teacherId: string): Promise<TeacherReadinessFlags> => {
   const teacher = await getTeacherForOnboarding(schoolId, teacherId);
-  const [classAssignments, subjectAssignments, classRoutines, timetableEntries, selfAttendance] = await Promise.all([
+  const [classAssignments, subjectAssignments, timetable, selfAttendance] = await Promise.all([
     prisma.teacherClassAssignment.count({ where: { teacherId: teacher.id } }),
     prisma.teacherSubjectAssignment.count({ where: { teacherId: teacher.id } }),
-    prisma.classRoutine.count({ where: { schoolId, teacherId: teacher.id } }),
-    prisma.timetableEntry.count({ where: { schoolId, teacherId: teacher.id } }),
+    timetableReadService.getTeacherTimetable({ schoolId, teacherId: teacher.id }),
     prisma.teacherSelfAttendance.count({ where: { schoolId, teacherId: teacher.id } }),
   ]);
 
   const profileCompleted = Boolean(teacher.firstName && teacher.lastName && (teacher.phone || teacher.employeeNo));
-  const timetableAssigned = classRoutines > 0 || timetableEntries > 0;
+  const timetableAssigned = timetable.slots.length > 0;
   const classAssigned = classAssignments > 0;
   const subjectAssigned = subjectAssignments > 0;
 

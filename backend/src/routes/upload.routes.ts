@@ -3,7 +3,8 @@ import multer from 'multer';
 import path from 'path';
 import crypto from 'crypto';
 import { authMiddleware } from '../middlewares/auth.middleware';
-import { blockSuperAdminSchoolOperations, requireSchoolAdminOrSuperAdmin } from '../middlewares/rbac.middleware';
+import { blockSuperAdminSchoolOperations, requirePermission, requireSchoolAdminOrSuperAdmin } from '../middlewares/rbac.middleware';
+import { PermissionCodes as P } from '../permissions/permission-manifest';
 import { resolveSchoolId } from '../utils/tenant';
 import { getSignedUrlForKey, uploadBuffer, getBucketName } from '../services/s3.service';
 import { prisma } from '../config/db';
@@ -66,6 +67,17 @@ export const uploadRouter = Router();
 
 uploadRouter.use(authMiddleware);
 
+const signedAssetReadPermissions = [
+  P.studentView,
+  P.studentsList,
+  P.studentDocumentView,
+  P.staffView,
+  P.staffDocumentView,
+  P.settingsAccess,
+  P.reportsView,
+  P.dashboardOverview,
+];
+
 const isSafeStorageKey = (key: string) => {
   if (!key || key.length > 512) return false;
   if (key.startsWith('/') || key.includes('\\')) return false;
@@ -73,7 +85,7 @@ const isSafeStorageKey = (key: string) => {
   return /^[a-zA-Z0-9/_.,=@-]+$/.test(key);
 };
 
-uploadRouter.get('/signed', async (req, res) => {
+uploadRouter.get('/signed', requirePermission(...signedAssetReadPermissions), async (req, res) => {
   const rawKey = req.query.key as string | undefined;
   const bucket = (req.query.bucket as string | undefined) ?? getBucketName();
   if (!rawKey) {
@@ -117,7 +129,7 @@ const runBrandingUpload = (req: Request, res: Response, next: NextFunction) => {
   });
 };
 
-uploadRouter.post('/branding', requireSchoolAdminOrSuperAdmin, runBrandingUpload, async (req, res) => {
+uploadRouter.post('/branding', requirePermission(P.settingsAccess), requireSchoolAdminOrSuperAdmin, runBrandingUpload, async (req, res) => {
   if (!req.file) {
     res.status(400).json({ error: { message: 'No file uploaded', details: null } });
     return;
@@ -190,7 +202,7 @@ const blockSuperAdminDailyAssetUpload = blockSuperAdminSchoolOperations(
   'Super Admin cannot upload school daily-operation photos or documents',
 );
 
-uploadRouter.post('/photos', blockSuperAdminDailyAssetUpload, upload.single('file'), (req, res) => {
+uploadRouter.post('/photos', requirePermission(P.studentDocumentCreate, P.staffDocumentCreate), blockSuperAdminDailyAssetUpload, upload.single('file'), (req, res) => {
   if (!req.file) {
     res.status(400).json({ error: { message: 'No file uploaded', details: null } });
     return;
@@ -219,7 +231,7 @@ const docUpload = multer({
   limits: { fileSize: 20 * 1024 * 1024 },
 });
 
-uploadRouter.post('/documents', blockSuperAdminDailyAssetUpload, docUpload.single('file'), (req, res) => {
+uploadRouter.post('/documents', requirePermission(P.studentDocumentCreate), blockSuperAdminDailyAssetUpload, docUpload.single('file'), (req, res) => {
   if (!req.file) {
     res.status(400).json({ error: { message: 'No file uploaded', details: null } });
     return;

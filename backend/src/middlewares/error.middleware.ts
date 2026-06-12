@@ -1,6 +1,7 @@
 import type { NextFunction, Request, Response } from 'express';
 import { ZodError } from 'zod';
 import { logger } from '../config/logger';
+import { formatZodIssues, RequestValidationError } from './validation.middleware';
 
 export class HttpError extends Error {
   statusCode: number;
@@ -23,14 +24,30 @@ export const errorMiddleware = (
   res: Response,
   _next: NextFunction,
 ) => {
+  if (err instanceof RequestValidationError) {
+    res.status(err.statusCode).json({
+      success: false,
+      message: 'Validation failed',
+      errors: err.errors,
+    });
+    return;
+  }
+
+  if (err instanceof ZodError) {
+    res.status(400).json({
+      success: false,
+      message: 'Validation failed',
+      errors: formatZodIssues(err),
+    });
+    return;
+  }
+
   const error =
     err instanceof HttpError
       ? err
-      : err instanceof ZodError
-        ? new HttpError(400, 'Invalid request body.', err.flatten())
         : new HttpError(500, 'Internal server error');
 
-  if (!(err instanceof HttpError) && !(err instanceof ZodError)) {
+  if (!(err instanceof HttpError)) {
     logger.error({ err }, 'unhandled error');
   }
 

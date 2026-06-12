@@ -4,6 +4,7 @@ import { prisma } from '../config/db';
 import { HttpError } from '../middlewares/error.middleware';
 import { logAudit } from '../utils/audit';
 import { invalidateStudentCache } from '../services/cache/cache.invalidation';
+import { attendanceReadService } from '../modules/attendance/services/attendance-read.service';
 
 const uuidSchema = z.string().uuid();
 const dateOnlySchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Use date format YYYY-MM-DD');
@@ -252,14 +253,13 @@ export const loadStudentAttendance = async (req: Request, res: Response) => {
       select: { id: true, admissionNo: true, rollNo: true, fullName: true, firstName: true, lastName: true },
       orderBy: [{ rollNo: 'asc' }, { fullName: 'asc' }],
     }),
-    prisma.studentAttendance.findMany({
-      where: {
+    attendanceReadService.getStudentAttendance({
         schoolId,
         academicSessionId: query.academicSessionId,
         classId: query.classId,
         sectionId: query.sectionId,
-        attendanceDate: date,
-      },
+        date,
+        source: 'student-attendance',
     }),
     prisma.attendanceHoliday.findUnique({
       where: {
@@ -284,7 +284,7 @@ export const loadStudentAttendance = async (req: Request, res: Response) => {
         ...student,
         status: record?.status ?? 'PRESENT',
         note: record?.note ?? '',
-        attendanceId: record?.id ?? null,
+        attendanceId: record?.sourceId ?? null,
       };
     }),
   });
@@ -430,14 +430,14 @@ export const getStudentAttendanceReport = async (req: Request, res: Response) =>
       select: { id: true, admissionNo: true, rollNo: true, fullName: true, firstName: true, lastName: true },
       orderBy: [{ rollNo: 'asc' }, { fullName: 'asc' }],
     }),
-    prisma.studentAttendance.findMany({
-      where: {
+    attendanceReadService.getStudentAttendance({
         schoolId,
         academicSessionId: query.academicSessionId,
         classId: query.classId,
         sectionId: query.sectionId,
-        attendanceDate: { gte: start, lt: end },
-      },
+        fromDate: start,
+        toDate: new Date(end.getTime() - 1),
+        source: 'student-attendance',
     }),
     prisma.attendanceHoliday.findMany({
       where: {
@@ -461,7 +461,7 @@ export const getStudentAttendanceReport = async (req: Request, res: Response) =>
   const rows = students.map((student) => {
     const counts = { present: 0, late: 0, absent: 0, holiday: holidayDays.size, halfDay: 0 };
     const daily: Array<{ day: number; status: string; note?: string | null }> = [];
-    const recordsByDay = new Map((byStudent.get(student.id) ?? []).map((record) => [record.attendanceDate.getUTCDate(), record]));
+    const recordsByDay = new Map((byStudent.get(student.id) ?? []).map((record) => [Number(record.date.slice(8, 10)), record]));
     for (let day = 1; day <= daysInMonth; day += 1) {
       if (holidayDays.has(day)) {
         daily.push({ day, status: 'HOLIDAY' });

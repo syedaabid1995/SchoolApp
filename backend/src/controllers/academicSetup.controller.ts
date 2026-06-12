@@ -4,6 +4,8 @@ import { z } from 'zod';
 import { prisma } from '../config/db';
 import { HttpError } from '../middlewares/error.middleware';
 import { logAudit } from '../utils/audit';
+import { timetableReadService } from '../modules/timetable/services/timetable-read.service';
+import { toLegacyClassRoutineRow } from '../modules/timetable/services/timetable-response-mapper';
 
 const uuidSchema = z.string().uuid();
 const timeSchema = z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/, 'Use HH:mm time format');
@@ -950,11 +952,17 @@ export const listClassRoutines = async (req: Request, res: Response) => {
   const classId = typeof req.query.classId === 'string' ? req.query.classId : undefined;
   const sectionId = typeof req.query.sectionId === 'string' ? req.query.sectionId : undefined;
   const teacherId = typeof req.query.teacherId === 'string' ? req.query.teacherId : undefined;
-  const routines = await prisma.classRoutine.findMany({
-    where: { schoolId, ...(classId ? { classId } : {}), ...(sectionId ? { sectionId } : {}), ...(teacherId ? { teacherId } : {}) },
-    include: classRoutineInclude,
-    orderBy: classRoutineOrderBy,
-  });
+  const routines = await timetableReadService
+    .getTimetable({ schoolId, classId, sectionId, teacherId, mode: 'legacy' })
+    .then((slots) =>
+      slots.map((slot) =>
+        toLegacyClassRoutineRow(slot, {
+          includeTeacher: true,
+          includeSubjectDetails: true,
+          includeRoomCapacity: true,
+        }),
+      ),
+    );
   res.status(200).json(routines);
 };
 

@@ -28,6 +28,7 @@ const envSchema = z.object({
   CORS_ORIGINS: z.string().default('http://localhost:3000,http://127.0.0.1:3000,http://localhost:3001,http://127.0.0.1:3001'),
   LOG_LEVEL: z.enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace']).default('info'),
   REDIS_CACHE_ENABLED: boolEnv(true).default(true),
+  REDIS_AUTHZ_CACHE_ENABLED: boolEnv(process.env.NODE_ENV !== 'test').default(process.env.NODE_ENV !== 'test'),
   REDIS_CACHE_DEBUG: boolEnv(false).default(false),
   REDIS_CACHE_DASHBOARD_ENABLED: boolEnv(true).default(true),
   REDIS_CACHE_ANALYTICS_ENABLED: boolEnv(true).default(true),

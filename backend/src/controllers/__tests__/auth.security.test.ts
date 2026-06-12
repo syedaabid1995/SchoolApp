@@ -21,6 +21,8 @@ import { loginIpRateLimit } from '../../middlewares/rate-limit.middleware';
 import { hashPassword } from '../../utils/password';
 import { hashToken } from '../../utils/token';
 import { hashOtp } from '../../utils/otp';
+import { createMockRequest } from '../../__tests__/test-utils/mock-request';
+import { createMockResponse, type MockResponse } from '../../__tests__/test-utils/mock-response';
 
 const GENERIC_LOGIN_ERROR = 'Invalid login details. Please try again.';
 const GENERIC_FORGOT_PASSWORD_MESSAGE = 'If an account exists, password reset instructions have been sent.';
@@ -97,16 +99,7 @@ type TestMfaChallenge = {
   userAgent?: string | null;
 };
 
-type TestResponse = {
-  statusCode: number;
-  body: unknown;
-  cookies: Record<string, { value: string; options: unknown }>;
-  clearedCookies: string[];
-  status: (code: number) => TestResponse;
-  json: (body: unknown) => TestResponse;
-  cookie: (name: string, value: string, options: unknown) => TestResponse;
-  clearCookie: (name: string) => TestResponse;
-};
+type TestResponse = MockResponse;
 
 let schools = new Map<string, TestSchool>();
 let users = new Map<string, TestUser>();
@@ -447,42 +440,17 @@ const createRequest = (params: {
   };
   if (params.cookie) headers.cookie = params.cookie;
 
-  return {
+  return createMockRequest({
     body: params.body ?? {},
     headers,
     ip: params.ip ?? '127.0.0.1',
-    socket: { remoteAddress: params.ip ?? '127.0.0.1' },
     auth: params.auth,
     originalUrl: params.originalUrl ?? '/api/v1/auth/login',
     params: {},
-  } as unknown as Request;
+  });
 };
 
-const createResponse = (): TestResponse => {
-  const response: TestResponse = {
-    statusCode: 200,
-    body: null,
-    cookies: {},
-    clearedCookies: [],
-    status(code: number) {
-      this.statusCode = code;
-      return this;
-    },
-    json(body: unknown) {
-      this.body = body;
-      return this;
-    },
-    cookie(name: string, value: string, options: unknown) {
-      this.cookies[name] = { value, options };
-      return this;
-    },
-    clearCookie(name: string) {
-      this.clearedCookies.push(name);
-      return this;
-    },
-  };
-  return response;
-};
+const createResponse = (): TestResponse => createMockResponse();
 
 const invoke = async (handler: (req: Request, res: Response) => Promise<void>, req: Request) => {
   const res = createResponse();

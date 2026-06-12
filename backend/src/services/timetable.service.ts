@@ -2,6 +2,8 @@ import { HttpError } from '../middlewares/error.middleware';
 import { prisma } from '../config/db';
 import { createAuditLog } from './auditLog.service';
 import { invalidateTimetableCache } from './cache/cache.invalidation';
+import { timetableReadService } from '../modules/timetable/services/timetable-read.service';
+import { toModernTimetableEntryRow } from '../modules/timetable/services/timetable-response-mapper';
 
 type UpsertTimetableEntryInput = {
   classId: string;
@@ -389,21 +391,14 @@ export const listTimetableEntries = async (params: {
   });
   if (!version) throw new HttpError(404, 'Timetable version not found');
 
-  return prisma.timetableEntry.findMany({
-    where: {
-      timetableVersionId: params.timetableVersionId,
+  return timetableReadService
+    .getTimetable({
       schoolId: params.schoolId,
-      ...(typeof params.dayOfWeek === 'number' ? { dayOfWeek: params.dayOfWeek } : {}),
-    },
-    include: {
-      class: { select: { id: true, name: true } },
-      section: { select: { id: true, name: true } },
-      subject: { select: { id: true, name: true } },
-      teacher: { select: { id: true, firstName: true, lastName: true } },
-      period: { select: { id: true, name: true, startTime: true, endTime: true } },
-    },
-    orderBy: [{ dayOfWeek: 'asc' }, { period: { startTime: 'asc' } }],
-  });
+      timetableVersionId: params.timetableVersionId,
+      dayOfWeek: params.dayOfWeek,
+      mode: 'modern',
+    })
+    .then((slots) => slots.map((slot) => toModernTimetableEntryRow(slot)));
 };
 
 const resolveAcademicYearForDate = async (params: {
@@ -477,21 +472,16 @@ export const getTeacherTimetableByDate = async (params: {
     };
   }
 
-  const periods = await prisma.timetableEntry.findMany({
-    where: {
-      timetableVersionId: version.id,
+  const periods = await timetableReadService
+    .getTeacherTimetable({
+      schoolId: params.schoolId,
       teacherId: teacher.id,
+      timetableVersionId: version.id,
       dayOfWeek,
       isActive: true,
-    },
-    include: {
-      class: { select: { id: true, name: true } },
-      section: { select: { id: true, name: true } },
-      subject: { select: { id: true, name: true } },
-      period: { select: { id: true, name: true, startTime: true, endTime: true } },
-    },
-    orderBy: [{ period: { startTime: 'asc' } }],
-  });
+      mode: 'modern',
+    })
+    .then((result) => result.slots.map((slot) => toModernTimetableEntryRow(slot)));
 
   return {
     teacher,

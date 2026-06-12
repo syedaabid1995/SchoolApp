@@ -1,5 +1,6 @@
 import { prisma } from '../config/db';
 import { redis } from '../config/redis';
+import { attendanceReadService } from '../modules/attendance/services/attendance-read.service';
 
 type DashboardRange = '7d' | '30d' | '6m' | '12m';
 type TopSchoolsSort = 'students' | 'teachers' | 'storage' | 'revenue' | 'tickets';
@@ -85,22 +86,23 @@ export const getAdminDashboardMetrics = async (schoolId: string) => {
   const todayEnd = new Date();
   todayEnd.setHours(23, 59, 59, 999);
 
-  const [studentCount, teacherCount, classCount, pendingApprovals, statusCounts] = await Promise.all([
+  const [studentCount, teacherCount, classCount, pendingApprovals, attendanceRecords] = await Promise.all([
     prisma.student.count({ where: { schoolId } }),
     prisma.teacherProfile.count({ where: { schoolId } }),
     prisma.class.count({ where: { schoolId } }),
     prisma.attendanceSession.count({
       where: { schoolId, approvalStatus: 'PENDING', date: { gte: todayStart, lte: todayEnd } },
     }),
-    prisma.attendanceRecord.groupBy({
-      by: ['status'],
-      where: { session: { schoolId, date: { gte: todayStart, lte: todayEnd } } },
-      _count: { _all: true },
+    attendanceReadService.getStudentAttendance({
+      schoolId,
+      fromDate: todayStart,
+      toDate: todayEnd,
+      source: 'period-attendance',
     }),
   ]);
 
-  const statusMap = statusCounts.reduce<Record<string, number>>((acc, row) => {
-    acc[row.status] = row._count._all;
+  const statusMap = attendanceRecords.reduce<Record<string, number>>((acc, row) => {
+    acc[row.status] = (acc[row.status] ?? 0) + 1;
     return acc;
   }, {});
 

@@ -2,7 +2,10 @@ import PDFDocument from 'pdfkit';
 import type { Prisma } from '@prisma/client';
 import { prisma } from '../config/db';
 import { HttpError } from '../middlewares/error.middleware';
+import { attendanceReadService } from '../modules/attendance/services/attendance-read.service';
 import { calculateGrade, evaluateFailCriteria, getExamGradingSettings } from './grade.service';
+import type { StudentDailyAttendance } from '../modules/attendance/models/attendance-read-model';
+import { timetableReadService } from '../modules/timetable/services/timetable-read.service';
 
 export const generateTermReport = async (params: {
   schoolId: string;
@@ -358,6 +361,40 @@ const pageArgs = (query: ReportQuery) => ({
   take: query.pageSize,
 });
 
+const paginate = <T>(rows: T[], query: ReportQuery) => rows.slice((query.page - 1) * query.pageSize, query.page * query.pageSize);
+
+const dateFromKey = (date: string) => new Date(`${date}T00:00:00.000Z`);
+
+const filterStatus = <T extends { status: string }>(records: T[], status?: string) =>
+  status ? records.filter((record) => record.status === status) : records;
+
+const loadStudentAttendanceLookups = async (schoolId: string, records: StudentDailyAttendance[]) => {
+  const studentIds = [...new Set(records.map((record) => record.studentId))];
+  const classIds = [...new Set(records.map((record) => record.classId).filter((id): id is string => Boolean(id)))];
+  const sectionIds = [...new Set(records.map((record) => record.sectionId).filter((id): id is string => Boolean(id)))];
+
+  const [students, classes, sections] = await Promise.all([
+    studentIds.length
+      ? prisma.student.findMany({
+          where: { schoolId, id: { in: studentIds } },
+          select: { id: true, admissionNo: true, firstName: true, lastName: true, fullName: true },
+        })
+      : Promise.resolve([]),
+    classIds.length
+      ? prisma.class.findMany({ where: { schoolId, id: { in: classIds } }, select: { id: true, name: true } })
+      : Promise.resolve([]),
+    sectionIds.length
+      ? prisma.section.findMany({ where: { schoolId, id: { in: sectionIds } }, select: { id: true, name: true } })
+      : Promise.resolve([]),
+  ]);
+
+  return {
+    students: new Map(students.map((student) => [student.id, student])),
+    classes: new Map(classes.map((row) => [row.id, row])),
+    sections: new Map(sections.map((row) => [row.id, row])),
+  };
+};
+
 const toPlain = (value: unknown): string => {
   if (value === null || value === undefined) return '';
   if (value instanceof Date) return value.toISOString().slice(0, 10);
@@ -563,26 +600,28 @@ const reports: ReportDefinition[] = [
       { key: 'status', label: 'Status' },
     ],
     fetch: async (query) => {
-      const where: Prisma.StudentAttendanceWhereInput = {
-        schoolId: query.schoolId,
-        ...(query.classId ? { classId: query.classId } : {}),
-        ...(query.sectionId ? { sectionId: query.sectionId } : {}),
-        ...(query.studentId ? { studentId: query.studentId } : {}),
-        ...(query.status ? { status: query.status as any } : {}),
-        ...dateRange('attendanceDate', query),
-      };
-      const [rows, total] = await Promise.all([
-        prisma.studentAttendance.findMany({ where, ...pageArgs(query), orderBy: [{ attendanceDate: 'desc' }], include: { student: true, class: true, section: true } }),
-        prisma.studentAttendance.count({ where }),
-      ]);
+      const records = filterStatus(
+        await attendanceReadService.getStudentAttendance({
+          schoolId: query.schoolId,
+          classId: query.classId,
+          sectionId: query.sectionId,
+          studentId: query.studentId,
+          fromDate: query.fromDate,
+          toDate: query.toDate,
+          source: 'student-attendance',
+        }),
+        query.status,
+      ).sort((a, b) => b.date.localeCompare(a.date));
+      const rows = paginate(records, query);
+      const lookups = await loadStudentAttendanceLookups(query.schoolId, rows);
       return {
-        total,
+        total: records.length,
         rows: rows.map((row) => ({
-          date: row.attendanceDate,
-          admissionNo: row.student.admissionNo,
-          studentName: fullName(row.student),
-          class: row.class.name,
-          section: row.section.name,
+          date: dateFromKey(row.date),
+          admissionNo: lookups.students.get(row.studentId)?.admissionNo ?? '',
+          studentName: fullName(lookups.students.get(row.studentId)),
+          class: row.classId ? lookups.classes.get(row.classId)?.name ?? '' : '',
+          section: row.sectionId ? lookups.sections.get(row.sectionId)?.name ?? '' : '',
           status: row.status,
         })),
       };
@@ -1022,35 +1061,28 @@ const reports: ReportDefinition[] = [
       { key: 'active', label: 'Active' },
     ],
     fetch: async (query) => {
-      const where: Prisma.TimetableEntryWhereInput = {
+      const rows = await timetableReadService.getTimetable({
         schoolId: query.schoolId,
-        ...(query.academicYearId ? { academicYearId: query.academicYearId } : {}),
-        ...(query.classId ? { classId: query.classId } : {}),
-        ...(query.sectionId ? { sectionId: query.sectionId } : {}),
-        ...(query.teacherId ? { teacherId: query.teacherId } : {}),
-        ...(query.subjectId ? { subjectId: query.subjectId } : {}),
-        ...(query.status ? { isActive: query.status === 'ACTIVE' } : {}),
-      };
-      const [rows, total] = await Promise.all([
-        prisma.timetableEntry.findMany({
-          where,
-          ...pageArgs(query),
-          orderBy: [{ dayOfWeek: 'asc' }, { class: { name: 'asc' } }],
-          include: { class: true, section: true, period: true, subject: true, teacher: true },
-        }),
-        prisma.timetableEntry.count({ where }),
-      ]);
+        academicYearId: query.academicYearId,
+        classId: query.classId,
+        sectionId: query.sectionId,
+        teacherId: query.teacherId,
+        isActive: query.status ? query.status === 'ACTIVE' : undefined,
+        mode: 'modern',
+      });
+      const filteredRows = query.subjectId ? rows.filter((row) => row.subjectId === query.subjectId) : rows;
+      const pagedRows = paginate(filteredRows, query);
       const days = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
       return {
-        total,
-        rows: rows.map((row) => ({
+        total: filteredRows.length,
+        rows: pagedRows.map((row) => ({
           day: days[row.dayOfWeek] ?? String(row.dayOfWeek),
-          class: row.class.name,
-          section: row.section?.name ?? '',
-          period: row.period.name,
-          subject: row.subject.name,
-          teacher: fullName(row.teacher),
-          room: row.room ?? '',
+          class: row.className ?? '',
+          section: row.sectionName ?? '',
+          period: row.periodName ?? '',
+          subject: row.subjectName,
+          teacher: row.teacherName,
+          room: row.roomName ?? '',
           active: row.isActive ? 'Yes' : 'No',
         })),
       };
@@ -1078,24 +1110,26 @@ const reports: ReportDefinition[] = [
       { key: 'total', label: 'Total' },
     ],
     fetch: async (query) => {
-      const where: Prisma.StudentAttendanceWhereInput = {
+      const records = await attendanceReadService.getStudentAttendance({
         schoolId: query.schoolId,
-        ...(query.classId ? { classId: query.classId } : {}),
-        ...(query.sectionId ? { sectionId: query.sectionId } : {}),
-        ...(query.studentId ? { studentId: query.studentId } : {}),
-        ...dateRange('attendanceDate', query),
-      };
-      const records = await prisma.studentAttendance.findMany({ where, orderBy: [{ attendanceDate: 'desc' }], include: { student: true, class: true, section: true } });
+        classId: query.classId,
+        sectionId: query.sectionId,
+        studentId: query.studentId,
+        fromDate: query.fromDate,
+        toDate: query.toDate,
+        source: 'student-attendance',
+      });
+      const lookups = await loadStudentAttendanceLookups(query.schoolId, records);
       const grouped = new Map<string, Record<string, unknown> & { present: number; absent: number; late: number; halfDay: number; total: number }>();
       records.forEach((record) => {
-        const month = record.attendanceDate.toISOString().slice(0, 7);
+        const month = record.date.slice(0, 7);
         const key = `${month}:${record.studentId}`;
         const row = grouped.get(key) ?? {
           month,
-          admissionNo: record.student.admissionNo,
-          studentName: fullName(record.student),
-          class: record.class.name,
-          section: record.section.name,
+          admissionNo: lookups.students.get(record.studentId)?.admissionNo ?? '',
+          studentName: fullName(lookups.students.get(record.studentId)),
+          class: record.classId ? lookups.classes.get(record.classId)?.name ?? '' : '',
+          section: record.sectionId ? lookups.sections.get(record.sectionId)?.name ?? '' : '',
           present: 0,
           absent: 0,
           late: 0,
@@ -1132,22 +1166,31 @@ const reports: ReportDefinition[] = [
       { key: 'total', label: 'Total' },
     ],
     fetch: async (query) => {
-      const where: Prisma.StaffAttendanceWhereInput = {
+      const summary = await attendanceReadService.getTeacherAttendance({
         schoolId: query.schoolId,
-        ...(query.teacherId ? { staffId: query.teacherId } : {}),
-        ...(query.status ? { status: query.status as any } : {}),
-        ...dateRange('attendanceDate', query),
-      };
-      const records = await prisma.staffAttendance.findMany({ where, orderBy: [{ attendanceDate: 'desc' }], include: { staff: true } });
+        teacherId: query.teacherId,
+        fromDate: query.fromDate,
+        toDate: query.toDate,
+      });
+      const records = filterStatus(summary.records, query.status);
+      const staffIds = [...new Set(records.map((record) => record.teacherId))];
+      const staffRows = staffIds.length
+        ? await prisma.teacherProfile.findMany({
+          where: { schoolId: query.schoolId, id: { in: staffIds } },
+            select: { id: true, employeeNo: true, firstName: true, lastName: true },
+          })
+        : [];
+      const staffById = new Map(staffRows.map((staff) => [staff.id, staff]));
       const grouped = new Map<string, { employeeNo: string; staffName: string; present: number; absent: number; late: number; halfDay: number; total: number }>();
       records.forEach((record) => {
-        const row = grouped.get(record.staffId) ?? { employeeNo: record.staff.employeeNo, staffName: fullName(record.staff), present: 0, absent: 0, late: 0, halfDay: 0, total: 0 };
+        const staff = staffById.get(record.teacherId);
+        const row = grouped.get(record.teacherId) ?? { employeeNo: staff?.employeeNo ?? '', staffName: fullName(staff), present: 0, absent: 0, late: 0, halfDay: 0, total: 0 };
         if (record.status === 'PRESENT') row.present += 1;
         if (record.status === 'ABSENT') row.absent += 1;
         if (record.status === 'LATE') row.late += 1;
         if (record.status === 'HALF_DAY') row.halfDay += 1;
         row.total += 1;
-        grouped.set(record.staffId, row);
+        grouped.set(record.teacherId, row);
       });
       const rows = Array.from(grouped.values()).sort((a, b) => a.staffName.localeCompare(b.staffName));
       return { total: rows.length, rows: rows.slice((query.page - 1) * query.pageSize, query.page * query.pageSize) };

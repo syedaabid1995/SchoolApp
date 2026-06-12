@@ -1,6 +1,7 @@
 import type { LeaveRequestStatus, RoleName, StudentAttendanceStatus, TeacherSelfAttendanceStatus, Prisma } from '@prisma/client';
 import { prisma } from '../config/db';
 import { HttpError } from '../middlewares/error.middleware';
+import { attendanceReadService } from '../modules/attendance/services/attendance-read.service';
 import { createAuditLog } from './auditLog.service';
 
 const normalizeDate = (value?: Date | string | null) => {
@@ -524,10 +525,8 @@ export const getAttendanceSummary = async (params: {
   actorRole?: string;
 }) => {
   const date = params.date ? normalizeDate(params.date) : undefined;
-  const where: Prisma.StudentAttendanceSessionWhereInput = {
-    schoolId: params.schoolId,
-    ...(date ? { date } : {}),
-  };
+  let classId: string | string[] | undefined;
+  let classSectionPairs: Array<{ classId: string; sectionId: string | null }> | undefined;
 
   if (params.actorRole && !isAdminRole(params.actorRole) && params.actorId) {
     const teacher = await getTeacherProfile(params.schoolId, params.actorId);
@@ -550,19 +549,17 @@ export const getAttendanceSummary = async (params: {
 
     const hasSectionScoped = pairs.some((pair) => pair.sectionId);
     if (!hasSectionScoped) {
-      where.classId = { in: pairs.map((pair) => pair.classId) };
+      classId = pairs.map((pair) => pair.classId);
     } else {
-      where.OR = pairs.map((pair) => ({
-        classId: pair.classId,
-        sectionId: pair.sectionId,
-      }));
+      classSectionPairs = pairs;
     }
   }
 
-  const sessions = await prisma.studentAttendanceSession.findMany({
-    where,
-    include: { records: true, class: { select: { id: true, name: true } }, section: { select: { id: true, name: true } } },
-    orderBy: { date: 'desc' },
+  const sessions = await attendanceReadService.getSessionAttendanceOverview({
+    schoolId: params.schoolId,
+    date,
+    classId,
+    classSectionPairs,
   });
 
   const counts = sessions.flatMap((s) => s.records).reduce<Record<string, number>>((acc, rec) => {
@@ -573,7 +570,7 @@ export const getAttendanceSummary = async (params: {
   return {
     totals: {
       sessions: sessions.length,
-      records: sessions.reduce((sum, s) => sum + s.records.length, 0),
+      records: sessions.reduce((sum, s) => sum + s.recordCount, 0),
       present: counts.PRESENT ?? 0,
       absent: counts.ABSENT ?? 0,
       late: counts.LATE ?? 0,
@@ -584,12 +581,12 @@ export const getAttendanceSummary = async (params: {
       date: s.date,
       status: s.status,
       classId: s.classId,
-      className: s.class.name,
+      className: s.className,
       sectionId: s.sectionId,
-      sectionName: s.section?.name ?? 'N/A',
+      sectionName: s.sectionName,
       lockedAt: s.lockedAt,
       lockReason: s.lockReason,
-      recordCount: s.records.length,
+      recordCount: s.recordCount,
     })),
   };
 };

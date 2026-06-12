@@ -1,22 +1,13 @@
 import type { Request, Response } from 'express';
-import { z } from 'zod';
 import { resolveSchoolId } from '../utils/tenant';
 import { HttpError } from '../middlewares/error.middleware';
 import { approveAttendanceSession, rejectAttendanceSession } from '../services/attendanceApproval.service';
 import { logAudit } from '../utils/audit';
 import { invalidateAttendanceCache } from '../services/cache/cache.invalidation';
-
-const approveSchema = z.object({
-  schoolId: z.string().uuid().optional(),
-});
-
-const rejectSchema = z.object({
-  reason: z.string().min(1),
-  schoolId: z.string().uuid().optional(),
-});
+import { approveAttendanceSessionSchema, rejectAttendanceSessionSchema } from '../validations/attendance.validation';
 
 export const approveSession = async (req: Request, res: Response) => {
-  const payload = approveSchema.parse(req.body);
+  const payload = approveAttendanceSessionSchema.parse(req.body);
   const schoolId = resolveSchoolId(req, payload.schoolId ?? (req.query.schoolId as string | undefined));
   const auth = req.auth;
   if (!auth) throw new HttpError(401, 'Unauthorized');
@@ -40,7 +31,7 @@ export const approveSession = async (req: Request, res: Response) => {
 };
 
 export const rejectSession = async (req: Request, res: Response) => {
-  const payload = rejectSchema.parse(req.body);
+  const payload = rejectAttendanceSessionSchema.parse(req.body);
   const schoolId = resolveSchoolId(req, payload.schoolId ?? (req.query.schoolId as string | undefined));
   const auth = req.auth;
   if (!auth) throw new HttpError(401, 'Unauthorized');

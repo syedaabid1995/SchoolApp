@@ -4,6 +4,7 @@ import { HttpError } from '../middlewares/error.middleware';
 import { invalidateSchoolCache, invalidateSubscriptionCache } from './cache/cache.invalidation';
 import { createAuditLog } from './auditLog.service';
 import { getNextNumber } from './numberSequence.service';
+import { PermissionCacheService } from './permissionCache.service';
 
 type BillingCycleInput = 'MONTHLY' | 'ANNUAL' | 'QUARTERLY' | 'YEARLY';
 type EffectiveDateInput = 'IMMEDIATE' | 'NEXT_BILLING_CYCLE';
@@ -41,6 +42,11 @@ const defaultLimits = {
 const openInvoiceStatuses = ['UNPAID', 'PARTIAL', 'OVERDUE'] as const;
 const paidRestrictedStatusReasons = ['payment', 'subscription', 'overdue'];
 const limitEligibleSubscriptionStatuses = ['ACTIVE', 'TRIAL'] as const;
+
+const invalidateSchoolSubscriptionAuthorizationCache = async (schoolId: string) => {
+  await invalidateSubscriptionCache(schoolId);
+  await PermissionCacheService.invalidateSchool(schoolId);
+};
 
 const addDays = (date: Date, days: number) => {
   const next = new Date(date.getTime());
@@ -333,7 +339,7 @@ export const upsertSubscription = async (params: {
       teacherLimit,
     },
   });
-  await invalidateSubscriptionCache(params.schoolId);
+  await invalidateSchoolSubscriptionAuthorizationCache(params.schoolId);
   await invalidateSchoolCache(params.schoolId);
   return subscription;
 };
@@ -686,7 +692,7 @@ export const generateSchoolSubscriptionInvoice = async (params: {
       dueDate: invoice.dueDate,
     },
   });
-  await invalidateSubscriptionCache(params.schoolId);
+  await invalidateSchoolSubscriptionAuthorizationCache(params.schoolId);
   await invalidateSchoolCache(params.schoolId);
   return mapSubscriptionInvoice(invoice);
 };
@@ -831,7 +837,7 @@ export const assignSchoolSubscriptionPlan = async (params: {
       : null,
     afterState: { planId: plan.id, planName: plan.name, status, trialDays, reason: params.reason ?? null },
   });
-  await invalidateSubscriptionCache(params.schoolId);
+  await invalidateSchoolSubscriptionAuthorizationCache(params.schoolId);
   await invalidateSchoolCache(params.schoolId);
   return getAdminSchoolSubscriptionDetail(params.schoolId);
 };
@@ -867,7 +873,7 @@ export const startSchoolSubscriptionTrial = async (params: {
     beforeState: existing ? { status: existing.status, endsAt: existing.endsAt } : null,
     afterState: { planId: plan.id, trialDays: params.trialDays, reason: params.reason ?? null },
   });
-  await invalidateSubscriptionCache(params.schoolId);
+  await invalidateSchoolSubscriptionAuthorizationCache(params.schoolId);
   return getAdminSchoolSubscriptionDetail(params.schoolId);
 };
 
@@ -897,7 +903,7 @@ export const extendSchoolSubscriptionTrial = async (params: {
     beforeState: { status: existing.status, endsAt: existing.endsAt },
     afterState: { status: 'TRIAL', endsAt: subscription.endsAt, extraDays: params.extraDays, reason: params.reason ?? null },
   });
-  await invalidateSubscriptionCache(params.schoolId);
+  await invalidateSchoolSubscriptionAuthorizationCache(params.schoolId);
   return getAdminSchoolSubscriptionDetail(params.schoolId);
 };
 
@@ -949,7 +955,7 @@ const changeSchoolSubscriptionPlan = async (params: {
       reason: params.reason ?? null,
     },
   });
-  await invalidateSubscriptionCache(params.schoolId);
+  await invalidateSchoolSubscriptionAuthorizationCache(params.schoolId);
   return getAdminSchoolSubscriptionDetail(params.schoolId);
 };
 
@@ -993,7 +999,7 @@ const updateSubscriptionStatus = async (params: {
     beforeState: { status: existing.status },
     afterState: { status: params.status, reason: params.reason ?? null },
   });
-  await invalidateSubscriptionCache(params.schoolId);
+  await invalidateSchoolSubscriptionAuthorizationCache(params.schoolId);
   return getAdminSchoolSubscriptionDetail(params.schoolId);
 };
 
@@ -1026,7 +1032,7 @@ export const cancelSchoolSubscription = async (params: {
     beforeState: { status: existing.status },
     afterState: { status, cancelAt: params.cancelAt ?? 'IMMEDIATE', reason: params.reason ?? null },
   });
-  await invalidateSubscriptionCache(params.schoolId);
+  await invalidateSchoolSubscriptionAuthorizationCache(params.schoolId);
   return getAdminSchoolSubscriptionDetail(params.schoolId);
 };
 
@@ -1057,7 +1063,7 @@ export const renewSchoolSubscription = async (params: {
     beforeState: { status: existing.status, endsAt: existing.endsAt },
     afterState: { status: 'ACTIVE', endsAt, periodMonths: params.periodMonths, reason: params.reason ?? null },
   });
-  await invalidateSubscriptionCache(params.schoolId);
+  await invalidateSchoolSubscriptionAuthorizationCache(params.schoolId);
   return getAdminSchoolSubscriptionDetail(params.schoolId);
 };
 
@@ -1094,7 +1100,7 @@ export const overrideSchoolSubscriptionLimits = async (params: {
       reason: params.reason ?? null,
     },
   });
-  await invalidateSubscriptionCache(params.schoolId);
+  await invalidateSchoolSubscriptionAuthorizationCache(params.schoolId);
   return getAdminSchoolSubscriptionDetail(params.schoolId);
 };
 
@@ -1218,7 +1224,7 @@ export const recordSchoolSubscriptionManualPayment = async (params: {
       balanceAmount: moneyNumber(payment.balanceAmount),
     },
   });
-  await invalidateSubscriptionCache(params.schoolId);
+  await invalidateSchoolSubscriptionAuthorizationCache(params.schoolId);
   await invalidateSchoolCache(params.schoolId);
   return {
     detail: await getAdminSchoolSubscriptionDetail(params.schoolId),

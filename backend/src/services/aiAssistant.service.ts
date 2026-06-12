@@ -3,8 +3,9 @@ import { z } from 'zod';
 import { env } from '../config/env';
 import { prisma } from '../config/db';
 import { HttpError } from '../middlewares/error.middleware';
-import { getEffectivePermissionCodesForUser } from '../utils/employeePermissions';
 import { planAiOperations } from './aiOperationPlanner.service';
+import { PermissionCodes as P } from '../permissions/permission-manifest';
+import { AuthorizationService } from './authorization.service';
 import {
   executeReadOnlyAiOperationPlan,
   summarizeOperationResults,
@@ -209,8 +210,7 @@ const assistantMessage = async (conversationId: string, message: string) => {
 
 const ensureCanExecuteAssistantAction = async (ctx: AiAssistantContext) => {
   if (!ctx.schoolId) throw new HttpError(400, 'Select a school context before executing AI assistant actions');
-  const permissions = await getEffectivePermissionCodesForUser(ctx.schoolId, ctx.userId, ctx.role);
-  if (!permissions.includes('ai.assistant.execute')) {
+  if (!await AuthorizationService.hasAnyEffectivePermission(ctx, P.aiAssistantExecute)) {
     throw new HttpError(403, 'You do not have permission to execute AI assistant actions');
   }
 };

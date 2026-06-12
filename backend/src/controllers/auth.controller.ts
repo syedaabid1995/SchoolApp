@@ -45,7 +45,7 @@ import {
 } from '../services/totp.service';
 import { isAuthenticatorAppVerificationEnabled } from '../services/authSecurity.service';
 import { buildAuthAuditMetadata, createAuthAuditLog, maskEmailForAudit } from '../utils/audit';
-import { getEffectivePermissionCodesForUser } from '../utils/employeePermissions';
+import { AuthorizationService } from '../services/authorization.service';
 import { hashPassword, verifyPassword } from '../utils/password';
 import { schoolIdentifierWhere } from '../utils/schoolDomain';
 import { hashToken } from '../utils/token';
@@ -623,7 +623,7 @@ export const login = async (req: Request, res: Response) => {
   }
 
   const permissions = user.schoolId
-    ? await getEffectivePermissionCodesForUser(user.schoolId, user.id, roleName)
+    ? await AuthorizationService.getEffectivePermissionCodesForUser(user.schoolId, user.id, roleName)
     : [];
 
   const accessToken = signToken({ ...payloadBase, typ: 'access' }, ACCESS_TOKEN_TTL);

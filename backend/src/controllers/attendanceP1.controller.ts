@@ -1,9 +1,16 @@
 import type { Request, Response } from 'express';
-import { z } from 'zod';
 import { env } from '../config/env';
 import { prisma } from '../config/db';
 import { HttpError } from '../middlewares/error.middleware';
 import { resolveSchoolId } from '../utils/tenant';
+import {
+  attendanceSummaryQuerySchema,
+  createAttendanceSessionSchema,
+  lockAttendanceSessionSchema,
+  teacherSelfAttendanceListQuerySchema,
+  teacherSelfAttendanceSchema,
+  updateAttendanceSessionSchema,
+} from '../validations/attendance.validation';
 import {
   createStudentAttendanceSession,
   ensureTeacherAssignedToClassSection,
@@ -14,53 +21,6 @@ import {
   markTeacherSelfAttendance,
   updateStudentAttendanceSession,
 } from '../services/attendanceP1.service';
-
-const recordSchema = z.object({
-  studentId: z.string().uuid(),
-  status: z.enum(['PRESENT', 'ABSENT', 'LATE', 'HALF_DAY']),
-  remarks: z.string().trim().max(500).optional(),
-});
-
-const createSessionSchema = z.object({
-  schoolId: z.string().uuid().optional(),
-  classId: z.string().uuid(),
-  sectionId: z.string().uuid().optional(),
-  date: z.coerce.date().optional(),
-});
-
-const updateSessionSchema = z.object({
-  schoolId: z.string().uuid().optional(),
-  records: z.array(recordSchema).min(1).optional().default([]),
-  submit: z.boolean().optional().default(false),
-  unlock: z.boolean().optional().default(false),
-  reason: z.string().trim().optional(),
-});
-
-const lockSessionSchema = z.object({
-  schoolId: z.string().uuid().optional(),
-  reason: z.string().trim().min(1),
-});
-
-const summaryQuerySchema = z.object({
-  schoolId: z.string().uuid().optional(),
-  date: z.coerce.date().optional(),
-});
-
-const selfAttendanceSchema = z.object({
-  schoolId: z.string().uuid().optional(),
-  status: z.enum(['PRESENT', 'LEAVE']),
-  date: z.coerce.date().optional(),
-  teacherId: z.string().uuid().optional(),
-  overrideReason: z.string().trim().optional(),
-  leaveRequestId: z.string().uuid().optional(),
-});
-
-const selfAttendanceListQuerySchema = z.object({
-  schoolId: z.string().uuid().optional(),
-  teacherId: z.string().uuid().optional(),
-  fromDate: z.coerce.date().optional(),
-  toDate: z.coerce.date().optional(),
-});
 
 const requireAuth = (req: Request) => {
   if (!req.auth) throw new HttpError(401, 'Unauthorized');
@@ -74,7 +34,7 @@ const ensureAttendanceEnabled = () => {
 export const createAttendanceSessionApi = async (req: Request, res: Response) => {
   ensureAttendanceEnabled();
   const auth = requireAuth(req);
-  const payload = createSessionSchema.parse(req.body);
+  const payload = createAttendanceSessionSchema.parse(req.body);
   const schoolId = resolveSchoolId(req, payload.schoolId);
   const sectionCount = await prisma.section.count({
     where: { classId: payload.classId, class: { schoolId } },
@@ -108,7 +68,7 @@ export const createAttendanceSessionApi = async (req: Request, res: Response) =>
 export const updateAttendanceSessionApi = async (req: Request, res: Response) => {
   ensureAttendanceEnabled();
   const auth = requireAuth(req);
-  const payload = updateSessionSchema.parse(req.body);
+  const payload = updateAttendanceSessionSchema.parse(req.body);
   const schoolId = resolveSchoolId(req, payload.schoolId);
 
   const updated = await updateStudentAttendanceSession({
@@ -132,7 +92,7 @@ export const updateAttendanceSessionApi = async (req: Request, res: Response) =>
 export const lockAttendanceSessionApi = async (req: Request, res: Response) => {
   ensureAttendanceEnabled();
   const auth = requireAuth(req);
-  const payload = lockSessionSchema.parse(req.body);
+  const payload = lockAttendanceSessionSchema.parse(req.body);
   const schoolId = resolveSchoolId(req, payload.schoolId);
 
   const locked = await lockStudentAttendanceSession({
@@ -149,7 +109,7 @@ export const lockAttendanceSessionApi = async (req: Request, res: Response) => {
 export const attendanceSummaryApi = async (req: Request, res: Response) => {
   ensureAttendanceEnabled();
   const auth = requireAuth(req);
-  const payload = summaryQuerySchema.parse(req.query);
+  const payload = attendanceSummaryQuerySchema.parse(req.query);
   const schoolId = resolveSchoolId(req, payload.schoolId);
   const summary = await getAttendanceSummary({
     schoolId,
@@ -165,7 +125,7 @@ export const markTeacherSelfAttendanceApi = async (req: Request, res: Response) 
     throw new HttpError(503, 'Teacher self attendance is disabled');
   }
   const auth = requireAuth(req);
-  const payload = selfAttendanceSchema.parse(req.body);
+  const payload = teacherSelfAttendanceSchema.parse(req.body);
   const schoolId = resolveSchoolId(req, payload.schoolId);
 
   const attendance = await markTeacherSelfAttendance({
@@ -187,7 +147,7 @@ export const listTeacherSelfAttendanceApi = async (req: Request, res: Response) 
     throw new HttpError(503, 'Teacher self attendance is disabled');
   }
   const auth = requireAuth(req);
-  const payload = selfAttendanceListQuerySchema.parse(req.query);
+  const payload = teacherSelfAttendanceListQuerySchema.parse(req.query);
   const schoolId = resolveSchoolId(req, payload.schoolId);
 
   const records = await listTeacherSelfAttendance({

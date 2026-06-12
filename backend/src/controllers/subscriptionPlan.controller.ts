@@ -7,6 +7,7 @@ import { cacheKeys } from '../services/cache/cache.keys';
 import { rememberCache, setCacheHeader } from '../services/cache/cache.service';
 import { cacheTTL } from '../services/cache/cache.ttl';
 import { invalidateSchoolCache, invalidateSubscriptionCache } from '../services/cache/cache.invalidation';
+import { PermissionCacheService } from '../services/permissionCache.service';
 import { EMPLOYEE_PERMISSION_CATALOG } from '../utils/employeePermissions';
 
 const createSchema = z.object({
@@ -123,6 +124,7 @@ export const updateSubscriptionPlanApi = async (req: Request, res: Response) => 
   });
   await invalidateSubscriptionCache();
   await invalidateSchoolCache();
+  await PermissionCacheService.invalidatePlan(id);
 
   res.status(200).json(updated);
 };
@@ -142,6 +144,7 @@ export const deleteSubscriptionPlanApi = async (req: Request, res: Response) => 
   });
   await invalidateSubscriptionCache();
   await invalidateSchoolCache();
+  await PermissionCacheService.invalidatePlan(id);
 
   res.status(200).json({ success: true, id, message: 'Subscription plan deleted' });
 };
@@ -218,6 +221,7 @@ export const updatePlanPermissionsApi = async (req: Request, res: Response) => {
   });
   await invalidateSubscriptionCache();
   await invalidateSchoolCache();
+  await PermissionCacheService.invalidatePlan(id);
 
   res.status(200).json({ success: true });
 };

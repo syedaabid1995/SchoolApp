@@ -1,5 +1,4 @@
 import type { Request, Response } from 'express';
-import { z } from 'zod';
 import { prisma } from '../config/db';
 import { HttpError } from '../middlewares/error.middleware';
 import { resolveSchoolId } from '../utils/tenant';
@@ -10,47 +9,16 @@ import { invalidateAttendanceCache } from '../services/cache/cache.invalidation'
 import { buildQueryFingerprint, cacheKeys } from '../services/cache/cache.keys';
 import { rememberCache, setCacheHeader } from '../services/cache/cache.service';
 import { cacheTTL } from '../services/cache/cache.ttl';
-
-const startSchema = z.object({
-  periodId: z.string().uuid(),
-  date: z.coerce.date().optional(),
-  deviceId: z.string().min(1),
-  gpsLat: z.number().optional(),
-  gpsLng: z.number().optional(),
-  schoolId: z.string().uuid().optional(),
-});
-
-const markSchema = z.object({
-  sessionId: z.string().uuid(),
-  records: z
-    .array(
-      z.object({
-        studentId: z.string().uuid(),
-        confidence: z.number().min(0).max(1).optional(),
-      }),
-    )
-    .min(1),
-  deviceId: z.string().min(1),
-  gpsLat: z.number().optional(),
-  gpsLng: z.number().optional(),
-  schoolId: z.string().uuid().optional(),
-});
-
-const overrideSchema = z.object({
-  status: z.enum(['PRESENT', 'LATE', 'ABSENT', 'EXCUSED']),
-  reason: z.string().min(1),
-  schoolId: z.string().uuid().optional(),
-});
-
-const listSessionsSchema = z.object({
-  schoolId: z.string().uuid().optional(),
-  dateFrom: z.coerce.date().optional(),
-  dateTo: z.coerce.date().optional(),
-  approvalStatus: z.enum(['PENDING', 'APPROVED', 'REJECTED']).optional(),
-});
+import { attendanceReadService } from '../modules/attendance/services/attendance-read.service';
+import {
+  listLegacyAttendanceSessionsQuerySchema,
+  markLegacyAttendanceSchema,
+  overrideLegacyAttendanceSchema,
+  startLegacyAttendanceSessionSchema,
+} from '../validations/attendance.validation';
 
 export const startSession = async (req: Request, res: Response) => {
-  const payload = startSchema.parse(req.body);
+  const payload = startLegacyAttendanceSessionSchema.parse(req.body);
   const schoolId = resolveSchoolId(req, payload.schoolId);
   const auth = req.auth;
   if (!auth) throw new HttpError(401, 'Unauthorized');
@@ -113,7 +81,7 @@ export const startSession = async (req: Request, res: Response) => {
 };
 
 export const markAttendance = async (req: Request, res: Response) => {
-  const payload = markSchema.parse(req.body);
+  const payload = markLegacyAttendanceSchema.parse(req.body);
   const schoolId = resolveSchoolId(req, payload.schoolId);
   const auth = req.auth;
   if (!auth) throw new HttpError(401, 'Unauthorized');
@@ -251,7 +219,7 @@ export const closeSession = async (req: Request, res: Response) => {
 };
 
 export const overrideAttendance = async (req: Request, res: Response) => {
-  const payload = overrideSchema.parse(req.body);
+  const payload = overrideLegacyAttendanceSchema.parse(req.body);
   const schoolId = resolveSchoolId(req, payload.schoolId ?? (req.query.schoolId as string | undefined));
   const auth = req.auth;
   if (!auth) throw new HttpError(401, 'Unauthorized');
@@ -312,17 +280,13 @@ export const listSessionRecords = async (req: Request, res: Response) => {
     throw new HttpError(404, 'Attendance session not found');
   }
 
-  const records = await prisma.attendanceRecord.findMany({
-    where: { sessionId },
-    include: { student: true },
-    orderBy: { capturedAt: 'asc' },
-  });
+  const records = await attendanceReadService.getPeriodSessionRecords(sessionId);
 
   res.status(200).json(records);
 };
 
 export const listSessions = async (req: Request, res: Response) => {
-  const payload = listSessionsSchema.parse(req.query);
+  const payload = listLegacyAttendanceSessionsQuerySchema.parse(req.query);
   const schoolId = resolveSchoolId(req, payload.schoolId);
 
   const to = payload.dateTo ?? new Date();

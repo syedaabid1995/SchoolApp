@@ -2,6 +2,7 @@ import type { NextFunction, Request, Response } from 'express';
 import type { RoleName } from '@prisma/client';
 import { prisma } from '../config/db';
 import { HttpError } from './error.middleware';
+import { AuthorizationService } from '../services/authorization.service';
 
 const SUPER_ADMIN_ROLE: RoleName = 'SUPER_ADMIN';
 const SCHOOL_ADMIN_ROLE: RoleName = 'SCHOOL_ADMIN';
@@ -81,34 +82,7 @@ export const requirePermission = (...permissions: string[]) => {
   return async (req: Request, _res: Response, next: NextFunction) => {
     try {
       const auth = requireAuth(req);
-
-      const userRoles = await prisma.userRole.findMany({
-        where: { userId: auth.userId },
-        select: { roleId: true, role: { select: { name: true } } },
-      });
-
-      const hasSuperAdmin = userRoles.some((entry) => entry.role.name === SUPER_ADMIN_ROLE);
-      if (hasSuperAdmin) {
-        return next();
-      }
-
-      const roleIds = userRoles.map((entry) => entry.roleId);
-      if (roleIds.length === 0) {
-        return next(new HttpError(403, 'Forbidden'));
-      }
-
-      const rolePermissions = await prisma.rolePermission.findMany({
-        where: { roleId: { in: roleIds } },
-        select: { permission: { select: { code: true } } },
-      });
-
-      const permissionCodes = new Set(rolePermissions.map((entry) => entry.permission.code));
-      const isAllowed = permissions.some((permission) => permissionCodes.has(permission));
-
-      if (!isAllowed) {
-        return next(new HttpError(403, 'Forbidden'));
-      }
-
+      await AuthorizationService.assertPermission(auth, permissions);
       return next();
     } catch (err) {
       return next(err);

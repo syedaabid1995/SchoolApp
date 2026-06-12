@@ -2,6 +2,7 @@ import type { Request, Response } from 'express';
 import { prisma } from '../config/db';
 import { HttpError } from '../middlewares/error.middleware';
 import { requireAuth } from '../middlewares/rbac.middleware';
+import { attendanceReadService } from '../modules/attendance/services/attendance-read.service';
 import { evaluateFailCriteria, getExamGradingSettings } from '../services/grade.service';
 
 const resolveParentProfiles = async (userId: string) => {
@@ -93,10 +94,13 @@ export const getParentDashboard = async (req: Request, res: Response) => {
   const { childId } = req.query;
   const { child } = await requireChildAccess(auth.userId, typeof childId === 'string' ? childId : undefined);
 
-  const totalRecords = await prisma.attendanceRecord.count({ where: { studentId: child.id } });
-  const presentRecords = await prisma.attendanceRecord.count({
-    where: { studentId: child.id, status: { in: ['PRESENT', 'LATE', 'EXCUSED'] } },
+  const attendanceRecords = await attendanceReadService.getStudentAttendance({
+    schoolId: child.schoolId,
+    studentId: child.id,
+    source: 'period-attendance',
   });
+  const totalRecords = attendanceRecords.length;
+  const presentRecords = attendanceRecords.filter((record) => ['PRESENT', 'LATE', 'EXCUSED'].includes(record.status)).length;
   const attendancePercent = totalRecords ? Math.round((presentRecords / totalRecords) * 100) : null;
 
   const currentExam = await prisma.exam.findFirst({
@@ -145,9 +149,12 @@ export const getParentDashboard = async (req: Request, res: Response) => {
 
   const since = new Date();
   since.setDate(since.getDate() - 30);
-  const recentAttendance = await prisma.attendanceRecord.findMany({
-    where: { studentId: child.id, session: { date: { gte: since } } },
-    include: { session: { select: { date: true } } },
+  const recentAttendance = await attendanceReadService.getStudentAttendance({
+    schoolId: child.schoolId,
+    studentId: child.id,
+    fromDate: since,
+    toDate: new Date(),
+    source: 'period-attendance',
   });
   const presentDays = recentAttendance.filter((record) => record.status !== 'ABSENT').length;
   const absentDays = recentAttendance.filter((record) => record.status === 'ABSENT').length;
@@ -358,12 +365,14 @@ export const getParentAttendance = async (req: Request, res: Response) => {
   const end = new Date(start);
   end.setMonth(start.getMonth() + 1);
 
-  const records = await prisma.studentAttendanceRecord.findMany({
-    where: {
-      studentId: child.id,
-      session: { date: { gte: start, lt: end } },
-    },
-    include: { session: { select: { date: true } } },
+  const endInclusive = new Date(end);
+  endInclusive.setDate(endInclusive.getDate() - 1);
+  const records = await attendanceReadService.getStudentAttendance({
+    schoolId: child.schoolId,
+    studentId: child.id,
+    fromDate: start,
+    toDate: endInclusive,
+    source: 'session-attendance',
   });
 
   const statusRank: Record<string, number> = {
@@ -381,16 +390,13 @@ export const getParentAttendance = async (req: Request, res: Response) => {
 
   const byDate = new Map<string, { status: string; remark?: string | null }>();
   records.forEach((record) => {
-    const sessionDate = record.session.date;
-    const key = `${sessionDate.getUTCFullYear()}-${String(sessionDate.getUTCMonth() + 1).padStart(2, '0')}-${String(
-      sessionDate.getUTCDate(),
-    ).padStart(2, '0')}`;
+    const key = record.date;
     const nextStatus = normalizeStatus(record.status);
     const existing = byDate.get(key);
     const nextRank = statusRank[nextStatus] ?? 0;
     const existingRank = existing ? statusRank[existing.status] ?? 0 : 0;
-    if (!existing || nextRank > existingRank || (nextRank === existingRank && !existing.remark && record.remarks)) {
-      byDate.set(key, { status: nextStatus, remark: record.remarks ?? null });
+    if (!existing || nextRank > existingRank || (nextRank === existingRank && !existing.remark && record.note)) {
+      byDate.set(key, { status: nextStatus, remark: record.note ?? null });
     }
   });
 

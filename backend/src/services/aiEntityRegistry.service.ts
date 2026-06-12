@@ -1,5 +1,6 @@
 import type { AiEntityDefinition, AiOperationAction } from '../types/aiAssistant.types';
 
+import { PermissionCodes as P } from '../permissions/permission-manifest';
 export const AI_ENTITY_REGISTRY: Record<string, AiEntityDefinition> = {
   AcademicYear: {
     entity: 'AcademicYear',
@@ -13,9 +14,9 @@ export const AI_ENTITY_REGISTRY: Record<string, AiEntityDefinition> = {
     defaultLimit: 25,
     maxLimit: 50,
     permissions: {
-      findRecords: ['academics.setup'],
-      createRecord: ['academics.setup'],
-      updateRecord: ['academics.setup'],
+      findRecords: [P.academicsSetup],
+      createRecord: [P.academicsSetup],
+      updateRecord: [P.academicsSetup],
     },
     fields: {
       id: { type: 'uuid', filterable: true },
@@ -38,10 +39,10 @@ export const AI_ENTITY_REGISTRY: Record<string, AiEntityDefinition> = {
     maxLimit: 100,
     maxBulkCount: 50,
     permissions: {
-      findRecords: ['academic.class.view', 'academics.setup'],
-      createRecord: ['academic.class.create'],
-      bulkCreateRecords: ['academic.class.create'],
-      updateRecord: ['academic.class.edit'],
+      findRecords: [P.academicClassView, P.academicsSetup],
+      createRecord: [P.academicClassCreate],
+      bulkCreateRecords: [P.academicClassCreate],
+      updateRecord: [P.academicClassEdit],
     },
     fields: {
       id: { type: 'uuid', filterable: true },
@@ -65,10 +66,10 @@ export const AI_ENTITY_REGISTRY: Record<string, AiEntityDefinition> = {
     maxLimit: 100,
     maxBulkCount: 50,
     permissions: {
-      findRecords: ['academic.section.view', 'academics.setup'],
-      createRecord: ['academic.section.create'],
-      bulkCreateRecords: ['academic.section.create'],
-      updateRecord: ['academic.section.edit'],
+      findRecords: [P.academicSectionView, P.academicsSetup],
+      createRecord: [P.academicSectionCreate],
+      bulkCreateRecords: [P.academicSectionCreate],
+      updateRecord: [P.academicSectionEdit],
     },
     fields: {
       id: { type: 'uuid', filterable: true },
@@ -91,10 +92,10 @@ export const AI_ENTITY_REGISTRY: Record<string, AiEntityDefinition> = {
     maxLimit: 100,
     maxBulkCount: 50,
     permissions: {
-      findRecords: ['academic.subject.view', 'academics.setup'],
-      createRecord: ['academic.subject.create'],
-      bulkCreateRecords: ['academic.subject.create'],
-      updateRecord: ['academic.subject.edit'],
+      findRecords: [P.academicSubjectView, P.academicsSetup],
+      createRecord: [P.academicSubjectCreate],
+      bulkCreateRecords: [P.academicSubjectCreate],
+      updateRecord: [P.academicSubjectEdit],
     },
     fields: {
       id: { type: 'uuid', filterable: true },
@@ -120,8 +121,8 @@ export const AI_ENTITY_REGISTRY: Record<string, AiEntityDefinition> = {
     maxLimit: 100,
     maxBulkCount: 100,
     permissions: {
-      findRecords: ['academic.section.view', 'academic.class.view', 'academics.setup'],
-      linkRecords: ['academic.section.create', 'academic.class.edit'],
+      findRecords: [P.academicSectionView, P.academicClassView, P.academicsSetup],
+      linkRecords: [P.academicSectionCreate, P.academicClassEdit],
     },
     fields: {
       id: { type: 'uuid', filterable: true },

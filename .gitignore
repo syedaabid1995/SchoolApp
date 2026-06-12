@@ -17,6 +17,9 @@ dist/
 .env.development.local
 .env.test.local
 .env.production.local
+.env.*
+!.env.example
+!.env.*.example
 
 # Database
 *.db
@@ -109,4 +112,6 @@ backend/frontend-deployment.json
 backend/lightsail-deployment.json
 backend/simple-deployment.json
 backend/test-deployment.json
+*deployment*.json
+*deployment*.local.json
 /tools

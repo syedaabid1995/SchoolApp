@@ -3,7 +3,8 @@ import { z } from 'zod';
 import { resolveSchoolId } from '../utils/tenant';
 import { logAudit } from '../utils/audit';
 import { HttpError } from '../middlewares/error.middleware';
-import { getEffectivePermissionCodesForUser } from '../utils/employeePermissions';
+import { PermissionCodes as P } from '../permissions/permission-manifest';
+import { AuthorizationService } from '../services/authorization.service';
 import {
   generateTermReport,
   generateAnnualReport,
@@ -72,8 +73,8 @@ const requireReportPermission = async (req: Request, reportKey: string, options?
   const report = getReportDefinition(reportKey);
   if (!req.auth?.schoolId || req.auth.role === 'SUPER_ADMIN' || !managedRoles.has(req.auth.role ?? '')) return report;
 
-  const permissionCodes = await getEffectivePermissionCodesForUser(req.auth.schoolId, req.auth.userId, req.auth.role);
-  const required = [report.permission, ...(options?.export ? ['reports.export'] : [])];
+  const required = [report.permission, ...(options?.export ? [P.reportsExport] : [])];
+  const permissionCodes = await AuthorizationService.getEffectivePermissionCodesForUser(req.auth.schoolId, req.auth.userId, req.auth.role);
   const missing = required.find((code) => !permissionCodes.includes(code));
   if (missing) {
     throw new HttpError(403, `Missing required report permission: ${missing}`);

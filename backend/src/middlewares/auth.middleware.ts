@@ -3,9 +3,10 @@ import jwt, { type JwtPayload } from 'jsonwebtoken';
 import { env } from '../config/env';
 import { HttpError } from './error.middleware';
 import { prisma } from '../config/db';
-import { getEffectivePermissionCodesForUser } from '../utils/employeePermissions';
+import { PermissionCodes as P, type PermissionCode } from '../permissions/permission-manifest';
+import { AuthorizationService } from '../services/authorization.service';
 
-type PermissionRequirement = string | string[];
+type PermissionRequirement = PermissionCode | PermissionCode[];
 
 export type AuthContext = {
   userId: string;
@@ -131,8 +132,7 @@ export const authMiddleware = async (req: Request, _res: Response, next: NextFun
   if (schoolId && role && ['SCHOOL_ADMIN', 'TEACHER', 'ACCOUNTANT', 'LIBRARIAN', 'STAFF', 'PARENT', 'STUDENT'].includes(role)) {
     const permissionRequirement = resolvePermissionForPath(req.originalUrl, req.method);
     if (permissionRequirement) {
-      const permissionCodes = await getEffectivePermissionCodesForUser(schoolId, decoded.sub, role);
-      if (!hasPermissionRequirement(permissionCodes, permissionRequirement)) {
+      if (!await AuthorizationService.hasAnyEffectivePermission(req.auth, permissionRequirement)) {
         next(new HttpError(403, 'Access blocked by plan permissions'));
         return;
       }
@@ -142,318 +142,363 @@ export const authMiddleware = async (req: Request, _res: Response, next: NextFun
   next();
 };
 
-const hasPermissionRequirement = (permissionCodes: string[], requirement: PermissionRequirement) => {
-  if (Array.isArray(requirement)) return requirement.some((code) => permissionCodes.includes(code));
-  return permissionCodes.includes(requirement);
-};
-
 const studentLookupPermissions = [
-  'students.list',
-  'student.view',
-  'attendance.view',
-  'attendance.create',
-  'attendance.report',
-  'dormitory.view',
-  'transport.view',
-  'library.view',
-  'homework.view',
-  'fees.assignments.view',
-  'fees.collection.view',
-  'fees.invoice-generate.view',
-  'fees.invoices.view',
-  'exam.seating.view',
-  'exam.hallticket.view',
-  'academics.marks',
-  'reports.view',
-  'reports.students.view',
-  'reports.attendance.view',
-  'reports.transport.view',
-  'reports.dormitory.view',
-  'reports.fees.view',
+  P.studentsList,
+  P.studentView,
+  P.attendanceView,
+  P.attendanceCreate,
+  P.attendanceReport,
+  P.dormitoryView,
+  P.transportView,
+  P.libraryView,
+  P.homeworkView,
+  P.feesAssignmentsView,
+  P.feesCollectionView,
+  P.feesInvoiceGenerateView,
+  P.feesInvoicesView,
+  P.examSeatingView,
+  P.examHallticketView,
+  P.academicsMarks,
+  P.reportsView,
+  P.reportsStudentsView,
+  P.reportsAttendanceView,
+  P.reportsTransportView,
+  P.reportsDormitoryView,
+  P.reportsFeesView,
 ];
 
 const academicLookupPermissions = [
-  'academics.setup',
-  'student.view',
-  'students.list',
-  'students.add',
-  'attendance.view',
-  'attendance.create',
-  'attendance.report',
-  'staff.attendance.view',
-  'staff.attendance.create',
-  'dormitory.view',
-  'transport.view',
-  'library.view',
-  'homework.view',
-  'fees.assignments.view',
-  'fees.invoice-generate.view',
-  'fees.collection.view',
-  'exam.center.view',
-  'exam.room.view',
-  'exam.seating.view',
-  'exam.invigilator.view',
-  'exam.hallticket.view',
-  'academics.exams',
-  'academics.marks',
-  'reports.view',
-  'reports.students.view',
-  'reports.attendance.view',
-  'reports.academics.view',
-  'reports.exams.view',
-  'reports.transport.view',
-  'reports.dormitory.view',
-  'reports.fees.view',
+  P.academicsSetup,
+  P.studentView,
+  P.studentsList,
+  P.studentsAdd,
+  P.attendanceView,
+  P.attendanceCreate,
+  P.attendanceReport,
+  P.staffAttendanceView,
+  P.staffAttendanceCreate,
+  P.dormitoryView,
+  P.transportView,
+  P.libraryView,
+  P.homeworkView,
+  P.feesAssignmentsView,
+  P.feesInvoiceGenerateView,
+  P.feesCollectionView,
+  P.examCenterView,
+  P.examRoomView,
+  P.examSeatingView,
+  P.examInvigilatorView,
+  P.examHallticketView,
+  P.academicsExams,
+  P.academicsMarks,
+  P.reportsView,
+  P.reportsStudentsView,
+  P.reportsAttendanceView,
+  P.reportsAcademicsView,
+  P.reportsExamsView,
+  P.reportsTransportView,
+  P.reportsDormitoryView,
+  P.reportsFeesView,
 ];
 
 const teacherLookupPermissions = [
-  'teachers.list',
-  'staff.view',
-  'staff.attendance.view',
-  'staff.attendance.create',
-  'academic.assign_subject.view',
-  'academic.assign_subject.create',
-  'academic.class_teacher.view',
-  'academic.class_teacher.create',
-  'academic.routine.view',
-  'academic.routine.create',
-  'exam.invigilator.view',
-  'exam.invigilator.manage',
-  'idcards.view',
-  'reports.view',
-  'reports.staff.view',
-  'reports.academics.view',
-  'reports.exams.view',
+  P.teachersList,
+  P.staffView,
+  P.staffAttendanceView,
+  P.staffAttendanceCreate,
+  P.academicAssignSubjectView,
+  P.academicAssignSubjectCreate,
+  P.academicClassTeacherView,
+  P.academicClassTeacherCreate,
+  P.academicRoutineView,
+  P.academicRoutineCreate,
+  P.examInvigilatorView,
+  P.examInvigilatorManage,
+  P.idcardsView,
+  P.reportsView,
+  P.reportsStaffView,
+  P.reportsAcademicsView,
+  P.reportsExamsView,
 ];
 
 const staffLookupPermissions = [
-  'staff.view',
-  'teachers.list',
-  'staff.attendance.view',
-  'staff.attendance.create',
-  'transport.view',
-  'academic.assign_subject.view',
-  'academic.assign_subject.create',
-  'academic.class_teacher.view',
-  'academic.class_teacher.create',
-  'academic.routine.view',
-  'academic.routine.create',
-  'exam.invigilator.view',
-  'exam.invigilator.manage',
-  'idcards.view',
-  'payroll.view',
-  'payroll.generate',
-  'reports.view',
-  'reports.staff.view',
-  'reports.payroll.view',
-  'reports.transport.view',
+  P.staffView,
+  P.teachersList,
+  P.staffAttendanceView,
+  P.staffAttendanceCreate,
+  P.transportView,
+  P.academicAssignSubjectView,
+  P.academicAssignSubjectCreate,
+  P.academicClassTeacherView,
+  P.academicClassTeacherCreate,
+  P.academicRoutineView,
+  P.academicRoutineCreate,
+  P.examInvigilatorView,
+  P.examInvigilatorManage,
+  P.idcardsView,
+  P.payrollView,
+  P.payrollGenerate,
+  P.reportsView,
+  P.reportsStaffView,
+  P.reportsPayrollView,
+  P.reportsTransportView,
 ];
 
 export const resolvePermissionForPath = (path: string, method = 'GET') => {
   const pathOnly = path.split('?')[0] ?? path;
   const verb = method.toUpperCase();
 
-  if (pathOnly.startsWith('/api/v1/students/attendance/report')) return 'attendance.report';
-  if (pathOnly.startsWith('/api/v1/students/attendance')) return verb === 'POST' ? 'attendance.create' : 'attendance.view';
+  if (pathOnly.startsWith('/api/v1/students/attendance/report')) return P.attendanceReport;
+  if (pathOnly.startsWith('/api/v1/students/attendance')) return verb === 'POST' ? P.attendanceCreate : P.attendanceView;
 
   if (pathOnly.startsWith('/api/v1/students/groups')) {
-    if (verb === 'POST') return 'student.group.create';
-    if (verb === 'PATCH' || verb === 'PUT') return 'student.group.edit';
-    if (verb === 'DELETE') return 'student.group.delete';
-    return 'student.group.view';
+    if (verb === 'POST') return P.studentGroupCreate;
+    if (verb === 'PATCH' || verb === 'PUT') return P.studentGroupEdit;
+    if (verb === 'DELETE') return P.studentGroupDelete;
+    return P.studentGroupView;
   }
 
   if (pathOnly.startsWith('/api/v1/students/categories')) {
-    if (verb === 'POST') return 'student.category.create';
-    if (verb === 'PATCH' || verb === 'PUT') return 'student.category.edit';
-    if (verb === 'DELETE') return 'student.category.delete';
-    return 'student.category.view';
+    if (verb === 'POST') return P.studentCategoryCreate;
+    if (verb === 'PATCH' || verb === 'PUT') return P.studentCategoryEdit;
+    if (verb === 'DELETE') return P.studentCategoryDelete;
+    return P.studentCategoryView;
   }
 
   if (pathOnly.startsWith('/api/v1/students/promotions')) {
-    return verb === 'POST' ? 'student.promote.create' : 'student.promote.view';
+    return verb === 'POST' ? P.studentPromoteCreate : P.studentPromoteView;
   }
 
-  if (/^\/api\/v1\/students\/students\/[^/]+\/disable$/.test(pathOnly)) return 'student.disabled.edit';
-  if (/^\/api\/v1\/students\/disabled\/[^/]+\/restore$/.test(pathOnly)) return 'student.disabled.restore';
-  if (pathOnly.startsWith('/api/v1/students/disabled')) return verb === 'DELETE' ? 'student.disabled.delete' : 'student.disabled.view';
+  if (/^\/api\/v1\/students\/students\/[^/]+\/disable$/.test(pathOnly)) return P.studentDisabledEdit;
+  if (/^\/api\/v1\/students\/disabled\/[^/]+\/restore$/.test(pathOnly)) return P.studentDisabledRestore;
+  if (pathOnly.startsWith('/api/v1/students/disabled')) return verb === 'DELETE' ? P.studentDisabledDelete : P.studentDisabledView;
 
-  if (pathOnly.startsWith('/api/v1/students/students/import')) return 'student.import';
+  if (pathOnly.startsWith('/api/v1/students/students/import')) return P.studentImport;
   if (/^\/api\/v1\/students\/students\/[^/]+\/documents/.test(pathOnly)) {
-    if (verb === 'POST') return 'student.document.create';
-    if (verb === 'DELETE') return 'student.document.delete';
-    return 'student.document.view';
+    if (verb === 'POST') return P.studentDocumentCreate;
+    if (verb === 'DELETE') return P.studentDocumentDelete;
+    return P.studentDocumentView;
   }
   if (/^\/api\/v1\/students\/students\/[^/]+\/timeline/.test(pathOnly)) {
-    if (verb === 'POST') return 'student.timeline.create';
-    if (verb === 'DELETE') return 'student.timeline.delete';
-    return 'student.timeline.view';
+    if (verb === 'POST') return P.studentTimelineCreate;
+    if (verb === 'DELETE') return P.studentTimelineDelete;
+    return P.studentTimelineView;
   }
   if (pathOnly.startsWith('/api/v1/students/students')) {
-    if (verb === 'POST') return 'student.create';
-    if (verb === 'PATCH' || verb === 'PUT') return 'student.edit';
-    if (verb === 'DELETE') return 'student.delete';
+    if (verb === 'POST') return P.studentCreate;
+    if (verb === 'PATCH' || verb === 'PUT') return P.studentEdit;
+    if (verb === 'DELETE') return P.studentDelete;
     return studentLookupPermissions;
   }
-  if (pathOnly.startsWith('/api/v1/imports')) return 'student.import';
+  if (pathOnly.startsWith('/api/v1/imports')) return P.studentImport;
 
-  if (pathOnly.startsWith('/api/v1/staff/attendance/report')) return 'staff.attendance.report';
-  if (pathOnly.startsWith('/api/v1/staff/attendance')) return verb === 'POST' ? 'staff.attendance.create' : 'staff.attendance.view';
-  if (pathOnly.startsWith('/api/v1/staff/payroll/report')) return 'payroll.report';
-  if (/^\/api\/v1\/staff\/payroll\/[^/]+\/pay$/.test(pathOnly)) return 'payroll.pay';
-  if (pathOnly.startsWith('/api/v1/staff/payroll/generate')) return 'payroll.generate';
-  if (pathOnly.startsWith('/api/v1/staff/payroll')) return 'payroll.view';
+  if (pathOnly.startsWith('/api/v1/staff/attendance/report')) return P.staffAttendanceReport;
+  if (pathOnly.startsWith('/api/v1/staff/attendance')) return verb === 'POST' ? P.staffAttendanceCreate : P.staffAttendanceView;
+  if (pathOnly.startsWith('/api/v1/staff/payroll/report')) return P.payrollReport;
+  if (/^\/api\/v1\/staff\/payroll\/[^/]+\/pay$/.test(pathOnly)) return P.payrollPay;
+  if (pathOnly.startsWith('/api/v1/staff/payroll/generate')) return P.payrollGenerate;
+  if (pathOnly.startsWith('/api/v1/staff/payroll')) return P.payrollView;
   if (/^\/api\/v1\/staff\/[^/]+\/documents/.test(pathOnly)) {
-    if (verb === 'POST') return 'staff.document.create';
-    if (verb === 'DELETE') return 'staff.document.delete';
-    return 'staff.document.view';
+    if (verb === 'POST') return P.staffDocumentCreate;
+    if (verb === 'DELETE') return P.staffDocumentDelete;
+    return P.staffDocumentView;
   }
   if (/^\/api\/v1\/staff\/[^/]+\/timeline/.test(pathOnly)) {
-    if (verb === 'POST') return 'staff.timeline.create';
-    if (verb === 'DELETE') return 'staff.timeline.delete';
-    return 'staff.timeline.view';
+    if (verb === 'POST') return P.staffTimelineCreate;
+    if (verb === 'DELETE') return P.staffTimelineDelete;
+    return P.staffTimelineView;
   }
   if (pathOnly.startsWith('/api/v1/staff')) {
-    if (verb === 'POST') return 'staff.create';
-    if (verb === 'PATCH' || verb === 'PUT') return 'staff.edit';
-    if (verb === 'DELETE') return 'staff.delete';
+    if (verb === 'POST') return P.staffCreate;
+    if (verb === 'PATCH' || verb === 'PUT') return P.staffEdit;
+    if (verb === 'DELETE') return P.staffDelete;
     return staffLookupPermissions;
   }
 
   if (pathOnly.startsWith('/api/v1/fees')) {
-    if (pathOnly.startsWith('/api/v1/fees/metadata')) return 'fees.overview.view';
+    if (pathOnly.startsWith('/api/v1/fees/metadata')) return P.feesOverviewView;
     if (pathOnly.startsWith('/api/v1/fees/particulars')) {
-      if (verb === 'POST') return 'fees.particulars.create';
-      if (verb === 'PATCH' || verb === 'PUT') return 'fees.particulars.update';
-      if (verb === 'DELETE') return 'fees.particulars.delete';
-      return 'fees.particulars.view';
+      if (verb === 'POST') return P.feesParticularsCreate;
+      if (verb === 'PATCH' || verb === 'PUT') return P.feesParticularsUpdate;
+      if (verb === 'DELETE') return P.feesParticularsDelete;
+      return P.feesParticularsView;
     }
     if (pathOnly.startsWith('/api/v1/fees/types')) {
-      if (verb === 'POST') return 'fees.types.create';
-      if (verb === 'PATCH' || verb === 'PUT') return 'fees.types.update';
-      if (verb === 'DELETE') return 'fees.types.delete';
-      return 'fees.types.view';
+      if (verb === 'POST') return P.feesTypesCreate;
+      if (verb === 'PATCH' || verb === 'PUT') return P.feesTypesUpdate;
+      if (verb === 'DELETE') return P.feesTypesDelete;
+      return P.feesTypesView;
     }
     if (pathOnly.startsWith('/api/v1/fees/structures')) {
-      if (verb === 'POST') return 'fees.structures.create';
-      if (verb === 'PATCH' || verb === 'PUT') return 'fees.structures.update';
-      if (verb === 'DELETE') return 'fees.structures.delete';
-      return 'fees.structures.view';
+      if (verb === 'POST') return P.feesStructuresCreate;
+      if (verb === 'PATCH' || verb === 'PUT') return P.feesStructuresUpdate;
+      if (verb === 'DELETE') return P.feesStructuresDelete;
+      return P.feesStructuresView;
     }
     if (pathOnly.startsWith('/api/v1/fees/assignments')) {
-      if (verb === 'POST') return 'fees.assignments.create';
-      if (verb === 'PATCH' || verb === 'PUT') return 'fees.assignments.update';
-      if (verb === 'DELETE') return 'fees.assignments.delete';
-      return 'fees.assignments.view';
+      if (verb === 'POST') return P.feesAssignmentsCreate;
+      if (verb === 'PATCH' || verb === 'PUT') return P.feesAssignmentsUpdate;
+      if (verb === 'DELETE') return P.feesAssignmentsDelete;
+      return P.feesAssignmentsView;
     }
-    if (pathOnly.startsWith('/api/v1/fees/invoices/preview')) return 'fees.invoice-generate.view';
-    if (pathOnly.startsWith('/api/v1/fees/invoices/generate')) return verb === 'POST' ? 'fees.invoice-generate.create' : 'fees.invoice-generate.view';
+    if (pathOnly.startsWith('/api/v1/fees/invoices/preview')) return P.feesInvoiceGenerateView;
+    if (pathOnly.startsWith('/api/v1/fees/invoices/generate')) return verb === 'POST' ? P.feesInvoiceGenerateCreate : P.feesInvoiceGenerateView;
     if (pathOnly.startsWith('/api/v1/fees/invoices')) {
-      if (verb === 'DELETE' || verb === 'PATCH' || verb === 'PUT') return 'fees.invoices.cancel';
-      return 'fees.invoices.view';
+      if (verb === 'DELETE' || verb === 'PATCH' || verb === 'PUT') return P.feesInvoicesCancel;
+      return P.feesInvoicesView;
     }
-    if (pathOnly.startsWith('/api/v1/fees/payments')) return verb === 'POST' ? 'fees.collection.create' : 'fees.collection.view';
+    if (pathOnly.startsWith('/api/v1/fees/payments')) return verb === 'POST' ? P.feesCollectionCreate : P.feesCollectionView;
     if (pathOnly.startsWith('/api/v1/fees/collection')) {
-      if (pathOnly.includes('/receipt') || pathOnly.includes('/print')) return 'fees.receipts.print';
-      return verb === 'POST' ? 'fees.collection.create' : 'fees.collection.view';
+      if (pathOnly.includes('/receipt') || pathOnly.includes('/print')) return P.feesReceiptsPrint;
+      return verb === 'POST' ? P.feesCollectionCreate : P.feesCollectionView;
     }
     if (pathOnly.startsWith('/api/v1/fees/ledger')) {
-      if (pathOnly.includes('/export') || pathOnly.endsWith('.pdf') || pathOnly.endsWith('.xlsx')) return 'fees.ledger.export';
-      return 'fees.ledger.view';
+      if (pathOnly.includes('/export') || pathOnly.endsWith('.pdf') || pathOnly.endsWith('.xlsx')) return P.feesLedgerExport;
+      return P.feesLedgerView;
     }
     if (pathOnly.startsWith('/api/v1/fees/discounts')) {
-      if (/\/(approve|reject|activate|deactivate)$/.test(pathOnly) && ['POST', 'PATCH', 'PUT'].includes(verb)) return 'fees.discounts.approve';
-      if (verb === 'POST') return 'fees.discounts.create';
-      if (verb === 'PATCH' || verb === 'PUT') return 'fees.discounts.update';
-      if (verb === 'DELETE') return 'fees.discounts.delete';
-      return 'fees.discounts.view';
+      if (/\/(approve|reject|activate|deactivate)$/.test(pathOnly) && ['POST', 'PATCH', 'PUT'].includes(verb)) return P.feesDiscountsApprove;
+      if (verb === 'POST') return P.feesDiscountsCreate;
+      if (verb === 'PATCH' || verb === 'PUT') return P.feesDiscountsUpdate;
+      if (verb === 'DELETE') return P.feesDiscountsDelete;
+      return P.feesDiscountsView;
     }
     if (pathOnly.startsWith('/api/v1/fees/fines')) {
-      if (verb === 'POST') return 'fees.fines.create';
-      if (verb === 'PATCH' || verb === 'PUT') return 'fees.fines.update';
-      if (verb === 'DELETE') return 'fees.fines.delete';
-      return 'fees.fines.view';
+      if (verb === 'POST') return P.feesFinesCreate;
+      if (verb === 'PATCH' || verb === 'PUT') return P.feesFinesUpdate;
+      if (verb === 'DELETE') return P.feesFinesDelete;
+      return P.feesFinesView;
     }
     if (pathOnly.startsWith('/api/v1/fees/reports')) {
-      if (pathOnly.includes('/export') || pathOnly.endsWith('.csv') || pathOnly.endsWith('.pdf') || pathOnly.endsWith('.xlsx')) return 'fees.reports.export';
-      return 'fees.reports.view';
+      if (pathOnly.includes('/export') || pathOnly.endsWith('.csv') || pathOnly.endsWith('.pdf') || pathOnly.endsWith('.xlsx')) return P.feesReportsExport;
+      return P.feesReportsView;
     }
-    return 'fees.overview.view';
+    return P.feesOverviewView;
   }
   if (pathOnly.startsWith('/api/v1/leave/types')) {
-    if (verb === 'POST') return 'leave.type.create';
-    if (verb === 'PATCH' || verb === 'PUT') return 'leave.type.edit';
-    if (verb === 'DELETE') return 'leave.type.delete';
-    return 'leave.type.view';
+    if (verb === 'POST') return P.leaveTypeCreate;
+    if (verb === 'PATCH' || verb === 'PUT') return P.leaveTypeEdit;
+    if (verb === 'DELETE') return P.leaveTypeDelete;
+    return P.leaveTypeView;
   }
   if (pathOnly.startsWith('/api/v1/leave/defines')) {
-    if (verb === 'POST') return 'leave.define.create';
-    if (verb === 'PATCH' || verb === 'PUT') return 'leave.define.edit';
-    if (verb === 'DELETE') return 'leave.define.delete';
-    return 'leave.define.view';
+    if (verb === 'POST') return P.leaveDefineCreate;
+    if (verb === 'PATCH' || verb === 'PUT') return P.leaveDefineEdit;
+    if (verb === 'DELETE') return P.leaveDefineDelete;
+    return P.leaveDefineView;
   }
-  if (pathOnly.startsWith('/api/v1/leave/balances')) return 'leave.balance.view';
-  if (/^\/api\/v1\/leave\/(applications|requests)\/[^/]+\/(status|approve|reject)$/.test(pathOnly)) return 'leave.approve.edit';
+  if (pathOnly.startsWith('/api/v1/leave/balances')) return P.leaveBalanceView;
+  if (/^\/api\/v1\/leave\/(applications|requests)\/[^/]+\/(status|approve|reject)$/.test(pathOnly)) return P.leaveApproveEdit;
   if (/^\/api\/v1\/leave\/(applications|requests)/.test(pathOnly)) {
     const isMineRequest = /[?&]mine=true(?:&|$)/.test(path);
-    if (verb === 'POST') return 'leave.apply.create';
-    if (verb === 'GET') return isMineRequest ? 'leave.apply.view' : 'leave.approve.view';
-    if (verb === 'PATCH' || verb === 'PUT') return isMineRequest ? 'leave.apply.edit' : 'leave.approve.edit';
-    if (verb === 'DELETE') return isMineRequest ? 'leave.apply.delete' : 'leave.approve.delete';
-    return isMineRequest ? 'leave.apply.view' : 'leave.approve.view';
+    if (verb === 'POST') return P.leaveApplyCreate;
+    if (verb === 'GET') return isMineRequest ? P.leaveApplyView : P.leaveApproveView;
+    if (verb === 'PATCH' || verb === 'PUT') return isMineRequest ? P.leaveApplyEdit : P.leaveApproveEdit;
+    if (verb === 'DELETE') return isMineRequest ? P.leaveApplyDelete : P.leaveApproveDelete;
+    return isMineRequest ? P.leaveApplyView : P.leaveApproveView;
   }
 
   if (pathOnly.startsWith('/api/v1/exams/centers')) {
-    return verb === 'GET' ? 'exam.center.view' : 'exam.center.manage';
+    return verb === 'GET' ? P.examCenterView : P.examCenterManage;
   }
   if (pathOnly.startsWith('/api/v1/exams/rooms')) {
-    return verb === 'GET' ? 'exam.room.view' : 'exam.room.manage';
+    return verb === 'GET' ? P.examRoomView : P.examRoomManage;
   }
   if (/^\/api\/v1\/exams\/[^/]+\/seating/.test(pathOnly)) {
-    return verb === 'GET' ? 'exam.seating.view' : 'exam.seating.manage';
+    return verb === 'GET' ? P.examSeatingView : P.examSeatingManage;
   }
   if (/^\/api\/v1\/exams\/[^/]+\/invigilators/.test(pathOnly)) {
-    return verb === 'GET' ? 'exam.invigilator.view' : 'exam.invigilator.manage';
+    return verb === 'GET' ? P.examInvigilatorView : P.examInvigilatorManage;
   }
   if (/^\/api\/v1\/exams\/[^/]+\/hall-tickets/.test(pathOnly)) {
-    return pathOnly.endsWith('/pdf') ? 'exam.hallticket.export' : 'exam.hallticket.view';
+    return pathOnly.endsWith('/pdf') ? P.examHallticketExport : P.examHallticketView;
   }
   if (pathOnly.startsWith('/api/v1/reports')) {
     if (pathOnly.endsWith('/export.csv') || pathOnly.endsWith('/export.pdf') || ['/api/v1/reports/term', '/api/v1/reports/annual', '/api/v1/reports/rank'].includes(pathOnly)) {
-      return 'reports.export';
+      return P.reportsExport;
     }
-    return 'reports.view';
+    return P.reportsView;
   }
   if (pathOnly.startsWith('/api/v1/admin/compliance') || pathOnly.startsWith('/api/v1/compliance')) {
-    if (/\/(approve|reject|execute)$/.test(pathOnly)) return 'compliance.review';
-    return 'compliance.view';
+    if (/\/(approve|reject|execute)$/.test(pathOnly)) return P.complianceReview;
+    return P.complianceView;
   }
 
+  if (pathOnly.startsWith('/api/v1/faces')) {
+    if (pathOnly.endsWith('/approve') || pathOnly.endsWith('/reject')) return P.studentEdit;
+    if (verb === 'POST') return [P.studentDocumentCreate, P.studentEdit];
+    return [P.studentDocumentView, P.studentView];
+  }
+  if (pathOnly.startsWith('/api/v1/recognition')) return [P.attendanceCreate, P.attendanceEdit];
+  if (pathOnly.startsWith('/api/v1/analytics')) return [P.dashboardOverview, P.reportsView];
+  if (pathOnly.startsWith('/api/v1/uploads/branding')) return P.settingsAccess;
+  if (pathOnly.startsWith('/api/v1/uploads/photos')) return [P.studentDocumentCreate, P.staffDocumentCreate];
+  if (pathOnly.startsWith('/api/v1/uploads/documents')) return P.studentDocumentCreate;
+  if (pathOnly.startsWith('/api/v1/uploads/signed')) {
+    return [
+      P.studentView,
+      P.studentsList,
+      P.studentDocumentView,
+      P.staffView,
+      P.staffDocumentView,
+      P.settingsAccess,
+      P.reportsView,
+      P.dashboardOverview,
+    ];
+  }
+  if (pathOnly.startsWith('/api/v1/notifications/templates')) return P.settingsAccess;
+  if (pathOnly.startsWith('/api/v1/notifications/send')) return P.settingsAccess;
+  if (pathOnly.startsWith('/api/v1/notifications/logs')) return P.settingsAccess;
+  if (pathOnly.startsWith('/api/v1/notifications/summary')) return [P.dashboardOverview, P.supportView, P.plansView];
+  if (pathOnly.startsWith('/api/v1/attendance/substitutions')) return P.attendanceSubstituteManage;
+  if (pathOnly.startsWith('/api/v1/attendance/summary')) return [P.attendanceView, P.attendanceReport];
+  if (pathOnly.startsWith('/api/v1/attendance/sessions')) {
+    if (pathOnly.endsWith('/lock')) return P.attendanceEdit;
+    if (verb === 'POST') return [P.attendanceCreate, P.attendanceEdit];
+    if (verb === 'PATCH' || verb === 'PUT') return P.attendanceEdit;
+    return P.attendanceView;
+  }
+  if (pathOnly.startsWith('/api/v1/attendance/periods')) {
+    if (['POST', 'PATCH', 'PUT', 'DELETE'].includes(verb)) return P.attendanceEdit;
+    return P.attendanceView;
+  }
+  if (pathOnly.startsWith('/api/v1/attendance/legacy/sessions')) {
+    if (pathOnly.endsWith('/close')) return P.attendanceEdit;
+    if (verb === 'POST') return [P.attendanceCreate, P.attendanceEdit];
+    return P.attendanceView;
+  }
+  if (pathOnly.startsWith('/api/v1/attendance/legacy/records')) {
+    if (pathOnly.endsWith('/override')) return P.attendanceEdit;
+    if (verb === 'POST') return [P.attendanceCreate, P.attendanceEdit];
+    return P.attendanceView;
+  }
+  if (pathOnly.startsWith('/api/v1/attendance-approval')) return P.attendanceEdit;
+
   const targets: Array<{ prefix: string; code: PermissionRequirement }> = [
-    { prefix: '/api/v1/ai-assistant', code: 'ai.assistant.use' },
-    { prefix: '/api/v1/schools', code: verb === 'GET' ? 'school.onboarding.view' : 'school.onboarding.manage' },
-    { prefix: '/api/v1/teachers/onboarding', code: verb === 'GET' ? 'teacher.onboarding.view' : 'teacher.onboarding.manage' },
-    { prefix: '/api/v1/teachers/', code: pathOnly.includes('/credentials/') ? 'teacher.credentials.manage' : pathOnly.includes('/onboarding') ? (verb === 'GET' ? 'teacher.onboarding.view' : 'teacher.onboarding.manage') : verb === 'POST' ? 'teachers.add' : teacherLookupPermissions },
-    { prefix: '/api/v1/academics/timetable/teacher', code: 'attendance.view' },
-    { prefix: '/api/v1/teachers', code: verb === 'POST' ? 'teachers.add' : teacherLookupPermissions },
+    { prefix: '/api/v1/ai-assistant', code: P.aiAssistantUse },
+    { prefix: '/api/v1/schools', code: verb === 'GET' ? P.schoolOnboardingView : P.schoolOnboardingManage },
+    { prefix: '/api/v1/teachers/onboarding', code: verb === 'GET' ? P.teacherOnboardingView : P.teacherOnboardingManage },
+    { prefix: '/api/v1/teachers/', code: pathOnly.includes('/credentials/') ? P.teacherCredentialsManage : pathOnly.includes('/onboarding') ? (verb === 'GET' ? P.teacherOnboardingView : P.teacherOnboardingManage) : verb === 'POST' ? P.teachersAdd : teacherLookupPermissions },
+    { prefix: '/api/v1/academics/timetable/teacher', code: P.attendanceView },
+    { prefix: '/api/v1/teachers', code: verb === 'POST' ? P.teachersAdd : teacherLookupPermissions },
     { prefix: '/api/v1/teacher-assignments', code: teacherLookupPermissions },
-    { prefix: '/api/v1/academic-setup', code: verb === 'GET' ? academicLookupPermissions : 'academics.setup' },
-    { prefix: '/api/v1/dormitories', code: 'dormitory.view' },
-    { prefix: '/api/v1/transport', code: 'transport.view' },
-    { prefix: '/api/v1/homework', code: 'homework.view' },
-    { prefix: '/api/v1/library', code: 'library.view' },
-    { prefix: '/api/v1/students', code: 'students.list' },
-    { prefix: '/api/v1/attendance', code: 'attendance.view' },
-    { prefix: '/api/v1/attendance-summary', code: 'attendance.view' },
-    { prefix: '/api/v1/attendance-approval', code: 'attendance.view' },
-    { prefix: '/api/v1/leave', code: 'leave.apply.view' },
-    { prefix: '/api/v1/academics', code: verb === 'GET' ? academicLookupPermissions : 'academics.setup' },
-    { prefix: '/api/v1/exams', code: 'academics.exams' },
-    { prefix: '/api/v1/users/school-users', code: 'settings.access' },
-    { prefix: '/api/v1/users/employee-permissions', code: 'settings.access' },
-    { prefix: '/api/v1/audit-logs', code: 'audit.view' },
-    { prefix: '/api/v1/tickets', code: 'support.view' },
-    { prefix: '/api/v1/subscriptions', code: 'plans.view' },
+    { prefix: '/api/v1/academic-setup', code: verb === 'GET' ? academicLookupPermissions : P.academicsSetup },
+    { prefix: '/api/v1/dormitories', code: P.dormitoryView },
+    { prefix: '/api/v1/transport', code: P.transportView },
+    { prefix: '/api/v1/homework', code: P.homeworkView },
+    { prefix: '/api/v1/library', code: P.libraryView },
+    { prefix: '/api/v1/students', code: P.studentsList },
+    { prefix: '/api/v1/attendance', code: P.attendanceView },
+    { prefix: '/api/v1/attendance-summary', code: P.attendanceView },
+    { prefix: '/api/v1/attendance-approval', code: P.attendanceView },
+    { prefix: '/api/v1/leave', code: P.leaveApplyView },
+    { prefix: '/api/v1/academics', code: verb === 'GET' ? academicLookupPermissions : P.academicsSetup },
+    { prefix: '/api/v1/exams', code: P.academicsExams },
+    { prefix: '/api/v1/users/school-users', code: P.settingsAccess },
+    { prefix: '/api/v1/users/employee-permissions', code: P.settingsAccess },
+    { prefix: '/api/v1/audit-logs', code: P.auditView },
+    { prefix: '/api/v1/tickets', code: P.supportView },
+    { prefix: '/api/v1/subscriptions', code: P.plansView },
   ];
 
   const match = targets.find((entry) => path.startsWith(entry.prefix));

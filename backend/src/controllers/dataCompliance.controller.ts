@@ -2,9 +2,10 @@ import type { Request, Response } from 'express';
 import { z } from 'zod';
 import { resolveSchoolId } from '../utils/tenant';
 import { HttpError } from '../middlewares/error.middleware';
-import { getEffectivePermissionCodesForUser } from '../utils/employeePermissions';
 import { exportTenantData, getExportJob } from '../services/dataExport.service';
 import { requestDeletion, approveDeletion, executeDeletion, listDeletionJobs } from '../services/dataDeletion.service';
+import { PermissionCodes as P } from '../permissions/permission-manifest';
+import { AuthorizationService } from '../services/authorization.service';
 import {
   approveAdminDeletionRequest,
   approveAdminExportRequest,
@@ -70,8 +71,7 @@ const requireCompliancePermission = async (req: Request, permissionCode: string)
   const auth = req.auth;
   if (!auth) throw new HttpError(401, 'Unauthorized');
   if (!auth.schoolId || auth.role === 'SUPER_ADMIN' || !managedRoles.has(auth.role ?? '')) return;
-  const permissions = await getEffectivePermissionCodesForUser(auth.schoolId, auth.userId, auth.role);
-  if (!permissions.includes(permissionCode)) {
+  if (!await AuthorizationService.hasAnyEffectivePermission(auth, permissionCode)) {
     throw new HttpError(403, `Missing required compliance permission: ${permissionCode}`);
   }
 };
@@ -160,7 +160,7 @@ export const getExportRequestByIdApi = async (req: Request, res: Response) => {
 };
 
 export const approveExportRequestApi = async (req: Request, res: Response) => {
-  await requireCompliancePermission(req, 'compliance.export.review');
+  await requireCompliancePermission(req, P.complianceExportReview);
   const payload = noteSchema.parse(req.body);
   const auth = req.auth;
   if (!auth) throw new HttpError(401, 'Unauthorized');
@@ -175,7 +175,7 @@ export const approveExportRequestApi = async (req: Request, res: Response) => {
 };
 
 export const rejectExportRequestApi = async (req: Request, res: Response) => {
-  await requireCompliancePermission(req, 'compliance.export.review');
+  await requireCompliancePermission(req, P.complianceExportReview);
   const payload = rejectSchema.parse(req.body);
   const auth = req.auth;
   if (!auth) throw new HttpError(401, 'Unauthorized');
@@ -202,7 +202,7 @@ export const getDeletionRequestByIdApi = async (req: Request, res: Response) => 
 };
 
 export const approveDeletionRequestApi = async (req: Request, res: Response) => {
-  await requireCompliancePermission(req, 'compliance.deletion.review');
+  await requireCompliancePermission(req, P.complianceDeletionReview);
   const payload = noteSchema.parse(req.body);
   const auth = req.auth;
   if (!auth) throw new HttpError(401, 'Unauthorized');
@@ -217,7 +217,7 @@ export const approveDeletionRequestApi = async (req: Request, res: Response) => 
 };
 
 export const rejectDeletionRequestApi = async (req: Request, res: Response) => {
-  await requireCompliancePermission(req, 'compliance.deletion.review');
+  await requireCompliancePermission(req, P.complianceDeletionReview);
   const payload = rejectSchema.parse(req.body);
   const auth = req.auth;
   if (!auth) throw new HttpError(401, 'Unauthorized');

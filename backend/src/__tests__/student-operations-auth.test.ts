@@ -51,7 +51,7 @@ test('student operation routes reject Super Admin because they are School Admin 
   });
 
   expectForbidden(response);
-  assert.match(response.text, /Only School Admin/i);
+  assert.match(response.text, /School scope is required to access student information/i);
 });
 
 test('student operation routes reject teacher, parent, and student roles', async () => {

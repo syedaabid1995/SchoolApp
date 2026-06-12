@@ -29,6 +29,7 @@ import {
   recalculateTeacherOnboarding,
   updateTeacherOnboarding,
 } from '../services/teacherOnboarding.service';
+import { timetableReadService } from '../modules/timetable/services/timetable-read.service';
 import { listExamCentersApi } from '../controllers/examOperations.controller';
 import {
   assignExamInvigilator,
@@ -1779,8 +1780,7 @@ const patchTeacherReadinessSignals = (ready: boolean) => {
   const restores = [
     patch(prisma.teacherClassAssignment as any, 'count', async () => ready ? 1 : 0),
     patch(prisma.teacherSubjectAssignment as any, 'count', async () => ready ? 1 : 0),
-    patch(prisma.classRoutine as any, 'count', async () => ready ? 1 : 0),
-    patch(prisma.timetableEntry as any, 'count', async () => ready ? 1 : 0),
+    patch(timetableReadService as any, 'getTeacherTimetable', async () => ({ slots: ready ? [{ sourceId: 'slot-1' }] : [] })),
     patch(prisma.teacherSelfAttendance as any, 'count', async () => ready ? 1 : 0),
   ];
   return () => restores.reverse().forEach((restore) => restore());

@@ -1,5 +1,7 @@
 import { Router } from 'express';
 import { authMiddleware } from '../middlewares/auth.middleware';
+import { requirePermission } from '../middlewares/rbac.middleware';
+import { PermissionCodes as P } from '../permissions/permission-manifest';
 import {
   createTemplate,
   listTemplates,
@@ -12,8 +14,8 @@ export const notificationRouter = Router();
 
 notificationRouter.use(authMiddleware);
 
-notificationRouter.post('/templates', createTemplate);
-notificationRouter.get('/templates', listTemplates);
-notificationRouter.post('/send', sendNotificationApi);
-notificationRouter.get('/logs', listNotificationLogs);
-notificationRouter.get('/summary', listNotificationSummary);
+notificationRouter.post('/templates', requirePermission(P.settingsAccess), createTemplate);
+notificationRouter.get('/templates', requirePermission(P.settingsAccess), listTemplates);
+notificationRouter.post('/send', requirePermission(P.settingsAccess), sendNotificationApi);
+notificationRouter.get('/logs', requirePermission(P.settingsAccess), listNotificationLogs);
+notificationRouter.get('/summary', requirePermission(P.dashboardOverview, P.supportView, P.plansView), listNotificationSummary);

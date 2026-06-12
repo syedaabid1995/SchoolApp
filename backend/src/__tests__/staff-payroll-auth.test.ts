@@ -47,11 +47,17 @@ test('staff management routes reject Super Admin because they are School Admin s
   });
 
   expectForbidden(response);
-  assert.match(response.text, /Only School Admin/i);
+  assert.match(response.text, /School scope is required to manage staff/i);
 });
 
-test('staff management routes reject teacher, parent, and student roles', async () => {
-  for (const role of ['TEACHER', 'PARENT', 'STUDENT'] as const) {
+test('staff management list allows only school roles with staff view permission', async () => {
+  const teacherResponse = await server.request('GET', '/api/v1/staff', {
+    user: getUser('TEACHER'),
+  });
+  expectSuccess(teacherResponse);
+  expectNoSensitiveFields(teacherResponse.body);
+
+  for (const role of ['PARENT', 'STUDENT'] as const) {
     const response = await server.request('GET', '/api/v1/staff', {
       user: getUser(role),
     });

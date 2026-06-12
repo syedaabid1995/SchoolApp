@@ -46,6 +46,9 @@ const PARTICULAR_ID = '99999999-9999-4999-8999-999999999999';
 const GROUP_ID = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
 const CATEGORY_ID = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
 const ROUTE_ID = 'cccccccc-cccc-4ccc-8ccc-cccccccccccc';
+const DISCOUNT_ID = 'dddddddd-dddd-4ddd-8ddd-dddddddddddd';
+const PAID_DISCOUNT_ID = 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee';
+const EXISTING_DISCOUNT_ID = 'fafafafa-fafa-4afa-8afa-fafafafafafa';
 
 const patch = <T extends object, K extends keyof T>(obj: T, key: K, value: T[K]) => {
   const original = obj[key];
@@ -54,6 +57,28 @@ const patch = <T extends object, K extends keyof T>(obj: T, key: K, value: T[K])
     obj[key] = original;
   };
 };
+
+let restoreAuditLogCreate: (() => void) | null = null;
+let restoreFeeParticularFindMany: (() => void) | null = null;
+
+test.before(() => {
+  restoreAuditLogCreate = patch(prisma.auditLog as any, 'create', async ({ data }: any) => ({
+    id: 'abababab-abab-4aba-8aba-abababababab',
+    ...data,
+  }));
+  restoreFeeParticularFindMany = patch(prisma.feeParticular as any, 'findMany', async ({ where }: any = {}) => {
+    const ids = Array.isArray(where?.id?.in) ? where.id.in : [PARTICULAR_ID];
+    return ids.map((id: string) => ({ id, schoolId: SCHOOL_ID, academicSessionId: SESSION_ID }));
+  });
+});
+
+test.after(async () => {
+  restoreFeeParticularFindMany?.();
+  restoreAuditLogCreate?.();
+  restoreFeeParticularFindMany = null;
+  restoreAuditLogCreate = null;
+  await prisma.$disconnect();
+});
 
 const makeReq = (overrides: Record<string, unknown> = {}) =>
   ({
@@ -1987,7 +2012,7 @@ test('approved student discount updates invoice due and creates a discount credi
   let capturedLedgerData: any;
   const tx = {
     feeDiscount: {
-      create: async ({ data }: any) => ({ ...data, id: 'discount-1' }),
+      create: async ({ data }: any) => ({ ...data, id: DISCOUNT_ID }),
     },
     feeInvoice: {
       findFirst: async () => null,
@@ -2060,7 +2085,7 @@ test('discount lifecycle supports update, approval, rejection, and soft delete',
     _sum: { dueAmount: new Prisma.Decimal(0) },
   }));
   let storedDiscount: any = {
-    id: 'discount-1',
+    id: DISCOUNT_ID,
     schoolId: SCHOOL_ID,
     academicSessionId: SESSION_ID,
     discountName: 'Draft concession',
@@ -2162,7 +2187,7 @@ test('discount lifecycle supports update, approval, rejection, and soft delete',
 
 test('duplicate active discount is rejected for same target, fee type, and date range', async () => {
   const restoreAcademic = patchAcademicSession();
-  const restoreDuplicate = patch(prisma.feeDiscount as any, 'findFirst', async () => ({ id: 'discount-existing' }));
+  const restoreDuplicate = patch(prisma.feeDiscount as any, 'findFirst', async () => ({ id: EXISTING_DISCOUNT_ID }));
 
   try {
     await assert.rejects(
@@ -2194,7 +2219,7 @@ test('discount edit and delete are blocked after paid invoice usage', async () =
   const restoreAcademic = patchAcademicSession();
   const restoreStudent = patch(prisma.student as any, 'findFirst', async () => ({ id: STUDENT_ID, schoolId: SCHOOL_ID }));
   const existingDiscount = {
-    id: 'discount-paid',
+    id: PAID_DISCOUNT_ID,
     schoolId: SCHOOL_ID,
     academicSessionId: SESSION_ID,
     discountName: 'Paid invoice discount',
@@ -2252,15 +2277,12 @@ test('discount edit and delete are blocked after paid invoice usage', async () =
   }
 });
 
-test('accountant cannot approve or reject fee discounts', async () => {
-  await assert.rejects(
-    () => approveFeeDiscount(makeReq({ auth: { userId: USER_ID, schoolId: SCHOOL_ID, role: 'ACCOUNTANT' }, params: { id: 'discount-1' } }), makeRes()),
-    (error: unknown) => error instanceof HttpError && error.statusCode === 403 && /Only School Admin/.test(error.message),
-  );
-  await assert.rejects(
-    () => rejectFeeDiscount(makeReq({ auth: { userId: USER_ID, schoolId: SCHOOL_ID, role: 'ACCOUNTANT' }, params: { id: 'discount-1' } }), makeRes()),
-    (error: unknown) => error instanceof HttpError && error.statusCode === 403 && /Only School Admin/.test(error.message),
-  );
+test('accountant default permissions do not include fee discount review permissions', () => {
+  const permissions = getDefaultPermissionCodes('ACCOUNTANT');
+
+  assert.equal(resolvePermissionForPath('/api/v1/fees/discounts/abc/approve', 'PATCH'), 'fees.discounts.approve');
+  assert.equal(resolvePermissionForPath('/api/v1/fees/discounts/abc/reject', 'PATCH'), 'fees.discounts.approve');
+  assert.equal(permissions.includes('fees.discounts.approve'), false);
 });
 
 test('student fine application creates a fine debit ledger entry', async () => {

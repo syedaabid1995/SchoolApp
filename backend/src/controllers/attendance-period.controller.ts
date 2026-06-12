@@ -1,33 +1,12 @@
 import type { Request, Response } from 'express';
-import { z } from 'zod';
 import { prisma } from '../config/db';
 import { HttpError } from '../middlewares/error.middleware';
 import { resolveSchoolId } from '../utils/tenant';
-import { isValidTime } from '../utils/attendance';
 import { invalidateAttendanceCache } from '../services/cache/cache.invalidation';
-
-const timeSchema = z.string().refine(isValidTime, 'Invalid time format');
-
-const createSchema = z.object({
-  name: z.string().min(1),
-  startTime: timeSchema,
-  endTime: timeSchema,
-  lateThresholdMinutes: z.number().int().min(0).optional(),
-  earlyThresholdMinutes: z.number().int().min(0).optional(),
-  schoolId: z.string().uuid().optional(),
-});
-
-const updateSchema = z.object({
-  name: z.string().min(1).optional(),
-  startTime: timeSchema.optional(),
-  endTime: timeSchema.optional(),
-  lateThresholdMinutes: z.number().int().min(0).optional(),
-  earlyThresholdMinutes: z.number().int().min(0).optional(),
-  schoolId: z.string().uuid().optional(),
-});
+import { attendancePeriodCreateSchema, attendancePeriodUpdateSchema } from '../validations/attendance.validation';
 
 export const createAttendancePeriod = async (req: Request, res: Response) => {
-  const payload = createSchema.parse(req.body);
+  const payload = attendancePeriodCreateSchema.parse(req.body);
   const schoolId = resolveSchoolId(req, payload.schoolId);
   if (payload.endTime <= payload.startTime) {
     throw new HttpError(400, 'End time must be after start time');
@@ -76,7 +55,7 @@ export const getAttendancePeriod = async (req: Request, res: Response) => {
 };
 
 export const updateAttendancePeriod = async (req: Request, res: Response) => {
-  const payload = updateSchema.parse(req.body);
+  const payload = attendancePeriodUpdateSchema.parse(req.body);
   const schoolId = resolveSchoolId(req, payload.schoolId ?? (req.query.schoolId as string | undefined));
   const { id } = req.params;
 

@@ -1,9 +1,9 @@
 import type { Prisma } from '@prisma/client';
 import { prisma } from '../config/db';
 import { HttpError } from '../middlewares/error.middleware';
-import { getEffectivePermissionCodesForUser } from '../utils/employeePermissions';
 import type { AiAssistantContext, AiEntityDefinition, AiOperation, AiOperationFilter, AiOperationPlan } from '../types/aiAssistant.types';
 import { getAiEntityDefinition, getEntityPermissionCodes } from './aiEntityRegistry.service';
+import { AuthorizationService } from './authorization.service';
 
 const normalize = (value: unknown) => String(value ?? '').trim().replace(/\s+/g, ' ');
 const normalizeClassName = (value: unknown) => normalize(value).replace(/^(\d+)$/, 'Class $1');
@@ -239,8 +239,7 @@ const ensurePermissions = async (ctx: AiAssistantContext, entity: AiEntityDefini
   const schoolId = ensureSchool(ctx);
   const required = getEntityPermissionCodes(entity, operation.action);
   if (!required.length) throw new HttpError(403, `${operation.action} is not permitted for ${entity.entity}`);
-  const effective = new Set(await getEffectivePermissionCodesForUser(schoolId, ctx.userId, ctx.role));
-  if (!required.some((code) => effective.has(code))) {
+  if (!await AuthorizationService.hasAnyEffectivePermission({ ...ctx, schoolId }, required)) {
     throw new HttpError(403, `You do not have permission to ${operation.action} ${entity.entity}`);
   }
 };

@@ -11,12 +11,13 @@ import { logAudit } from '../utils/audit';
 import {
   EMPLOYEE_PERMISSION_CATALOG,
   MANAGED_EMPLOYEE_ROLES,
-  getEffectivePermissionCodesForRole,
-  getEffectivePermissionCodesForUser,
-  getPlanPermissionCodesForSchool,
   type ManagedEmployeeRole,
 } from '../utils/employeePermissions';
 import { sendAccountCreatedWhatsapp } from '../services/accountOnboardingWhatsapp.service';
+import { AuthorizationService } from '../services/authorization.service';
+import { PermissionCacheService } from '../services/permissionCache.service';
+import { timetableReadService } from '../modules/timetable/services/timetable-read.service';
+import { toLegacyClassRoutineRow } from '../modules/timetable/services/timetable-response-mapper';
 
 const bankDetailsSchema = z
   .object({
@@ -166,7 +167,7 @@ export const getMe = async (req: Request, res: Response) => {
   const displayName = teacherName || parentName || user.email;
   const permissionCodes =
     user.schoolId && role
-      ? await getEffectivePermissionCodesForUser(user.schoolId, user.id, role)
+      ? await AuthorizationService.getEffectivePermissionCodesForUser(user.schoolId, user.id, role)
       : [];
 
   res.status(200).json({
@@ -200,17 +201,9 @@ export const getMyTimetableApi = async (req: Request, res: Response) => {
       select: { id: true, name: true, startTime: true, endTime: true, type: true },
       orderBy: { startTime: 'asc' },
     }),
-    prisma.classRoutine.findMany({
-      where: { schoolId, teacherId: teacher.id },
-      include: {
-        class: { select: { id: true, name: true } },
-        section: { select: { id: true, name: true } },
-        timePeriod: { select: { id: true, name: true, startTime: true, endTime: true, type: true } },
-        subject: { select: { id: true, name: true } },
-        classRoom: { select: { id: true, roomNumber: true } },
-      },
-      orderBy: [{ dayOfWeek: 'asc' }, { timePeriod: { startTime: 'asc' } }],
-    }),
+    timetableReadService
+      .getTeacherTimetable({ schoolId, teacherId: teacher.id, mode: 'legacy' })
+      .then((result) => result.slots.map((slot) => toLegacyClassRoutineRow(slot))),
     prisma.schoolSystemSetting.findUnique({
       where: { schoolId },
       select: { weekends: true },
@@ -690,10 +683,10 @@ export const listEmployeePermissionsApi = async (req: Request, res: Response) =>
   const validCodes = new Set(EMPLOYEE_PERMISSION_CATALOG.map((permission) => permission.code));
   const scopeCodes = parseScopeCodes(req.query.scopeCodes).filter((code) => validCodes.has(code));
   const scopedCodeSet = scopeCodes.length ? new Set(scopeCodes) : null;
-  const planCodes = new Set(await getPlanPermissionCodesForSchool(schoolId));
+  const planCodes = new Set(await AuthorizationService.getPlanPermissionCodesForSchool(schoolId));
   const enabledCodes = userId
-    ? await getEffectivePermissionCodesForUser(schoolId, userId, roleName)
-    : await getEffectivePermissionCodesForRole(schoolId, roleName);
+    ? await AuthorizationService.getEffectivePermissionCodesForUser(schoolId, userId, roleName)
+    : await AuthorizationService.getEffectivePermissionCodesForRole(schoolId, roleName);
   const allowedPermissions = planCodes.size
     ? EMPLOYEE_PERMISSION_CATALOG.filter((permission) => planCodes.has(permission.code) && (!scopedCodeSet || scopedCodeSet.has(permission.code)))
     : [];
@@ -783,7 +776,7 @@ export const updateEmployeePermissionsApi = async (req: Request, res: Response) 
   const payload = updateEmployeePermissionsSchema.parse(req.body);
   const schoolId = resolveSchoolId(req, payload.schoolId);
   const validCodes = new Set(EMPLOYEE_PERMISSION_CATALOG.map((permission) => permission.code));
-  const planCodes = new Set(await getPlanPermissionCodesForSchool(schoolId));
+  const planCodes = new Set(await AuthorizationService.getPlanPermissionCodesForSchool(schoolId));
   const scopeCodes = (payload.scopeCodes ?? []).filter((code) => validCodes.has(code) && planCodes.has(code));
   const targetCodes = scopeCodes.length ? scopeCodes : EMPLOYEE_PERMISSION_CATALOG.map((permission) => permission.code);
   const targetCodeSet = new Set(targetCodes);
@@ -833,6 +826,8 @@ export const updateEmployeePermissionsApi = async (req: Request, res: Response) 
       afterState: { roleName: payload.roleName, enabledCodes, scopeCodes },
     });
 
+    await PermissionCacheService.invalidateUser(schoolId, payload.userId);
+
     res.status(200).json({ success: true });
     return;
   }
@@ -863,6 +858,8 @@ export const updateEmployeePermissionsApi = async (req: Request, res: Response) 
     action: 'UPDATE',
     afterState: { roleName: payload.roleName, enabledCodes, scopeCodes },
   });
+
+  await PermissionCacheService.invalidateRole(schoolId, payload.roleName);
 
   res.status(200).json({ success: true });
 };

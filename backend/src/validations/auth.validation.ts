@@ -107,6 +107,10 @@ export const resetPasswordSchema = z
     }
   });
 
+export const revokeSessionParamsSchema = z.object({
+  sessionId: z.string().trim().uuid(),
+});
+
 export type LoginType = z.infer<typeof loginTypeSchema>;
 export type ForgotPasswordInput = z.infer<typeof forgotPasswordSchema>;
 export type ResetPasswordInput = z.infer<typeof resetPasswordSchema>;
