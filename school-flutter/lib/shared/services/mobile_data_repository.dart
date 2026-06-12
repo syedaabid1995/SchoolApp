@@ -21,6 +21,10 @@ final mobileDashboardDataProvider = FutureProvider<MobileDashboardData>((
       .loadDashboardData(session.user);
 });
 
+final myTimetableProvider = FutureProvider<MyTimetableData>((ref) async {
+  return ref.watch(mobileDataRepositoryProvider).loadMyTimetable();
+});
+
 final assignedStudentsProvider = FutureProvider<List<AssignedStudent>>((
   ref,
 ) async {
@@ -31,6 +35,19 @@ final assignedExamPapersProvider = FutureProvider<List<AssignedExamPaper>>((
   ref,
 ) async {
   return ref.watch(mobileDataRepositoryProvider).listAssignedExamPapers();
+});
+
+final attendanceOptionsProvider = FutureProvider<AttendanceOptions>((
+  ref,
+) async {
+  return ref.watch(mobileDataRepositoryProvider).loadAttendanceOptions();
+});
+
+final attendanceStudentsProvider = FutureProvider.autoDispose
+    .family<AttendanceLoadResult, AttendanceCriteria>((ref, criteria) {
+  return ref
+      .watch(mobileDataRepositoryProvider)
+      .loadStudentAttendance(criteria);
 });
 
 Map<String, dynamic> _queryParameters(Map<String, Object?> values) {
@@ -111,6 +128,11 @@ class MobileDataRepository {
         .toList();
   }
 
+  Future<MyTimetableData> loadMyTimetable() async {
+    final response = await _dio.get<Map<String, dynamic>>('/users/me/timetable');
+    return MyTimetableData.fromJson(response.data ?? const {});
+  }
+
   Future<List<AssignedStudent>> listAssignedStudents({
     String? classId,
     String? sectionId,
@@ -126,6 +148,52 @@ class MobileDataRepository {
         .whereType<Map<String, dynamic>>()
         .map(AssignedStudent.fromJson)
         .toList();
+  }
+
+  Future<AttendanceOptions> loadAttendanceOptions() async {
+    final response = await _dio.get<Map<String, dynamic>>(
+      '/users/me/assigned-classes',
+    );
+    return AttendanceOptions.fromJson(response.data ?? const {});
+  }
+
+  Future<AttendanceLoadResult> loadStudentAttendance(
+    AttendanceCriteria criteria,
+  ) async {
+    final response = await _dio.get<Map<String, dynamic>>(
+      '/students/attendance',
+      queryParameters: {
+        'academicSessionId': criteria.academicSessionId,
+        'classId': criteria.classId,
+        'sectionId': criteria.sectionId,
+        'date': criteria.date,
+      },
+    );
+    return AttendanceLoadResult.fromJson(response.data ?? const {});
+  }
+
+  Future<void> saveStudentAttendance({
+    required AttendanceCriteria criteria,
+    required List<AttendanceStudentRecord> records,
+  }) async {
+    await _dio.post<void>(
+      '/students/attendance',
+      data: {
+        'academicSessionId': criteria.academicSessionId,
+        'classId': criteria.classId,
+        'sectionId': criteria.sectionId,
+        'date': criteria.date,
+        'records': records
+            .map(
+              (r) => {
+                'studentId': r.id,
+                'status': r.status,
+                if (r.note != null && r.note!.isNotEmpty) 'note': r.note,
+              },
+            )
+            .toList(),
+      },
+    );
   }
 
   Future<List<AssignedExamPaper>> listAssignedExamPapers({

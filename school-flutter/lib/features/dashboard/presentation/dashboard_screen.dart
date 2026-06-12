@@ -9,6 +9,20 @@ import '../../../core/widgets/prototype_widgets.dart';
 import '../../../shared/services/mobile_data_repository.dart';
 import '../../auth/presentation/auth_controller.dart';
 
+// Backend custom day scheme: 1=Sat, 2=Sun, 3=Mon, 4=Tue, 5=Wed, 6=Thu, 7=Fri
+int _backendDayOfWeek(DateTime d) {
+  return switch (d.weekday) {
+    6 => 1,
+    7 => 2,
+    1 => 3,
+    2 => 4,
+    3 => 5,
+    4 => 6,
+    5 => 7,
+    _ => 3,
+  };
+}
+
 class DashboardScreen extends ConsumerWidget {
   const DashboardScreen({super.key});
 
@@ -91,32 +105,7 @@ class DashboardScreen extends ConsumerWidget {
               const SizedBox(height: 12),
               const SectionTitle("Today's Timetable"),
               const SizedBox(height: 12),
-              if (data.teacherTimetable == null ||
-                  data.teacherTimetable!.periods.isEmpty)
-                const PrototypeCard(
-                  child: Text('No timetable periods found for today.'),
-                )
-              else
-                ...data.teacherTimetable!.periods
-                    .take(3)
-                    .map(
-                      (period) => Padding(
-                        padding: const EdgeInsets.only(bottom: 12),
-                        child: PrototypeRow(
-                          icon: Icons.schedule_outlined,
-                          title:
-                              '${period.subjectName} - ${period.className} ${period.sectionName}',
-                          subtitle:
-                              '${period.periodName} ${period.startTime ?? ''}-${period.endTime ?? ''}',
-                          tag: period.room == null
-                              ? null
-                              : StatusTag(
-                                  label: period.room!,
-                                  color: PrototypeColors.blue,
-                                ),
-                        ),
-                      ),
-                    ),
+              const _TodayTimetableWidget(),
               const SectionTitle('Attendance Shortcut'),
               const SizedBox(height: 12),
               PrototypeButton(
@@ -209,6 +198,94 @@ class DashboardScreen extends ConsumerWidget {
             },
           ),
       ],
+    );
+  }
+}
+
+class _TodayTimetableWidget extends ConsumerWidget {
+  const _TodayTimetableWidget();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final timetableAsync = ref.watch(myTimetableProvider);
+    return timetableAsync.when(
+      loading: () => const PrototypeCard(
+        child: Center(child: CircularProgressIndicator()),
+      ),
+      error: (e, s) => const PrototypeCard(
+        child: Text('Could not load timetable.'),
+      ),
+      data: (tt) {
+        final today = _backendDayOfWeek(DateTime.now());
+        final todayRoutines =
+            tt.routines.where((r) => r.dayOfWeek == today).toList();
+
+        if (todayRoutines.isEmpty) {
+          return const PrototypeCard(
+            child: Text('No classes scheduled for today.'),
+          );
+        }
+
+        return Column(
+          children: todayRoutines.map((r) {
+            final period =
+                tt.periods.where((p) => p.id == r.timePeriodId).firstOrNull;
+            final time =
+                period != null ? '${period.startTime}-${period.endTime}' : '';
+            return Padding(
+              padding: const EdgeInsets.only(bottom: 8),
+              child: PrototypeCard(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 14,
+                  vertical: 12,
+                ),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            '${r.className} - ${r.sectionName}',
+                            style: const TextStyle(
+                              fontWeight: FontWeight.w800,
+                              fontSize: 14,
+                            ),
+                          ),
+                          const SizedBox(height: 2),
+                          Text(
+                            r.subjectName,
+                            style: const TextStyle(
+                              color: PrototypeColors.blue,
+                              fontSize: 13,
+                            ),
+                          ),
+                          if (r.roomNumber != null)
+                            Text(
+                              'Room ${r.roomNumber}',
+                              style: const TextStyle(
+                                color: PrototypeColors.muted,
+                                fontSize: 12,
+                              ),
+                            ),
+                        ],
+                      ),
+                    ),
+                    if (time.isNotEmpty)
+                      Text(
+                        time,
+                        style: const TextStyle(
+                          color: PrototypeColors.muted,
+                          fontSize: 12,
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+            );
+          }).toList(),
+        );
+      },
     );
   }
 }

@@ -182,6 +182,147 @@ export const getMe = async (req: Request, res: Response) => {
   });
 };
 
+export const getMyTimetableApi = async (req: Request, res: Response) => {
+  const { userId, schoolId } = requireCurrentSchool(req);
+
+  const teacher = await prisma.teacherProfile.findFirst({
+    where: { schoolId, userId, isActive: true },
+    select: { id: true, firstName: true, lastName: true },
+  });
+
+  if (!teacher) {
+    return res.status(200).json({ teacher: null, periods: [], routines: [], weekends: [] });
+  }
+
+  const [periods, routines, settings, academicYear] = await Promise.all([
+    prisma.timePeriod.findMany({
+      where: { schoolId },
+      select: { id: true, name: true, startTime: true, endTime: true, type: true },
+      orderBy: { startTime: 'asc' },
+    }),
+    prisma.classRoutine.findMany({
+      where: { schoolId, teacherId: teacher.id },
+      include: {
+        class: { select: { id: true, name: true } },
+        section: { select: { id: true, name: true } },
+        timePeriod: { select: { id: true, name: true, startTime: true, endTime: true, type: true } },
+        subject: { select: { id: true, name: true } },
+        classRoom: { select: { id: true, roomNumber: true } },
+      },
+      orderBy: [{ dayOfWeek: 'asc' }, { timePeriod: { startTime: 'asc' } }],
+    }),
+    prisma.schoolSystemSetting.findUnique({
+      where: { schoolId },
+      select: { weekends: true },
+    }),
+    prisma.academicYear.findFirst({
+      where: { schoolId, isActive: true },
+      select: { id: true },
+    }),
+  ]);
+
+  const defaultWeekends = [
+    { id: 'saturday', name: 'Saturday', isWeekend: false },
+    { id: 'sunday', name: 'Sunday', isWeekend: false },
+    { id: 'monday', name: 'Monday', isWeekend: false },
+    { id: 'tuesday', name: 'Tuesday', isWeekend: false },
+    { id: 'wednesday', name: 'Wednesday', isWeekend: false },
+    { id: 'thursday', name: 'Thursday', isWeekend: false },
+    { id: 'friday', name: 'Friday', isWeekend: true },
+  ];
+  const weekends =
+    settings && Array.isArray(settings.weekends) && settings.weekends.length
+      ? (settings.weekends as Array<{ id: string; name: string; isWeekend: boolean }>)
+      : defaultWeekends;
+
+  return res.status(200).json({ teacher, periods, routines, weekends, activeAcademicYearId: academicYear?.id ?? null });
+};
+
+export const listMyAssignedClassesApi = async (req: Request, res: Response) => {
+  const { userId, schoolId, role } = requireCurrentSchool(req);
+
+  const fetchAllSchoolData = async () => {
+    const [academicYears, classes, sections] = await Promise.all([
+      prisma.academicYear.findMany({
+        where: { schoolId },
+        select: { id: true, name: true, isActive: true },
+        orderBy: [{ isActive: 'desc' }, { startDate: 'desc' }],
+      }),
+      prisma.class.findMany({
+        where: { schoolId },
+        select: { id: true, name: true, academicYearId: true },
+        orderBy: { name: 'asc' },
+      }),
+      prisma.section.findMany({
+        where: { schoolId },
+        select: { id: true, name: true, classId: true, classSections: { select: { classId: true } } },
+        orderBy: { name: 'asc' },
+      }),
+    ]);
+    return { academicYears, classes, sections };
+  };
+
+  // Admins and principals always see all school classes
+  if (isSchoolAdminRole(role) || role === 'PRINCIPAL') {
+    return res.status(200).json(await fetchAllSchoolData());
+  }
+
+  // For teachers: try their explicit class assignments first
+  const teacher = await prisma.teacherProfile.findFirst({
+    where: { schoolId, userId, isActive: true },
+    select: { id: true },
+  });
+
+  if (!teacher) {
+    return res.status(200).json(await fetchAllSchoolData());
+  }
+
+  const assignments = await prisma.teacherClassAssignment.findMany({
+    where: { teacherId: teacher.id },
+    select: {
+      classId: true,
+      sectionId: true,
+      class: { select: { id: true, name: true, academicYearId: true } },
+      section: { select: { id: true, name: true } },
+    },
+  });
+
+  // If teacher has no explicit class assignments, fall back to all school classes
+  // (same behaviour as the web admin attendance options endpoint)
+  if (assignments.length === 0) {
+    return res.status(200).json(await fetchAllSchoolData());
+  }
+
+  const classMap = new Map<string, { id: string; name: string; academicYearId: string | null }>();
+  const sectionMap = new Map<string, { id: string; name: string; classId: string }>();
+  for (const assignment of assignments) {
+    classMap.set(assignment.classId, assignment.class);
+    if (assignment.sectionId && assignment.section) {
+      sectionMap.set(assignment.sectionId, { ...assignment.section, classId: assignment.classId });
+    }
+  }
+
+  const academicYearIds = [...new Set([...classMap.values()].map((c) => c.academicYearId).filter(Boolean))] as string[];
+  const academicYears = academicYearIds.length
+    ? await prisma.academicYear.findMany({
+        where: { schoolId, id: { in: academicYearIds } },
+        select: { id: true, name: true, isActive: true },
+        orderBy: [{ isActive: 'desc' }, { startDate: 'desc' }],
+      })
+    : [];
+
+  return res.status(200).json({
+    academicYears,
+    classes: [...classMap.values()],
+    sections: [...sectionMap.values()].map((s) => ({
+      id: s.id,
+      name: s.name,
+      classId: s.classId,
+      classSections: [{ classId: s.classId }],
+    })),
+  });
+};
+
 export const listMyAssignedStudentsApi = async (req: Request, res: Response) => {
   const { userId, schoolId, role } = requireCurrentSchool(req);
   const query = assignedStudentsQuerySchema.parse(req.query);
@@ -196,16 +337,21 @@ export const listMyAssignedStudentsApi = async (req: Request, res: Response) => 
   const where = isSchoolAdminRole(role)
     ? whereBase
     : await (async () => {
-        const teacher = await getActiveTeacherForUser(schoolId, userId);
+        const teacher = await prisma.teacherProfile.findFirst({
+          where: { schoolId, userId, isActive: true },
+          select: { id: true },
+        });
+        if (!teacher) return whereBase;
+
         const assignments = await prisma.teacherClassAssignment.findMany({
           where: { teacherId: teacher.id },
           select: { classId: true, sectionId: true },
         });
 
+        // No explicit assignments: fall back to all school students (same as web admin)
+        if (assignments.length === 0) return whereBase;
+
         ensureClassSectionInAssignments(assignments, query.classId, query.sectionId);
-        if (assignments.length === 0) {
-          return { ...whereBase, id: { in: [] as string[] } };
-        }
 
         return {
           ...whereBase,
