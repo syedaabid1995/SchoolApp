@@ -2,6 +2,7 @@ import { z } from 'zod';
 import { isValidTime } from '../utils/attendance';
 
 const timeSchema = z.string().refine(isValidTime, 'Invalid time format');
+const timePeriodTypeSchema = z.enum(['CLASS_TIME', 'EXAM_TIME', 'BREAK']);
 
 export const uuidParamsSchema = z.object({
   id: z.string().uuid(),
@@ -16,6 +17,7 @@ export const attendanceRecordParamsSchema = z.object({
 });
 
 export const attendancePeriodCreateSchema = z.object({
+  type: timePeriodTypeSchema.optional(),
   name: z.string().min(1),
   startTime: timeSchema,
   endTime: timeSchema,
@@ -25,6 +27,7 @@ export const attendancePeriodCreateSchema = z.object({
 });
 
 export const attendancePeriodUpdateSchema = z.object({
+  type: timePeriodTypeSchema.optional(),
   name: z.string().min(1).optional(),
   startTime: timeSchema.optional(),
   endTime: timeSchema.optional(),

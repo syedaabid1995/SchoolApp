@@ -1,6 +1,7 @@
 import { env } from '../../config/env';
 import { logger } from '../../config/logger';
 import { redis } from '../../config/redis';
+import { RedisMetricsService } from '../observability/redis-metrics.service';
 import type { CacheResult, CacheStatus } from './cache.types';
 
 const cacheEnabled = () => env.REDIS_CACHE_ENABLED;
@@ -56,9 +57,14 @@ export const getCacheJson = async <T>(key: string): Promise<T | null> => {
   if (!isCacheAllowedForKey(key)) return null;
   try {
     const raw = await redis.get(key);
-    if (!raw) return null;
+    if (!raw) {
+      RedisMetricsService.recordCacheMiss(key);
+      return null;
+    }
+    RedisMetricsService.recordCacheHit(key);
     return JSON.parse(raw) as T;
   } catch (err) {
+    RedisMetricsService.recordRedisError('cache_get');
     logDebug({ err, key }, 'cache get failed');
     return null;
   }
@@ -68,8 +74,10 @@ export const setCacheJson = async (key: string, value: unknown, ttlSeconds: numb
   if (!isCacheAllowedForKey(key)) return;
   try {
     await redis.set(key, JSON.stringify(value), 'EX', ttlSeconds);
+    RedisMetricsService.recordCacheSet(key);
     logDebug({ key, ttlSeconds }, 'cache set');
   } catch (err) {
+    RedisMetricsService.recordRedisError('cache_set');
     logDebug({ err, key }, 'cache set failed');
   }
 };
@@ -80,6 +88,7 @@ export const deleteCacheKeys = async (keys: string[]) => {
     await redis.del(...keys);
     logDebug({ keysCount: keys.length }, 'cache delete keys');
   } catch (err) {
+    RedisMetricsService.recordRedisError('cache_delete_keys');
     logDebug({ err, keys }, 'cache delete keys failed');
   }
 };
@@ -100,6 +109,7 @@ export const deleteCacheByPattern = async (pattern: string) => {
       logDebug({ pattern, deleted: matched.length }, 'cache delete pattern');
     }
   } catch (err) {
+    RedisMetricsService.recordRedisError('cache_delete_pattern');
     logDebug({ err, pattern }, 'cache delete pattern failed');
   }
 };

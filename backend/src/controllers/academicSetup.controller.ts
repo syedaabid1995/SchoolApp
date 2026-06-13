@@ -4,8 +4,8 @@ import { z } from 'zod';
 import { prisma } from '../config/db';
 import { HttpError } from '../middlewares/error.middleware';
 import { logAudit } from '../utils/audit';
-import { timetableReadService } from '../modules/timetable/services/timetable-read.service';
-import { toLegacyClassRoutineRow } from '../modules/timetable/services/timetable-response-mapper';
+import { invalidateAttendanceCache, invalidateTimetableCache } from '../services/cache/cache.invalidation';
+import { modernTimetableGeneratorService } from '../modules/timetable/services/modern-timetable-generator.service';
 
 const uuidSchema = z.string().uuid();
 const timeSchema = z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/, 'Use HH:mm time format');
@@ -83,7 +83,7 @@ const findOverlappingTimePeriod = async (
   endTime: string,
   excludeId?: string,
 ) =>
-  prisma.timePeriod.findFirst({
+  prisma.attendancePeriod.findFirst({
     where: {
       schoolId,
       ...(excludeId ? { id: { not: excludeId } } : {}),
@@ -147,7 +147,7 @@ const assertTeacher = async (schoolId: string, teacherId: string) => {
 };
 
 const assertTimePeriod = async (schoolId: string, timePeriodId: string) => {
-  const found = await prisma.timePeriod.findFirst({
+  const found = await prisma.attendancePeriod.findFirst({
     where: { id: timePeriodId, schoolId },
     select: { id: true, type: true },
   });
@@ -162,6 +162,179 @@ const assertClassRoom = async (schoolId: string, classRoomId?: string | null) =>
     select: { id: true },
   });
   if (!found) throw new HttpError(404, 'Class room not found');
+};
+
+const attendancePeriodLegacySelect = {
+  id: true,
+  schoolId: true,
+  type: true,
+  name: true,
+  startTime: true,
+  endTime: true,
+  createdAt: true,
+  updatedAt: true,
+  _count: { select: { timetableEntries: true, sessions: true } },
+} as const;
+
+const toLegacyTimePeriodRow = (period: {
+  id: string;
+  schoolId: string;
+  type: TimePeriodType;
+  name: string;
+  startTime: string;
+  endTime: string;
+  createdAt: Date;
+  updatedAt: Date;
+  _count?: { timetableEntries?: number };
+}, includeRoutineCount = false) => ({
+  id: period.id,
+  schoolId: period.schoolId,
+  type: period.type,
+  name: period.name,
+  startTime: period.startTime,
+  endTime: period.endTime,
+  createdAt: period.createdAt,
+  updatedAt: period.updatedAt,
+  ...(includeRoutineCount ? { _count: { classRoutines: period._count?.timetableEntries ?? 0 } } : {}),
+});
+
+const toLegacyRoutineScalar = (entry: {
+  id: string;
+  schoolId: string;
+  classId: string;
+  sectionId: string | null;
+  attendancePeriodId: string;
+  dayOfWeek: number;
+  subjectId: string;
+  teacherId: string;
+  classRoomId: string | null;
+  createdAt: Date;
+  updatedAt: Date;
+}) => ({
+  id: entry.id,
+  schoolId: entry.schoolId,
+  classId: entry.classId,
+  sectionId: entry.sectionId ?? '',
+  timePeriodId: entry.attendancePeriodId,
+  dayOfWeek: entry.dayOfWeek,
+  subjectId: entry.subjectId,
+  teacherId: entry.teacherId,
+  classRoomId: entry.classRoomId,
+  createdAt: entry.createdAt,
+  updatedAt: entry.updatedAt,
+});
+
+const toLegacyRoutineRow = (entry: any) => ({
+  ...toLegacyRoutineScalar(entry),
+  class: entry.class ? { id: entry.class.id, name: entry.class.name } : undefined,
+  section: entry.section ? { id: entry.section.id, name: entry.section.name } : null,
+  timePeriod: entry.period
+    ? {
+        id: entry.period.id,
+        name: entry.period.name,
+        startTime: entry.period.startTime,
+        endTime: entry.period.endTime,
+        type: entry.period.type,
+      }
+    : undefined,
+  subject: entry.subject
+    ? {
+        id: entry.subject.id,
+        name: entry.subject.name,
+        code: entry.subject.code,
+        type: entry.subject.type,
+      }
+    : undefined,
+  teacher: entry.teacher
+    ? {
+        id: entry.teacher.id,
+        firstName: entry.teacher.firstName,
+        lastName: entry.teacher.lastName,
+        employeeNo: entry.teacher.employeeNo,
+      }
+    : undefined,
+  classRoom: entry.classRoom
+    ? {
+        id: entry.classRoom.id,
+        roomNumber: entry.classRoom.roomNumber,
+        capacity: entry.classRoom.capacity,
+      }
+    : null,
+});
+
+const timetableEntryLegacyInclude = {
+  class: { select: { id: true, name: true } },
+  section: { select: { id: true, name: true } },
+  period: { select: { id: true, name: true, type: true, startTime: true, endTime: true } },
+  subject: { select: { id: true, name: true, code: true, type: true } },
+  teacher: { select: { id: true, firstName: true, lastName: true, employeeNo: true } },
+  classRoom: { select: { id: true, roomNumber: true, capacity: true } },
+} satisfies Prisma.TimetableEntryInclude;
+
+const timetableEntryLegacyOrderBy = [
+  { dayOfWeek: 'asc' },
+  { period: { startTime: 'asc' } },
+] satisfies Prisma.TimetableEntryOrderByWithRelationInput[];
+
+const resolveAcademicYearForTimetable = async (schoolId: string, classId?: string) => {
+  if (classId) {
+    const classRecord = await prisma.class.findFirst({
+      where: { id: classId, schoolId },
+      select: { academicYearId: true },
+    });
+    if (classRecord?.academicYearId) {
+      const academicYear = await prisma.academicYear.findFirst({
+        where: { id: classRecord.academicYearId, schoolId },
+        select: { id: true, name: true, startDate: true, endDate: true },
+      });
+      if (academicYear) return academicYear;
+    }
+  }
+
+  const today = new Date();
+  return prisma.academicYear.findFirst({
+    where: {
+      schoolId,
+      OR: [
+        { isActive: true },
+        { startDate: { lte: today }, endDate: { gte: today } },
+      ],
+    },
+    select: { id: true, name: true, startDate: true, endDate: true },
+    orderBy: [{ isActive: 'desc' }, { startDate: 'desc' }],
+  });
+};
+
+const resolveDraftTimetableVersion = async (params: {
+  schoolId: string;
+  userId: string;
+  classId?: string;
+  createIfMissing: boolean;
+}) => {
+  const academicYear = await resolveAcademicYearForTimetable(params.schoolId, params.classId);
+  if (!academicYear) {
+    if (params.createIfMissing) throw new HttpError(400, 'Create an academic year before managing timetable entries');
+    return null;
+  }
+
+  const draft = await prisma.timetableVersion.findFirst({
+    where: { schoolId: params.schoolId, academicYearId: academicYear.id, status: 'DRAFT' },
+    orderBy: [{ createdAt: 'desc' }],
+    select: { id: true, academicYearId: true },
+  });
+  if (draft || !params.createIfMissing) return draft;
+
+  return prisma.timetableVersion.create({
+    data: {
+      schoolId: params.schoolId,
+      academicYearId: academicYear.id,
+      name: `Draft Timetable ${new Date().toISOString().slice(0, 10)}`,
+      effectiveFrom: academicYear.startDate,
+      effectiveTo: academicYear.endDate,
+      createdById: params.userId,
+    },
+    select: { id: true, academicYearId: true },
+  });
 };
 
 const classSchema = z.object({
@@ -193,13 +366,15 @@ export const listSetupClasses = async (req: Request, res: Response) => {
           timetableEntries: true,
           assignSubjects: true,
           classTeachers: true,
-          classRoutines: true,
         },
       },
     },
     orderBy: { name: 'asc' },
   });
-  res.status(200).json(classes);
+  res.status(200).json(classes.map((item) => ({
+    ...item,
+    _count: item._count ? { ...item._count, classRoutines: item._count.timetableEntries ?? 0 } : item._count,
+  })));
 };
 
 export const createSetupClass = async (req: Request, res: Response) => {
@@ -306,11 +481,11 @@ export const deleteSetupClass = async (req: Request, res: Response) => {
   const existing = await prisma.class.findFirst({
     where: { id, schoolId },
     include: {
-      _count: { select: { students: true, subjects: true, timetableEntries: true, assignSubjects: true, classTeachers: true, classRoutines: true } },
+      _count: { select: { students: true, subjects: true, timetableEntries: true, assignSubjects: true, classTeachers: true } },
     },
   });
   if (!existing) throw new HttpError(404, 'Class not found');
-  const blockers = existing._count.students + existing._count.subjects + existing._count.timetableEntries + existing._count.assignSubjects + existing._count.classTeachers + existing._count.classRoutines;
+  const blockers = existing._count.students + existing._count.subjects + existing._count.timetableEntries + existing._count.assignSubjects + existing._count.classTeachers;
   if (blockers > 0) throw new HttpError(409, 'Cannot delete class while students, routine, subjects, or assignments exist');
   await prisma.class.delete({ where: { id } });
   await logAudit(req, { schoolId, entityType: 'CLASS', entityId: id, action: 'DELETE', beforeState: existing });
@@ -386,10 +561,10 @@ export const deleteSetupSection = async (req: Request, res: Response) => {
   const id = req.params.id;
   const existing = await prisma.section.findFirst({
     where: { id, schoolId },
-    include: { _count: { select: { students: true, classSections: true, assignSubjects: true, classTeachers: true, classRoutines: true } } },
+    include: { _count: { select: { students: true, classSections: true, assignSubjects: true, classTeachers: true, timetableEntries: true } } },
   });
   if (!existing) throw new HttpError(404, 'Section not found');
-  const blockers = existing._count.students + existing._count.classSections + existing._count.assignSubjects + existing._count.classTeachers + existing._count.classRoutines;
+  const blockers = existing._count.students + existing._count.classSections + existing._count.assignSubjects + existing._count.classTeachers + existing._count.timetableEntries;
   if (blockers > 0) throw new HttpError(409, 'Cannot delete section while linked with classes, students, or assignments');
   await prisma.section.delete({ where: { id } });
   await logAudit(req, { schoolId, entityType: 'SECTION', entityId: id, action: 'DELETE', beforeState: existing });
@@ -417,10 +592,13 @@ export const listSetupSubjects = async (req: Request, res: Response) => {
           }
         : {}),
     },
-    include: { _count: { select: { assignSubjects: true, classRoutines: true, examPapers: true, timetableEntries: true } } },
+    include: { _count: { select: { assignSubjects: true, examPapers: true, timetableEntries: true } } },
     orderBy: [{ name: 'asc' }],
   });
-  res.status(200).json(subjects);
+  res.status(200).json(subjects.map((item) => ({
+    ...item,
+    _count: item._count ? { ...item._count, classRoutines: item._count.timetableEntries ?? 0 } : item._count,
+  })));
 };
 
 export const createSetupSubject = async (req: Request, res: Response) => {
@@ -484,11 +662,11 @@ export const deleteSetupSubject = async (req: Request, res: Response) => {
   const existing = await prisma.subject.findFirst({
     where: { id, schoolId },
     include: {
-      _count: { select: { assignSubjects: true, classRoutines: true, examPapers: true, teacherAssignments: true, timetableEntries: true } },
+      _count: { select: { assignSubjects: true, examPapers: true, teacherAssignments: true, timetableEntries: true } },
     },
   });
   if (!existing) throw new HttpError(404, 'Subject not found');
-  const blockers = existing._count.assignSubjects + existing._count.classRoutines + existing._count.examPapers + existing._count.teacherAssignments + existing._count.timetableEntries;
+  const blockers = existing._count.assignSubjects + existing._count.examPapers + existing._count.teacherAssignments + existing._count.timetableEntries;
   if (blockers > 0) throw new HttpError(409, 'Cannot delete subject while exams, routine, or assignments exist');
   await prisma.subject.delete({ where: { id } });
   res.status(204).send();
@@ -504,10 +682,13 @@ export const listClassRooms = async (req: Request, res: Response) => {
   const search = typeof req.query.search === 'string' ? req.query.search.trim() : '';
   const rooms = await prisma.classRoom.findMany({
     where: { schoolId, ...(search ? { roomNumber: { contains: search, mode: 'insensitive' } } : {}) },
-    include: { _count: { select: { classRoutines: true } } },
+    include: { _count: { select: { timetableEntries: true } } },
     orderBy: { roomNumber: 'asc' },
   });
-  res.status(200).json(rooms);
+  res.status(200).json(rooms.map((item) => ({
+    ...item,
+    _count: item._count ? { ...item._count, classRoutines: item._count.timetableEntries ?? 0 } : item._count,
+  })));
 };
 
 export const createClassRoom = async (req: Request, res: Response) => {
@@ -560,9 +741,9 @@ export const updateClassRoom = async (req: Request, res: Response) => {
 export const deleteClassRoom = async (req: Request, res: Response) => {
   const { schoolId } = requireAcademicSetupUser(req);
   const id = req.params.id;
-  const existing = await prisma.classRoom.findFirst({ where: { id, schoolId }, include: { _count: { select: { classRoutines: true } } } });
+  const existing = await prisma.classRoom.findFirst({ where: { id, schoolId }, include: { _count: { select: { timetableEntries: true } } } });
   if (!existing) throw new HttpError(404, 'Class room not found');
-  if (existing._count.classRoutines > 0) throw new HttpError(409, 'Cannot delete room while routine entries exist');
+  if (existing._count.timetableEntries > 0) throw new HttpError(409, 'Cannot delete room while routine entries exist');
   await prisma.classRoom.delete({ where: { id } });
   res.status(204).send();
 };
@@ -576,12 +757,12 @@ const timePeriodSchema = z.object({
 
 export const listTimePeriods = async (req: Request, res: Response) => {
   const { schoolId } = requireAcademicSetupUser(req);
-  const periods = await prisma.timePeriod.findMany({
+  const periods = await prisma.attendancePeriod.findMany({
     where: { schoolId },
-    include: { _count: { select: { classRoutines: true } } },
     orderBy: [{ startTime: 'asc' }, { name: 'asc' }],
+    select: attendancePeriodLegacySelect,
   });
-  res.status(200).json(periods);
+  res.status(200).json(periods.map((period) => toLegacyTimePeriodRow(period, true)));
 };
 
 export const createTimePeriod = async (req: Request, res: Response) => {
@@ -590,10 +771,12 @@ export const createTimePeriod = async (req: Request, res: Response) => {
   ensureEndAfterStart(payload.startTime, payload.endTime);
   await assertNoOverlappingTimePeriod(schoolId, payload.startTime, payload.endTime);
   try {
-    const period = await prisma.timePeriod.create({
+    const period = await prisma.attendancePeriod.create({
       data: { schoolId, type: payload.type, name: normalizeText(payload.name), startTime: payload.startTime, endTime: payload.endTime },
+      select: attendancePeriodLegacySelect,
     });
-    res.status(201).json(period);
+    await Promise.all([invalidateAttendanceCache(schoolId), invalidateTimetableCache(schoolId)]);
+    res.status(201).json(toLegacyTimePeriodRow(period));
   } catch (err) {
     handleUniqueError(err, 'Time period already exists for this school');
   }
@@ -603,14 +786,14 @@ export const updateTimePeriod = async (req: Request, res: Response) => {
   const { schoolId } = requireAcademicSetupUser(req);
   const payload = timePeriodSchema.partial().parse(req.body);
   const id = req.params.id;
-  const existing = await prisma.timePeriod.findFirst({ where: { id, schoolId }, select: { id: true, startTime: true, endTime: true } });
+  const existing = await prisma.attendancePeriod.findFirst({ where: { id, schoolId }, select: { id: true, startTime: true, endTime: true } });
   if (!existing) throw new HttpError(404, 'Time period not found');
   const startTime = payload.startTime ?? existing.startTime;
   const endTime = payload.endTime ?? existing.endTime;
   ensureEndAfterStart(startTime, endTime);
   await assertNoOverlappingTimePeriod(schoolId, startTime, endTime, id);
   try {
-    const period = await prisma.timePeriod.update({
+    const period = await prisma.attendancePeriod.update({
       where: { id },
       data: {
         type: payload.type ?? undefined,
@@ -618,8 +801,10 @@ export const updateTimePeriod = async (req: Request, res: Response) => {
         startTime: payload.startTime ?? undefined,
         endTime: payload.endTime ?? undefined,
       },
+      select: attendancePeriodLegacySelect,
     });
-    res.status(200).json(period);
+    await Promise.all([invalidateAttendanceCache(schoolId), invalidateTimetableCache(schoolId)]);
+    res.status(200).json(toLegacyTimePeriodRow(period));
   } catch (err) {
     handleUniqueError(err, 'Time period already exists for this school');
   }
@@ -632,7 +817,7 @@ export const seedDefaultTimePeriods = async (req: Request, res: Response) => {
   const skipped: Array<{ name: string; reason: string }> = [];
 
   for (const period of DEFAULT_TIME_PERIODS) {
-    const existing = await prisma.timePeriod.findFirst({
+    const existing = await prisma.attendancePeriod.findFirst({
       where: { schoolId, type: period.type, name: { equals: period.name, mode: 'insensitive' } },
       select: { id: true },
     });
@@ -645,33 +830,35 @@ export const seedDefaultTimePeriods = async (req: Request, res: Response) => {
       continue;
     }
     if (existing) {
-      await prisma.timePeriod.update({
+      await prisma.attendancePeriod.update({
         where: { id: existing.id },
         data: { type: period.type, name: period.name, startTime: period.startTime, endTime: period.endTime },
       });
       updatedCount += 1;
       continue;
     }
-    await prisma.timePeriod.create({ data: { schoolId, ...period } });
+    await prisma.attendancePeriod.create({ data: { schoolId, ...period } });
     createdCount += 1;
   }
 
-  const periods = await prisma.timePeriod.findMany({
+  await Promise.all([invalidateAttendanceCache(schoolId), invalidateTimetableCache(schoolId)]);
+  const periods = await prisma.attendancePeriod.findMany({
     where: { schoolId },
-    include: { _count: { select: { classRoutines: true } } },
     orderBy: [{ startTime: 'asc' }, { name: 'asc' }],
+    select: attendancePeriodLegacySelect,
   });
 
-  res.status(200).json({ createdCount, updatedCount, skippedCount: skipped.length, skipped, periods });
+  res.status(200).json({ createdCount, updatedCount, skippedCount: skipped.length, skipped, periods: periods.map((period) => toLegacyTimePeriodRow(period, true)) });
 };
 
 export const deleteTimePeriod = async (req: Request, res: Response) => {
   const { schoolId } = requireAcademicSetupUser(req);
   const id = req.params.id;
-  const existing = await prisma.timePeriod.findFirst({ where: { id, schoolId }, include: { _count: { select: { classRoutines: true } } } });
+  const existing = await prisma.attendancePeriod.findFirst({ where: { id, schoolId }, include: { _count: { select: { timetableEntries: true, sessions: true } } } });
   if (!existing) throw new HttpError(404, 'Time period not found');
-  if (existing._count.classRoutines > 0) throw new HttpError(409, 'Cannot delete time period while routine entries exist');
-  await prisma.timePeriod.delete({ where: { id } });
+  if (existing._count.timetableEntries > 0 || existing._count.sessions > 0) throw new HttpError(409, 'Cannot delete time period while routine entries exist');
+  await prisma.attendancePeriod.delete({ where: { id } });
+  await Promise.all([invalidateAttendanceCache(schoolId), invalidateTimetableCache(schoolId)]);
   res.status(204).send();
 };
 
@@ -850,20 +1037,6 @@ export const deleteClassTeacher = async (req: Request, res: Response) => {
   res.status(204).send();
 };
 
-const classRoutineInclude = {
-  class: { select: { id: true, name: true } },
-  section: { select: { id: true, name: true } },
-  timePeriod: true,
-  subject: { select: { id: true, name: true, code: true, type: true } },
-  teacher: { select: { id: true, firstName: true, lastName: true, employeeNo: true } },
-  classRoom: { select: { id: true, roomNumber: true, capacity: true } },
-} satisfies Prisma.ClassRoutineInclude;
-
-const classRoutineOrderBy = [
-  { dayOfWeek: 'asc' },
-  { timePeriod: { startTime: 'asc' } },
-] satisfies Prisma.ClassRoutineOrderByWithRelationInput[];
-
 const routineSchema = z.object({
   classId: uuidSchema,
   sectionId: uuidSchema,
@@ -904,87 +1077,104 @@ const validateRoutinePayload = async (schoolId: string, payload: z.infer<typeof 
 
 const assertRoutineAvailability = async (
   schoolId: string,
+  timetableVersionId: string,
   payload: Pick<z.infer<typeof routineSchema>, 'teacherId' | 'classRoomId' | 'dayOfWeek' | 'timePeriodId'>,
   excludeId?: string,
 ) => {
   const sameSlotWhere = {
     schoolId,
+    timetableVersionId,
     dayOfWeek: payload.dayOfWeek,
-    timePeriodId: payload.timePeriodId,
+    attendancePeriodId: payload.timePeriodId,
+    isActive: true,
     ...(excludeId ? { id: { not: excludeId } } : {}),
   };
 
-  const teacherConflict = await prisma.classRoutine.findFirst({
+  const teacherConflict = await prisma.timetableEntry.findFirst({
     where: { ...sameSlotWhere, teacherId: payload.teacherId },
     include: {
       class: { select: { name: true } },
       section: { select: { name: true } },
-      timePeriod: { select: { name: true, startTime: true, endTime: true } },
+      period: { select: { name: true, startTime: true, endTime: true } },
     },
   });
   if (teacherConflict) {
     throw new HttpError(
       409,
-      `Teacher already has ${teacherConflict.class.name}-${teacherConflict.section.name} in ${teacherConflict.timePeriod.name}`,
+      `Teacher already has ${teacherConflict.class.name}-${teacherConflict.section?.name ?? ''} in ${teacherConflict.period.name}`,
     );
   }
 
   if (!payload.classRoomId) return;
-  const roomConflict = await prisma.classRoutine.findFirst({
+  const roomConflict = await prisma.timetableEntry.findFirst({
     where: { ...sameSlotWhere, classRoomId: payload.classRoomId },
     include: {
       class: { select: { name: true } },
       section: { select: { name: true } },
       classRoom: { select: { roomNumber: true } },
-      timePeriod: { select: { name: true } },
+      period: { select: { name: true } },
     },
   });
   if (roomConflict) {
     throw new HttpError(
       409,
-      `Room ${roomConflict.classRoom?.roomNumber ?? ''} is already used by ${roomConflict.class.name}-${roomConflict.section.name} in ${roomConflict.timePeriod.name}`,
+      `Room ${roomConflict.classRoom?.roomNumber ?? ''} is already used by ${roomConflict.class.name}-${roomConflict.section?.name ?? ''} in ${roomConflict.period.name}`,
     );
   }
 };
 
 export const listClassRoutines = async (req: Request, res: Response) => {
-  const { schoolId } = requireAcademicSetupUser(req);
+  const { schoolId, userId } = requireAcademicSetupUser(req);
   const classId = typeof req.query.classId === 'string' ? req.query.classId : undefined;
   const sectionId = typeof req.query.sectionId === 'string' ? req.query.sectionId : undefined;
   const teacherId = typeof req.query.teacherId === 'string' ? req.query.teacherId : undefined;
-  const routines = await timetableReadService
-    .getTimetable({ schoolId, classId, sectionId, teacherId, mode: 'legacy' })
-    .then((slots) =>
-      slots.map((slot) =>
-        toLegacyClassRoutineRow(slot, {
-          includeTeacher: true,
-          includeSubjectDetails: true,
-          includeRoomCapacity: true,
-        }),
-      ),
-    );
-  res.status(200).json(routines);
+  const version = await resolveDraftTimetableVersion({ schoolId, userId, classId, createIfMissing: false });
+  if (!version) {
+    res.status(200).json([]);
+    return;
+  }
+  const routines = await prisma.timetableEntry.findMany({
+    where: {
+      schoolId,
+      timetableVersionId: version.id,
+      ...(classId ? { classId } : {}),
+      ...(sectionId ? { sectionId } : {}),
+      ...(teacherId ? { teacherId } : {}),
+    },
+    include: timetableEntryLegacyInclude,
+    orderBy: timetableEntryLegacyOrderBy,
+  });
+  res.status(200).json(routines.map(toLegacyRoutineRow));
 };
 
 export const createClassRoutine = async (req: Request, res: Response) => {
-  const { schoolId } = requireAcademicSetupUser(req);
+  const { schoolId, userId } = requireAcademicSetupUser(req);
   const payload = routineSchema.parse(req.body);
   await validateRoutinePayload(schoolId, payload);
-  await assertRoutineAvailability(schoolId, payload);
+  const version = await resolveDraftTimetableVersion({ schoolId, userId, classId: payload.classId, createIfMissing: true });
+  if (!version) throw new HttpError(400, 'Create an academic year before managing timetable entries');
+  await assertRoutineAvailability(schoolId, version.id, payload);
+  const room = payload.classRoomId
+    ? await prisma.classRoom.findFirst({ where: { id: payload.classRoomId, schoolId }, select: { roomNumber: true } })
+    : null;
   try {
-    const item = await prisma.classRoutine.create({
+    const item = await prisma.timetableEntry.create({
       data: {
         schoolId,
+        timetableVersionId: version.id,
+        academicYearId: version.academicYearId,
         classId: payload.classId,
         sectionId: payload.sectionId,
-        timePeriodId: payload.timePeriodId,
+        attendancePeriodId: payload.timePeriodId,
         dayOfWeek: payload.dayOfWeek,
         subjectId: payload.subjectId,
         teacherId: payload.teacherId,
         classRoomId: payload.classRoomId ?? null,
+        room: room?.roomNumber ?? null,
       },
     });
-    res.status(201).json(item);
+    await invalidateTimetableCache(schoolId);
+    res.status(201).json(toLegacyRoutineScalar(item));
   } catch (err) {
     handleUniqueError(err, 'Routine already exists for this day and period');
   }
@@ -993,150 +1183,85 @@ export const createClassRoutine = async (req: Request, res: Response) => {
 export const updateClassRoutine = async (req: Request, res: Response) => {
   const { schoolId } = requireAcademicSetupUser(req);
   const id = req.params.id;
-  const existing = await prisma.classRoutine.findFirst({ where: { id, schoolId } });
+  const existing = await prisma.timetableEntry.findFirst({
+    where: { id, schoolId },
+    include: { version: { select: { id: true, status: true, academicYearId: true } } },
+  });
   if (!existing) throw new HttpError(404, 'Routine not found');
+  if (existing.version.status !== 'DRAFT') throw new HttpError(409, 'Only draft timetable entries can be edited');
   const payload = routineSchema.partial().parse(req.body);
   const merged = {
     classId: payload.classId ?? existing.classId,
-    sectionId: payload.sectionId ?? existing.sectionId,
-    timePeriodId: payload.timePeriodId ?? existing.timePeriodId,
+    sectionId: payload.sectionId ?? existing.sectionId ?? '',
+    timePeriodId: payload.timePeriodId ?? existing.attendancePeriodId,
     dayOfWeek: payload.dayOfWeek ?? existing.dayOfWeek,
     subjectId: payload.subjectId ?? existing.subjectId,
     teacherId: payload.teacherId ?? existing.teacherId,
     classRoomId: payload.classRoomId === undefined ? existing.classRoomId : payload.classRoomId,
   };
   await validateRoutinePayload(schoolId, merged);
-  await assertRoutineAvailability(schoolId, merged, id);
+  await assertRoutineAvailability(schoolId, existing.version.id, merged, id);
+  const room = merged.classRoomId
+    ? await prisma.classRoom.findFirst({ where: { id: merged.classRoomId, schoolId }, select: { roomNumber: true } })
+    : null;
   try {
-    const item = await prisma.classRoutine.update({
+    const item = await prisma.timetableEntry.update({
       where: { id },
-      data: payload,
+      data: {
+        classId: payload.classId ?? undefined,
+        sectionId: payload.sectionId === undefined ? undefined : payload.sectionId,
+        attendancePeriodId: payload.timePeriodId ?? undefined,
+        dayOfWeek: payload.dayOfWeek ?? undefined,
+        subjectId: payload.subjectId ?? undefined,
+        teacherId: payload.teacherId ?? undefined,
+        classRoomId: payload.classRoomId === undefined ? undefined : payload.classRoomId,
+        room: payload.classRoomId === undefined ? undefined : room?.roomNumber ?? null,
+      },
     });
-    res.status(200).json(item);
+    await invalidateTimetableCache(schoolId);
+    res.status(200).json(toLegacyRoutineScalar(item));
   } catch (err) {
     handleUniqueError(err, 'Routine already exists for this day and period');
   }
 };
 
 export const generateClassRoutine = async (req: Request, res: Response) => {
-  const { schoolId } = requireAcademicSetupUser(req);
+  const { schoolId, userId } = requireAcademicSetupUser(req);
   const payload = generateRoutineSchema.parse(req.body);
   await assertClass(schoolId, payload.classId);
   await assertSection(schoolId, payload.sectionId);
   await assertClassSection(schoolId, payload.classId, payload.sectionId);
   await assertClassRoom(schoolId, payload.classRoomId);
-
-  const weekendValues = await getConfiguredWeekendValues(schoolId);
-  const requestedDays = payload.days?.length ? payload.days : allRoutineDayValues;
-  const days = [...new Set(requestedDays)].filter((day) => !weekendValues.has(day)).sort((a, b) => a - b);
-  if (!days.length) throw new HttpError(400, 'All selected days are configured as weekend');
-  const [periods, assignments] = await Promise.all([
-    prisma.timePeriod.findMany({
-      where: { schoolId, type: 'CLASS_TIME' },
-      orderBy: [{ startTime: 'asc' }, { name: 'asc' }],
-    }),
-    prisma.assignSubject.findMany({
-      where: { schoolId, classId: payload.classId, sectionId: payload.sectionId },
-      include: {
-        subject: { select: { name: true } },
-        teacher: { select: { firstName: true, lastName: true, employeeNo: true } },
-      },
-      orderBy: [{ subject: { name: 'asc' } }],
-    }),
-  ]);
-
-  if (!periods.length) throw new HttpError(400, 'Add class time periods before generating routine');
-  if (!assignments.length) throw new HttpError(400, 'Assign subjects and teachers before generating routine');
-
-  const periodIds = periods.map((period) => period.id);
-  const result = await prisma.$transaction(async (tx) => {
-    if (payload.replaceExisting) {
-      await tx.classRoutine.deleteMany({
-        where: { schoolId, classId: payload.classId, sectionId: payload.sectionId, dayOfWeek: { in: days }, timePeriodId: { in: periodIds } },
-      });
-    }
-
-    const existingRoutines = await tx.classRoutine.findMany({
-      where: { schoolId, dayOfWeek: { in: days }, timePeriodId: { in: periodIds } },
-      select: { classId: true, sectionId: true, dayOfWeek: true, timePeriodId: true, teacherId: true, classRoomId: true },
-    });
-
-    const occupiedClassSlots = new Set<string>();
-    const busyTeacherSlots = new Set<string>();
-    const busyRoomSlots = new Set<string>();
-    for (const routine of existingRoutines) {
-      if (routine.classId === payload.classId && routine.sectionId === payload.sectionId) {
-        occupiedClassSlots.add(`${routine.dayOfWeek}:${routine.timePeriodId}`);
-      }
-      busyTeacherSlots.add(`${routine.teacherId}:${routine.dayOfWeek}:${routine.timePeriodId}`);
-      if (routine.classRoomId) busyRoomSlots.add(`${routine.classRoomId}:${routine.dayOfWeek}:${routine.timePeriodId}`);
-    }
-
-    const skipped: Array<{ dayOfWeek: number; periodId: string; reason: string }> = [];
-    const createData: Prisma.ClassRoutineCreateManyInput[] = [];
-    let cursor = 0;
-
-    for (const dayOfWeek of days) {
-      for (const period of periods) {
-        const classSlotKey = `${dayOfWeek}:${period.id}`;
-        if (occupiedClassSlots.has(classSlotKey)) {
-          skipped.push({ dayOfWeek, periodId: period.id, reason: 'Class-section already has a routine in this period' });
-          continue;
-        }
-
-        let selected: (typeof assignments)[number] | null = null;
-        for (let offset = 0; offset < assignments.length; offset += 1) {
-          const candidate = assignments[(cursor + offset) % assignments.length];
-          const teacherSlotKey = `${candidate.teacherId}:${dayOfWeek}:${period.id}`;
-          const roomSlotKey = payload.classRoomId ? `${payload.classRoomId}:${dayOfWeek}:${period.id}` : null;
-          if (!busyTeacherSlots.has(teacherSlotKey) && (!roomSlotKey || !busyRoomSlots.has(roomSlotKey))) {
-            selected = candidate;
-            cursor = (cursor + offset + 1) % assignments.length;
-            break;
-          }
-        }
-
-        if (!selected) {
-          skipped.push({ dayOfWeek, periodId: period.id, reason: 'No assigned teacher available for this period' });
-          continue;
-        }
-
-        createData.push({
-          schoolId,
-          classId: payload.classId,
-          sectionId: payload.sectionId,
-          timePeriodId: period.id,
-          dayOfWeek,
-          subjectId: selected.subjectId,
-          teacherId: selected.teacherId,
-          classRoomId: payload.classRoomId ?? null,
-        });
-        occupiedClassSlots.add(classSlotKey);
-        busyTeacherSlots.add(`${selected.teacherId}:${dayOfWeek}:${period.id}`);
-        if (payload.classRoomId) busyRoomSlots.add(`${payload.classRoomId}:${dayOfWeek}:${period.id}`);
-      }
-    }
-
-    const created = createData.length
-      ? await tx.classRoutine.createMany({ data: createData, skipDuplicates: true })
-      : { count: 0 };
-    const routines = await tx.classRoutine.findMany({
-      where: { schoolId, classId: payload.classId, sectionId: payload.sectionId },
-      include: classRoutineInclude,
-      orderBy: classRoutineOrderBy,
-    });
-
-    return { createdCount: created.count, skippedCount: skipped.length, skipped, routines };
+  const version = await resolveDraftTimetableVersion({ schoolId, userId, classId: payload.classId, createIfMissing: true });
+  if (!version) throw new HttpError(400, 'Create an academic year before generating timetable entries');
+  const result = await modernTimetableGeneratorService.generate({
+    schoolId,
+    timetableVersionId: version.id,
+    classId: payload.classId,
+    sectionId: payload.sectionId,
+    classRoomId: payload.classRoomId ?? null,
+    replaceExisting: payload.replaceExisting,
+    days: payload.days,
   });
 
-  res.status(201).json(result);
+  res.status(201).json({
+    createdCount: result.createdCount,
+    skippedCount: result.skippedCount,
+    skipped: result.skipped,
+    routines: result.entries.map(toLegacyRoutineRow),
+  });
 };
 
 export const deleteClassRoutine = async (req: Request, res: Response) => {
   const { schoolId } = requireAcademicSetupUser(req);
   const id = req.params.id;
-  const existing = await prisma.classRoutine.findFirst({ where: { id, schoolId } });
+  const existing = await prisma.timetableEntry.findFirst({
+    where: { id, schoolId },
+    include: { version: { select: { status: true } } },
+  });
   if (!existing) throw new HttpError(404, 'Routine not found');
-  await prisma.classRoutine.delete({ where: { id } });
+  if (existing.version.status !== 'DRAFT') throw new HttpError(409, 'Only draft timetable entries can be deleted');
+  await prisma.timetableEntry.delete({ where: { id } });
+  await invalidateTimetableCache(schoolId);
   res.status(204).send();
 };

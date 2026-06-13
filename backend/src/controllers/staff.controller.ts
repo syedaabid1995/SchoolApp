@@ -679,7 +679,7 @@ export const loadStaffAttendance = async (req: Request, res: Response) => {
   const [staff, attendance, holiday] = await Promise.all([
     prisma.teacherProfile.findMany({ where: staffWhere, include: staffInclude, orderBy: [{ firstName: 'asc' }, { lastName: 'asc' }] }),
     attendanceReadService.getTeacherAttendance({ schoolId, fromDate: date, toDate: date }).then((summary) => summary.records),
-    prisma.staffAttendanceHoliday.findFirst({ where: { schoolId, holidayDate: date, roleName: query.role ?? null } }),
+    attendanceReadService.getStaffAttendanceHoliday({ schoolId, holidayDate: date, roleName: query.role ?? null }),
   ]);
   const byStaff = new Map(attendance.map((item) => [item.teacherId, item]));
   res.status(200).json({
@@ -761,7 +761,7 @@ const buildAttendanceSummary = async (schoolId: string, query: z.infer<typeof re
       const staffIds = new Set(staff.map((item) => item.id));
       return summary.records.filter((record) => staffIds.has(record.teacherId));
     }),
-    prisma.staffAttendanceHoliday.findMany({ where: { schoolId, holidayDate: { gte: start, lt: end }, roleName: query.role ?? null } }),
+    attendanceReadService.getStaffAttendanceHolidays({ schoolId, fromDate: start, toDateExclusive: end, roleName: query.role ?? null }),
   ]);
   const holidayDays = new Set(holidays.map((holiday) => holiday.holidayDate.getUTCDate()));
   const attendanceByStaff = new Map<string, typeof attendance>();

@@ -1,35 +1,59 @@
-import 'mobile_module.dart';
+import 'permission.dart';
+import 'permission_registry.dart';
 
-bool canAccessModule({
-  required MobileModule module,
-  required Iterable<String> permissions,
-  required String? role,
-}) {
-  if (module.key == 'profile') return true;
-  final normalizedRole = role?.toUpperCase();
-  final roleCanUseMobileModule =
-      normalizedRole != null && module.fallbackRoles.contains(normalizedRole);
-  final permissionSet = permissions.toSet();
-  final hasPermission =
-      module.requiredPermissions.isNotEmpty &&
-      module.requiredPermissions.any(permissionSet.contains);
-  if (hasPermission && roleCanUseMobileModule) return true;
+class PermissionChecker {
+  const PermissionChecker(Set<String> codes) : _codes = codes;
 
-  if (permissionSet.isNotEmpty) return false;
-  return roleCanUseMobileModule;
-}
+  final Set<String> _codes;
 
-List<MobileModule> visibleModules({
-  required Iterable<String> permissions,
-  required String? role,
-}) {
-  return mobileModules
-      .where(
-        (module) => canAccessModule(
-          module: module,
-          permissions: permissions,
-          role: role,
-        ),
-      )
-      .toList(growable: false);
+  Set<String> get codes => Set.unmodifiable(_codes);
+
+  bool hasPermission(String code) => _codes.contains(code);
+
+  bool hasAnyPermission(Iterable<String> codes) {
+    final required = codes.toList(growable: false);
+    return required.isEmpty || required.any(_codes.contains);
+  }
+
+  bool hasAllPermissions(Iterable<String> codes) =>
+      codes.every(_codes.contains);
+
+  bool canAccessModule(StaffModuleDefinition module) {
+    if (module.requireAll) return hasAllPermissions(module.requiredPermissions);
+    return hasAnyPermission(module.requiredPermissions);
+  }
+
+  bool canAccessRoute(String route) {
+    final module = PermissionRegistry.moduleForRoute(route);
+    if (module == null) return true;
+    return canAccessModule(module);
+  }
+
+  bool canPerformAction(String actionId) {
+    final action = PermissionRegistry.actionForId(actionId);
+    if (action == null) return false;
+    return canPerform(action);
+  }
+
+  bool canPerform(PermissionAction action) {
+    if (action.requireAll) return hasAllPermissions(action.requiredPermissions);
+    return hasAnyPermission(action.requiredPermissions);
+  }
+
+  List<StaffModuleDefinition> visibleModules() {
+    return [
+      for (final module in PermissionRegistry.modules)
+        if (canAccessModule(module)) module,
+    ];
+  }
+
+  String? missingPermissionForRoute(String route) {
+    final module = PermissionRegistry.moduleForRoute(route);
+    if (module == null || canAccessModule(module)) return null;
+    if (module.requiredPermissions.isEmpty) return null;
+    return module.requiredPermissions.join(' or ');
+  }
+
+  bool can(String code) => hasPermission(code);
+  bool canAny(Iterable<String> codes) => hasAnyPermission(codes);
 }

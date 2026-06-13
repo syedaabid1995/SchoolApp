@@ -1,5 +1,5 @@
-export type TimetableReadMode = 'legacy' | 'modern' | 'combined';
-export type TimetableSource = 'class-routine' | 'timetable-entry';
+export type TimetableReadMode = 'modern' | 'combined';
+export type TimetableSource = 'timetable-entry';
 
 export type TimetableSlot = {
   schoolId: string;
@@ -34,6 +34,20 @@ export type TimetableSlot = {
   teacherLastName: string | null;
 };
 
+export type LegacyTimePeriod = {
+  id: string;
+  schoolId?: string;
+  type: string;
+  name: string;
+  startTime: string;
+  endTime: string;
+  createdAt?: Date;
+  updatedAt?: Date;
+  _count?: {
+    classRoutines: number;
+  };
+};
+
 export type TimetableReadParams = {
   schoolId: string;
   academicYearId?: string;
@@ -44,6 +58,13 @@ export type TimetableReadParams = {
   dayOfWeek?: number;
   date?: Date | string;
   isActive?: boolean;
+};
+
+export type LegacyTimePeriodReadParams = {
+  schoolId: string;
+  type?: string;
+  includeRoutineCount?: boolean;
+  selectPublicFieldsOnly?: boolean;
 };
 
 export type StudentTimetableReadParams = Omit<TimetableReadParams, 'teacherId'> & {
@@ -83,4 +104,5 @@ export type DashboardTimetable = {
 export type TimetableAdapter = {
   readonly source: TimetableSource;
   getTimetable(params: TimetableReadParams): Promise<TimetableSlot[]>;
+  getLegacyTimePeriods?(params: LegacyTimePeriodReadParams): Promise<LegacyTimePeriod[]>;
 };

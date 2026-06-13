@@ -1,8 +1,11 @@
 import assert from 'node:assert/strict';
 import { after, afterEach, before, beforeEach, test } from 'node:test';
+import { prisma } from '../config/db';
 import {
   SCHOOL_A_ID,
   SCHOOL_B_ID,
+  STUDENT_A_ID,
+  TEACHER_A_ID,
   TEST_ACADEMIC_YEAR_A_ID,
   TEST_CLASS_A_ID,
   TEST_SECTION_A_ID,
@@ -142,6 +145,59 @@ test('attendance save succeeds for own school scope', async () => {
   expectSuccess(response);
   expectNoSensitiveFields(response.body);
   assert.equal((response.body as { saved?: number }).saved, 0);
+});
+
+test('attendance normal save preserves response contract and writes modern attendance records only', async () => {
+  const originalStudentCount = prisma.student.count;
+  const originalSessionFindFirst = prisma.studentAttendanceSession.findFirst;
+  const originalSessionCreate = prisma.studentAttendanceSession.create;
+  const originalRecordFindMany = prisma.studentAttendanceRecord.findMany;
+  const originalRecordUpsert = prisma.studentAttendanceRecord.upsert;
+  const writes: Array<{ type: string; data: unknown }> = [];
+
+  (prisma.student.count as any) = async () => 2;
+  (prisma.studentAttendanceSession.findFirst as any) = async () => null;
+  (prisma.studentAttendanceSession.create as any) = async ({ data }: any) => {
+    writes.push({ type: 'session', data });
+    return { id: 'session-1', ...data };
+  };
+  (prisma.studentAttendanceRecord.findMany as any) = async () => [];
+  (prisma.studentAttendanceRecord.upsert as any) = async ({ create }: any) => {
+    writes.push({ type: 'record', data: create });
+    return { id: `record-${writes.length}`, ...create };
+  };
+
+  try {
+    const response = await server.request('POST', '/api/v1/students/attendance', {
+      user: getUser('SCHOOL_ADMIN'),
+      body: {
+        academicSessionId: TEST_ACADEMIC_YEAR_A_ID,
+        classId: TEST_CLASS_A_ID,
+        sectionId: TEST_SECTION_A_ID,
+        date: '2026-05-21',
+        records: [
+          { studentId: STUDENT_A_ID, status: 'PRESENT', note: ' On time  ' },
+          { studentId: TEACHER_A_ID, status: 'ABSENT', note: null },
+        ],
+      },
+    });
+
+    expectSuccess(response);
+    expectNoSensitiveFields(response.body);
+    assert.deepEqual(response.body, { holiday: null, saved: 2 });
+    assert.equal(writes.filter((write) => write.type === 'session').length, 1);
+    assert.equal(writes.filter((write) => write.type === 'record').length, 2);
+    assert.deepEqual(
+      writes.filter((write) => write.type === 'record').map((write) => (write.data as any).remarks),
+      ['On time', null],
+    );
+  } finally {
+    (prisma.student.count as any) = originalStudentCount;
+    (prisma.studentAttendanceSession.findFirst as any) = originalSessionFindFirst;
+    (prisma.studentAttendanceSession.create as any) = originalSessionCreate;
+    (prisma.studentAttendanceRecord.findMany as any) = originalRecordFindMany;
+    (prisma.studentAttendanceRecord.upsert as any) = originalRecordUpsert;
+  }
 });
 
 test('attendance save rejects another schoolId in body before mutation', async () => {

@@ -4,7 +4,6 @@ import test from 'node:test';
 import { PeriodAttendanceReadAdapter } from '../adapters/period-attendance.adapter';
 import { SessionAttendanceReadAdapter } from '../adapters/session-attendance.adapter';
 import { StaffAttendanceReadAdapter } from '../adapters/staff-attendance.adapter';
-import { StudentAttendanceReadAdapter } from '../adapters/student-attendance.adapter';
 import { AttendanceReadService } from '../services/attendance-read.service';
 
 const SCHOOL_ID = '11111111-1111-4111-8111-111111111111';
@@ -26,25 +25,7 @@ const comparableStudentRow = (row: any) => ({
   status: row.status,
 });
 
-test('attendance adapters translate all student attendance sources into the same canonical daily shape', async () => {
-  const studentAdapter = new StudentAttendanceReadAdapter({
-    studentAttendance: {
-      findMany: async () => [
-        {
-          id: 'student-attendance-row',
-          schoolId: SCHOOL_ID,
-          academicSessionId: ACADEMIC_SESSION_ID,
-          classId: CLASS_ID,
-          sectionId: SECTION_ID,
-          studentId: STUDENT_ID,
-          attendanceDate: DATE,
-          status: 'PRESENT',
-          note: null,
-        },
-      ],
-    },
-  } as any);
-
+test('attendance adapters translate canonical student attendance sources into the same daily shape', async () => {
   const sessionAdapter = new SessionAttendanceReadAdapter({
     studentAttendanceSession: {
       findMany: async () => [
@@ -93,24 +74,21 @@ test('attendance adapters translate all student attendance sources into the same
     },
   } as any);
 
-  const [studentRow] = await studentAdapter.getStudentAttendance({ schoolId: SCHOOL_ID, studentId: STUDENT_ID, date: DATE });
   const [sessionRow] = await sessionAdapter.getStudentAttendance({ schoolId: SCHOOL_ID, studentId: STUDENT_ID, date: DATE });
   const [periodRow] = await periodAdapter.getStudentAttendance({ schoolId: SCHOOL_ID, studentId: STUDENT_ID, date: DATE });
 
-  assert.deepEqual(comparableStudentRow(studentRow), comparableStudentRow(sessionRow));
   assert.deepEqual(comparableStudentRow(sessionRow), comparableStudentRow(periodRow));
-  assert.equal(studentRow.source, 'student-attendance');
   assert.equal(sessionRow.source, 'session-attendance');
   assert.equal(periodRow.source, 'period-attendance');
 });
 
 test('AttendanceReadService builds monthly summaries from canonical student rows', async () => {
   const service = new AttendanceReadService({
-    studentAttendanceAdapter: {
-      source: 'student-attendance',
+    sessionAttendanceAdapter: {
+      source: 'session-attendance',
       getStudentAttendance: async () => [
         {
-          source: 'student-attendance',
+          source: 'session-attendance',
           sourceId: 'daily-1',
           schoolId: SCHOOL_ID,
           studentId: STUDENT_ID,
@@ -120,12 +98,12 @@ test('AttendanceReadService builds monthly summaries from canonical student rows
           date: '2026-02-01',
           status: 'PRESENT',
           note: null,
-          sessionId: null,
+          sessionId: SESSION_ID,
           periodId: null,
           timetableEntryId: null,
         },
         {
-          source: 'student-attendance',
+          source: 'session-attendance',
           sourceId: 'daily-2',
           schoolId: SCHOOL_ID,
           studentId: STUDENT_ID,
@@ -135,15 +113,11 @@ test('AttendanceReadService builds monthly summaries from canonical student rows
           date: '2026-02-02',
           status: 'ABSENT',
           note: null,
-          sessionId: null,
+          sessionId: SESSION_ID,
           periodId: null,
           timetableEntryId: null,
         },
       ],
-    },
-    sessionAttendanceAdapter: {
-      source: 'session-attendance',
-      getStudentAttendance: async () => [],
     },
     periodAttendanceAdapter: {
       source: 'period-attendance',
@@ -156,7 +130,7 @@ test('AttendanceReadService builds monthly summaries from canonical student rows
     studentId: STUDENT_ID,
     month: 2,
     year: 2026,
-    source: 'student-attendance',
+    source: 'session-attendance',
   });
 
   assert.equal(summary.fromDate, '2026-02-01');
@@ -167,28 +141,8 @@ test('AttendanceReadService builds monthly summaries from canonical student rows
   assert.equal(summary.byStudent[0].percentage, 50);
 });
 
-test('AttendanceReadService combines student sources without source-specific response logic', async () => {
+test('AttendanceReadService combines canonical student sources without source-specific response logic', async () => {
   const service = new AttendanceReadService({
-    studentAttendanceAdapter: {
-      source: 'student-attendance',
-      getStudentAttendance: async () => [
-        {
-          source: 'student-attendance',
-          sourceId: 'daily-1',
-          schoolId: SCHOOL_ID,
-          studentId: STUDENT_ID,
-          classId: CLASS_ID,
-          sectionId: SECTION_ID,
-          academicSessionId: ACADEMIC_SESSION_ID,
-          date: '2026-02-01',
-          status: 'PRESENT',
-          note: null,
-          sessionId: null,
-          periodId: null,
-          timetableEntryId: null,
-        },
-      ],
-    },
     sessionAttendanceAdapter: {
       source: 'session-attendance',
       getStudentAttendance: async () => [
@@ -243,11 +197,52 @@ test('AttendanceReadService combines student sources without source-specific res
   });
 
   assert.equal(summary.source, 'combined');
-  assert.equal(summary.totalRecords, 3);
-  assert.equal(summary.present, 1);
+  assert.equal(summary.totalRecords, 2);
   assert.equal(summary.late, 1);
   assert.equal(summary.excused, 1);
   assert.equal(analytics.attendanceRate, 100);
+});
+
+test('AttendanceReadService reads student attendance holidays from canonical holiday storage', async () => {
+  const holiday = {
+    id: 'holiday-1',
+    schoolId: SCHOOL_ID,
+    academicSessionId: ACADEMIC_SESSION_ID,
+    classId: CLASS_ID,
+    sectionId: SECTION_ID,
+    holidayDate: DATE,
+    reason: 'Local holiday',
+  };
+  const service = new AttendanceReadService({
+    prisma: {
+      attendanceHoliday: {
+        findFirst: async () => holiday,
+        findMany: async () => [holiday],
+      },
+    } as any,
+  });
+
+  assert.deepEqual(
+    await service.getStudentAttendanceHoliday({
+      schoolId: SCHOOL_ID,
+      academicSessionId: ACADEMIC_SESSION_ID,
+      classId: CLASS_ID,
+      sectionId: SECTION_ID,
+      holidayDate: DATE,
+    }),
+    holiday,
+  );
+  assert.deepEqual(
+    await service.getStudentAttendanceHolidays({
+      schoolId: SCHOOL_ID,
+      academicSessionId: ACADEMIC_SESSION_ID,
+      classId: CLASS_ID,
+      sectionId: SECTION_ID,
+      fromDate: DATE,
+      toDateExclusive: new Date('2026-02-06T00:00:00.000Z'),
+    }),
+    [holiday],
+  );
 });
 
 test('StaffAttendanceAdapter and AttendanceReadService return canonical teacher attendance summaries', async () => {
@@ -289,25 +284,9 @@ test('StaffAttendanceAdapter and AttendanceReadService return canonical teacher 
   assert.deepEqual(summary.records.map((row) => row.date), ['2026-02-01', '2026-02-02']);
 });
 
-test('AttendanceReadService maps legacy and modern timetable rows into canonical timetable slots', async () => {
+test('AttendanceReadService maps modern timetable rows into attendance timetable slots', async () => {
   const service = new AttendanceReadService({
     prisma: {
-      classRoutine: {
-        findMany: async () => [
-          {
-            id: 'routine-1',
-            schoolId: SCHOOL_ID,
-            classId: CLASS_ID,
-            sectionId: SECTION_ID,
-            timePeriodId: 'legacy-period-1',
-            dayOfWeek: 1,
-            subjectId: 'subject-1',
-            teacherId: STAFF_ID,
-            classRoom: { roomNumber: '101' },
-            timePeriod: { startTime: '09:00', endTime: '09:45' },
-          },
-        ],
-      },
       timetableEntry: {
         findMany: async () => [
           {
@@ -322,7 +301,15 @@ test('AttendanceReadService maps legacy and modern timetable rows into canonical
             subjectId: 'subject-1',
             teacherId: STAFF_ID,
             room: 'Lab',
-            period: { startTime: '10:00', endTime: '10:45' },
+            isActive: true,
+            createdAt: null,
+            updatedAt: null,
+            period: { id: 'modern-period-1', name: 'Period 1', type: 'CLASS_TIME', startTime: '10:00', endTime: '10:45' },
+            subject: { name: 'Science', code: 'SCI', type: 'THEORY' },
+            teacher: { firstName: 'Asha', lastName: 'Rao', employeeNo: 'EMP-1' },
+            class: { id: CLASS_ID, name: 'Grade 4' },
+            section: { id: SECTION_ID, name: 'A' },
+            classRoom: null,
           },
         ],
       },
@@ -331,13 +318,9 @@ test('AttendanceReadService maps legacy and modern timetable rows into canonical
 
   const slots = await service.getTimetable({ schoolId: SCHOOL_ID, teacherId: STAFF_ID, dayOfWeek: 1 });
 
-  assert.equal(slots.length, 2);
+  assert.equal(slots.length, 1);
   assert.deepEqual(
-    slots.map((slot) => ({ source: slot.source, periodId: slot.periodId, room: slot.room })),
-    [
-      { source: 'legacy-routine', periodId: 'legacy-period-1', room: '101' },
-      { source: 'timetable-entry', periodId: 'modern-period-1', room: 'Lab' },
-    ],
+    slots.map((row) => ({ source: row.source, periodId: row.periodId, room: row.room })),
+    [{ source: 'timetable-entry', periodId: 'modern-period-1', room: 'Lab' }],
   );
 });
-

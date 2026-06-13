@@ -62,6 +62,7 @@ export const toModernTimetableEntryRow = (slot: TimetableSlot) => ({
   dayOfWeek: slot.dayOfWeek,
   subjectId: slot.subjectId,
   teacherId: slot.teacherId,
+  classRoomId: slot.roomId,
   room: slot.roomName,
   isActive: slot.isActive,
   createdAt: slot.createdAt,
@@ -77,7 +78,15 @@ export const toModernTimetableEntryRow = (slot: TimetableSlot) => ({
   period: {
     id: slot.periodId,
     name: slot.periodName ?? '',
+    type: slot.periodType,
     startTime: slot.startTime,
     endTime: slot.endTime,
   },
+  classRoom: slot.roomId
+    ? {
+        id: slot.roomId,
+        roomNumber: slot.roomName ?? '',
+        capacity: slot.roomCapacity,
+      }
+    : null,
 });

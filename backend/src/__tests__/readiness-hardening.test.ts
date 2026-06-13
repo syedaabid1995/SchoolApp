@@ -1657,7 +1657,6 @@ const patchOnboardingReadinessSignals = (ready: boolean) => {
     patch(prisma.assignSubject as any, 'count', async () => ready ? 1 : 0),
     patch(prisma.attendancePeriod as any, 'count', async () => ready ? 1 : 0),
     patch(prisma.classRoom as any, 'count', async () => ready ? 1 : 0),
-    patch(prisma.timePeriod as any, 'count', async () => ready ? 1 : 0),
     patch(prisma.schoolMessagingConfig as any, 'count', async () => ready ? 1 : 0),
     patch(prisma.student as any, 'count', async () => ready ? 1 : 0),
     patch(prisma.studentParent as any, 'count', async () => ready ? 1 : 0),

@@ -116,7 +116,6 @@ export const deleteClass = async (req: Request, res: Response) => {
           timetableEntries: true,
           assignSubjects: true,
           classTeachers: true,
-          classRoutines: true,
         },
       },
     },
@@ -131,8 +130,7 @@ export const deleteClass = async (req: Request, res: Response) => {
     existing._count.subjects +
     existing._count.timetableEntries +
     existing._count.assignSubjects +
-    existing._count.classTeachers +
-    existing._count.classRoutines;
+    existing._count.classTeachers;
   if (blockers > 0) {
     throw new HttpError(409, 'Cannot delete class while students, routine, subjects, or assignments exist');
   }

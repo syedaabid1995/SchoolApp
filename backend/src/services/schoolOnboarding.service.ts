@@ -40,7 +40,7 @@ export const SCHOOL_ONBOARDING_ITEMS: ChecklistDefinition[] = [
   { key: 'teacher_subject_assignments_completed', label: 'Teacher-subject assignments completed', required: true, auto: (schoolId) => count(prisma.assignSubject, schoolId).then(Boolean) },
   { key: 'attendance_mode_configured', label: 'Attendance mode configured', required: true, auto: (schoolId) => count(prisma.attendancePeriod, schoolId).then(Boolean) },
   { key: 'timetable_rooms_configured', label: 'Timetable rooms configured', required: true, auto: (schoolId) => count(prisma.classRoom, schoolId).then(Boolean) },
-  { key: 'time_periods_configured', label: 'Time periods configured', required: true, auto: (schoolId) => count(prisma.timePeriod, schoolId).then(Boolean) },
+  { key: 'time_periods_configured', label: 'Time periods configured', required: true, auto: (schoolId) => count(prisma.attendancePeriod, schoolId).then(Boolean) },
   { key: 'messaging_configured_or_manual', label: 'Messaging/email/SMS configured or manual mode accepted', required: true, auto: (schoolId) => count(prisma.schoolMessagingConfig, schoolId, { isEnabled: true }).then(Boolean) },
   {
     key: 'first_admin_password_changed',

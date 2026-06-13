@@ -1,6 +1,7 @@
 import { Redis } from 'ioredis';
 import { env } from './env';
 import { logger } from './logger';
+import { RedisMetricsService } from '../services/observability/redis-metrics.service';
 
 export const redis = new Redis(env.REDIS_URL, {
   maxRetriesPerRequest: null,
@@ -16,6 +17,7 @@ export const redis = new Redis(env.REDIS_URL, {
 
 let didLogRedisError = false;
 redis.on('error', (error) => {
+  RedisMetricsService.recordRedisError('connection');
   if (didLogRedisError) return;
   didLogRedisError = true;
   logger.warn({ err: error }, 'redis unavailable; continuing with degraded mode');

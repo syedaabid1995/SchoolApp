@@ -1,5 +1,4 @@
 export type AttendanceSource =
-  | 'student-attendance'
   | 'session-attendance'
   | 'period-attendance'
   | 'staff-attendance';
@@ -121,7 +120,7 @@ export type AttendanceAnalyticsSummary = {
 };
 
 export type TimetableSlot = {
-  source: 'legacy-routine' | 'timetable-entry';
+  source: 'timetable-entry';
   sourceId: string;
   schoolId: string;
   academicYearId: string | null;

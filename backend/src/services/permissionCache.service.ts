@@ -1,5 +1,6 @@
 import { env } from '../config/env';
 import { logger } from '../config/logger';
+import { RedisMetricsService } from './observability/redis-metrics.service';
 
 const AUTHZ_CACHE_TTL_SECONDS = 300;
 const INDEX_TTL_SECONDS = AUTHZ_CACHE_TTL_SECONDS + 60;
@@ -41,6 +42,29 @@ const measure = () => {
 };
 
 const logMetric = (event: string, payload: Record<string, unknown>) => {
+  const scope = typeof payload.key === 'string'
+    ? payload.key.split(':')[0] ?? 'authz'
+    : typeof payload.indexKey === 'string'
+      ? 'invalidation'
+      : 'authz';
+
+  switch (event) {
+    case 'authorization_cache_hit':
+      RedisMetricsService.recordAuthorizationCacheHit(scope);
+      break;
+    case 'authorization_cache_miss':
+      RedisMetricsService.recordAuthorizationCacheMiss(scope);
+      break;
+    case 'authorization_cache_rebuild':
+      RedisMetricsService.recordAuthorizationCacheRebuild(scope);
+      break;
+    case 'authorization_cache_error':
+      RedisMetricsService.recordAuthorizationCacheError(scope);
+      RedisMetricsService.recordRedisError('authorization_cache');
+      break;
+    default:
+      break;
+  }
   logger.debug({ event, ...payload }, event);
 };
 

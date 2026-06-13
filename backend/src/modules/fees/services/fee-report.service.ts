@@ -1,6 +1,6 @@
 import { Prisma } from '@prisma/client';
 import { z } from 'zod';
-import { prisma } from '../../../config/db';
+import { FeeReportingRepository } from '../repositories/reporting.repository';
 import { HttpError } from '../../../middlewares/error.middleware';
 
 const uuidSchema = z.string().uuid();
@@ -153,7 +153,7 @@ export const buildFeeReport = async (scope: FeeReportScope, query: FeeReportQuer
   };
 
   const [payments, invoices, discounts, fines, fineLedgers, receipts, ledgers] = await Promise.all([
-    prisma.feePayment.findMany({
+    FeeReportingRepository.feePayment.findMany({
       where: paymentWhere,
       include: {
         student: { select: { fullName: true, admissionNo: true, class: { select: { name: true } }, section: { select: { name: true } } } },
@@ -162,7 +162,7 @@ export const buildFeeReport = async (scope: FeeReportScope, query: FeeReportQuer
       },
       orderBy: { paidAt: 'desc' },
     }),
-    prisma.feeInvoice.findMany({
+    FeeReportingRepository.feeInvoice.findMany({
       where: invoiceWhere,
       include: {
         student: { select: { fullName: true, admissionNo: true, class: { select: { name: true } }, section: { select: { name: true } } } },
@@ -172,7 +172,7 @@ export const buildFeeReport = async (scope: FeeReportScope, query: FeeReportQuer
       },
       orderBy: { issueDate: 'desc' },
     }),
-    prisma.feeDiscount.findMany({
+    FeeReportingRepository.feeDiscount.findMany({
       where: discountWhere,
       include: {
         student: { select: { fullName: true, admissionNo: true } },
@@ -183,8 +183,8 @@ export const buildFeeReport = async (scope: FeeReportScope, query: FeeReportQuer
       },
       orderBy: { createdAt: 'desc' },
     }),
-    prisma.feeFine.findMany({ where: { ...tenantScopeOnly(scope), deletedAt: null, ...(query.status ? { status: query.status as any } : {}) }, orderBy: { createdAt: 'desc' } }),
-    prisma.feeLedger.findMany({
+    FeeReportingRepository.feeFine.findMany({ where: { ...tenantScopeOnly(scope), deletedAt: null, ...(query.status ? { status: query.status as any } : {}) }, orderBy: { createdAt: 'desc' } }),
+    FeeReportingRepository.feeLedger.findMany({
       where: { ...ledgerWhere, OR: [{ type: 'FINE_DEBIT' }, { fineId: { not: null } }] },
       include: {
         student: { select: { fullName: true, admissionNo: true, class: { select: { name: true } }, section: { select: { name: true } } } },
@@ -193,7 +193,7 @@ export const buildFeeReport = async (scope: FeeReportScope, query: FeeReportQuer
       },
       orderBy: { entryDate: 'desc' },
     }),
-    prisma.feeReceipt.findMany({
+    FeeReportingRepository.feeReceipt.findMany({
       where: receiptWhere,
       include: {
         student: { select: { fullName: true, admissionNo: true, class: { select: { name: true } }, section: { select: { name: true } } } },
@@ -202,7 +202,7 @@ export const buildFeeReport = async (scope: FeeReportScope, query: FeeReportQuer
       },
       orderBy: { receiptDate: 'desc' },
     }),
-    prisma.feeLedger.findMany({
+    FeeReportingRepository.feeLedger.findMany({
       where: ledgerWhere,
       include: { student: { select: { fullName: true, admissionNo: true, class: { select: { name: true } }, section: { select: { name: true } } } } },
       orderBy: { entryDate: 'asc' },

@@ -608,7 +608,7 @@ const reports: ReportDefinition[] = [
           studentId: query.studentId,
           fromDate: query.fromDate,
           toDate: query.toDate,
-          source: 'student-attendance',
+          source: 'session-attendance',
         }),
         query.status,
       ).sort((a, b) => b.date.localeCompare(a.date));
@@ -1117,7 +1117,7 @@ const reports: ReportDefinition[] = [
         studentId: query.studentId,
         fromDate: query.fromDate,
         toDate: query.toDate,
-        source: 'student-attendance',
+        source: 'session-attendance',
       });
       const lookups = await loadStudentAttendanceLookups(query.schoolId, records);
       const grouped = new Map<string, Record<string, unknown> & { present: number; absent: number; late: number; halfDay: number; total: number }>();

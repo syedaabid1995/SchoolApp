@@ -5,6 +5,7 @@ import { HttpError } from '../middlewares/error.middleware';
 import { logAudit } from '../utils/audit';
 import { invalidateStudentCache } from '../services/cache/cache.invalidation';
 import { attendanceReadService } from '../modules/attendance/services/attendance-read.service';
+import { attendanceCompatibilityService } from '../modules/attendance/services/attendance-compatibility.service';
 
 const uuidSchema = z.string().uuid();
 const dateOnlySchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Use date format YYYY-MM-DD');
@@ -259,18 +260,14 @@ export const loadStudentAttendance = async (req: Request, res: Response) => {
         classId: query.classId,
         sectionId: query.sectionId,
         date,
-        source: 'student-attendance',
+        source: 'session-attendance',
     }),
-    prisma.attendanceHoliday.findUnique({
-      where: {
-        schoolId_academicSessionId_classId_sectionId_holidayDate: {
-          schoolId,
-          academicSessionId: query.academicSessionId,
-          classId: query.classId,
-          sectionId: query.sectionId,
-          holidayDate: date,
-        },
-      },
+    attendanceReadService.getStudentAttendanceHoliday({
+      schoolId,
+      academicSessionId: query.academicSessionId,
+      classId: query.classId,
+      sectionId: query.sectionId,
+      holidayDate: date,
     }),
   ]);
 
@@ -335,8 +332,8 @@ export const saveStudentAttendance = async (req: Request, res: Response) => {
           createdById: userId,
         },
       });
-      await tx.studentAttendance.deleteMany({
-        where: { schoolId, academicSessionId: payload.academicSessionId, classId: payload.classId, sectionId: payload.sectionId, attendanceDate: date },
+      await tx.studentAttendanceSession.deleteMany({
+        where: { schoolId, classId: payload.classId, sectionId: payload.sectionId, date },
       });
       return { holiday, saved: 0 };
     }
@@ -344,36 +341,19 @@ export const saveStudentAttendance = async (req: Request, res: Response) => {
     await tx.attendanceHoliday.deleteMany({
       where: { schoolId, academicSessionId: payload.academicSessionId, classId: payload.classId, sectionId: payload.sectionId, holidayDate: date },
     });
-    for (const record of payload.records) {
-      await tx.studentAttendance.upsert({
-        where: {
-          schoolId_academicSessionId_studentId_attendanceDate: {
-            schoolId,
-            academicSessionId: payload.academicSessionId,
-            studentId: record.studentId,
-            attendanceDate: date,
-          },
-        },
-        update: {
-          classId: payload.classId,
-          sectionId: payload.sectionId,
-          status: record.status,
-          note: normalizeText(record.note) ?? null,
-          markedById: userId,
-        },
-        create: {
-          schoolId,
-          academicSessionId: payload.academicSessionId,
-          classId: payload.classId,
-          sectionId: payload.sectionId,
-          studentId: record.studentId,
-          attendanceDate: date,
-          status: record.status,
-          note: normalizeText(record.note) ?? null,
-          markedById: userId,
-        },
-      });
-    }
+    await attendanceCompatibilityService.writeStudentAttendanceWithExecutor(tx as any, {
+      schoolId,
+      academicSessionId: payload.academicSessionId,
+      classId: payload.classId,
+      sectionId: payload.sectionId,
+      attendanceDate: date,
+      actorId: userId,
+      records: payload.records.map((record) => ({
+        studentId: record.studentId,
+        status: record.status,
+        note: normalizeText(record.note) ?? null,
+      })),
+    });
     return { holiday: null, saved: payload.records.length };
   });
 
@@ -437,16 +417,15 @@ export const getStudentAttendanceReport = async (req: Request, res: Response) =>
         sectionId: query.sectionId,
         fromDate: start,
         toDate: new Date(end.getTime() - 1),
-        source: 'student-attendance',
+        source: 'session-attendance',
     }),
-    prisma.attendanceHoliday.findMany({
-      where: {
-        schoolId,
-        academicSessionId: query.academicSessionId,
-        classId: query.classId,
-        sectionId: query.sectionId,
-        holidayDate: { gte: start, lt: end },
-      },
+    attendanceReadService.getStudentAttendanceHolidays({
+      schoolId,
+      academicSessionId: query.academicSessionId,
+      classId: query.classId,
+      sectionId: query.sectionId,
+      fromDate: start,
+      toDateExclusive: end,
     }),
   ]);
 

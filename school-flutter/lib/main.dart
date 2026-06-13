@@ -1,11 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:hive_flutter/hive_flutter.dart';
 
-import 'app.dart';
+import 'app/app.dart';
+import 'core/services/app_bootstrap.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  await Hive.initFlutter();
-  runApp(const ProviderScope(child: SchoolErpApp()));
+  await AppBootstrap.initialize();
+  runApp(const ProviderScope(child: StaffErpApp()));
 }

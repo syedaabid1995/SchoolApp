@@ -1,9 +1,11 @@
 import { createApp, appLogger } from './app';
 import { env } from './config/env';
 import { prisma } from './config/db';
+import { initializeTelemetry } from './telemetry';
 import { startSubscriptionWorker } from './workers/subscription.worker';
 
 const start = async () => {
+  initializeTelemetry();
   const app = createApp();
 
   try {

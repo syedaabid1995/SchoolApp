@@ -203,7 +203,7 @@ const main = async () => {
   const periodRows = [];
   for (const [name, startTime, endTime] of periods) {
     periodRows.push(
-      await prisma.timePeriod.upsert({
+      await prisma.attendancePeriod.upsert({
         where: { schoolId_type_name: { schoolId: school.id, type: 'CLASS_TIME', name } },
         update: { startTime, endTime },
         create: { schoolId: school.id, type: 'CLASS_TIME', name, startTime, endTime },
@@ -211,25 +211,49 @@ const main = async () => {
     );
   }
 
+  const timetableVersion = await prisma.timetableVersion.upsert({
+    where: { id: '11111111-1111-4111-8111-000000059001' },
+    update: {
+      schoolId: school.id,
+      academicYearId: academicYear.id,
+      name: 'Demo Draft Timetable',
+      status: 'DRAFT',
+      effectiveFrom: academicYear.startDate,
+      effectiveTo: academicYear.endDate,
+    },
+    create: {
+      id: '11111111-1111-4111-8111-000000059001',
+      schoolId: school.id,
+      academicYearId: academicYear.id,
+      name: 'Demo Draft Timetable',
+      status: 'DRAFT',
+      effectiveFrom: academicYear.startDate,
+      effectiveTo: academicYear.endDate,
+      createdById: schoolAdmin.id,
+    },
+  });
+
   for (const item of sectionRows.filter((row) => row.classRow.id === classOne.id)) {
     for (let index = 0; index < periodRows.length; index += 1) {
-      await prisma.classRoutine.upsert({
+      await prisma.timetableEntry.upsert({
         where: {
-          schoolId_classId_sectionId_dayOfWeek_timePeriodId: {
-            schoolId: school.id,
+          timetableVersionId_classId_sectionId_dayOfWeek_attendancePeriodId: {
+            timetableVersionId: timetableVersion.id,
             classId: classOne.id,
             sectionId: item.section.id,
             dayOfWeek: 1,
-            timePeriodId: periodRows[index].id,
+            attendancePeriodId: periodRows[index].id,
           },
         },
         update: { subjectId: subjectRows[index].id, teacherId: teacherRows[index].id },
         create: {
           schoolId: school.id,
+          timetableVersionId: timetableVersion.id,
+          academicYearId: academicYear.id,
           classId: classOne.id,
           sectionId: item.section.id,
           dayOfWeek: 1,
-          timePeriodId: periodRows[index].id,
+          attendancePeriodId: periodRows[index].id,
           subjectId: subjectRows[index].id,
           teacherId: teacherRows[index].id,
         },

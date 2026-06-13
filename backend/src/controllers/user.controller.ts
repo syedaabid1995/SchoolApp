@@ -196,13 +196,9 @@ export const getMyTimetableApi = async (req: Request, res: Response) => {
   }
 
   const [periods, routines, settings, academicYear] = await Promise.all([
-    prisma.timePeriod.findMany({
-      where: { schoolId },
-      select: { id: true, name: true, startTime: true, endTime: true, type: true },
-      orderBy: { startTime: 'asc' },
-    }),
+    timetableReadService.getLegacyTimePeriods({ schoolId, selectPublicFieldsOnly: true }),
     timetableReadService
-      .getTeacherTimetable({ schoolId, teacherId: teacher.id, mode: 'legacy' })
+      .getTeacherTimetable({ schoolId, teacherId: teacher.id, mode: 'modern' })
       .then((result) => result.slots.map((slot) => toLegacyClassRoutineRow(slot))),
     prisma.schoolSystemSetting.findUnique({
       where: { schoolId },

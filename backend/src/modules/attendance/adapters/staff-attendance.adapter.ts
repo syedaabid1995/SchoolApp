@@ -30,6 +30,31 @@ export class StaffAttendanceReadAdapter implements TeacherAttendanceAdapter {
 
   constructor(private readonly db: PrismaLike = defaultPrisma) {}
 
+  async getStaffAttendanceHoliday(params: {
+    schoolId: string;
+    holidayDate: Date;
+    roleName?: string | null;
+  }) {
+    return this.db.staffAttendanceHoliday.findFirst({
+      where: { schoolId: params.schoolId, holidayDate: params.holidayDate, roleName: (params.roleName ?? null) as any },
+    });
+  }
+
+  async getStaffAttendanceHolidays(params: {
+    schoolId: string;
+    fromDate: Date;
+    toDateExclusive: Date;
+    roleName?: string | null;
+  }) {
+    return this.db.staffAttendanceHoliday.findMany({
+      where: {
+        schoolId: params.schoolId,
+        holidayDate: { gte: params.fromDate, lt: params.toDateExclusive },
+        roleName: (params.roleName ?? null) as any,
+      },
+    });
+  }
+
   async getTeacherAttendance(params: TeacherAttendanceReadParams): Promise<TeacherDailyAttendance[]> {
     const attendanceDate = buildDateRange(params);
     const rows = await this.db.staffAttendance.findMany({
@@ -52,4 +77,3 @@ export class StaffAttendanceReadAdapter implements TeacherAttendanceAdapter {
     }));
   }
 }
-

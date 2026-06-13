@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 
 import { prisma } from '../../../config/db';
-import { listClassRoutines } from '../../../controllers/academicSetup.controller';
+import { listClassRoutines, listTimePeriods } from '../../../controllers/academicSetup.controller';
 import { getMyTimetableApi } from '../../../controllers/user.controller';
 import { getReportData } from '../../../services/report.service';
 import { getTeacherTimetableByDate, listTimetableEntries } from '../../../services/timetable.service';
@@ -66,10 +66,10 @@ const slot = (overrides: Partial<TimetableSlot> = {}): TimetableSlot => ({
   isActive: true,
   createdAt: new Date('2026-02-01T00:00:00.000Z'),
   updatedAt: new Date('2026-02-02T00:00:00.000Z'),
-  source: 'class-routine',
-  sourceId: 'routine-1',
-  timetableVersionId: null,
-  academicYearId: null,
+  source: 'timetable-entry',
+  sourceId: 'entry-1',
+  timetableVersionId: VERSION_ID,
+  academicYearId: ACADEMIC_YEAR_ID,
   ...overrides,
 });
 
@@ -79,7 +79,7 @@ test('teacher /users/me/timetable preserves legacy response shape through Timeta
     firstName: 'Riya',
     lastName: 'Sharma',
   })) as any);
-  const restorePeriods = replaceMethod(prisma.timePeriod, 'findMany', (async () => [
+  const restorePeriods = replaceMethod(timetableReadService, 'getLegacyTimePeriods', (async () => [
     { id: 'period-1', name: 'Period 1', startTime: '09:00', endTime: '09:45', type: 'CLASS_TIME' },
   ]) as any);
   const restoreSettings = replaceMethod(prisma.schoolSystemSetting, 'findUnique', (async () => null) as any);
@@ -87,7 +87,7 @@ test('teacher /users/me/timetable preserves legacy response shape through Timeta
   const restoreTimetable = replaceMethod(timetableReadService, 'getTeacherTimetable', (async () => ({
     schoolId: SCHOOL_ID,
     teacherId: TEACHER_ID,
-    mode: 'legacy',
+    mode: 'modern',
     slots: [slot()],
   })) as any);
   const res = response();
@@ -100,7 +100,7 @@ test('teacher /users/me/timetable preserves legacy response shape through Timeta
     assert.deepEqual((res.body as any).periods, [
       { id: 'period-1', name: 'Period 1', startTime: '09:00', endTime: '09:45', type: 'CLASS_TIME' },
     ]);
-    assert.equal((res.body as any).routines[0].id, 'routine-1');
+    assert.equal((res.body as any).routines[0].id, 'entry-1');
     assert.equal((res.body as any).routines[0].timePeriod.name, 'Period 1');
     assert.equal((res.body as any).routines[0].subject.name, 'Mathematics');
     assert.equal((res.body as any).routines[0].classRoom.roomNumber, 'Room 101');
@@ -114,8 +114,76 @@ test('teacher /users/me/timetable preserves legacy response shape through Timeta
   }
 });
 
-test('admin class routine listing preserves included legacy routine fields through TimetableReadService', async () => {
-  const restoreTimetable = replaceMethod(timetableReadService, 'getTimetable', (async () => [slot()]) as any);
+test('admin time period listing preserves payload shape through attendance periods', async () => {
+  const createdAt = new Date('2026-02-01T00:00:00.000Z');
+  const updatedAt = new Date('2026-02-02T00:00:00.000Z');
+  const restorePeriods = replaceMethod(prisma.attendancePeriod, 'findMany', (async () => [
+    {
+      id: 'period-1',
+      schoolId: SCHOOL_ID,
+      type: 'CLASS_TIME',
+      name: 'Period 1',
+      startTime: '09:00',
+      endTime: '09:45',
+      createdAt,
+      updatedAt,
+      _count: { timetableEntries: 2, sessions: 0 },
+    },
+  ]) as any);
+  const res = response();
+
+  try {
+    await listTimePeriods({ auth: { userId: USER_ID, schoolId: SCHOOL_ID }, query: {} } as any, res as any);
+
+    assert.equal(res.statusCode, 200);
+    assert.deepEqual(res.body, [
+      {
+        id: 'period-1',
+        schoolId: SCHOOL_ID,
+        type: 'CLASS_TIME',
+        name: 'Period 1',
+        startTime: '09:00',
+        endTime: '09:45',
+        createdAt,
+        updatedAt,
+        _count: { classRoutines: 2 },
+      },
+    ]);
+  } finally {
+    restorePeriods();
+  }
+});
+
+test('admin class routine listing preserves included legacy routine fields through timetable entries', async () => {
+  const restoreClass = replaceMethod(prisma.class, 'findFirst', (async () => ({ academicYearId: ACADEMIC_YEAR_ID })) as any);
+  const restoreAcademicYear = replaceMethod(prisma.academicYear, 'findFirst', (async () => ({
+    id: ACADEMIC_YEAR_ID,
+    name: '2026',
+    startDate: new Date('2026-01-01T00:00:00.000Z'),
+    endDate: new Date('2026-12-31T00:00:00.000Z'),
+  })) as any);
+  const restoreVersion = replaceMethod(prisma.timetableVersion, 'findFirst', (async () => ({ id: VERSION_ID, academicYearId: ACADEMIC_YEAR_ID })) as any);
+  const restoreEntries = replaceMethod(prisma.timetableEntry, 'findMany', (async () => [
+    {
+      id: 'routine-1',
+      schoolId: SCHOOL_ID,
+      classId: CLASS_ID,
+      sectionId: SECTION_ID,
+      attendancePeriodId: 'period-1',
+      dayOfWeek: 1,
+      subjectId: SUBJECT_ID,
+      teacherId: TEACHER_ID,
+      classRoomId: 'room-1',
+      createdAt: new Date('2026-02-01T00:00:00.000Z'),
+      updatedAt: new Date('2026-02-02T00:00:00.000Z'),
+      class: { id: CLASS_ID, name: 'Grade 4' },
+      section: { id: SECTION_ID, name: 'A' },
+      period: { id: 'period-1', name: 'Period 1', startTime: '09:00', endTime: '09:45', type: 'CLASS_TIME' },
+      subject: { id: SUBJECT_ID, name: 'Mathematics', code: 'MATH', type: 'THEORY' },
+      teacher: { id: TEACHER_ID, firstName: 'Riya', lastName: 'Sharma', employeeNo: 'EMP-1' },
+      classRoom: { id: 'room-1', roomNumber: 'Room 101', capacity: 40 },
+    },
+  ]) as any);
   const res = response();
 
   try {
@@ -128,7 +196,10 @@ test('admin class routine listing preserves included legacy routine fields throu
     assert.equal(row.subject.code, 'MATH');
     assert.equal(row.classRoom.capacity, 40);
   } finally {
-    restoreTimetable();
+    restoreClass();
+    restoreAcademicYear();
+    restoreVersion();
+    restoreEntries();
   }
 });
 

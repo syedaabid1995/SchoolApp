@@ -5,6 +5,20 @@ import { resolveSchoolId } from '../utils/tenant';
 import { invalidateAttendanceCache } from '../services/cache/cache.invalidation';
 import { attendancePeriodCreateSchema, attendancePeriodUpdateSchema } from '../validations/attendance.validation';
 
+const attendancePeriodResponseSelect = {
+  id: true,
+  schoolId: true,
+  type: true,
+  name: true,
+  startTime: true,
+  endTime: true,
+  lateThresholdMinutes: true,
+  earlyThresholdMinutes: true,
+  createdAt: true,
+  updatedAt: true,
+  _count: { select: { timetableEntries: true, sessions: true } },
+} as const;
+
 export const createAttendancePeriod = async (req: Request, res: Response) => {
   const payload = attendancePeriodCreateSchema.parse(req.body);
   const schoolId = resolveSchoolId(req, payload.schoolId);
@@ -15,12 +29,14 @@ export const createAttendancePeriod = async (req: Request, res: Response) => {
   const period = await prisma.attendancePeriod.create({
     data: {
       schoolId,
+      type: payload.type ?? 'CLASS_TIME',
       name: payload.name,
       startTime: payload.startTime,
       endTime: payload.endTime,
       lateThresholdMinutes: payload.lateThresholdMinutes ?? 0,
       earlyThresholdMinutes: payload.earlyThresholdMinutes ?? 0,
     },
+    select: attendancePeriodResponseSelect,
   });
 
   await invalidateAttendanceCache(schoolId);
@@ -34,6 +50,7 @@ export const listAttendancePeriods = async (req: Request, res: Response) => {
   const periods = await prisma.attendancePeriod.findMany({
     where: { schoolId },
     orderBy: { name: 'asc' },
+    select: attendancePeriodResponseSelect,
   });
 
   res.status(200).json(periods);
@@ -45,6 +62,7 @@ export const getAttendancePeriod = async (req: Request, res: Response) => {
 
   const period = await prisma.attendancePeriod.findFirst({
     where: { id, schoolId },
+    select: attendancePeriodResponseSelect,
   });
 
   if (!period) {
@@ -76,11 +94,13 @@ export const updateAttendancePeriod = async (req: Request, res: Response) => {
     where: { id },
     data: {
       name: payload.name ?? undefined,
+      type: payload.type ?? undefined,
       startTime: payload.startTime ?? undefined,
       endTime: payload.endTime ?? undefined,
       lateThresholdMinutes: payload.lateThresholdMinutes ?? undefined,
       earlyThresholdMinutes: payload.earlyThresholdMinutes ?? undefined,
     },
+    select: attendancePeriodResponseSelect,
   });
 
   await invalidateAttendanceCache(schoolId);

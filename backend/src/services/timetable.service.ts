@@ -12,6 +12,7 @@ type UpsertTimetableEntryInput = {
   dayOfWeek: number;
   subjectId: string;
   teacherId: string;
+  classRoomId?: string | null;
   room?: string | null;
   isActive?: boolean;
 };
@@ -108,8 +109,9 @@ const validateEntries = async (params: {
   const subjectIds = [...new Set(params.entries.map((entry) => entry.subjectId))];
   const teacherIds = [...new Set(params.entries.map((entry) => entry.teacherId))];
   const periodIds = [...new Set(params.entries.map((entry) => entry.attendancePeriodId))];
+  const classRoomIds = [...new Set(params.entries.map((entry) => entry.classRoomId).filter(Boolean) as string[])];
 
-  const [classes, sections, subjects, teachers, periods] = await Promise.all([
+  const [classes, sections, subjects, teachers, periods, classRooms] = await Promise.all([
     prisma.class.findMany({
       where: { schoolId: params.schoolId, academicYearId: params.academicYearId, id: { in: classIds } },
       select: { id: true },
@@ -132,12 +134,19 @@ const validateEntries = async (params: {
       where: { schoolId: params.schoolId, id: { in: periodIds } },
       select: { id: true },
     }),
+    classRoomIds.length
+      ? prisma.classRoom.findMany({
+          where: { schoolId: params.schoolId, id: { in: classRoomIds } },
+          select: { id: true },
+        })
+      : Promise.resolve([]),
   ]);
 
   if (classes.length !== classIds.length) throw new HttpError(404, 'One or more classes are invalid');
   if (subjects.length !== subjectIds.length) throw new HttpError(404, 'One or more subjects are invalid');
   if (teachers.length !== teacherIds.length) throw new HttpError(404, 'One or more teachers are invalid');
   if (periods.length !== periodIds.length) throw new HttpError(404, 'One or more attendance periods are invalid');
+  if (classRooms.length !== classRoomIds.length) throw new HttpError(404, 'One or more class rooms are invalid');
 
   const sectionsByClass = new Map<string, Set<string>>();
   for (const section of sections) {
@@ -154,8 +163,8 @@ const validateEntries = async (params: {
 
   const subjectById = new Map(subjects.map((subject) => [subject.id, subject]));
   for (const entry of params.entries) {
-    if (entry.dayOfWeek < 1 || entry.dayOfWeek > 6) {
-      throw new HttpError(400, 'dayOfWeek must be between 1 and 6');
+    if (entry.dayOfWeek < 1 || entry.dayOfWeek > 7) {
+      throw new HttpError(400, 'dayOfWeek must be between 1 and 7');
     }
 
     if ((sectionCountByClass.get(entry.classId) ?? 0) > 0 && !entry.sectionId) {
@@ -224,6 +233,7 @@ export const bulkUpsertTimetableEntries = async (params: {
         update: {
           subjectId: entry.subjectId,
           teacherId: entry.teacherId,
+          classRoomId: entry.classRoomId ?? null,
           room: entry.room?.trim() || null,
           isActive: entry.isActive ?? true,
         },
@@ -237,6 +247,7 @@ export const bulkUpsertTimetableEntries = async (params: {
           dayOfWeek: entry.dayOfWeek,
           subjectId: entry.subjectId,
           teacherId: entry.teacherId,
+          classRoomId: entry.classRoomId ?? null,
           room: entry.room?.trim() || null,
           isActive: entry.isActive ?? true,
         },
@@ -271,7 +282,21 @@ export const bulkUpsertTimetableEntries = async (params: {
   return prisma.timetableEntry.findMany({
     where: { id: { in: changedIds } },
     orderBy: [{ dayOfWeek: 'asc' }, { period: { startTime: 'asc' } }],
-    include: {
+    select: {
+      id: true,
+      schoolId: true,
+      timetableVersionId: true,
+      academicYearId: true,
+      classId: true,
+      sectionId: true,
+      attendancePeriodId: true,
+      dayOfWeek: true,
+      subjectId: true,
+      teacherId: true,
+      room: true,
+      isActive: true,
+      createdAt: true,
+      updatedAt: true,
       class: { select: { id: true, name: true } },
       section: { select: { id: true, name: true } },
       subject: { select: { id: true, name: true } },
@@ -281,11 +306,163 @@ export const bulkUpsertTimetableEntries = async (params: {
   });
 };
 
+const timetableEntrySelect = {
+  id: true,
+  schoolId: true,
+  timetableVersionId: true,
+  academicYearId: true,
+  classId: true,
+  sectionId: true,
+  attendancePeriodId: true,
+  dayOfWeek: true,
+  subjectId: true,
+  teacherId: true,
+  classRoomId: true,
+  room: true,
+  isActive: true,
+  createdAt: true,
+  updatedAt: true,
+  class: { select: { id: true, name: true } },
+  section: { select: { id: true, name: true } },
+  subject: { select: { id: true, name: true } },
+  teacher: { select: { id: true, firstName: true, lastName: true } },
+  period: { select: { id: true, name: true, type: true, startTime: true, endTime: true } },
+  classRoom: { select: { id: true, roomNumber: true, capacity: true } },
+} as const;
+
+export const updateTimetableEntry = async (params: {
+  schoolId: string;
+  timetableEntryId: string;
+  entry: Partial<UpsertTimetableEntryInput>;
+  actorId: string;
+  actorRole: string;
+}) => {
+  const existing = await prisma.timetableEntry.findFirst({
+    where: { id: params.timetableEntryId, schoolId: params.schoolId },
+    include: { version: { select: { id: true, status: true, academicYearId: true } } },
+  });
+  if (!existing) throw new HttpError(404, 'Timetable entry not found');
+  if (existing.version.status !== 'DRAFT') throw new HttpError(409, 'Only draft timetable entries can be edited');
+
+  const merged: UpsertTimetableEntryInput = {
+    classId: params.entry.classId ?? existing.classId,
+    sectionId: params.entry.sectionId === undefined ? existing.sectionId : params.entry.sectionId,
+    attendancePeriodId: params.entry.attendancePeriodId ?? existing.attendancePeriodId,
+    dayOfWeek: params.entry.dayOfWeek ?? existing.dayOfWeek,
+    subjectId: params.entry.subjectId ?? existing.subjectId,
+    teacherId: params.entry.teacherId ?? existing.teacherId,
+    classRoomId: params.entry.classRoomId === undefined ? existing.classRoomId : params.entry.classRoomId,
+    room: params.entry.room === undefined ? existing.room : params.entry.room,
+    isActive: params.entry.isActive ?? existing.isActive,
+  };
+
+  await validateEntries({
+    schoolId: params.schoolId,
+    academicYearId: existing.version.academicYearId,
+    entries: [merged],
+  });
+
+  let updated: Awaited<ReturnType<typeof prisma.timetableEntry.update>>;
+  try {
+    updated = await prisma.timetableEntry.update({
+      where: { id: params.timetableEntryId },
+      data: {
+        classId: merged.classId,
+        sectionId: merged.sectionId ?? null,
+        attendancePeriodId: merged.attendancePeriodId,
+        dayOfWeek: merged.dayOfWeek,
+        subjectId: merged.subjectId,
+        teacherId: merged.teacherId,
+        classRoomId: merged.classRoomId ?? null,
+        room: merged.room?.trim() || null,
+        isActive: merged.isActive ?? true,
+      },
+      select: timetableEntrySelect,
+    });
+  } catch (err) {
+    if ((err as { code?: string }).code === 'P2002') {
+      throw new HttpError(409, 'Timetable entry already exists for this class, section, day, and period');
+    }
+    throw err;
+  }
+
+  await invalidateTimetableCache(params.schoolId);
+  await createAuditLog({
+    schoolId: params.schoolId,
+    actorId: params.actorId,
+    actorRole: params.actorRole,
+    entityType: 'TimetableEntry',
+    entityId: updated.id,
+    action: 'UPDATE',
+    beforeState: {
+      classId: existing.classId,
+      sectionId: existing.sectionId,
+      attendancePeriodId: existing.attendancePeriodId,
+      dayOfWeek: existing.dayOfWeek,
+      subjectId: existing.subjectId,
+      teacherId: existing.teacherId,
+      classRoomId: existing.classRoomId,
+      room: existing.room,
+      isActive: existing.isActive,
+    },
+    afterState: {
+      classId: updated.classId,
+      sectionId: updated.sectionId,
+      attendancePeriodId: updated.attendancePeriodId,
+      dayOfWeek: updated.dayOfWeek,
+      subjectId: updated.subjectId,
+      teacherId: updated.teacherId,
+      classRoomId: updated.classRoomId,
+      room: updated.room,
+      isActive: updated.isActive,
+    },
+  });
+
+  return updated;
+};
+
+export const deleteTimetableEntry = async (params: {
+  schoolId: string;
+  timetableEntryId: string;
+  actorId: string;
+  actorRole: string;
+}) => {
+  const existing = await prisma.timetableEntry.findFirst({
+    where: { id: params.timetableEntryId, schoolId: params.schoolId },
+    include: { version: { select: { status: true } } },
+  });
+  if (!existing) throw new HttpError(404, 'Timetable entry not found');
+  if (existing.version.status !== 'DRAFT') throw new HttpError(409, 'Only draft timetable entries can be deleted');
+
+  await prisma.timetableEntry.delete({ where: { id: params.timetableEntryId } });
+  await invalidateTimetableCache(params.schoolId);
+  await createAuditLog({
+    schoolId: params.schoolId,
+    actorId: params.actorId,
+    actorRole: params.actorRole,
+    entityType: 'TimetableEntry',
+    entityId: existing.id,
+    action: 'DELETE',
+    beforeState: {
+      classId: existing.classId,
+      sectionId: existing.sectionId,
+      attendancePeriodId: existing.attendancePeriodId,
+      dayOfWeek: existing.dayOfWeek,
+      subjectId: existing.subjectId,
+      teacherId: existing.teacherId,
+      classRoomId: existing.classRoomId,
+      room: existing.room,
+      isActive: existing.isActive,
+    },
+  });
+};
+
 const detectPublishConflicts = (entries: Array<{
   id: string;
   dayOfWeek: number;
   attendancePeriodId: string;
   teacherId: string;
+  classRoomId: string | null;
   room: string | null;
   isActive: boolean;
 }>) => {
@@ -300,8 +477,13 @@ const detectPublishConflicts = (entries: Array<{
     if (teacherSet.has(teacherKey)) teacherConflicts.push(teacherKey);
     teacherSet.add(teacherKey);
 
-    if (entry.room) {
-      const roomKey = `${entry.dayOfWeek}:${entry.attendancePeriodId}:${entry.room.trim().toLowerCase()}`;
+    const normalizedRoom = entry.classRoomId
+      ? `id:${entry.classRoomId}`
+      : entry.room
+        ? `label:${entry.room.trim().toLowerCase()}`
+        : null;
+    if (normalizedRoom) {
+      const roomKey = `${entry.dayOfWeek}:${entry.attendancePeriodId}:${normalizedRoom}`;
       if (roomSet.has(roomKey)) roomConflicts.push(roomKey);
       roomSet.add(roomKey);
     }
@@ -330,6 +512,7 @@ export const publishTimetableVersion = async (params: {
           dayOfWeek: true,
           attendancePeriodId: true,
           teacherId: true,
+          classRoomId: true,
           room: true,
           isActive: true,
         },

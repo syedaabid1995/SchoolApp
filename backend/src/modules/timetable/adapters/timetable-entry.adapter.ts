@@ -8,8 +8,8 @@ const toDateOnly = (value: Date | string) => {
   return new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate()));
 };
 
-const teacherName = (teacher: { firstName?: string | null; lastName?: string | null }) =>
-  [teacher.firstName, teacher.lastName].filter(Boolean).join(' ');
+const teacherName = (teacher?: { firstName?: string | null; lastName?: string | null } | null) =>
+  [teacher?.firstName, teacher?.lastName].filter(Boolean).join(' ');
 
 export class TimetableEntryAdapter implements TimetableAdapter {
   readonly source = 'timetable-entry' as const;
@@ -42,9 +42,10 @@ export class TimetableEntryAdapter implements TimetableAdapter {
       include: {
         class: { select: { id: true, name: true } },
         section: { select: { id: true, name: true } },
-        period: { select: { id: true, name: true, startTime: true, endTime: true } },
+        period: { select: { id: true, name: true, type: true, startTime: true, endTime: true } },
         subject: { select: { name: true, code: true, type: true } },
         teacher: { select: { firstName: true, lastName: true, employeeNo: true } },
+        classRoom: { select: { id: true, roomNumber: true, capacity: true } },
       },
       orderBy: [{ dayOfWeek: 'asc' }, { period: { startTime: 'asc' } }],
     });
@@ -54,7 +55,7 @@ export class TimetableEntryAdapter implements TimetableAdapter {
       dayOfWeek: row.dayOfWeek,
       periodId: row.attendancePeriodId,
       periodName: row.period?.name ?? null,
-      periodType: null,
+      periodType: row.period?.type ?? null,
       startTime: row.period?.startTime ?? null,
       endTime: row.period?.endTime ?? null,
       subjectId: row.subjectId,
@@ -68,9 +69,9 @@ export class TimetableEntryAdapter implements TimetableAdapter {
       className: row.class?.name ?? null,
       sectionId: row.sectionId ?? null,
       sectionName: row.section?.name ?? null,
-      roomId: null,
-      roomName: row.room ?? null,
-      roomCapacity: null,
+      roomId: row.classRoomId ?? null,
+      roomName: row.classRoom?.roomNumber ?? row.room ?? null,
+      roomCapacity: row.classRoom?.capacity ?? null,
       isActive: row.isActive,
       createdAt: row.createdAt ?? null,
       updatedAt: row.updatedAt ?? null,

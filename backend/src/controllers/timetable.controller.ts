@@ -5,12 +5,15 @@ import { resolveSchoolId } from '../utils/tenant';
 import {
   bulkUpsertTimetableEntries,
   createTimetableVersion,
+  deleteTimetableEntry,
   getTeacherTimetableByDate,
   listTimetableEntries,
   listTimetableTeachers,
   listTimetableVersions,
   publishTimetableVersion,
+  updateTimetableEntry,
 } from '../services/timetable.service';
+import { modernTimetableGeneratorService } from '../modules/timetable/services/modern-timetable-generator.service';
 
 const createVersionSchema = z.object({
   schoolId: z.string().uuid().optional(),
@@ -20,7 +23,7 @@ const createVersionSchema = z.object({
   effectiveTo: z.string().optional().nullable(),
 });
 
-const bulkEntriesSchema = z.object({
+export const bulkEntriesSchema = z.object({
   schoolId: z.string().uuid().optional(),
   timetableVersionId: z.string().uuid(),
   replace: z.boolean().optional(),
@@ -30,14 +33,38 @@ const bulkEntriesSchema = z.object({
         classId: z.string().uuid(),
         sectionId: z.string().uuid().optional().nullable(),
         attendancePeriodId: z.string().uuid(),
-        dayOfWeek: z.number().int().min(1).max(6),
+        dayOfWeek: z.number().int().min(1).max(7),
         subjectId: z.string().uuid(),
         teacherId: z.string().uuid(),
+        classRoomId: z.string().uuid().optional().nullable(),
         room: z.string().optional().nullable(),
         isActive: z.boolean().optional(),
       }),
     )
     .min(1),
+});
+
+const generateEntriesSchema = z.object({
+  schoolId: z.string().uuid().optional(),
+  timetableVersionId: z.string().uuid().optional(),
+  classId: z.string().uuid(),
+  sectionId: z.string().uuid(),
+  classRoomId: z.string().uuid().optional().nullable(),
+  replaceExisting: z.boolean().optional(),
+  days: z.array(z.coerce.number().int().min(1).max(7)).min(1).max(7).optional(),
+});
+
+const updateEntrySchema = z.object({
+  schoolId: z.string().uuid().optional(),
+  classId: z.string().uuid().optional(),
+  sectionId: z.string().uuid().optional().nullable(),
+  attendancePeriodId: z.string().uuid().optional(),
+  dayOfWeek: z.number().int().min(1).max(7).optional(),
+  subjectId: z.string().uuid().optional(),
+  teacherId: z.string().uuid().optional(),
+  classRoomId: z.string().uuid().optional().nullable(),
+  room: z.string().optional().nullable(),
+  isActive: z.boolean().optional(),
 });
 
 const publishSchema = z.object({
@@ -50,10 +77,10 @@ const teacherViewSchema = z.object({
   academicYearId: z.string().uuid().optional(),
 });
 
-const listEntriesSchema = z.object({
+export const listEntriesSchema = z.object({
   schoolId: z.string().uuid().optional(),
   timetableVersionId: z.string().uuid(),
-  dayOfWeek: z.coerce.number().int().min(1).max(6).optional(),
+  dayOfWeek: z.coerce.number().int().min(1).max(7).optional(),
 });
 
 const listTeachersSchema = z.object({
@@ -107,6 +134,7 @@ export const bulkUpsertTimetableEntriesApi = async (req: Request, res: Response)
       dayOfWeek: entry.dayOfWeek,
       subjectId: entry.subjectId,
       teacherId: entry.teacherId,
+      classRoomId: entry.classRoomId ?? null,
       room: entry.room ?? null,
       isActive: entry.isActive ?? true,
     })),
@@ -115,6 +143,63 @@ export const bulkUpsertTimetableEntriesApi = async (req: Request, res: Response)
   });
 
   res.status(200).json(items);
+};
+
+export const generateTimetableEntriesApi = async (req: Request, res: Response) => {
+  requireAuth(req);
+  const payload = generateEntriesSchema.parse(req.body);
+  const schoolId = resolveSchoolId(req, payload.schoolId);
+
+  const result = await modernTimetableGeneratorService.generate({
+    schoolId,
+    timetableVersionId: payload.timetableVersionId,
+    classId: payload.classId,
+    sectionId: payload.sectionId,
+    classRoomId: payload.classRoomId ?? null,
+    replaceExisting: payload.replaceExisting ?? false,
+    days: payload.days,
+  });
+
+  res.status(201).json(result);
+};
+
+export const updateTimetableEntryApi = async (req: Request, res: Response) => {
+  const auth = requireAuth(req);
+  const payload = updateEntrySchema.parse(req.body);
+  const schoolId = resolveSchoolId(req, payload.schoolId);
+
+  const item = await updateTimetableEntry({
+    schoolId,
+    timetableEntryId: req.params.id,
+    entry: {
+      classId: payload.classId,
+      sectionId: payload.sectionId,
+      attendancePeriodId: payload.attendancePeriodId,
+      dayOfWeek: payload.dayOfWeek,
+      subjectId: payload.subjectId,
+      teacherId: payload.teacherId,
+      classRoomId: payload.classRoomId,
+      room: payload.room,
+      isActive: payload.isActive,
+    },
+    actorId: auth.userId,
+    actorRole: auth.role ?? 'UNKNOWN',
+  });
+
+  res.status(200).json(item);
+};
+
+export const deleteTimetableEntryApi = async (req: Request, res: Response) => {
+  const auth = requireAuth(req);
+  const schoolId = resolveSchoolId(req, req.query.schoolId as string | undefined);
+  await deleteTimetableEntry({
+    schoolId,
+    timetableEntryId: req.params.id,
+    actorId: auth.userId,
+    actorRole: auth.role ?? 'UNKNOWN',
+  });
+
+  res.status(204).send();
 };
 
 export const publishTimetableVersionApi = async (req: Request, res: Response) => {

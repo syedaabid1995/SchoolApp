@@ -141,13 +141,15 @@ export type TimetableEntry = {
   dayOfWeek: number;
   subjectId: string;
   teacherId: string;
+  classRoomId?: string | null;
   room?: string | null;
   isActive: boolean;
   class?: { id: string; name: string };
   section?: { id: string; name: string } | null;
   subject?: { id: string; name: string };
   teacher?: { id: string; firstName: string; lastName: string };
-  period?: { id: string; name: string; startTime: string; endTime: string };
+  period?: { id: string; name: string; type?: string | null; startTime: string; endTime: string };
+  classRoom?: { id: string; roomNumber: string; capacity?: number | null } | null;
 };
 
 export const createTimetableVersion = async (payload: {
@@ -178,6 +180,7 @@ export const upsertTimetableEntries = async (payload: {
     dayOfWeek: number;
     subjectId: string;
     teacherId: string;
+    classRoomId?: string | null;
     room?: string | null;
     isActive?: boolean;
   }>;
@@ -189,6 +192,47 @@ export const upsertTimetableEntries = async (payload: {
 export const listTimetableEntries = async (params: { schoolId?: string; timetableVersionId: string; dayOfWeek?: number }) => {
   const sanitized = params && (params as any).queryKey ? undefined : params;
   const { data } = await api.get<TimetableEntry[]>('/academics/timetable/entries', { params: sanitized });
+  return data;
+};
+
+export const updateTimetableEntry = async (
+  id: string,
+  payload: Partial<{
+    schoolId: string;
+    classId: string;
+    sectionId: string | null;
+    attendancePeriodId: string;
+    dayOfWeek: number;
+    subjectId: string;
+    teacherId: string;
+    classRoomId: string | null;
+    room: string | null;
+    isActive: boolean;
+  }>,
+) => {
+  const { data } = await api.patch<TimetableEntry>(`/academics/timetable/entries/${id}`, payload);
+  return data;
+};
+
+export const deleteTimetableEntry = async (id: string, params?: { schoolId?: string }) => {
+  await api.delete(`/academics/timetable/entries/${id}`, { params });
+};
+
+export const generateTimetableEntries = async (payload: {
+  schoolId?: string;
+  timetableVersionId?: string;
+  classId: string;
+  sectionId: string;
+  classRoomId?: string | null;
+  replaceExisting?: boolean;
+  days?: number[];
+}) => {
+  const { data } = await api.post<{
+    createdCount: number;
+    skippedCount: number;
+    skipped: Array<{ dayOfWeek: number; periodId: string; reason: string }>;
+    entries: TimetableEntry[];
+  }>('/academics/timetable/entries/generate', payload);
   return data;
 };
 
@@ -230,11 +274,13 @@ export const listAttendancePeriodsForAcademics = async (params?: { schoolId?: st
   const { data } = await api.get<
     Array<{
       id: string;
+      type?: 'CLASS_TIME' | 'EXAM_TIME' | 'BREAK';
       name: string;
       startTime: string;
       endTime: string;
       lateThresholdMinutes?: number;
       earlyThresholdMinutes?: number;
+      _count?: { timetableEntries?: number; sessions?: number };
     }>
   >(
     '/academics/attendance-periods',
@@ -244,6 +290,7 @@ export const listAttendancePeriodsForAcademics = async (params?: { schoolId?: st
 };
 
 export const createAttendancePeriodForAcademics = async (payload: {
+  type?: 'CLASS_TIME' | 'EXAM_TIME' | 'BREAK';
   name: string;
   startTime: string;
   endTime: string;
@@ -252,7 +299,23 @@ export const createAttendancePeriodForAcademics = async (payload: {
   schoolId?: string;
 }) => {
   const { data } = await api.post('/academics/attendance-periods', payload);
-  return data as { id: string; name: string; startTime: string; endTime: string };
+  return data as { id: string; type?: 'CLASS_TIME' | 'EXAM_TIME' | 'BREAK'; name: string; startTime: string; endTime: string };
+};
+
+export const updateAttendancePeriodForAcademics = async (
+  id: string,
+  payload: Partial<{
+    type: 'CLASS_TIME' | 'EXAM_TIME' | 'BREAK';
+    name: string;
+    startTime: string;
+    endTime: string;
+    lateThresholdMinutes: number;
+    earlyThresholdMinutes: number;
+    schoolId: string;
+  }>,
+) => {
+  const { data } = await api.patch(`/academics/attendance-periods/${id}`, payload);
+  return data as { id: string; type?: 'CLASS_TIME' | 'EXAM_TIME' | 'BREAK'; name: string; startTime: string; endTime: string };
 };
 
 export const deleteAttendancePeriodForAcademics = async (id: string, payload?: { schoolId?: string }) => {

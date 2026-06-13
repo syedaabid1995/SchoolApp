@@ -133,7 +133,6 @@ export const deleteSubject = async (req: Request, res: Response) => {
       _count: {
         select: {
           assignSubjects: true,
-          classRoutines: true,
           examPapers: true,
           teacherAssignments: true,
           timetableEntries: true,
@@ -148,7 +147,6 @@ export const deleteSubject = async (req: Request, res: Response) => {
 
   const blockers =
     existing._count.assignSubjects +
-    existing._count.classRoutines +
     existing._count.examPapers +
     existing._count.teacherAssignments +
     existing._count.timetableEntries;

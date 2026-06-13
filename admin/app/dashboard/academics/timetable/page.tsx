@@ -19,6 +19,7 @@ import {
   listClassRoutines,
   listSetupClasses,
   listTimePeriods,
+  publishCurrentTimetableDraft,
   seedDefaultTimePeriods,
   updateClassRoom,
   updateClassRoutine,
@@ -420,6 +421,15 @@ export default function TimetableManagementPage() {
     onError,
   });
 
+  const publishMutation = useMutation({
+    mutationFn: publishCurrentTimetableDraft,
+    onSuccess: async () => {
+      notify.success('Timetable published');
+      await invalidateTimetable();
+    },
+    onError,
+  });
+
   const validateRoom = () => {
     const roomNumber = roomForm.roomNumber.trim().replace(/\s+/g, ' ');
     if (!roomNumber) return notify.error('Validation error', 'Room number is required.');
@@ -793,6 +803,11 @@ export default function TimetableManagementPage() {
       <PageHeader
         title="Timetable"
         subtitle="Weekend, class rooms, periods, manual timetable cells, class generation, and teacher timetable views."
+        actions={
+          <PrimaryButton icon="save" disabled={publishMutation.isPending || !routines.length} onClick={() => publishMutation.mutate()}>
+            Publish Timetable
+          </PrimaryButton>
+        }
       />
 
       <div className="grid gap-5 xl:grid-cols-[18rem_minmax(0,1fr)]">

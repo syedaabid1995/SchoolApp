@@ -2,7 +2,7 @@ import { prisma as defaultPrisma } from '../../../config/db';
 import { PeriodAttendanceReadAdapter } from '../adapters/period-attendance.adapter';
 import { SessionAttendanceReadAdapter } from '../adapters/session-attendance.adapter';
 import { StaffAttendanceReadAdapter } from '../adapters/staff-attendance.adapter';
-import { StudentAttendanceReadAdapter } from '../adapters/student-attendance.adapter';
+import { TimetableReadService } from '../../timetable/services/timetable-read.service';
 import type {
   AttendanceAnalyticsSummary,
   AttendanceStatus,
@@ -22,19 +22,31 @@ import type {
 
 type PrismaLike = typeof defaultPrisma;
 type StudentSourceOption = StudentAttendanceReadSource | 'combined';
-type TimetableSourceOption = 'legacy-routine' | 'timetable-entry' | 'combined';
+type TimetableSourceOption = 'timetable-entry' | 'combined';
 type SessionAttendanceOverviewAdapter = StudentAttendanceAdapter & {
   getSessionOverview?: (params: StudentAttendanceSessionOverviewParams) => Promise<StudentAttendanceSessionOverview[]>;
 };
 type PeriodAttendanceRecordAdapter = StudentAttendanceAdapter & {
   getSessionRecords?: (sessionId: string) => Promise<unknown[]>;
 };
+type StaffAttendanceLegacyAdapter = TeacherAttendanceAdapter & {
+  getStaffAttendanceHoliday?: (params: {
+    schoolId: string;
+    holidayDate: Date;
+    roleName?: string | null;
+  }) => Promise<any>;
+  getStaffAttendanceHolidays?: (params: {
+    schoolId: string;
+    fromDate: Date;
+    toDateExclusive: Date;
+    roleName?: string | null;
+  }) => Promise<any[]>;
+};
 
 type AttendanceReadServiceOptions = {
-  studentAttendanceAdapter?: StudentAttendanceAdapter;
   sessionAttendanceAdapter?: SessionAttendanceOverviewAdapter;
   periodAttendanceAdapter?: PeriodAttendanceRecordAdapter;
-  staffAttendanceAdapter?: TeacherAttendanceAdapter;
+  staffAttendanceAdapter?: StaffAttendanceLegacyAdapter;
   prisma?: PrismaLike;
 };
 
@@ -81,25 +93,24 @@ const dayOfWeekFromDate = (date: Date | string) => {
 };
 
 export class AttendanceReadService {
-  private readonly studentAttendanceAdapter: StudentAttendanceAdapter;
   private readonly sessionAttendanceAdapter: SessionAttendanceOverviewAdapter;
   private readonly periodAttendanceAdapter: PeriodAttendanceRecordAdapter;
-  private readonly staffAttendanceAdapter: TeacherAttendanceAdapter;
+  private readonly staffAttendanceAdapter: StaffAttendanceLegacyAdapter;
+  private readonly timetableReadService: TimetableReadService;
   private readonly db: PrismaLike;
 
   constructor(options: AttendanceReadServiceOptions = {}) {
     this.db = options.prisma ?? defaultPrisma;
-    this.studentAttendanceAdapter = options.studentAttendanceAdapter ?? new StudentAttendanceReadAdapter(this.db);
     this.sessionAttendanceAdapter = options.sessionAttendanceAdapter ?? new SessionAttendanceReadAdapter(this.db);
     this.periodAttendanceAdapter = options.periodAttendanceAdapter ?? new PeriodAttendanceReadAdapter(this.db);
     this.staffAttendanceAdapter = options.staffAttendanceAdapter ?? new StaffAttendanceReadAdapter(this.db);
+    this.timetableReadService = new TimetableReadService({ prisma: this.db });
   }
 
   private studentAdapters(source: StudentSourceOption = 'combined') {
-    if (source === 'student-attendance') return [this.studentAttendanceAdapter];
     if (source === 'session-attendance') return [this.sessionAttendanceAdapter];
     if (source === 'period-attendance') return [this.periodAttendanceAdapter];
-    return [this.studentAttendanceAdapter, this.sessionAttendanceAdapter, this.periodAttendanceAdapter];
+    return [this.sessionAttendanceAdapter, this.periodAttendanceAdapter];
   }
 
   async getStudentAttendance(
@@ -195,6 +206,66 @@ export class AttendanceReadService {
     return this.periodAttendanceAdapter.getSessionRecords(sessionId);
   }
 
+  async getStudentAttendanceHoliday(params: {
+    schoolId: string;
+    academicSessionId: string;
+    classId: string;
+    sectionId: string;
+    holidayDate: Date;
+  }): Promise<any> {
+    return this.db.attendanceHoliday.findFirst({
+      where: {
+        schoolId: params.schoolId,
+        academicSessionId: params.academicSessionId,
+        classId: params.classId,
+        sectionId: params.sectionId,
+        holidayDate: params.holidayDate,
+      },
+    });
+  }
+
+  async getStudentAttendanceHolidays(params: {
+    schoolId: string;
+    academicSessionId: string;
+    classId: string;
+    sectionId: string;
+    fromDate: Date;
+    toDateExclusive: Date;
+  }): Promise<any[]> {
+    return this.db.attendanceHoliday.findMany({
+      where: {
+        schoolId: params.schoolId,
+        academicSessionId: params.academicSessionId,
+        classId: params.classId,
+        sectionId: params.sectionId,
+        holidayDate: { gte: params.fromDate, lt: params.toDateExclusive },
+      },
+    });
+  }
+
+  async getStaffAttendanceHoliday(params: {
+    schoolId: string;
+    holidayDate: Date;
+    roleName?: string | null;
+  }): Promise<any> {
+    if (!this.staffAttendanceAdapter.getStaffAttendanceHoliday) {
+      throw new Error('Staff attendance holiday reads are not supported by this adapter');
+    }
+    return this.staffAttendanceAdapter.getStaffAttendanceHoliday(params);
+  }
+
+  async getStaffAttendanceHolidays(params: {
+    schoolId: string;
+    fromDate: Date;
+    toDateExclusive: Date;
+    roleName?: string | null;
+  }): Promise<any[]> {
+    if (!this.staffAttendanceAdapter.getStaffAttendanceHolidays) {
+      throw new Error('Staff attendance holiday reads are not supported by this adapter');
+    }
+    return this.staffAttendanceAdapter.getStaffAttendanceHolidays(params);
+  }
+
   async getTeacherAttendance(params: TeacherAttendanceReadParams): Promise<TeacherAttendanceSummary> {
     const fromDate = params.fromDate ?? new Date();
     const toDate = params.toDate ?? fromDate;
@@ -249,95 +320,35 @@ export class AttendanceReadService {
   async getTimetable(
     params: TimetableReadParams & { source?: TimetableSourceOption },
   ): Promise<TimetableSlot[]> {
-    const source = params.source ?? 'combined';
-    const [legacy, modern] = await Promise.all([
-      source === 'timetable-entry' ? Promise.resolve([]) : this.getLegacyTimetable(params),
-      source === 'legacy-routine' ? Promise.resolve([]) : this.getModernTimetable(params),
-    ]);
-    return [...legacy, ...modern].sort((a, b) => {
+    const modern = await this.getModernTimetable(params);
+    return modern.sort((a, b) => {
       const dayCompare = a.dayOfWeek - b.dayOfWeek;
       if (dayCompare) return dayCompare;
       return (a.startTime ?? '').localeCompare(b.startTime ?? '');
     });
   }
 
-  private async getLegacyTimetable(params: TimetableReadParams): Promise<TimetableSlot[]> {
-    const dayOfWeek = params.dayOfWeek ?? (params.date ? dayOfWeekFromDate(params.date) : undefined);
-    const rows = await this.db.classRoutine.findMany({
-      where: {
-        schoolId: params.schoolId,
-        ...(params.teacherId ? { teacherId: params.teacherId } : {}),
-        ...(params.classId ? { classId: params.classId } : {}),
-        ...(params.sectionId !== undefined ? { sectionId: params.sectionId } : {}),
-        ...(dayOfWeek ? { dayOfWeek } : {}),
-      },
-      include: {
-        timePeriod: { select: { startTime: true, endTime: true } },
-        classRoom: { select: { roomNumber: true } },
-      },
-    });
-
-    return rows.map((row) => ({
-      source: 'legacy-routine',
-      sourceId: row.id,
-      schoolId: row.schoolId,
-      academicYearId: null,
-      timetableVersionId: null,
-      classId: row.classId,
-      sectionId: row.sectionId,
-      periodId: row.timePeriodId,
-      dayOfWeek: row.dayOfWeek,
-      subjectId: row.subjectId,
-      teacherId: row.teacherId,
-      room: row.classRoom?.roomNumber ?? null,
-      startTime: row.timePeriod?.startTime ?? null,
-      endTime: row.timePeriod?.endTime ?? null,
-    }));
-  }
-
   private async getModernTimetable(params: TimetableReadParams): Promise<TimetableSlot[]> {
-    const dayOfWeek = params.dayOfWeek ?? (params.date ? dayOfWeekFromDate(params.date) : undefined);
-    const date = params.date ? toDateOnly(params.date) : undefined;
-    const rows = await this.db.timetableEntry.findMany({
-      where: {
-        schoolId: params.schoolId,
-        isActive: true,
-        ...(params.timetableVersionId ? { timetableVersionId: params.timetableVersionId } : {}),
-        ...(params.academicYearId ? { academicYearId: params.academicYearId } : {}),
-        ...(params.teacherId ? { teacherId: params.teacherId } : {}),
-        ...(params.classId ? { classId: params.classId } : {}),
-        ...(params.sectionId !== undefined ? { sectionId: params.sectionId } : {}),
-        ...(dayOfWeek ? { dayOfWeek } : {}),
-        ...(date
-          ? {
-              version: {
-                status: 'PUBLISHED',
-                effectiveFrom: { lte: date },
-                OR: [{ effectiveTo: null }, { effectiveTo: { gte: date } }],
-              },
-            }
-          : {}),
-      },
-      include: {
-        period: { select: { startTime: true, endTime: true } },
-      },
+    const slots = await this.timetableReadService.getTimetable({
+      ...params,
+      dayOfWeek: params.dayOfWeek ?? (params.date ? dayOfWeekFromDate(params.date) : undefined),
     });
 
-    return rows.map((row) => ({
+    return slots.map((slot) => ({
       source: 'timetable-entry',
-      sourceId: row.id,
-      schoolId: row.schoolId,
-      academicYearId: row.academicYearId,
-      timetableVersionId: row.timetableVersionId,
-      classId: row.classId,
-      sectionId: row.sectionId ?? null,
-      periodId: row.attendancePeriodId,
-      dayOfWeek: row.dayOfWeek,
-      subjectId: row.subjectId,
-      teacherId: row.teacherId,
-      room: row.room ?? null,
-      startTime: row.period?.startTime ?? null,
-      endTime: row.period?.endTime ?? null,
+      sourceId: slot.sourceId,
+      schoolId: slot.schoolId,
+      academicYearId: slot.academicYearId,
+      timetableVersionId: slot.timetableVersionId,
+      classId: slot.classId,
+      sectionId: slot.sectionId,
+      periodId: slot.periodId ?? '',
+      dayOfWeek: slot.dayOfWeek,
+      subjectId: slot.subjectId,
+      teacherId: slot.teacherId,
+      room: slot.roomName,
+      startTime: slot.startTime,
+      endTime: slot.endTime,
     }));
   }
 }

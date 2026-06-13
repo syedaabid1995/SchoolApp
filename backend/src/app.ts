@@ -65,6 +65,10 @@ import { feeManagementRouter } from './routes/feeManagement.routes';
 import { aiAssistantRouter } from './routes/aiAssistant.routes';
 import { rateLimit } from './middlewares/rate-limit.middleware';
 import { apiVersionMiddleware } from './middlewares/version.middleware';
+import { requestMetricsMiddleware } from './middlewares/request-metrics.middleware';
+import { getHealthStatus } from './services/observability/health.service';
+import { metricsRegistry } from './services/observability/metrics.service';
+import { QueueMetricsService } from './services/observability/queue-metrics.service';
 
 export const createApp = () => {
   const app = express();
@@ -109,36 +113,25 @@ export const createApp = () => {
   );
   app.use(express.json({ limit: '10mb' }));
   app.use(express.urlencoded({ extended: false, limit: '10mb' }));
+  app.use(requestMetricsMiddleware);
   app.use(rateLimit());
   app.use(apiVersionMiddleware);
   app.use(schoolDomainMiddleware);
 
   app.get('/health', async (_req: Request, res: Response) => {
-    try {
-      // Check database connectivity
-      const { prisma } = await import('./config/db');
-      await prisma.$queryRaw`SELECT 1`;
-      
-      res.status(200).json({ 
-        status: 'healthy',
-        timestamp: new Date().toISOString(),
-        uptime: process.uptime(),
-        version: process.env.npm_package_version || '1.0.0',
-        environment: process.env.NODE_ENV || 'development',
-        database: 'connected',
-        message: 'CI/CD Pipeline Test - Redis Integration Complete'
-      });
-    } catch (error) {
-      res.status(503).json({ 
-        status: 'unhealthy',
-        timestamp: new Date().toISOString(),
-        uptime: process.uptime(),
-        version: process.env.npm_package_version || '1.0.0',
-        environment: process.env.NODE_ENV || 'development',
-        database: 'disconnected',
-        error: error instanceof Error ? error.message : 'Unknown error'
-      });
-    }
+    const health = await getHealthStatus();
+    res.status(health.status === 'healthy' ? 200 : 503).json(health);
+  });
+
+  app.get('/metrics', async (_req: Request, res: Response) => {
+    await QueueMetricsService.collectQueueMetrics().catch((err) => {
+      logger.warn({ err }, 'queue metrics collection failed');
+    });
+
+    res
+      .status(200)
+      .set('Content-Type', 'text/plain; version=0.0.4; charset=utf-8')
+      .send(metricsRegistry.renderPrometheus());
   });
 
   app.use('/docs', swaggerUi.serve, swaggerUi.setup(openapiSpec));
