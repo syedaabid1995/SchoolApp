@@ -16,6 +16,9 @@ class TodayTimetableScreen extends ConsumerWidget {
     final timetable = ref.watch(todayTimetableProvider);
     return AppScaffold(
       title: 'Timetable',
+      emoji: '🗓️',
+      breadcrumb: '👩🏫 Teacher Dashboard',
+      subtitle: 'Today\'s schedule and weekly overview.',
       actions: [
         IconButton(
           tooltip: 'Refresh',

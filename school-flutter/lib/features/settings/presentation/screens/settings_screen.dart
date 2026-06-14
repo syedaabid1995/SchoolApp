@@ -25,6 +25,9 @@ class SettingsScreen extends ConsumerWidget {
     final textTheme = Theme.of(context).textTheme;
     return AppScaffold(
       title: l10n.settings,
+      emoji: '⚙️',
+      breadcrumb: '👩🏫 Teacher Dashboard',
+      subtitle: 'Manage your preferences and account.',
       child: AsyncStateView(
         value: settings,
         data: (state) => FocusTraversalGroup(

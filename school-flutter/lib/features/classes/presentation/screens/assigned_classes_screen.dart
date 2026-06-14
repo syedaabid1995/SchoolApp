@@ -15,7 +15,10 @@ class AssignedClassesScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final assignments = ref.watch(classAssignmentsProvider);
     return AppScaffold(
-      title: 'Assigned classes',
+      title: 'My Classes',
+      emoji: '🏫',
+      breadcrumb: '👩🏫 Teacher Dashboard',
+      subtitle: 'Your assigned classes, sections, and subjects.',
       onRefresh: () async => ref.invalidate(classAssignmentsProvider),
       actions: [
         IconButton(

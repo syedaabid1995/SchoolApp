@@ -13,7 +13,6 @@ import '../../../../core/sync/sync_manager.dart';
 import '../../../../core/sync/sync_models.dart';
 import '../../../../core/widgets/app_scaffold.dart';
 import '../../../../core/widgets/async_state_view.dart';
-import '../../../auth/presentation/providers/auth_controller.dart';
 import '../providers/dashboard_providers.dart';
 
 class DashboardScreen extends ConsumerWidget {
@@ -27,21 +26,14 @@ class DashboardScreen extends ConsumerWidget {
 
     return AppScaffold(
       title: l10n.dashboard,
+      emoji: '🏠',
+      breadcrumb: '👩‍🏫 Teacher Dashboard',
+      subtitle: 'Welcome back — here\'s your overview.',
       actions: [
         IconButton(
           tooltip: l10n.refresh,
           onPressed: () => ref.invalidate(dashboardProvider),
           icon: const Icon(Icons.refresh),
-        ),
-        IconButton(
-          tooltip: l10n.settings,
-          onPressed: () => context.go(AppRoutes.settings),
-          icon: const Icon(Icons.settings_outlined),
-        ),
-        IconButton(
-          tooltip: 'Logout',
-          onPressed: () => ref.read(authControllerProvider.notifier).logout(),
-          icon: const Icon(Icons.logout),
         ),
       ],
       child: AsyncStateView(
@@ -52,41 +44,7 @@ class DashboardScreen extends ConsumerWidget {
           return Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // Greeting header
-              Row(
-                children: [
-                  CircleAvatar(
-                    radius: 24,
-                    backgroundColor: colorScheme.primaryContainer,
-                    child: Text(
-                      snapshot.user.displayName.isNotEmpty
-                          ? snapshot.user.displayName[0].toUpperCase()
-                          : '?',
-                      style: textTheme.titleLarge?.copyWith(
-                        color: colorScheme.onPrimaryContainer,
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: AppSpacing.md),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          l10n.greeting(snapshot.user.displayName),
-                          style: AppTypography.screenTitle(context),
-                        ),
-                        Text(
-                          snapshot.user.schoolName ?? l10n.schoolWorkspace,
-                          style: AppTypography.supporting(context),
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: AppSpacing.lg),
+              const SizedBox(height: AppSpacing.md),
               _SyncStatusBanner(sync: sync),
               const SizedBox(height: AppSpacing.md),
               _QuickActions(

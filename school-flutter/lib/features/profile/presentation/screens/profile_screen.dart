@@ -15,6 +15,9 @@ class ProfileScreen extends ConsumerWidget {
 
     return AppScaffold(
       title: 'Profile',
+      emoji: '👤',
+      breadcrumb: '👩🏫 Teacher Dashboard',
+      subtitle: 'Your account details and information.',
       actions: [
         IconButton(
           tooltip: 'Refresh',

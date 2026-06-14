@@ -30,6 +30,9 @@ class AttendanceHomeScreen extends ConsumerWidget {
 
     return AppScaffold(
       title: 'Attendance',
+      emoji: '📊',
+      breadcrumb: '👩🏫 Teacher Dashboard',
+      subtitle: 'Teacher self attendance and student session status.',
       onRefresh: () async {
         ref.invalidate(attendanceSummaryProvider);
         ref.invalidate(teacherAttendanceHistoryProvider);
