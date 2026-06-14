@@ -530,8 +530,8 @@ export const getAttendanceSummary = async (params: {
 
   if (params.actorRole && !isAdminRole(params.actorRole) && params.actorId) {
     const teacher = await getTeacherProfile(params.schoolId, params.actorId);
-    const assignments = await prisma.teacherClassAssignment.findMany({
-      where: { teacherId: teacher.id },
+    const assignments = await prisma.assignSubject.findMany({
+      where: { schoolId: params.schoolId, teacherId: teacher.id },
       select: { classId: true, sectionId: true },
     });
 

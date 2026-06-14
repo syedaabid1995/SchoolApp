@@ -6,7 +6,9 @@ import '../../app/routes/app_routes.dart';
 import '../../app/theme/app_breakpoints.dart';
 import '../../app/theme/app_colors.dart';
 import '../../app/theme/app_spacing.dart';
+import '../../core/permissions/permission_registry.dart';
 import '../../features/auth/presentation/providers/auth_controller.dart';
+import '../../features/auth/presentation/providers/current_permission_provider.dart';
 
 class AppScaffold extends ConsumerStatefulWidget {
   const AppScaffold({
@@ -42,7 +44,9 @@ class _AppScaffoldState extends ConsumerState<AppScaffold> {
   @override
   Widget build(BuildContext context) {
     final maxWidth = AppBreakpoints.contentMaxWidth(context);
-    final padding = AppBreakpoints.isCompact(context) ? AppSpacing.md : AppSpacing.lg;
+    final padding = AppBreakpoints.isCompact(context)
+        ? AppSpacing.md
+        : AppSpacing.lg;
     final canPop = Navigator.of(context).canPop();
 
     final body = Align(
@@ -55,14 +59,22 @@ class _AppScaffoldState extends ConsumerState<AppScaffold> {
 
     final scrollView = widget.onRefresh == null
         ? ListView(
-            padding: EdgeInsets.only(left: padding, right: padding, bottom: padding),
+            padding: EdgeInsets.only(
+              left: padding,
+              right: padding,
+              bottom: padding,
+            ),
             keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
             children: [body],
           )
         : RefreshIndicator(
             onRefresh: widget.onRefresh!,
             child: ListView(
-              padding: EdgeInsets.only(left: padding, right: padding, bottom: padding),
+              padding: EdgeInsets.only(
+                left: padding,
+                right: padding,
+                bottom: padding,
+              ),
               keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
               children: [body],
             ),
@@ -92,27 +104,6 @@ class _AppScaffoldState extends ConsumerState<AppScaffold> {
 
 // ─── Drawer ──────────────────────────────────────────────────────────────────
 
-class _NavItem {
-  const _NavItem(this.label, this.icon, this.route);
-  final String label;
-  final IconData icon;
-  final String route;
-}
-
-const _navItems = [
-  _NavItem('Dashboard', Icons.home_outlined, AppRoutes.dashboard),
-  _NavItem('Attendance', Icons.fact_check_outlined, AppRoutes.attendance),
-  _NavItem('Timetable', Icons.calendar_today_outlined, AppRoutes.timetable),
-  _NavItem('Classes', Icons.class_outlined, AppRoutes.classes),
-  _NavItem('Homework', Icons.assignment_outlined, AppRoutes.homework),
-  _NavItem('Marks', Icons.grading_outlined, AppRoutes.marks),
-  _NavItem('Exams', Icons.edit_note_outlined, AppRoutes.exams),
-  _NavItem('Leave', Icons.event_available_outlined, AppRoutes.leave),
-  _NavItem('Notices', Icons.campaign_outlined, AppRoutes.notices),
-  _NavItem('Fees', Icons.payments_outlined, AppRoutes.fees),
-  _NavItem('Notifications', Icons.notifications_outlined, AppRoutes.notifications),
-];
-
 class _AppDrawer extends ConsumerWidget {
   const _AppDrawer({required this.scaffoldKey});
   final GlobalKey<ScaffoldState> scaffoldKey;
@@ -123,9 +114,22 @@ class _AppDrawer extends ConsumerWidget {
     final user = authAsync.when(
       data: (s) => s.user,
       loading: () => null,
-      error: (_, __) => null,
+      error: (_, stackTrace) => null,
     );
     final currentRoute = GoRouterState.of(context).uri.path;
+    final checker = ref.watch(currentPermissionCheckerProvider);
+    final visibleModules = checker.visibleModules();
+    final primaryModules = visibleModules
+        .where(
+          (module) =>
+              module.route != AppRoutes.profile &&
+              module.route != AppRoutes.settings,
+        )
+        .toList(growable: false);
+    final profileModule = PermissionRegistry.moduleForRoute(AppRoutes.profile);
+    final settingsModule = PermissionRegistry.moduleForRoute(
+      AppRoutes.settings,
+    );
     final colorScheme = Theme.of(context).colorScheme;
     final textTheme = Theme.of(context).textTheme;
 
@@ -148,10 +152,10 @@ class _AppDrawer extends ConsumerWidget {
             child: ListView(
               padding: const EdgeInsets.symmetric(vertical: AppSpacing.xs),
               children: [
-                for (final item in _navItems)
+                for (final item in primaryModules)
                   _DrawerNavTile(
                     item: item,
-                    isActive: currentRoute == item.route,
+                    isActive: _routeMatches(currentRoute, item.route),
                     onTap: () {
                       scaffoldKey.currentState?.closeDrawer();
                       context.go(item.route);
@@ -162,22 +166,24 @@ class _AppDrawer extends ConsumerWidget {
           ),
           // ── Bottom actions ──
           const Divider(height: 1),
-          _DrawerNavTile(
-            item: const _NavItem('Profile', Icons.person_outline, AppRoutes.profile),
-            isActive: currentRoute == AppRoutes.profile,
-            onTap: () {
-              scaffoldKey.currentState?.closeDrawer();
-              context.go(AppRoutes.profile);
-            },
-          ),
-          _DrawerNavTile(
-            item: const _NavItem('Settings', Icons.settings_outlined, AppRoutes.settings),
-            isActive: currentRoute == AppRoutes.settings,
-            onTap: () {
-              scaffoldKey.currentState?.closeDrawer();
-              context.go(AppRoutes.settings);
-            },
-          ),
+          if (profileModule != null && checker.canAccessModule(profileModule))
+            _DrawerNavTile(
+              item: profileModule,
+              isActive: _routeMatches(currentRoute, AppRoutes.profile),
+              onTap: () {
+                scaffoldKey.currentState?.closeDrawer();
+                context.go(AppRoutes.profile);
+              },
+            ),
+          if (settingsModule != null && checker.canAccessModule(settingsModule))
+            _DrawerNavTile(
+              item: settingsModule,
+              isActive: _routeMatches(currentRoute, AppRoutes.settings),
+              onTap: () {
+                scaffoldKey.currentState?.closeDrawer();
+                context.go(AppRoutes.settings);
+              },
+            ),
           ListTile(
             leading: Container(
               width: 36,
@@ -186,7 +192,11 @@ class _AppDrawer extends ConsumerWidget {
                 color: colorScheme.errorContainer,
                 borderRadius: BorderRadius.circular(10),
               ),
-              child: Icon(Icons.logout, size: 18, color: colorScheme.onErrorContainer),
+              child: Icon(
+                Icons.logout,
+                size: 18,
+                color: colorScheme.onErrorContainer,
+              ),
             ),
             title: Text(
               'Logout',
@@ -200,11 +210,16 @@ class _AppDrawer extends ConsumerWidget {
               ref.read(authControllerProvider.notifier).logout();
             },
           ),
-          SizedBox(height: MediaQuery.of(context).padding.bottom + AppSpacing.sm),
+          SizedBox(
+            height: MediaQuery.of(context).padding.bottom + AppSpacing.sm,
+          ),
         ],
       ),
     );
   }
+
+  bool _routeMatches(String currentRoute, String route) =>
+      currentRoute == route || currentRoute.startsWith('$route/');
 }
 
 class _DrawerHeader extends StatelessWidget {
@@ -223,7 +238,9 @@ class _DrawerHeader extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final topPad = MediaQuery.of(context).padding.top;
-    final initials = displayName.trim().split(' ')
+    final initials = displayName
+        .trim()
+        .split(' ')
         .take(2)
         .map((w) => w.isEmpty ? '' : w[0].toUpperCase())
         .join();
@@ -314,7 +331,7 @@ class _DrawerNavTile extends StatelessWidget {
     required this.onTap,
   });
 
-  final _NavItem item;
+  final StaffModuleDefinition item;
   final bool isActive;
   final VoidCallback onTap;
 
@@ -324,7 +341,10 @@ class _DrawerNavTile extends StatelessWidget {
     final textTheme = Theme.of(context).textTheme;
 
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: AppSpacing.sm, vertical: 2),
+      padding: const EdgeInsets.symmetric(
+        horizontal: AppSpacing.sm,
+        vertical: 2,
+      ),
       child: Material(
         color: isActive ? colorScheme.primaryContainer : Colors.transparent,
         borderRadius: BorderRadius.circular(12),
@@ -348,17 +368,21 @@ class _DrawerNavTile extends StatelessWidget {
                     borderRadius: BorderRadius.circular(10),
                   ),
                   child: Icon(
-                    item.icon,
+                    isActive ? item.activeIcon : item.icon,
                     size: 18,
-                    color: isActive ? colorScheme.primary : colorScheme.onSurface.withOpacity(0.65),
+                    color: isActive
+                        ? colorScheme.primary
+                        : colorScheme.onSurface.withOpacity(0.65),
                   ),
                 ),
                 const SizedBox(width: AppSpacing.sm),
                 Text(
-                  item.label,
+                  item.displayName,
                   style: textTheme.bodyMedium?.copyWith(
                     fontWeight: isActive ? FontWeight.w700 : FontWeight.w500,
-                    color: isActive ? colorScheme.primary : colorScheme.onSurface,
+                    color: isActive
+                        ? colorScheme.primary
+                        : colorScheme.onSurface,
                   ),
                 ),
                 if (isActive) ...[
@@ -471,7 +495,8 @@ class _GradientHeader extends StatelessWidget {
                           color: Colors.white,
                           size: 24,
                         ),
-                        onPressed: () => scaffoldKey?.currentState?.openDrawer(),
+                        onPressed: () =>
+                            scaffoldKey?.currentState?.openDrawer(),
                         padding: EdgeInsets.zero,
                         constraints: const BoxConstraints(),
                         tooltip: 'Open menu',

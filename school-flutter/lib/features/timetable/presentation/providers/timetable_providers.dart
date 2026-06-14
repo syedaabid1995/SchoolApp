@@ -29,7 +29,7 @@ final todayTimetableProvider = FutureProvider.autoDispose<TeacherTimetable>((
 final weeklyTimetableProvider =
     FutureProvider.autoDispose<List<TeacherTimetable>>((ref) async {
       final today = DateTime.now();
-      final start = today.subtract(Duration(days: today.weekday - 1));
+      final start = today.subtract(Duration(days: (today.weekday + 1) % 7));
       final repository = ref.watch(timetableRepositoryProvider);
       return Future.wait([
         for (var offset = 0; offset < 7; offset++)

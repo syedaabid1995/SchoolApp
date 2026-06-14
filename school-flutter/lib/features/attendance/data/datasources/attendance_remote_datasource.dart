@@ -2,6 +2,7 @@ import 'package:dio/dio.dart';
 import 'package:intl/intl.dart';
 
 import '../../../../core/constants/api_endpoints.dart';
+import '../../domain/entities/attendance_summary.dart';
 import '../models/attendance_summary_model.dart';
 
 class AttendanceRemoteDatasource {
@@ -53,6 +54,36 @@ class AttendanceRemoteDatasource {
     );
     return TeacherAttendanceRecordModel.fromJson(
       response.data ?? const <String, dynamic>{},
+    );
+  }
+
+  Future<StudentAttendanceOptionsModel> getStudentAttendanceOptions() async {
+    final response = await _dio.get<Map<String, dynamic>>(
+      ApiEndpoints.studentAttendanceOptions,
+    );
+    return StudentAttendanceOptionsModel.fromJson(
+      response.data ?? const <String, dynamic>{},
+    );
+  }
+
+  Future<StudentAttendanceSheetModel> loadStudentAttendance(
+    StudentAttendanceQuery query,
+  ) async {
+    final response = await _dio.get<Map<String, dynamic>>(
+      ApiEndpoints.studentAttendance,
+      queryParameters: studentAttendanceQueryParams(query),
+    );
+    return StudentAttendanceSheetModel.fromJson(
+      response.data ?? const <String, dynamic>{},
+    );
+  }
+
+  Future<void> saveStudentAttendance(
+    StudentAttendanceSaveRequest request,
+  ) async {
+    await _dio.post<Map<String, dynamic>>(
+      ApiEndpoints.studentAttendance,
+      data: studentAttendanceSavePayload(request),
     );
   }
 }

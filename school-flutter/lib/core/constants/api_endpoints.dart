@@ -12,6 +12,8 @@ class ApiEndpoints {
   static const teacherTimetable = '/academics/timetable/teacher';
   static const attendanceSummary = '/attendance/summary';
   static const teacherSelfAttendance = '/attendance/teacher/self';
+  static const studentAttendance = '/students/attendance';
+  static const studentAttendanceOptions = '/students/attendance/options';
   static const notificationSummary = '/notifications/summary';
   static const leaveBalancesMe = '/leave/balances/me';
   static const leaveTypes = '/leave/types';

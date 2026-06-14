@@ -68,14 +68,26 @@ class PermissionRegistry {
     ),
     StaffModuleDefinition(
       id: 'attendance',
-      displayName: 'Attendance',
+      displayName: 'My Attendance',
       route: '/attendance',
       icon: Icons.fact_check_outlined,
       activeIcon: Icons.fact_check,
       requiredPermissions: [
-        PermissionCodes.attendanceView,
-        PermissionCodes.attendanceReport,
         PermissionCodes.staffAttendanceView,
+        PermissionCodes.staffAttendanceCreate,
+        PermissionCodes.staffAttendanceEdit,
+      ],
+    ),
+    StaffModuleDefinition(
+      id: 'student-attendance',
+      displayName: 'Student Attendance',
+      route: '/student-attendance',
+      icon: Icons.assignment_turned_in_outlined,
+      activeIcon: Icons.assignment_turned_in,
+      requiredPermissions: [
+        PermissionCodes.attendanceView,
+        PermissionCodes.attendanceCreate,
+        PermissionCodes.attendanceEdit,
       ],
     ),
     StaffModuleDefinition(
@@ -87,7 +99,6 @@ class PermissionRegistry {
       requiredPermissions: [
         PermissionCodes.timetableView,
         PermissionCodes.academicRoutineView,
-        PermissionCodes.dashboardOverview,
       ],
     ),
     StaffModuleDefinition(
@@ -125,6 +136,8 @@ class PermissionRegistry {
       activeIcon: Icons.event_available,
       requiredPermissions: [
         PermissionCodes.leaveApplyView,
+        PermissionCodes.leaveApplyCreate,
+        PermissionCodes.leaveApplyDelete,
         PermissionCodes.leaveBalanceView,
       ],
     ),

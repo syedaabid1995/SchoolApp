@@ -21,16 +21,15 @@ class ClassAssignmentRepositoryImpl implements ClassAssignmentRepository {
   Future<ClassAssignments> getAssignments() async {
     try {
       final assigned = await _remote.getAssignedClasses();
-      final subjects = await _remote.getAssignedSubjectsFromMe();
       final data = ClassAssignments(
         classes: assigned.classes,
         sections: assigned.sections,
-        subjects: subjects,
+        subjects: assigned.subjects,
       );
       await _cache.write(_cacheKey, {
         'classes': assigned.classes.map((item) => item.toJson()).toList(),
         'sections': assigned.sections.map((item) => item.toJson()).toList(),
-        'subjects': subjects.map((item) => item.toJson()).toList(),
+        'subjects': assigned.subjects.map((item) => item.toJson()).toList(),
       });
       return data;
     } catch (error) {

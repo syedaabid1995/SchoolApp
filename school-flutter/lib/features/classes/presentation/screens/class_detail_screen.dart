@@ -43,6 +43,9 @@ class ClassDetailScreen extends StatelessWidget {
                     ListTile(
                       contentPadding: EdgeInsets.zero,
                       title: Text(section.name),
+                      subtitle: Text(
+                        '${assignments.subjectsForClass(assignedClass.id, sectionId: section.id).length} subject(s)',
+                      ),
                     ),
               ],
             ),
@@ -59,11 +62,35 @@ class ClassDetailScreen extends StatelessWidget {
                 const SizedBox(height: AppSpacing.sm),
                 if (subjects.isEmpty)
                   const Text('No subjects assigned.')
+                else if (sections.isNotEmpty)
+                  for (final section in sections) ...[
+                    Padding(
+                      padding: const EdgeInsets.only(top: AppSpacing.xs),
+                      child: Text(
+                        'Section ${section.name}',
+                        style: Theme.of(context).textTheme.labelLarge,
+                      ),
+                    ),
+                    for (final subject in assignments.subjectsForClass(
+                      assignedClass.id,
+                      sectionId: section.id,
+                    ))
+                      ListTile(
+                        contentPadding: EdgeInsets.zero,
+                        title: Text(subject.name),
+                        subtitle: subject.teacherName == null
+                            ? null
+                            : Text(subject.teacherName!),
+                      ),
+                  ]
                 else
                   for (final subject in subjects)
                     ListTile(
                       contentPadding: EdgeInsets.zero,
                       title: Text(subject.name),
+                      subtitle: subject.teacherName == null
+                          ? null
+                          : Text(subject.teacherName!),
                     ),
               ],
             ),

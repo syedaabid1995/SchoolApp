@@ -9,7 +9,11 @@ class ClassAssignmentRemoteDatasource {
   final Dio _dio;
 
   Future<
-    ({List<AssignedClassModel> classes, List<AssignedSectionModel> sections})
+    ({
+      List<AssignedClassModel> classes,
+      List<AssignedSectionModel> sections,
+      List<AssignedSubjectModel> subjects,
+    })
   >
   getAssignedClasses() async {
     final response = await _dio.get<Map<String, dynamic>>(
@@ -21,6 +25,9 @@ class ClassAssignmentRemoteDatasource {
     final sections = response.data?['sections'] is List
         ? response.data!['sections'] as List
         : const [];
+    final subjects = response.data?['subjects'] is List
+        ? response.data!['subjects'] as List
+        : const [];
     return (
       classes: [
         for (final item in classes)
@@ -30,20 +37,10 @@ class ClassAssignmentRemoteDatasource {
         for (final item in sections)
           if (item is Map<String, dynamic>) AssignedSectionModel.fromJson(item),
       ],
+      subjects: [
+        for (final item in subjects)
+          if (item is Map<String, dynamic>) AssignedSubjectModel.fromJson(item),
+      ],
     );
-  }
-
-  Future<List<AssignedSubjectModel>> getAssignedSubjectsFromMe() async {
-    final response = await _dio.get<Map<String, dynamic>>(ApiEndpoints.me);
-    final profile = response.data?['teacherProfile'] is Map<String, dynamic>
-        ? response.data!['teacherProfile'] as Map<String, dynamic>
-        : const <String, dynamic>{};
-    final assignments = profile['subjectAssignments'] is List
-        ? profile['subjectAssignments'] as List
-        : const [];
-    return [
-      for (final item in assignments)
-        if (item is Map<String, dynamic>) AssignedSubjectModel.fromJson(item),
-    ];
   }
 }

@@ -127,12 +127,12 @@ class AttendanceHomeScreen extends ConsumerWidget {
                                     ? null
                                     : () => ref
                                           .read(markSelfAttendanceProvider.notifier)
-                                          .mark('ABSENT'),
+                                          .mark('LEAVE'),
                                 icon: Icon(
-                                  Icons.cancel_outlined,
+                                  Icons.event_busy_outlined,
                                   color: Theme.of(context).colorScheme.error,
                                 ),
-                                label: const Text('Absent'),
+                                label: const Text('Leave'),
                               ),
                             ),
                           ],

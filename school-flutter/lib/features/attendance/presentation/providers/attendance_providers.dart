@@ -40,6 +40,17 @@ final teacherAttendanceHistoryProvider =
           );
     });
 
+final studentAttendanceOptionsProvider =
+    FutureProvider.autoDispose<StudentAttendanceOptions>((ref) {
+      return ref.watch(attendanceRepositoryProvider).getStudentAttendanceOptions();
+    });
+
+final studentAttendanceSheetProvider =
+    FutureProvider.autoDispose
+        .family<StudentAttendanceSheet, StudentAttendanceQuery>((ref, query) {
+          return ref.watch(attendanceRepositoryProvider).loadStudentAttendance(query);
+        });
+
 final markSelfAttendanceProvider =
     AsyncNotifierProvider<
       MarkSelfAttendanceController,
@@ -65,5 +76,24 @@ class MarkSelfAttendanceController
     } catch (_) {
       // Pending badges are best-effort and must not fail attendance actions.
     }
+  }
+}
+
+final saveStudentAttendanceProvider =
+    AsyncNotifierProvider<SaveStudentAttendanceController, void>(
+      SaveStudentAttendanceController.new,
+    );
+
+class SaveStudentAttendanceController extends AsyncNotifier<void> {
+  @override
+  Future<void> build() async {}
+
+  Future<void> save(StudentAttendanceSaveRequest request) async {
+    state = const AsyncLoading();
+    state = await AsyncValue.guard(
+      () => ref.read(attendanceRepositoryProvider).saveStudentAttendance(request),
+    );
+    ref.invalidate(attendanceSummaryProvider);
+    ref.invalidate(studentAttendanceSheetProvider(request.query));
   }
 }

@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { authMiddleware } from '../middlewares/auth.middleware';
-import { blockSuperAdminSchoolOperations, requirePermission, requireRole } from '../middlewares/rbac.middleware';
+import { blockSuperAdminSchoolOperations, requirePermission } from '../middlewares/rbac.middleware';
 import { validateBody, validateParams, validateQuery } from '../middlewares/validation.middleware';
 import { PermissionCodes as P } from '../permissions/permission-manifest';
 import {
@@ -58,9 +58,9 @@ attendanceRouter.use(blockSuperAdminSchoolOperations('Super Admin cannot manage 
 attendanceRouter.post('/sessions', requirePermission(P.attendanceCreate, P.attendanceEdit), validateBody(createAttendanceSessionSchema), createAttendanceSessionApi);
 attendanceRouter.patch('/sessions/:id', requirePermission(P.attendanceEdit), validateParams(uuidParamsSchema), validateBody(updateAttendanceSessionSchema), updateAttendanceSessionApi);
 attendanceRouter.post('/sessions/:id/lock', requirePermission(P.attendanceEdit), validateParams(uuidParamsSchema), validateBody(lockAttendanceSessionSchema), lockAttendanceSessionApi);
-attendanceRouter.get('/summary', requirePermission(P.attendanceView, P.attendanceReport), validateQuery(attendanceSummaryQuerySchema), attendanceSummaryApi);
-attendanceRouter.post('/teacher/self', requireRole('SCHOOL_ADMIN', 'TEACHER', 'ACCOUNTANT', 'LIBRARIAN', 'STAFF'), validateBody(teacherSelfAttendanceSchema), markTeacherSelfAttendanceApi);
-attendanceRouter.get('/teacher/self', requireRole('SCHOOL_ADMIN', 'TEACHER', 'ACCOUNTANT', 'LIBRARIAN', 'STAFF'), validateQuery(teacherSelfAttendanceListQuerySchema), listTeacherSelfAttendanceApi);
+attendanceRouter.get('/summary', requirePermission(P.attendanceView, P.attendanceReport, P.staffAttendanceView, P.staffAttendanceReport), validateQuery(attendanceSummaryQuerySchema), attendanceSummaryApi);
+attendanceRouter.post('/teacher/self', requirePermission(P.attendanceCreate, P.staffAttendanceCreate), validateBody(teacherSelfAttendanceSchema), markTeacherSelfAttendanceApi);
+attendanceRouter.get('/teacher/self', requirePermission(P.attendanceView, P.staffAttendanceView), validateQuery(teacherSelfAttendanceListQuerySchema), listTeacherSelfAttendanceApi);
 attendanceRouter.post('/substitutions', requirePermission(P.attendanceSubstituteManage), createAttendanceSubstitutionApi);
 attendanceRouter.get('/substitutions', requirePermission(P.attendanceSubstituteManage), listAttendanceSubstitutionsApi);
 attendanceRouter.patch('/substitutions/:id/cancel', requirePermission(P.attendanceSubstituteManage), cancelAttendanceSubstitutionApi);

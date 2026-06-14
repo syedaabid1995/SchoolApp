@@ -31,14 +31,31 @@ class AssignedSection extends Equatable {
 }
 
 class AssignedSubject extends Equatable {
-  const AssignedSubject({required this.id, required this.name, this.classId});
+  const AssignedSubject({
+    required this.id,
+    required this.name,
+    this.classId,
+    this.sectionId,
+    this.teacherId,
+    this.teacherName,
+  });
 
   final String id;
   final String name;
   final String? classId;
+  final String? sectionId;
+  final String? teacherId;
+  final String? teacherName;
 
   @override
-  List<Object?> get props => [id, name, classId];
+  List<Object?> get props => [
+    id,
+    name,
+    classId,
+    sectionId,
+    teacherId,
+    teacherName,
+  ];
 }
 
 class ClassAssignments extends Equatable {
@@ -57,13 +74,22 @@ class ClassAssignments extends Equatable {
     return sections.where((section) => section.classId == classId).toList();
   }
 
-  List<AssignedSubject> subjectsForClass(String? classId) {
+  List<AssignedSubject> subjectsForClass(String? classId, {String? sectionId}) {
     if (classId == null || classId.isEmpty) return subjects;
     return subjects
         .where(
-          (subject) => subject.classId == null || subject.classId == classId,
+          (subject) =>
+              (subject.classId == null || subject.classId == classId) &&
+              (sectionId == null ||
+                  sectionId.isEmpty ||
+                  subject.sectionId == null ||
+                  subject.sectionId == sectionId),
         )
         .toList();
+  }
+
+  int uniqueSubjectCountForClass(String? classId) {
+    return subjectsForClass(classId).map((subject) => subject.id).toSet().length;
   }
 
   @override

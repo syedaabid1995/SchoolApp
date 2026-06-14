@@ -98,3 +98,146 @@ class TeacherAttendanceRecord extends Equatable {
   @override
   List<Object?> get props => [id, date, status, teacherId, overrideReason];
 }
+
+class StudentAttendanceOption extends Equatable {
+  const StudentAttendanceOption({
+    required this.id,
+    required this.name,
+    this.academicYearId,
+    this.classId,
+    this.isActive = false,
+  });
+
+  final String id;
+  final String name;
+  final String? academicYearId;
+  final String? classId;
+  final bool isActive;
+
+  @override
+  List<Object?> get props => [id, name, academicYearId, classId, isActive];
+}
+
+class StudentAttendanceOptions extends Equatable {
+  const StudentAttendanceOptions({
+    required this.academicYears,
+    required this.classes,
+    required this.sections,
+  });
+
+  final List<StudentAttendanceOption> academicYears;
+  final List<StudentAttendanceOption> classes;
+  final List<StudentAttendanceOption> sections;
+
+  List<StudentAttendanceOption> sectionsForClass(String? classId) {
+    if (classId == null || classId.isEmpty) return const [];
+    return sections.where((section) => section.classId == classId).toList();
+  }
+
+  @override
+  List<Object?> get props => [academicYears, classes, sections];
+}
+
+class StudentAttendanceRow extends Equatable {
+  const StudentAttendanceRow({
+    required this.id,
+    required this.fullName,
+    required this.status,
+    this.admissionNo,
+    this.rollNo,
+    this.note,
+    this.attendanceId,
+  });
+
+  final String id;
+  final String fullName;
+  final String status;
+  final String? admissionNo;
+  final String? rollNo;
+  final String? note;
+  final String? attendanceId;
+
+  StudentAttendanceRow copyWith({String? status, String? note}) {
+    return StudentAttendanceRow(
+      id: id,
+      fullName: fullName,
+      status: status ?? this.status,
+      admissionNo: admissionNo,
+      rollNo: rollNo,
+      note: note ?? this.note,
+      attendanceId: attendanceId,
+    );
+  }
+
+  @override
+  List<Object?> get props => [
+    id,
+    fullName,
+    status,
+    admissionNo,
+    rollNo,
+    note,
+    attendanceId,
+  ];
+}
+
+class StudentAttendanceSheet extends Equatable {
+  const StudentAttendanceSheet({
+    required this.date,
+    required this.students,
+    this.holiday,
+  });
+
+  final DateTime date;
+  final List<StudentAttendanceRow> students;
+  final StudentAttendanceHoliday? holiday;
+
+  bool get isHoliday => holiday != null;
+
+  @override
+  List<Object?> get props => [date, students, holiday];
+}
+
+class StudentAttendanceHoliday extends Equatable {
+  const StudentAttendanceHoliday({required this.id, this.reason});
+
+  final String id;
+  final String? reason;
+
+  @override
+  List<Object?> get props => [id, reason];
+}
+
+class StudentAttendanceQuery extends Equatable {
+  const StudentAttendanceQuery({
+    required this.academicSessionId,
+    required this.classId,
+    required this.sectionId,
+    required this.date,
+  });
+
+  final String academicSessionId;
+  final String classId;
+  final String sectionId;
+  final DateTime date;
+
+  @override
+  List<Object?> get props => [academicSessionId, classId, sectionId, date];
+}
+
+class StudentAttendanceSaveRequest extends Equatable {
+  const StudentAttendanceSaveRequest({
+    required this.query,
+    required this.markHoliday,
+    this.holidayReason,
+    this.records = const [],
+  });
+
+  final StudentAttendanceQuery query;
+  final bool markHoliday;
+  final String? holidayReason;
+  final List<StudentAttendanceRow> records;
+
+  @override
+  List<Object?> get props => [query, markHoliday, holidayReason, records];
+}

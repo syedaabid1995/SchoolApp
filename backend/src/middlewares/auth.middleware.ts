@@ -451,7 +451,14 @@ export const resolvePermissionForPath = (path: string, method = 'GET') => {
   if (pathOnly.startsWith('/api/v1/notifications/logs')) return P.settingsAccess;
   if (pathOnly.startsWith('/api/v1/notifications/summary')) return [P.dashboardOverview, P.supportView, P.plansView];
   if (pathOnly.startsWith('/api/v1/attendance/substitutions')) return P.attendanceSubstituteManage;
-  if (pathOnly.startsWith('/api/v1/attendance/summary')) return [P.attendanceView, P.attendanceReport];
+  if (pathOnly.startsWith('/api/v1/attendance/summary')) {
+    return [P.attendanceView, P.attendanceReport, P.staffAttendanceView, P.staffAttendanceReport];
+  }
+  if (pathOnly.startsWith('/api/v1/attendance/teacher/self')) {
+    return verb === 'POST'
+      ? [P.attendanceCreate, P.staffAttendanceCreate]
+      : [P.attendanceView, P.staffAttendanceView];
+  }
   if (pathOnly.startsWith('/api/v1/attendance/sessions')) {
     if (pathOnly.endsWith('/lock')) return P.attendanceEdit;
     if (verb === 'POST') return [P.attendanceCreate, P.attendanceEdit];
@@ -479,7 +486,7 @@ export const resolvePermissionForPath = (path: string, method = 'GET') => {
     { prefix: '/api/v1/schools', code: verb === 'GET' ? P.schoolOnboardingView : P.schoolOnboardingManage },
     { prefix: '/api/v1/teachers/onboarding', code: verb === 'GET' ? P.teacherOnboardingView : P.teacherOnboardingManage },
     { prefix: '/api/v1/teachers/', code: pathOnly.includes('/credentials/') ? P.teacherCredentialsManage : pathOnly.includes('/onboarding') ? (verb === 'GET' ? P.teacherOnboardingView : P.teacherOnboardingManage) : verb === 'POST' ? P.teachersAdd : teacherLookupPermissions },
-    { prefix: '/api/v1/academics/timetable/teacher', code: P.attendanceView },
+    { prefix: '/api/v1/academics/timetable/teacher', code: P.academicRoutineView },
     { prefix: '/api/v1/teachers', code: verb === 'POST' ? P.teachersAdd : teacherLookupPermissions },
     { prefix: '/api/v1/teacher-assignments', code: teacherLookupPermissions },
     { prefix: '/api/v1/academic-setup', code: verb === 'GET' ? academicLookupPermissions : P.academicsSetup },

@@ -43,7 +43,7 @@ class AssignedClassesScreen extends ConsumerWidget {
                     contentPadding: EdgeInsets.zero,
                     title: Text(item.name),
                     subtitle: Text(
-                      '${value.sectionsForClass(item.id).length} section(s) · ${value.subjectsForClass(item.id).length} subject(s)',
+                      '${value.sectionsForClass(item.id).length} section(s) · ${value.uniqueSubjectCountForClass(item.id)} subject(s)',
                     ),
                     trailing: const Icon(Icons.chevron_right),
                     onTap: () => Navigator.of(context).push(

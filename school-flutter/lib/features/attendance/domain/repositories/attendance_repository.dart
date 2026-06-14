@@ -10,4 +10,9 @@ abstract class AttendanceRepository {
     required String status,
     DateTime? date,
   });
+  Future<StudentAttendanceOptions> getStudentAttendanceOptions();
+  Future<StudentAttendanceSheet> loadStudentAttendance(
+    StudentAttendanceQuery query,
+  );
+  Future<void> saveStudentAttendance(StudentAttendanceSaveRequest request);
 }

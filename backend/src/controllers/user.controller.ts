@@ -231,7 +231,7 @@ export const listMyAssignedClassesApi = async (req: Request, res: Response) => {
   const { userId, schoolId, role } = requireCurrentSchool(req);
 
   const fetchAllSchoolData = async () => {
-    const [academicYears, classes, sections] = await Promise.all([
+    const [academicYears, classes, sections, subjects] = await Promise.all([
       prisma.academicYear.findMany({
         where: { schoolId },
         select: { id: true, name: true, isActive: true },
@@ -247,8 +247,18 @@ export const listMyAssignedClassesApi = async (req: Request, res: Response) => {
         select: { id: true, name: true, classId: true, classSections: { select: { classId: true } } },
         orderBy: { name: 'asc' },
       }),
+      prisma.assignSubject.findMany({
+        where: { schoolId },
+        include: {
+          class: { select: { id: true, name: true, academicYearId: true } },
+          section: { select: { id: true, name: true } },
+          subject: { select: { id: true, name: true, code: true, type: true, classId: true } },
+          teacher: { select: { id: true, firstName: true, lastName: true, employeeNo: true } },
+        },
+        orderBy: [{ class: { name: 'asc' } }, { section: { name: 'asc' } }, { subject: { name: 'asc' } }],
+      }),
     ]);
-    return { academicYears, classes, sections };
+    return { academicYears, classes, sections, subjects };
   };
 
   // Admins and principals always see all school classes
@@ -256,39 +266,37 @@ export const listMyAssignedClassesApi = async (req: Request, res: Response) => {
     return res.status(200).json(await fetchAllSchoolData());
   }
 
-  // For teachers: try their explicit class assignments first
+  // For teachers: use the same class-section-subject assignments shown in
+  // Academic Setup > Assign Multiple Subjects.
   const teacher = await prisma.teacherProfile.findFirst({
     where: { schoolId, userId, isActive: true },
     select: { id: true },
   });
 
   if (!teacher) {
-    return res.status(200).json(await fetchAllSchoolData());
+    return res.status(200).json({ academicYears: [], classes: [], sections: [], subjects: [] });
   }
 
-  const assignments = await prisma.teacherClassAssignment.findMany({
-    where: { teacherId: teacher.id },
-    select: {
-      classId: true,
-      sectionId: true,
+  const assignments = await prisma.assignSubject.findMany({
+    where: { schoolId, teacherId: teacher.id },
+    include: {
       class: { select: { id: true, name: true, academicYearId: true } },
       section: { select: { id: true, name: true } },
+      subject: { select: { id: true, name: true, code: true, type: true, classId: true } },
+      teacher: { select: { id: true, firstName: true, lastName: true, employeeNo: true } },
     },
+    orderBy: [{ class: { name: 'asc' } }, { section: { name: 'asc' } }, { subject: { name: 'asc' } }],
   });
 
-  // If teacher has no explicit class assignments, fall back to all school classes
-  // (same behaviour as the web admin attendance options endpoint)
   if (assignments.length === 0) {
-    return res.status(200).json(await fetchAllSchoolData());
+    return res.status(200).json({ academicYears: [], classes: [], sections: [], subjects: [] });
   }
 
   const classMap = new Map<string, { id: string; name: string; academicYearId: string | null }>();
   const sectionMap = new Map<string, { id: string; name: string; classId: string }>();
   for (const assignment of assignments) {
     classMap.set(assignment.classId, assignment.class);
-    if (assignment.sectionId && assignment.section) {
-      sectionMap.set(assignment.sectionId, { ...assignment.section, classId: assignment.classId });
-    }
+    sectionMap.set(assignment.sectionId, { ...assignment.section, classId: assignment.classId });
   }
 
   const academicYearIds = [...new Set([...classMap.values()].map((c) => c.academicYearId).filter(Boolean))] as string[];
@@ -309,6 +317,7 @@ export const listMyAssignedClassesApi = async (req: Request, res: Response) => {
       classId: s.classId,
       classSections: [{ classId: s.classId }],
     })),
+    subjects: assignments,
   });
 };
 

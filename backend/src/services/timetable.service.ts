@@ -28,7 +28,7 @@ const toDateOnly = (value: string | Date) => {
 
 const toDayOfWeek = (date: Date) => {
   const day = date.getUTCDay();
-  return day === 0 ? 7 : day;
+  return day === 6 ? 1 : day + 2;
 };
 
 export const createTimetableVersion = async (params: {
@@ -632,7 +632,7 @@ export const getTeacherTimetableByDate = async (params: {
   });
   const dayOfWeek = toDayOfWeek(date);
 
-  const version = await prisma.timetableVersion.findFirst({
+  const publishedVersion = await prisma.timetableVersion.findFirst({
     where: {
       schoolId: params.schoolId,
       academicYearId: academicYear.id,
@@ -643,6 +643,17 @@ export const getTeacherTimetableByDate = async (params: {
     orderBy: [{ publishedAt: 'desc' }, { createdAt: 'desc' }],
     select: { id: true, name: true, publishedAt: true },
   });
+  const version =
+    publishedVersion ??
+    (await prisma.timetableVersion.findFirst({
+      where: {
+        schoolId: params.schoolId,
+        academicYearId: academicYear.id,
+        status: 'DRAFT',
+      },
+      orderBy: { createdAt: 'desc' },
+      select: { id: true, name: true, publishedAt: true },
+    }));
 
   if (!version) {
     return {

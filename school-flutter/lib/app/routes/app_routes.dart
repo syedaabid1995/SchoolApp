@@ -5,6 +5,7 @@ class AppRoutes {
   static const login = '/login';
   static const dashboard = '/dashboard';
   static const attendance = '/attendance';
+  static const studentAttendance = '/student-attendance';
   static const timetable = '/timetable';
   static const notifications = '/notifications';
   static const profile = '/profile';

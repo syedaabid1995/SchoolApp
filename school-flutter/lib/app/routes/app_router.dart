@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../features/attendance/presentation/screens/attendance_home_screen.dart';
+import '../../features/attendance/presentation/screens/student_attendance_screen.dart';
 import '../../features/auth/presentation/providers/auth_controller.dart';
 import '../../features/auth/presentation/screens/login_screen.dart';
 import '../../features/auth/presentation/screens/splash_screen.dart';
@@ -51,7 +52,7 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       final isAuthenticated = session?.isAuthenticated ?? false;
 
       if (!isAuthenticated && !isLogin && !isSplash) return AppRoutes.login;
-      if (isAuthenticated && (isLogin || isSplash)) return AppRoutes.dashboard;
+      if (isAuthenticated && (isLogin || isSplash)) return AppRoutes.attendance;
       if (!auth.isLoading && !isAuthenticated && isSplash) {
         return AppRoutes.login;
       }
@@ -96,6 +97,10 @@ final appRouterProvider = Provider<GoRouter>((ref) {
           GoRoute(
             path: AppRoutes.attendance,
             builder: (context, state) => const TeacherAttendanceHomeScreen(),
+          ),
+          GoRoute(
+            path: AppRoutes.studentAttendance,
+            builder: (context, state) => const StudentAttendanceScreen(),
           ),
           GoRoute(
             path: AppRoutes.timetable,
