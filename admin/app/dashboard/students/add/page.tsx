@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useMutation, useQuery } from '@tanstack/react-query';
 import { useRouter } from 'next/navigation';
 import FullPageLoader from '../../../../components/FullPageLoader';
@@ -180,6 +180,12 @@ export default function AddStudentPage() {
   const canCreateStudent = isSchoolAdmin || permissionCodes.includes('students.add') || permissionCodes.includes('student.create');
 
   const yearsQuery = useQuery({ queryKey: ['academic-years'], queryFn: () => listAcademicYears(), enabled: canCreateStudent });
+  useEffect(() => {
+    const years = yearsQuery.data ?? [];
+    if (!years.length || form.academicSessionId) return;
+    const active = years.find((y: any) => y.isActive) ?? years[0];
+    if (active) setValue('academicSessionId', active.id);
+  }, [yearsQuery.data]);
   const classesQuery = useQuery({ queryKey: ['setup-classes'], queryFn: () => listSetupClasses(), enabled: canCreateStudent });
   const sectionsQuery = useQuery({ queryKey: ['setup-sections'], queryFn: () => listSetupSections(), enabled: canCreateStudent });
   const systemSettingsQuery = useQuery({
@@ -194,12 +200,12 @@ export default function AddStudentPage() {
   });
   const feeMastersQuery = useQuery({
     queryKey: ['admission-fee-masters', form.academicSessionId],
-    queryFn: () => listFeeMasters({ academicSessionId: form.academicSessionId, status: 'ACTIVE', limit: 1000 }),
+    queryFn: () => listFeeMasters({ academicSessionId: form.academicSessionId, status: 'ACTIVE', limit: 100 }),
     enabled: canCreateStudent && Boolean(form.academicSessionId),
   });
   const feeDiscountsQuery = useQuery({
     queryKey: ['admission-fee-discounts', form.academicSessionId],
-    queryFn: () => listFeeDiscounts({ academicSessionId: form.academicSessionId, limit: 200 }),
+    queryFn: () => listFeeDiscounts({ academicSessionId: form.academicSessionId, limit: 100 }),
     enabled: canCreateStudent && Boolean(form.academicSessionId),
   });
   const siblingsQuery = useQuery({
@@ -261,7 +267,7 @@ export default function AddStudentPage() {
   const rawDiscountTotal = useMemo(
     () =>
       selectedDiscounts.reduce((sum, discount) => {
-        const value = toAmount(discount.amount ?? discount.value);
+        const value = discount.valueType === 'PERCENTAGE' ? toAmount(discount.value) : toAmount(discount.amount ?? discount.value);
         return sum + (discount.valueType === 'PERCENTAGE' ? (feeSubTotal * value) / 100 : value);
       }, 0),
     [selectedDiscounts, feeSubTotal],
@@ -619,7 +625,7 @@ export default function AddStudentPage() {
                 <Field label="Session" required>
                   <select value={form.academicSessionId} onChange={(event) => setValue('academicSessionId', event.target.value)} className={inputClass}>
                     <option value="">Select session</option>
-                    {(yearsQuery.data ?? []).map((year: any) => <option key={year.id} value={year.id}>{year.name}</option>)}
+                    {(yearsQuery.data ?? []).map((year: any) => <option key={year.id} value={year.id}>{year.name}{year.isActive ? ' (Active)' : ''}</option>)}
                   </select>
                 </Field>
                 <Field label="Class" required>
@@ -677,12 +683,12 @@ export default function AddStudentPage() {
                     </thead>
                     <tbody className="divide-y divide-slate-100 bg-white">
                       {feeMasters.map((master) => (
-                        <tr key={master.id} className={form.feeGroupIds.includes(master.id) ? 'bg-violet-50/50' : undefined}>
+                        <tr key={master.id} className={form.feeGroupIds.includes(master.feeGroupId) ? 'bg-violet-50/50' : undefined}>
                           <td className="px-4 py-3">
                             <input
                               type="checkbox"
-                              checked={form.feeGroupIds.includes(master.id)}
-                              onChange={() => toggleFeeGroup(master.id)}
+                              checked={form.feeGroupIds.includes(master.feeGroupId)}
+                              onChange={() => toggleFeeGroup(master.feeGroupId)}
                             />
                           </td>
                           <td className="px-4 py-3 font-bold text-slate-900">{master.name}</td>
