@@ -1,4 +1,6 @@
 import { api } from '../lib/api';
+import { env } from '../lib/env';
+import { resolveUploadUrl as resolveUploadUrlWithBase, type SignedUploadAssetRef } from './upload-url';
 
 export type StaffRole = 'SCHOOL_ADMIN' | 'TEACHER' | 'ACCOUNTANT' | 'LIBRARIAN' | 'STAFF';
 export type StaffAttendanceStatus = 'PRESENT' | 'LATE' | 'ABSENT' | 'HOLIDAY' | 'HALF_DAY' | 'LEAVE';
@@ -191,6 +193,9 @@ export const getStaff = async (id: string) => {
   const { data } = await api.get<Staff>(`/staff/${id}`);
   return data;
 };
+
+export const resolveStaffUploadUrl = (value?: string | null, asset?: SignedUploadAssetRef | null) =>
+  resolveUploadUrlWithBase(value, asset, env.apiBaseUrl);
 
 export const updateStaff = async (id: string, payload: Partial<StaffPayload>) => {
   const { data } = await api.patch<Staff>(`/staff/${id}`, payload);

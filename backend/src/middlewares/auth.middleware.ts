@@ -167,38 +167,15 @@ const studentLookupPermissions = [
   P.reportsFeesView,
 ];
 
-const academicLookupPermissions = [
-  P.academicsSetup,
-  P.studentView,
-  P.studentsList,
-  P.studentsAdd,
-  P.attendanceView,
-  P.attendanceCreate,
-  P.attendanceReport,
-  P.staffAttendanceView,
-  P.staffAttendanceCreate,
-  P.dormitoryView,
-  P.transportView,
-  P.libraryView,
-  P.homeworkView,
-  P.feesAssignmentsView,
-  P.feesInvoiceGenerateView,
-  P.feesCollectionView,
-  P.examCenterView,
-  P.examRoomView,
-  P.examSeatingView,
-  P.examInvigilatorView,
-  P.examHallticketView,
-  P.academicsExams,
-  P.academicsMarks,
-  P.reportsView,
-  P.reportsStudentsView,
-  P.reportsAttendanceView,
-  P.reportsAcademicsView,
-  P.reportsExamsView,
-  P.reportsTransportView,
-  P.reportsDormitoryView,
-  P.reportsFeesView,
+const academicReadPermissions = [
+  P.academicClassView,
+  P.academicSectionView,
+  P.academicSubjectView,
+  P.academicRoomView,
+  P.academicTimeView,
+  P.academicAssignSubjectView,
+  P.academicClassTeacherView,
+  P.academicRoutineView,
 ];
 
 const teacherLookupPermissions = [
@@ -221,28 +198,177 @@ const teacherLookupPermissions = [
   P.reportsExamsView,
 ];
 
-const staffLookupPermissions = [
-  P.staffView,
-  P.teachersList,
-  P.staffAttendanceView,
-  P.staffAttendanceCreate,
-  P.transportView,
-  P.academicAssignSubjectView,
-  P.academicAssignSubjectCreate,
-  P.academicClassTeacherView,
-  P.academicClassTeacherCreate,
-  P.academicRoutineView,
-  P.academicRoutineCreate,
-  P.examInvigilatorView,
-  P.examInvigilatorManage,
-  P.idcardsView,
-  P.payrollView,
-  P.payrollGenerate,
-  P.reportsView,
-  P.reportsStaffView,
-  P.reportsPayrollView,
-  P.reportsTransportView,
-];
+const crudPermissionForVerb = (
+  verb: string,
+  permissions: { view: PermissionCode; create: PermissionCode; edit: PermissionCode; delete: PermissionCode },
+) => {
+  if (verb === 'POST') return permissions.create;
+  if (verb === 'PATCH' || verb === 'PUT') return permissions.edit;
+  if (verb === 'DELETE') return permissions.delete;
+  return permissions.view;
+};
+
+const academicSetupPermissionForPath = (pathOnly: string, verb: string): PermissionRequirement | null => {
+  const routePermissions: Array<{
+    prefix: string;
+    permissions: { view: PermissionCode; create: PermissionCode; edit: PermissionCode; delete: PermissionCode };
+  }> = [
+    {
+      prefix: '/api/v1/academic-setup/classes',
+      permissions: {
+        view: P.academicClassView,
+        create: P.academicClassCreate,
+        edit: P.academicClassEdit,
+        delete: P.academicClassDelete,
+      },
+    },
+    {
+      prefix: '/api/v1/academic-setup/sections',
+      permissions: {
+        view: P.academicSectionView,
+        create: P.academicSectionCreate,
+        edit: P.academicSectionEdit,
+        delete: P.academicSectionDelete,
+      },
+    },
+    {
+      prefix: '/api/v1/academic-setup/subjects',
+      permissions: {
+        view: P.academicSubjectView,
+        create: P.academicSubjectCreate,
+        edit: P.academicSubjectEdit,
+        delete: P.academicSubjectDelete,
+      },
+    },
+    {
+      prefix: '/api/v1/academic-setup/rooms',
+      permissions: {
+        view: P.academicRoomView,
+        create: P.academicRoomCreate,
+        edit: P.academicRoomEdit,
+        delete: P.academicRoomDelete,
+      },
+    },
+    {
+      prefix: '/api/v1/academic-setup/time-periods',
+      permissions: {
+        view: P.academicTimeView,
+        create: P.academicTimeCreate,
+        edit: P.academicTimeEdit,
+        delete: P.academicTimeDelete,
+      },
+    },
+    {
+      prefix: '/api/v1/academic-setup/assign-subjects',
+      permissions: {
+        view: P.academicAssignSubjectView,
+        create: P.academicAssignSubjectCreate,
+        edit: P.academicAssignSubjectEdit,
+        delete: P.academicAssignSubjectDelete,
+      },
+    },
+    {
+      prefix: '/api/v1/academic-setup/class-teachers',
+      permissions: {
+        view: P.academicClassTeacherView,
+        create: P.academicClassTeacherCreate,
+        edit: P.academicClassTeacherEdit,
+        delete: P.academicClassTeacherDelete,
+      },
+    },
+    {
+      prefix: '/api/v1/academic-setup/routines',
+      permissions: {
+        view: P.academicRoutineView,
+        create: P.academicRoutineCreate,
+        edit: P.academicRoutineEdit,
+        delete: P.academicRoutineDelete,
+      },
+    },
+  ];
+
+  const matched = routePermissions.find((entry) => pathOnly.startsWith(entry.prefix));
+  if (matched) return crudPermissionForVerb(verb, matched.permissions);
+  if (pathOnly.startsWith('/api/v1/academic-setup')) {
+    return verb === 'GET' ? academicReadPermissions : P.academicsSetup;
+  }
+  return null;
+};
+
+const academicApiPermissionForPath = (pathOnly: string, verb: string): PermissionRequirement | null => {
+  if (!pathOnly.startsWith('/api/v1/academics')) return null;
+
+  if (pathOnly.startsWith('/api/v1/academics/timetable/teacher')) return P.academicRoutineView;
+  if (pathOnly.startsWith('/api/v1/academics/timetable/teachers')) return P.academicRoutineView;
+  if (/^\/api\/v1\/academics\/timetable\/versions\/[^/]+\/publish$/.test(pathOnly)) {
+    return P.academicRoutineEdit;
+  }
+  if (pathOnly.startsWith('/api/v1/academics/timetable/versions')) {
+    return verb === 'POST' ? P.academicRoutineCreate : P.academicRoutineView;
+  }
+  if (pathOnly.startsWith('/api/v1/academics/timetable/entries/generate')) return P.academicRoutineCreate;
+  if (pathOnly.startsWith('/api/v1/academics/timetable/entries/bulk')) return P.academicRoutineEdit;
+  if (pathOnly.startsWith('/api/v1/academics/timetable/entries')) {
+    if (verb === 'POST') return P.academicRoutineCreate;
+    if (verb === 'PATCH' || verb === 'PUT') return P.academicRoutineEdit;
+    if (verb === 'DELETE') return P.academicRoutineDelete;
+    return P.academicRoutineView;
+  }
+
+  const routePermissions: Array<{
+    prefix: string;
+    permissions: { view: PermissionCode; create: PermissionCode; edit: PermissionCode; delete: PermissionCode };
+  }> = [
+    {
+      prefix: '/api/v1/academics/classes',
+      permissions: {
+        view: P.academicClassView,
+        create: P.academicClassCreate,
+        edit: P.academicClassEdit,
+        delete: P.academicClassDelete,
+      },
+    },
+    {
+      prefix: '/api/v1/academics/sections',
+      permissions: {
+        view: P.academicSectionView,
+        create: P.academicSectionCreate,
+        edit: P.academicSectionEdit,
+        delete: P.academicSectionDelete,
+      },
+    },
+    {
+      prefix: '/api/v1/academics/subjects',
+      permissions: {
+        view: P.academicSubjectView,
+        create: P.academicSubjectCreate,
+        edit: P.academicSubjectEdit,
+        delete: P.academicSubjectDelete,
+      },
+    },
+    {
+      prefix: '/api/v1/academics/attendance-periods',
+      permissions: {
+        view: P.academicTimeView,
+        create: P.academicTimeCreate,
+        edit: P.academicTimeEdit,
+        delete: P.academicTimeDelete,
+      },
+    },
+  ];
+
+  const matched = routePermissions.find((entry) => pathOnly.startsWith(entry.prefix));
+  if (matched) return crudPermissionForVerb(verb, matched.permissions);
+
+  if (pathOnly.startsWith('/api/v1/academics/attendance-mode')) {
+    return verb === 'GET' ? P.academicTimeView : P.academicTimeEdit;
+  }
+  if (pathOnly.startsWith('/api/v1/academics/exam-types')) return P.academicsExams;
+  if (pathOnly.startsWith('/api/v1/academics/academic-years') || pathOnly.startsWith('/api/v1/academics/terms')) {
+    return verb === 'GET' ? P.academicClassView : P.academicsSetup;
+  }
+  return verb === 'GET' ? academicReadPermissions : P.academicsSetup;
+};
 
 export const resolvePermissionForPath = (path: string, method = 'GET') => {
   const pathOnly = path.split('?')[0] ?? path;
@@ -312,8 +438,13 @@ export const resolvePermissionForPath = (path: string, method = 'GET') => {
     if (verb === 'POST') return P.staffCreate;
     if (verb === 'PATCH' || verb === 'PUT') return P.staffEdit;
     if (verb === 'DELETE') return P.staffDelete;
-    return staffLookupPermissions;
+    return P.staffView;
   }
+
+  const academicSetupPermission = academicSetupPermissionForPath(pathOnly, verb);
+  if (academicSetupPermission) return academicSetupPermission;
+  const academicApiPermission = academicApiPermissionForPath(pathOnly, verb);
+  if (academicApiPermission) return academicApiPermission;
 
   if (pathOnly.startsWith('/api/v1/fees')) {
     if (pathOnly.startsWith('/api/v1/fees/metadata')) return P.feesOverviewView;
@@ -434,23 +565,15 @@ export const resolvePermissionForPath = (path: string, method = 'GET') => {
   if (pathOnly.startsWith('/api/v1/uploads/branding')) return P.settingsAccess;
   if (pathOnly.startsWith('/api/v1/uploads/photos')) return [P.studentDocumentCreate, P.staffDocumentCreate];
   if (pathOnly.startsWith('/api/v1/uploads/documents')) return P.studentDocumentCreate;
-  if (pathOnly.startsWith('/api/v1/uploads/signed')) {
-    return [
-      P.studentView,
-      P.studentsList,
-      P.studentDocumentView,
-      P.staffView,
-      P.staffDocumentView,
-      P.settingsAccess,
-      P.reportsView,
-      P.dashboardOverview,
-    ];
-  }
+  if (pathOnly.startsWith('/api/v1/uploads/signed')) return [P.studentDocumentView, P.staffDocumentView, P.attendanceView];
   if (pathOnly.startsWith('/api/v1/notifications/templates')) return P.settingsAccess;
   if (pathOnly.startsWith('/api/v1/notifications/send')) return P.settingsAccess;
   if (pathOnly.startsWith('/api/v1/notifications/logs')) return P.settingsAccess;
   if (pathOnly.startsWith('/api/v1/notifications/summary')) return [P.dashboardOverview, P.supportView, P.plansView];
   if (pathOnly.startsWith('/api/v1/attendance/substitutions')) return P.attendanceSubstituteManage;
+  if (pathOnly.startsWith('/api/v1/attendance/evidence')) {
+    return verb === 'POST' ? [P.attendanceCreate, P.attendanceEdit] : P.attendanceView;
+  }
   if (pathOnly.startsWith('/api/v1/attendance/summary')) {
     return [P.attendanceView, P.attendanceReport, P.staffAttendanceView, P.staffAttendanceReport];
   }
@@ -480,6 +603,9 @@ export const resolvePermissionForPath = (path: string, method = 'GET') => {
     return P.attendanceView;
   }
   if (pathOnly.startsWith('/api/v1/attendance-approval')) return P.attendanceEdit;
+  if (pathOnly.startsWith('/api/v1/jobs')) return P.jobsView;
+  // /api/v1/users/:id is identity-aware: self access is enforced in the controller.
+  if (/^\/api\/v1\/users\/[^/]+$/.test(pathOnly)) return null;
 
   const targets: Array<{ prefix: string; code: PermissionRequirement }> = [
     { prefix: '/api/v1/ai-assistant', code: P.aiAssistantUse },
@@ -489,7 +615,6 @@ export const resolvePermissionForPath = (path: string, method = 'GET') => {
     { prefix: '/api/v1/academics/timetable/teacher', code: P.academicRoutineView },
     { prefix: '/api/v1/teachers', code: verb === 'POST' ? P.teachersAdd : teacherLookupPermissions },
     { prefix: '/api/v1/teacher-assignments', code: teacherLookupPermissions },
-    { prefix: '/api/v1/academic-setup', code: verb === 'GET' ? academicLookupPermissions : P.academicsSetup },
     { prefix: '/api/v1/dormitories', code: P.dormitoryView },
     { prefix: '/api/v1/transport', code: P.transportView },
     { prefix: '/api/v1/homework', code: P.homeworkView },
@@ -499,7 +624,6 @@ export const resolvePermissionForPath = (path: string, method = 'GET') => {
     { prefix: '/api/v1/attendance-summary', code: P.attendanceView },
     { prefix: '/api/v1/attendance-approval', code: P.attendanceView },
     { prefix: '/api/v1/leave', code: P.leaveApplyView },
-    { prefix: '/api/v1/academics', code: verb === 'GET' ? academicLookupPermissions : P.academicsSetup },
     { prefix: '/api/v1/exams', code: P.academicsExams },
     { prefix: '/api/v1/users/school-users', code: P.settingsAccess },
     { prefix: '/api/v1/users/employee-permissions', code: P.settingsAccess },

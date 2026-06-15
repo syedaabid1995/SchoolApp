@@ -18,6 +18,7 @@ import { AuthorizationService } from '../services/authorization.service';
 import { PermissionCacheService } from '../services/permissionCache.service';
 import { timetableReadService } from '../modules/timetable/services/timetable-read.service';
 import { toLegacyClassRoutineRow } from '../modules/timetable/services/timetable-response-mapper';
+import { PermissionCodes as P } from '../permissions/permission-manifest';
 
 const bankDetailsSchema = z
   .object({
@@ -458,11 +459,6 @@ export const getUserById = async (req: Request, res: Response) => {
     throw new HttpError(401, 'Unauthorized');
   }
 
-  const requester = await prisma.user.findUnique({
-    where: { id: req.auth.userId },
-    select: { id: true, schoolId: true },
-  });
-
   const user = await prisma.user.findUnique({
     where: { id: req.params.id },
     select: {
@@ -480,20 +476,21 @@ export const getUserById = async (req: Request, res: Response) => {
     throw new HttpError(404, 'User not found');
   }
 
-  const requesterSchoolId = requester?.schoolId ?? null;
-  const isSuperAdmin = requesterSchoolId === null;
-  const sameSchoolUser = requesterSchoolId && user.schoolId === requesterSchoolId;
-  const hasParentProfileInSchool = requesterSchoolId
-    ? await prisma.studentParent.findFirst({
-        where: {
-          parent: { userId: user.id },
-          student: { schoolId: requesterSchoolId },
-        },
-        select: { studentId: true },
-      })
-    : null;
+  const requesterRoles = await prisma.userRole.findMany({
+    where: { userId: req.auth.userId },
+    select: { role: { select: { name: true } } },
+  });
+  const requesterRoleNames = requesterRoles.map((entry) => entry.role.name);
+  const requesterSchoolId = req.auth.schoolId ?? null;
+  const isSelf = user.id === req.auth.userId;
+  const isSuperAdmin = requesterRoleNames.includes('SUPER_ADMIN');
+  const sameSchoolUser = Boolean(requesterSchoolId && user.schoolId === requesterSchoolId);
+  const isSchoolAdmin = requesterRoleNames.includes('SCHOOL_ADMIN') && sameSchoolUser;
+  const hasSettingsAccess = sameSchoolUser
+    ? await AuthorizationService.hasAnyEffectivePermission(req.auth, P.settingsAccess)
+    : false;
 
-  if (!isSuperAdmin && !sameSchoolUser && !hasParentProfileInSchool) {
+  if (!isSelf && !isSuperAdmin && !isSchoolAdmin && !hasSettingsAccess) {
     throw new HttpError(403, 'Forbidden');
   }
 

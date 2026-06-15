@@ -11,6 +11,8 @@ import { logAudit } from '../utils/audit';
 import { uploadBuffer } from '../services/s3.service';
 import { enforceLimits, incrementUsage } from '../services/subscription.service';
 import { attendanceReadService } from '../modules/attendance/services/attendance-read.service';
+import { AuthorizationService } from '../services/authorization.service';
+import { PermissionCodes as P } from '../permissions/permission-manifest';
 
 const staffRoles = ['SCHOOL_ADMIN', 'TEACHER', 'ACCOUNTANT', 'LIBRARIAN', 'STAFF'] as const;
 const attendanceStatuses = ['PRESENT', 'LATE', 'ABSENT', 'HOLIDAY', 'HALF_DAY', 'LEAVE'] as const;
@@ -161,25 +163,86 @@ const staffInclude = {
   socialLinks: true,
 } satisfies Prisma.TeacherProfileInclude;
 
-const formatStaff = (staff: any) => ({
-  ...staff,
-  user: staff.user
+const canViewPayrollProjection = async (req: Request) => {
+  if (!req.auth?.schoolId) return false;
+  return AuthorizationService.hasAnyEffectivePermission(req.auth, [
+    P.payrollView,
+    P.payrollReport,
+    P.payrollGenerate,
+    P.payrollPay,
+  ]);
+};
+
+const formatUserSummary = (user: any) =>
+  user
     ? {
-        id: staff.user.id,
-        email: staff.user.email,
-        status: staff.user.status,
-        roles: staff.user.roles,
+        id: user.id,
+        email: user.email,
+        status: user.status,
+        roles: user.roles,
       }
-    : staff.user,
-  role: staff.user?.roles?.[0]?.role?.name ?? staff.roleName,
-  staffNo: staff.employeeNo,
-  fullName: `${staff.firstName ?? ''} ${staff.lastName ?? ''}`.trim(),
-  bankInfo: staff.bankDetails ?? null,
-  leaveBalances: staff.leaveBalances?.map((balance: any) => ({
+    : user;
+
+const formatLeaveBalances = (balances: any[] | undefined) =>
+  balances?.map((balance: any) => ({
     ...balance,
     remainingDays: Math.max(0, Number(balance.totalDays ?? 0) - Number(balance.usedDays ?? 0)),
-  })),
-});
+  }));
+
+const formatStaff = (staff: any, options: { includeSensitive?: boolean } = {}) => {
+  const safe = {
+    id: staff.id,
+    userId: staff.userId,
+    schoolId: staff.schoolId,
+    employeeNo: staff.employeeNo,
+    staffNo: staff.employeeNo,
+    firstName: staff.firstName,
+    lastName: staff.lastName,
+    fullName: `${staff.firstName ?? ''} ${staff.lastName ?? ''}`.trim(),
+    roleName: staff.roleName,
+    role: staff.user?.roles?.[0]?.role?.name ?? staff.roleName,
+    phone: staff.phone,
+    photoUrl: staff.photoUrl,
+    department: staff.department ?? null,
+    designation: staff.designation ?? null,
+    user: formatUserSummary(staff.user),
+    contact: {
+      email: staff.user?.email ?? null,
+      phone: staff.phone ?? null,
+    },
+    isActive: staff.isActive,
+    createdAt: staff.createdAt,
+    updatedAt: staff.updatedAt,
+  };
+
+  if (!options.includeSensitive) return safe;
+
+  return {
+    ...safe,
+    fatherName: staff.fatherName ?? null,
+    motherName: staff.motherName ?? null,
+    gender: staff.gender ?? null,
+    dateOfBirth: staff.dateOfBirth ?? null,
+    dateOfJoining: staff.dateOfJoining ?? null,
+    emergencyMobile: staff.emergencyMobile ?? null,
+    drivingLicense: staff.drivingLicense ?? null,
+    address: staff.address ?? null,
+    currentAddress: staff.currentAddress ?? null,
+    permanentAddress: staff.permanentAddress ?? null,
+    qualifications: staff.qualifications ?? null,
+    experience: staff.experience ?? null,
+    maritalStatus: staff.maritalStatus ?? null,
+    socialLinks: staff.socialLinks ?? [],
+    documents: staff.documents,
+    timelines: staff.timelines,
+    leaveApplications: staff.leaveApplications,
+    leaveBalances: formatLeaveBalances(staff.leaveBalances),
+    payrolls: staff.payrolls,
+    payrollInfo: staff.payrollInfo ?? null,
+    bankDetails: staff.bankDetails ?? null,
+    bankInfo: staff.bankDetails ?? null,
+  };
+};
 
 const assertDepartmentScope = async (schoolId: string, departmentId?: string | null, designationId?: string | null) => {
   if (departmentId) {
@@ -417,7 +480,14 @@ export const listStaff = async (req: Request, res: Response) => {
     prisma.teacherProfile.findMany({ where, include: staffInclude, orderBy: { createdAt: 'desc' }, skip, take: query.limit }),
     prisma.teacherProfile.count({ where }),
   ]);
-  res.status(200).json({ items: items.map(formatStaff), page: query.page, limit: query.limit, total, pages: Math.ceil(total / query.limit) });
+  const includeSensitive = await canViewPayrollProjection(req);
+  res.status(200).json({
+    items: items.map((item) => formatStaff(item, { includeSensitive })),
+    page: query.page,
+    limit: query.limit,
+    total,
+    pages: Math.ceil(total / query.limit),
+  });
 };
 
 export const createStaff = async (req: Request, res: Response) => {
@@ -500,7 +570,8 @@ export const createStaff = async (req: Request, res: Response) => {
   });
 
   const staff = await prisma.teacherProfile.findFirst({ where: { id: result.staff.id, schoolId }, include: staffInclude });
-  res.status(201).json({ staff: formatStaff(staff), tempPassword: payload.password ? null : tempPassword });
+  const includeSensitive = await canViewPayrollProjection(req);
+  res.status(201).json({ staff: formatStaff(staff, { includeSensitive }), tempPassword: payload.password ? null : tempPassword });
 };
 
 export const getStaff = async (req: Request, res: Response) => {
@@ -517,7 +588,8 @@ export const getStaff = async (req: Request, res: Response) => {
     },
   });
   if (!staff) throw new HttpError(404, 'Staff not found');
-  res.status(200).json(formatStaff(staff));
+  const includeSensitive = await canViewPayrollProjection(req);
+  res.status(200).json(formatStaff(staff, { includeSensitive }));
 };
 
 export const updateStaff = async (req: Request, res: Response) => {
@@ -814,7 +886,11 @@ export const listPayroll = async (req: Request, res: Response) => {
     include: { ...staffInclude, payrolls: { where: { month: query.month, year: query.year }, include: { payments: true } } },
     orderBy: [{ firstName: 'asc' }, { lastName: 'asc' }],
   });
-  res.status(200).json(staff.map((item) => ({ staff: formatStaff(item), payroll: item.payrolls[0] ?? null, status: item.payrolls[0] ? item.payrolls[0].status : 'NOT_GENERATED' })));
+  res.status(200).json(staff.map((item) => ({
+    staff: formatStaff(item, { includeSensitive: true }),
+    payroll: item.payrolls[0] ?? null,
+    status: item.payrolls[0] ? item.payrolls[0].status : 'NOT_GENERATED',
+  })));
 };
 
 const amountRowsSchema = z.array(z.object({ title: z.string().trim().min(1).max(120), amount: z.coerce.number().min(0) })).default([]);
@@ -932,5 +1008,8 @@ export const getPayrollReport = async (req: Request, res: Response) => {
     }),
     { basicSalary: 0, earnings: 0, deductions: 0, grossSalary: 0, tax: 0, netSalary: 0 },
   );
-  res.status(200).json({ items: payrolls.map((item) => ({ ...item, staff: formatStaff(item.staff) })), totals });
+  res.status(200).json({
+    items: payrolls.map((item) => ({ ...item, staff: formatStaff(item.staff, { includeSensitive: true }) })),
+    totals,
+  });
 };

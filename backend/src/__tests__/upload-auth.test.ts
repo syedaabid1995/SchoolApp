@@ -2,7 +2,12 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
   SCHOOL_A_ID,
+  STUDENT_A_ID,
+  TEST_STAFF_DOCUMENT_A_ID,
+  TEST_STUDENT_DOCUMENT_A_ID,
+  TEST_STUDENT_PHOTO_A_ID,
   closeBackgroundHandles,
+  expectForbidden,
   expectNoSensitiveFields,
   expectUnauthorized,
   getUser,
@@ -49,6 +54,41 @@ test('signed upload URL rejects unsafe keys', async () => {
   assert.equal(absolute.status, 400);
   expectNoSensitiveFields(traversal.body);
   expectNoSensitiveFields(absolute.body);
+});
+
+test('signed upload URL signs authorized database-backed assets', async () => {
+  const response = await server.request('GET', `/api/v1/uploads/signed?type=student-document&id=${TEST_STUDENT_DOCUMENT_A_ID}`, {
+    user: getUser('SCHOOL_ADMIN', SCHOOL_A_ID),
+  });
+
+  assert.equal(response.status, 302);
+  assert.match(response.headers.get('location') ?? '', /^https:\/\/signed\.test\//);
+});
+
+test('signed upload URL signs student photo records without raw keys', async () => {
+  const response = await server.request('GET', `/api/v1/uploads/signed?type=student-photo&id=${TEST_STUDENT_PHOTO_A_ID}`, {
+    user: getUser('SCHOOL_ADMIN', SCHOOL_A_ID),
+  });
+
+  assert.equal(response.status, 302);
+  assert.match(response.headers.get('location') ?? '', /^https:\/\/signed\.test\//);
+});
+
+test('signed upload URL signs legacy scalar student photos by student record id', async () => {
+  const response = await server.request('GET', `/api/v1/uploads/signed?type=student-photo&id=${STUDENT_A_ID}`, {
+    user: getUser('SCHOOL_ADMIN', SCHOOL_A_ID),
+  });
+
+  assert.equal(response.status, 302);
+  assert.match(response.headers.get('location') ?? '', /^https:\/\/signed\.test\//);
+});
+
+test('Teacher cannot sign staff documents without staff document permission', async () => {
+  const response = await server.request('GET', `/api/v1/uploads/signed?type=staff-document&id=${TEST_STAFF_DOCUMENT_A_ID}`, {
+    user: getUser('TEACHER', SCHOOL_A_ID),
+  });
+
+  expectForbidden(response);
 });
 
 test('signed upload URL does not expose AWS credentials in JSON errors', async () => {

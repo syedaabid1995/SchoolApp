@@ -5,7 +5,7 @@ import { useMemo, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { useQuery } from '@tanstack/react-query';
 import { getSession } from '../../../services/auth.service';
-import { listStudents, getStudent, resolveUploadUrl } from '../../../services/student.service';
+import { getStudent, getStudentPhotoAsset, listStudents, resolveUploadUrl } from '../../../services/student.service';
 import { listTeachers, getTeacher } from '../../../services/teacher.service';
 import IdCardPreview from '../../../id_cards/IdCardPreview';
 import type { IdCardRecord, IdCardTemplate } from '../../../id_cards/types';
@@ -98,7 +98,11 @@ export default function IdCardsPage() {
     return null;
   }, [entity, selectedStudent, selectedTeacher, session?.schoolName]);
 
-  const photoUrl = resolveUploadUrl(selectedRecord?.photoUrl ?? null);
+  const selectedStudentPhoto = getStudentPhotoAsset(selectedStudent);
+  const photoUrl =
+    entity === 'student'
+      ? resolveUploadUrl(selectedStudentPhoto.value, selectedStudentPhoto.asset)
+      : resolveUploadUrl(selectedRecord?.photoUrl ?? null);
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-violet-50/30 to-purple-50/40">

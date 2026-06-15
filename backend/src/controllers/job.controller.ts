@@ -23,6 +23,13 @@ export const getJobStatus = async (req: Request, res: Response) => {
     throw new HttpError(404, 'Job not found');
   }
 
+  if (req.auth?.schoolId) {
+    const data = job.data as { schoolId?: unknown } | undefined;
+    if (data?.schoolId !== req.auth.schoolId) {
+      throw new HttpError(403, 'Forbidden');
+    }
+  }
+
   const state = await job.getState();
   const progress = await job.progress;
   const result = await job.returnvalue;

@@ -1,5 +1,11 @@
 import { api } from '../lib/api';
 import { env } from '../lib/env';
+import {
+  resolveStudentPhotoUrl as resolveStudentPhotoUrlWithBase,
+  resolveUploadUrl as resolveUploadUrlWithBase,
+  type SignedUploadAssetRef,
+} from './upload-url';
+export { getStudentPhotoAsset, signedUploadUrl } from './upload-url';
 
 export type Student = {
   id: string;
@@ -347,21 +353,11 @@ export const deleteStudentTimeline = async (studentId: string, timelineId: strin
   await api.delete(`/students/students/${studentId}/timeline/${timelineId}`);
 };
 
-export const resolveUploadUrl = (value?: string | null) => {
-  if (!value) return null;
-  if (/^https?:\/\//i.test(value)) return value;
-  if (value.startsWith('s3://')) {
-    const stripped = value.replace(/^s3:\/\//, '');
-    const [bucket, ...rest] = stripped.split('/');
-    const key = rest.join('/');
-    const params = new URLSearchParams({ key });
-    if (bucket) params.set('bucket', bucket);
-    return `/api/proxy/uploads/signed?${params.toString()}`;
-  }
-  const base = env.apiBaseUrl.replace(/\/api\/v1\/?$/, '');
-  const url = value.startsWith('/') ? `${base}${value}` : `${base}/${value}`;
-  return url;
-};
+export const resolveUploadUrl = (value?: string | null, asset?: SignedUploadAssetRef | null) =>
+  resolveUploadUrlWithBase(value, asset, env.apiBaseUrl);
+
+export const resolveStudentPhotoUrl = (student?: Student | null) =>
+  resolveStudentPhotoUrlWithBase(student, env.apiBaseUrl);
 
 export const addStudentPhoto = async (studentId: string, url: string) => {
   const { data } = await api.post(`/students/students/${studentId}/photos`, { url });

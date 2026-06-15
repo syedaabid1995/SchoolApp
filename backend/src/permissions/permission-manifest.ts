@@ -106,6 +106,7 @@ export const PermissionCodes = {
   feesView: 'fees.view',
   homeworkView: 'homework.view',
   idcardsView: 'idcards.view',
+  jobsView: 'jobs.view',
   leaveApplyCreate: 'leave.apply.create',
   leaveApplyDelete: 'leave.apply.delete',
   leaveApplyEdit: 'leave.apply.edit',
@@ -332,6 +333,9 @@ export const PermissionManifest = {
   },
   idcards: {
     view: PermissionCodes.idcardsView,
+  },
+  jobs: {
+    view: PermissionCodes.jobsView,
   },
   leave: {
     applyCreate: PermissionCodes.leaveApplyCreate,

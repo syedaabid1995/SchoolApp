@@ -3,6 +3,8 @@ import assert from 'node:assert/strict';
 import {
   SCHOOL_A_ID,
   SCHOOL_B_ID,
+  TEST_STUDENT_DOCUMENT_A_ID,
+  TEST_STUDENT_DOCUMENT_B_ID,
   TEST_TICKET_B_ID,
   closeBackgroundHandles,
   expectForbidden,
@@ -86,20 +88,20 @@ test('School Admin cannot add comments to another school support ticket or overr
   assert.ok([403, 404].includes(response.status), `Expected tenant block, got ${response.status}: ${response.text}`);
 });
 
-test('School Admin cannot request a signed URL for another school path', async () => {
+test('School Admin cannot request a signed URL for another school asset record', async () => {
   const schoolAdminA = getUser('SCHOOL_ADMIN', SCHOOL_A_ID);
 
-  const response = await server.request('GET', `/api/v1/uploads/signed?key=schools/${SCHOOL_B_ID}/students/photo.png`, {
+  const response = await server.request('GET', `/api/v1/uploads/signed?type=student-document&id=${TEST_STUDENT_DOCUMENT_B_ID}`, {
     user: schoolAdminA,
   });
 
   expectForbidden(response);
 });
 
-test('School Admin can request a signed URL for own school path', async () => {
+test('School Admin can request a signed URL for own school asset record', async () => {
   const schoolAdminA = getUser('SCHOOL_ADMIN', SCHOOL_A_ID);
 
-  const response = await server.request('GET', `/api/v1/uploads/signed?key=schools/${SCHOOL_A_ID}/students/photo.png`, {
+  const response = await server.request('GET', `/api/v1/uploads/signed?type=student-document&id=${TEST_STUDENT_DOCUMENT_A_ID}`, {
     user: schoolAdminA,
   });
 
@@ -107,13 +109,13 @@ test('School Admin can request a signed URL for own school path', async () => {
   assert.match(response.headers.get('location') ?? '', /^https:\/\/signed\.test\//);
 });
 
-test('Super Admin can intentionally access both school-scoped signed URL paths', async () => {
+test('Super Admin can intentionally access both school-scoped signed asset records', async () => {
   const superAdmin = getUser('SUPER_ADMIN');
 
-  const schoolA = await server.request('GET', `/api/v1/uploads/signed?key=schools/${SCHOOL_A_ID}/students/photo.png`, {
+  const schoolA = await server.request('GET', `/api/v1/uploads/signed?type=student-document&id=${TEST_STUDENT_DOCUMENT_A_ID}`, {
     user: superAdmin,
   });
-  const schoolB = await server.request('GET', `/api/v1/uploads/signed?key=schools/${SCHOOL_B_ID}/students/photo.png`, {
+  const schoolB = await server.request('GET', `/api/v1/uploads/signed?type=student-document&id=${TEST_STUDENT_DOCUMENT_B_ID}`, {
     user: superAdmin,
   });
 

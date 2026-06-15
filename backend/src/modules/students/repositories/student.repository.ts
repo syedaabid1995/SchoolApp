@@ -22,6 +22,7 @@ export const StudentRepository = {
           },
         },
       },
+      photos: { orderBy: { createdAt: 'desc' as const }, take: 1 },
     };
   },
 

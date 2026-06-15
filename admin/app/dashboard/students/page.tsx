@@ -14,7 +14,7 @@ import {
   downloadStudentImportSample,
   importStudents,
   listStudents,
-  resolveUploadUrl,
+  resolveStudentPhotoUrl,
   type Student,
 } from '../../../services/student.service';
 
@@ -275,6 +275,7 @@ export default function StudentsPage() {
                 {studentsQuery.isLoading ? <SkeletonRows /> : null}
                 {!studentsQuery.isLoading && paginated.map((student) => {
                   const name = student.fullName ?? `${student.firstName} ${student.lastName}`.trim();
+                  const photoUrl = resolveStudentPhotoUrl(student);
                   return (
                     <tr key={student.id} className="border-b border-slate-100 align-middle hover:bg-slate-50/70">
                       <td className="px-4 py-4 font-semibold text-slate-900">{student.admissionNo}</td>
@@ -282,7 +283,7 @@ export default function StudentsPage() {
                       <td className="px-4 py-4">
                         <div className="flex items-center gap-3">
                           <div className="grid h-10 w-10 place-items-center overflow-hidden rounded-full bg-violet-100 text-sm font-bold text-violet-700">
-                            {student.photoUrl ? <img src={resolveUploadUrl(student.photoUrl) ?? undefined} alt={name} className="h-full w-full object-cover" /> : name.slice(0, 2).toUpperCase()}
+                            {photoUrl ? <img src={photoUrl} alt={name} className="h-full w-full object-cover" /> : name.slice(0, 2).toUpperCase()}
                           </div>
                           <div>
                             <p className="font-semibold text-slate-900">{name}</p>

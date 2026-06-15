@@ -87,6 +87,38 @@ export const getSignedUrlForKey = async (params: { key: string; expiresInSeconds
   return getSignedUrl(s3, command, { expiresIn: params.expiresInSeconds ?? 900 });
 };
 
+export const storageKeyFromUrl = (value: string) => {
+  if (value.startsWith('s3://')) {
+    const withoutScheme = value.slice('s3://'.length);
+    const separatorIndex = withoutScheme.indexOf('/');
+    return separatorIndex >= 0 ? withoutScheme.slice(separatorIndex + 1) : null;
+  }
+
+  const localPrefix = '/uploads/';
+  if (value.startsWith(localPrefix)) {
+    return value.slice(localPrefix.length).split('/').map(decodeURIComponent).join('/');
+  }
+
+  try {
+    const parsed = new URL(value);
+    if (parsed.pathname.startsWith(localPrefix)) {
+      return parsed.pathname.slice(localPrefix.length).split('/').map(decodeURIComponent).join('/');
+    }
+  } catch {
+    return null;
+  }
+
+  return null;
+};
+
+export const getSignedUrlForStoredUrl = async (params: { url: string; expiresInSeconds?: number }) => {
+  const key = storageKeyFromUrl(params.url);
+  if (!key) {
+    throw new Error('Unsupported storage URL');
+  }
+  return getSignedUrlForKey({ key, expiresInSeconds: params.expiresInSeconds });
+};
+
 export const getObjectForKey = async (params: { key: string }) => {
   if (useLocalStorage) {
     const targetPath = assertSafeLocalKey(params.key);

@@ -15,7 +15,10 @@ final rawDioProvider = Provider<Dio>((ref) {
       baseUrl: AppConfig.apiBaseUrl,
       connectTimeout: AppConfig.connectTimeout,
       receiveTimeout: AppConfig.receiveTimeout,
-      headers: {'Accept': 'application/json'},
+      headers: {
+        'Accept': 'application/json',
+        'x-client-platform': AppConfig.clientPlatform,
+      },
     ),
   );
 });
@@ -26,7 +29,10 @@ final dioProvider = Provider<Dio>((ref) {
       baseUrl: AppConfig.apiBaseUrl,
       connectTimeout: AppConfig.connectTimeout,
       receiveTimeout: AppConfig.receiveTimeout,
-      headers: {'Accept': 'application/json'},
+      headers: {
+        'Accept': 'application/json',
+        'x-client-platform': AppConfig.clientPlatform,
+      },
     ),
   );
   dio.interceptors.addAll([

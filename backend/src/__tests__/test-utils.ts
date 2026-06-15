@@ -23,6 +23,12 @@ export const TEST_ACADEMIC_YEAR_A_ID = 'abababab-abab-4aba-8aba-abababababab';
 export const TEST_CLASS_A_ID = 'cdcdcdcd-cdcd-4cdc-8cdc-cdcdcdcdcdcd';
 export const TEST_SECTION_A_ID = 'efefefef-efef-4efe-8efe-efefefefefef';
 export const TEST_STAFF_PROFILE_A_ID = '12121212-1212-4121-8121-121212121212';
+export const TEST_STUDENT_DOCUMENT_A_ID = '13131313-1313-4131-8131-131313131313';
+export const TEST_STUDENT_DOCUMENT_B_ID = '14141414-1414-4141-8141-141414141414';
+export const TEST_STAFF_DOCUMENT_A_ID = '15151515-1515-4151-8151-151515151515';
+export const TEST_STUDENT_PHOTO_A_ID = '16161616-1616-4161-8161-161616161616';
+export const TEST_ATTENDANCE_EVIDENCE_A_ID = '17171717-1717-4171-8171-171717171717';
+export const TEST_ATTENDANCE_RECORD_A_ID = '18181818-1818-4181-8181-181818181818';
 export const TEST_LEAVE_TYPE_ID = '34343434-3434-4343-8343-343434343434';
 export const TEST_LEAVE_APPLICATION_ID = '56565656-5656-4565-8565-565656565656';
 
@@ -94,6 +100,7 @@ const defaultPermissionCodes = [
   'school.onboarding.manage',
   'school.onboarding.review',
   'settings.access',
+  'jobs.view',
   'teachers.list',
   'teachers.add',
   'academics.setup',
@@ -452,13 +459,18 @@ export const patchSecurityTestDependencies = () => {
     'staffSocialLink',
     'staffTimeline',
     'student',
+    'attendanceEvidence',
     'attendanceHoliday',
+    'attendancePeriod',
+    'attendanceRecord',
+    'attendanceSession',
     'disabledStudentLog',
     'parentGuardian',
     'studentAttendanceSession',
     'studentAttendanceRecord',
     'studentEnrollment',
     'studentDocument',
+    'studentPhoto',
     'studentGroup',
     'studentCategory',
     'studentTimeline',
@@ -726,7 +738,9 @@ export const patchSecurityTestDependencies = () => {
     isActive: true,
     address: 'Teacher Address',
     user: { id: TEACHER_A_ID, email: 'teacher-a@test.local', status: 'ACTIVE', mustChangePassword: false, roles: roleRowsFor(TEACHER_A_ID) },
-    payrolls: [],
+    payrollInfo: { id: 'staff-payroll-info-a', staffId: TEST_STAFF_PROFILE_A_ID, basicSalary: 50000, paymentMode: 'BANK' },
+    bankDetails: { id: 'staff-bank-details-a', teacherId: TEST_STAFF_PROFILE_A_ID, accountNumber: '1234567890', bankName: 'Test Bank' },
+    payrolls: [{ id: 'payroll-a', staffId: TEST_STAFF_PROFILE_A_ID, grossSalary: 50000, netSalary: 45000 }],
   };
   patchMethod(prisma.teacherProfile as any, 'findFirst', async ({ where }: any = {}) => {
     if (where?.schoolId && where.schoolId !== SCHOOL_A_ID) return null;
@@ -750,6 +764,94 @@ export const patchSecurityTestDependencies = () => {
     where?.userId === PARENT_A_ID ? [{ id: 'parent-profile-a', userId: PARENT_A_ID }] : [],
   );
   patchMethod(prisma.studentParent as any, 'findMany', async () => [{ student: { school: { status: 'ACTIVE' } } }]);
+  patchMethod(prisma.student as any, 'findFirst', async ({ where }: any = {}) => {
+    if (where?.id !== STUDENT_A_ID) return null;
+    if (where?.schoolId && where.schoolId !== SCHOOL_A_ID) return null;
+    return {
+      id: STUDENT_A_ID,
+      schoolId: SCHOOL_A_ID,
+      firstName: 'Student',
+      lastName: 'A',
+      fullName: 'Student A',
+      photoUrl: `s3://test-bucket/schools/${SCHOOL_A_ID}/students/${STUDENT_A_ID}/profile.png`,
+    };
+  });
+
+  const studentDocumentFor = (id: string | undefined) => {
+    if (id === TEST_STUDENT_DOCUMENT_A_ID) {
+      return {
+        id,
+        schoolId: SCHOOL_A_ID,
+        studentId: STUDENT_A_ID,
+        title: 'Aadhaar',
+        url: `s3://test-bucket/schools/${SCHOOL_A_ID}/students/${STUDENT_A_ID}/aadhaar.pdf`,
+      };
+    }
+    if (id === TEST_STUDENT_DOCUMENT_B_ID) {
+      return {
+        id,
+        schoolId: SCHOOL_B_ID,
+        studentId: '99999999-9999-4999-8999-999999999998',
+        title: 'Transfer Certificate',
+        url: `s3://test-bucket/schools/${SCHOOL_B_ID}/students/document.pdf`,
+      };
+    }
+    return null;
+  };
+  patchMethod(prisma.studentDocument as any, 'findFirst', async ({ where }: any = {}) => studentDocumentFor(where?.id));
+  patchMethod(prisma.studentPhoto as any, 'findFirst', async ({ where }: any = {}) => {
+    if (where?.id !== TEST_STUDENT_PHOTO_A_ID) return null;
+    return {
+      id: TEST_STUDENT_PHOTO_A_ID,
+      studentId: STUDENT_A_ID,
+      url: `s3://test-bucket/schools/${SCHOOL_A_ID}/students/${STUDENT_A_ID}/photo.png`,
+      student: { schoolId: SCHOOL_A_ID },
+    };
+  });
+  patchMethod(prisma.staffDocument as any, 'findFirst', async ({ where }: any = {}) => {
+    if (where?.id !== TEST_STAFF_DOCUMENT_A_ID) return null;
+    return {
+      id: TEST_STAFF_DOCUMENT_A_ID,
+      schoolId: SCHOOL_A_ID,
+      staffId: TEST_STAFF_PROFILE_A_ID,
+      title: 'PAN',
+      fileUrl: `s3://test-bucket/schools/${SCHOOL_A_ID}/staff/${TEST_STAFF_PROFILE_A_ID}/pan.pdf`,
+    };
+  });
+
+  const attendanceRecord = {
+    id: TEST_ATTENDANCE_RECORD_A_ID,
+    sessionId: 'attendance-session-a',
+    studentId: STUDENT_A_ID,
+    status: 'PRESENT',
+    session: { schoolId: SCHOOL_A_ID },
+  };
+  patchMethod(prisma.attendanceRecord as any, 'findFirst', async ({ where }: any = {}) => {
+    if (where?.id && where.id !== TEST_ATTENDANCE_RECORD_A_ID) return null;
+    if (where?.session?.schoolId && where.session.schoolId !== SCHOOL_A_ID) return null;
+    return attendanceRecord;
+  });
+  patchMethod(prisma.attendanceEvidence as any, 'findFirst', async ({ where }: any = {}) => {
+    if (where?.id !== TEST_ATTENDANCE_EVIDENCE_A_ID) return null;
+    return {
+      id: TEST_ATTENDANCE_EVIDENCE_A_ID,
+      recordId: TEST_ATTENDANCE_RECORD_A_ID,
+      imageUrl: `s3://test-bucket/schools/${SCHOOL_A_ID}/attendance/evidence.png`,
+      record: { session: { schoolId: SCHOOL_A_ID } },
+    };
+  });
+  patchMethod(prisma.attendanceEvidence as any, 'findMany', async ({ where }: any = {}) => {
+    if (where?.recordId && where.recordId !== TEST_ATTENDANCE_RECORD_A_ID) return [];
+    return [{
+      id: TEST_ATTENDANCE_EVIDENCE_A_ID,
+      recordId: TEST_ATTENDANCE_RECORD_A_ID,
+      imageUrl: `s3://test-bucket/schools/${SCHOOL_A_ID}/attendance/evidence.png`,
+      createdAt: new Date('2026-05-20T00:00:00.000Z'),
+    }];
+  });
+  patchMethod(prisma.attendanceEvidence as any, 'create', async ({ data }: any) =>
+    makeRecord({ id: TEST_ATTENDANCE_EVIDENCE_A_ID, ...data }),
+  );
 
   patchMethod(prisma.featureFlag as any, 'findMany', async () => []);
   patchMethod(prisma.featureFlag as any, 'findUnique', async ({ where }: any) =>
@@ -892,6 +994,7 @@ export const patchSecurityTestDependencies = () => {
   patchMethod(redis as any, 'ping', async () => 'PONG');
   patchMethod(redis as any, 'disconnect', () => undefined);
   patchMethod(s3Service as any, 'getSignedUrlForKey', async ({ key }: { key: string }) => `https://signed.test/${encodeURIComponent(key)}`);
+  patchMethod(s3Service as any, 'getSignedUrlForStoredUrl', async ({ url }: { url: string }) => `https://signed.test/${encodeURIComponent(url)}`);
 };
 
 export const restoreSecurityTestDependencies = () => {

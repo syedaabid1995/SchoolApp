@@ -2,12 +2,15 @@ import { Router, type NextFunction, type Request, type Response } from 'express'
 import multer from 'multer';
 import path from 'path';
 import crypto from 'crypto';
+import { z } from 'zod';
 import { authMiddleware } from '../middlewares/auth.middleware';
 import { blockSuperAdminSchoolOperations, requirePermission, requireSchoolAdminOrSuperAdmin } from '../middlewares/rbac.middleware';
 import { PermissionCodes as P } from '../permissions/permission-manifest';
 import { resolveSchoolId } from '../utils/tenant';
-import { getSignedUrlForKey, uploadBuffer, getBucketName } from '../services/s3.service';
+import { getSignedUrlForStoredUrl, uploadBuffer } from '../services/s3.service';
 import { prisma } from '../config/db';
+import { AuthorizationService } from '../services/authorization.service';
+import { HttpError } from '../middlewares/error.middleware';
 import {
   BRANDING_ASSET_MIME_TYPES,
   brandingAssetProxyUrl,
@@ -67,48 +70,88 @@ export const uploadRouter = Router();
 
 uploadRouter.use(authMiddleware);
 
-const signedAssetReadPermissions = [
-  P.studentView,
-  P.studentsList,
-  P.studentDocumentView,
-  P.staffView,
-  P.staffDocumentView,
-  P.settingsAccess,
-  P.reportsView,
-  P.dashboardOverview,
-];
+const signedAssetQuerySchema = z.object({
+  type: z.enum(['student-document', 'student-photo', 'staff-document', 'attendance-evidence']),
+  id: z.string().uuid(),
+});
 
-const isSafeStorageKey = (key: string) => {
-  if (!key || key.length > 512) return false;
-  if (key.startsWith('/') || key.includes('\\')) return false;
-  if (key.split('/').some((part) => part === '..' || part === '')) return false;
-  return /^[a-zA-Z0-9/_.,=@-]+$/.test(key);
+const assertSignedAssetPermission = async (req: Request, schoolId: string, permission: string | string[]) => {
+  if (!req.auth) throw new HttpError(401, 'Unauthorized');
+  if (await AuthorizationService.isSuperAdmin(req.auth)) return;
+  if (req.auth.schoolId !== schoolId) throw new HttpError(403, 'Forbidden');
+  if (!await AuthorizationService.hasAnyEffectivePermission(req.auth, permission)) {
+    throw new HttpError(403, 'Forbidden');
+  }
 };
 
-uploadRouter.get('/signed', requirePermission(...signedAssetReadPermissions), async (req, res) => {
-  const rawKey = req.query.key as string | undefined;
-  const bucket = (req.query.bucket as string | undefined) ?? getBucketName();
-  if (!rawKey) {
-    res.status(400).json({ error: { message: 'key is required', details: null } });
-    return;
+const resolveSignedAsset = async (req: Request) => {
+  if (typeof req.query.key === 'string') {
+    throw new HttpError(400, 'Signing raw storage keys is no longer supported');
   }
-  if (!isSafeStorageKey(rawKey)) {
-    res.status(400).json({ error: { message: 'Invalid key', details: null } });
-    return;
+
+  const payload = signedAssetQuerySchema.parse({
+    type: req.query.type ?? req.query.assetType,
+    id: req.query.id ?? req.query.documentId ?? req.query.photoId,
+  });
+
+  if (payload.type === 'student-document') {
+    const document = await prisma.studentDocument.findFirst({
+      where: { id: payload.id },
+      select: { schoolId: true, url: true },
+    });
+    if (!document) throw new HttpError(404, 'Asset not found');
+    await assertSignedAssetPermission(req, document.schoolId, P.studentDocumentView);
+    return document.url;
   }
-  if (bucket !== getBucketName()) {
-    res.status(400).json({ error: { message: 'Invalid bucket', details: null } });
-    return;
+
+  if (payload.type === 'student-photo') {
+    const photo = await prisma.studentPhoto.findFirst({
+      where: { id: payload.id },
+      select: { url: true, student: { select: { schoolId: true } } },
+    });
+    if (photo) {
+      await assertSignedAssetPermission(req, photo.student.schoolId, P.studentDocumentView);
+      return photo.url;
+    }
+
+    const student = await prisma.student.findFirst({
+      where: { id: payload.id },
+      select: { schoolId: true, photoUrl: true },
+    });
+    if (!student?.photoUrl) throw new HttpError(404, 'Asset not found');
+    await assertSignedAssetPermission(req, student.schoolId, P.studentDocumentView);
+    return student.photoUrl;
   }
-  const parts = rawKey.split('/');
-  if (parts[0] === 'schools' && parts[1]) {
-    resolveSchoolId(req, parts[1]);
+
+  if (payload.type === 'staff-document') {
+    const document = await prisma.staffDocument.findFirst({
+      where: { id: payload.id },
+      select: { schoolId: true, fileUrl: true },
+    });
+    if (!document) throw new HttpError(404, 'Asset not found');
+    await assertSignedAssetPermission(req, document.schoolId, P.staffDocumentView);
+    return document.fileUrl;
   }
+
+  const evidence = await prisma.attendanceEvidence.findFirst({
+    where: { id: payload.id },
+    select: {
+      imageUrl: true,
+      record: { select: { session: { select: { schoolId: true } } } },
+    },
+  });
+  if (!evidence?.imageUrl) throw new HttpError(404, 'Asset not found');
+  await assertSignedAssetPermission(req, evidence.record.session.schoolId, P.attendanceView);
+  return evidence.imageUrl;
+};
+
+uploadRouter.get('/signed', async (req, res) => {
+  const storedUrl = await resolveSignedAsset(req);
   try {
-    const signed = await getSignedUrlForKey({ key: rawKey });
+    const signed = await getSignedUrlForStoredUrl({ url: storedUrl });
     res.redirect(302, signed);
   } catch {
-    res.status(500).json({ error: { message: 'Failed to sign url', details: null } });
+    res.status(400).json({ error: { message: 'Asset cannot be signed', details: null } });
   }
 });
 

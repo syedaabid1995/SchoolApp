@@ -69,6 +69,39 @@ test('Teacher can read academic setup data when the role grants timetable or aca
   expectSuccess(response);
 });
 
+test('Teacher cannot create, edit, or delete academic setup data', async () => {
+  const teacher = getUser('TEACHER');
+
+  const createResponse = await server.request('POST', '/api/v1/academic-setup/classes', {
+    user: teacher,
+    body: { name: 'Class 9' },
+  });
+  expectForbidden(createResponse);
+
+  const editResponse = await server.request('PATCH', '/api/v1/academic-setup/subjects/10101010-1010-4101-8101-101010101010', {
+    user: teacher,
+    body: { name: 'Compromised Subject' },
+  });
+  expectForbidden(editResponse);
+
+  const deleteResponse = await server.request('DELETE', '/api/v1/academic-setup/classes/cdcdcdcd-cdcd-4cdc-8cdc-cdcdcdcdcdcd', {
+    user: teacher,
+  });
+  expectForbidden(deleteResponse);
+});
+
+test('Teacher cannot mutate academic API setup resources', async () => {
+  const response = await server.request('POST', '/api/v1/academics/classes', {
+    user: getUser('TEACHER'),
+    body: {
+      academicYearId: 'abababab-abab-4aba-8aba-abababababab',
+      name: 'Class 10',
+    },
+  });
+
+  expectForbidden(response);
+});
+
 test('School Admin can list and create school-scoped academic setup data', async () => {
   const schoolAdmin = getUser('SCHOOL_ADMIN');
   const listResponse = await server.request('GET', '/api/v1/academic-setup/classes', { user: schoolAdmin });

@@ -5,7 +5,7 @@ import { useMemo, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { useQuery } from '@tanstack/react-query';
 import { getSession } from '../../../../services/auth.service';
-import { getStudent, resolveUploadUrl } from '../../../../services/student.service';
+import { getStudent, getStudentPhotoAsset, resolveUploadUrl } from '../../../../services/student.service';
 import { getTeacher } from '../../../../services/teacher.service';
 import IdCardEditor from '../../../../id_cards/IdCardEditor';
 import type { IdCardRecord, IdCardTemplate } from '../../../../id_cards/types';
@@ -88,7 +88,11 @@ export default function IdCardEditorPage() {
     return null;
   }, [entity, selectedStudent, selectedTeacher, session?.schoolName]);
 
-  const photoUrl = resolveUploadUrl(selectedRecord?.photoUrl ?? null);
+  const selectedStudentPhoto = getStudentPhotoAsset(selectedStudent);
+  const photoUrl =
+    entity === 'student'
+      ? resolveUploadUrl(selectedStudentPhoto.value, selectedStudentPhoto.asset)
+      : resolveUploadUrl(selectedRecord?.photoUrl ?? null);
 
   if (!selectedRecord || !currentTemplate) {
     return (

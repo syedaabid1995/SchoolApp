@@ -24,7 +24,7 @@ class StaffUserModel extends StaffUser {
     final school = nestedUser['school'] is Map<String, dynamic>
         ? nestedUser['school'] as Map<String, dynamic>
         : null;
-    final permissions = nestedUser['permissionCodes'];
+    final permissions = nestedUser['permissionCodes'] ?? nestedUser['permissions'];
     final role = (nestedUser['role'] ?? nestedUser['roleName'])?.toString();
     final name = (nestedUser['displayName'] ?? nestedUser['name'])?.toString();
 

@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { after, afterEach, before, beforeEach, test } from 'node:test';
 import {
   SCHOOL_B_ID,
+  TEST_STAFF_PROFILE_A_ID,
   closeBackgroundHandles,
   expectForbidden,
   expectNoSensitiveFields,
@@ -54,8 +55,7 @@ test('staff management list allows only school roles with staff view permission'
   const teacherResponse = await server.request('GET', '/api/v1/staff', {
     user: getUser('TEACHER'),
   });
-  expectSuccess(teacherResponse);
-  expectNoSensitiveFields(teacherResponse.body);
+  expectForbidden(teacherResponse);
 
   for (const role of ['PARENT', 'STUDENT'] as const) {
     const response = await server.request('GET', '/api/v1/staff', {
@@ -65,7 +65,15 @@ test('staff management list allows only school roles with staff view permission'
   }
 });
 
-test('School Admin can list staff without sensitive fields', async () => {
+test('Teacher cannot view another staff member payroll projection through staff detail', async () => {
+  const response = await server.request('GET', `/api/v1/staff/${TEST_STAFF_PROFILE_A_ID}`, {
+    user: getUser('TEACHER'),
+  });
+
+  expectForbidden(response);
+});
+
+test('School Admin can list staff through the authorized HR projection', async () => {
   const response = await server.request('GET', '/api/v1/staff?limit=20', {
     user: getUser('SCHOOL_ADMIN'),
   });

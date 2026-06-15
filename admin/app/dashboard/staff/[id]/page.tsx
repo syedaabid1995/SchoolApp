@@ -13,6 +13,7 @@ import {
   deleteStaffDocument,
   deleteStaffTimeline,
   getStaff,
+  resolveStaffUploadUrl,
   uploadStaffDocument,
   type Payroll,
   type Staff,
@@ -349,7 +350,7 @@ export default function StaffDetailPage() {
                           {isInternalDocument ? (
                             <Link href={doc.fileUrl} className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-bold">View</Link>
                           ) : (
-                            <a href={doc.fileUrl} target="_blank" rel="noreferrer" className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-bold">Download</a>
+                            <a href={resolveStaffUploadUrl(doc.fileUrl, { type: 'staff-document', id: doc.id }) ?? undefined} target="_blank" rel="noreferrer" className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-bold">Download</a>
                           )}
                           {canDeleteDocument ? <button onClick={() => window.confirm('Delete this document?') && deleteDocumentMutation.mutate(doc.id)} className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-1.5 text-xs font-bold text-rose-700">Delete</button> : null}
                         </div>
