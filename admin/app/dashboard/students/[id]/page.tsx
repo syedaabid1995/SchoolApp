@@ -21,8 +21,7 @@ import {
   uploadStudentDocument,
 } from '../../../../services/student.service';
 import {
-  getStudentFeeLedger,
-  listStudentCollectionInvoices,
+  listFeeInvoices,
   type FeeInvoice,
 } from '../../../../services/fee-management.service';
 import { listStudentTransportAssignments } from '../../../../services/transport.service';
@@ -130,15 +129,11 @@ export default function StudentDetailPage() {
   const displayName = student ? student.fullName ?? `${student.firstName} ${student.lastName}`.trim() : '';
 
   const feeInvoicesQuery = useQuery({
-    queryKey: ['student-fee-invoices', studentId],
-    queryFn: () => listStudentCollectionInvoices(studentId),
-    enabled: Boolean(studentId) && canViewStudent && tab === 'fees',
+    queryKey: ['student-fee-invoices', studentId, student?.academicSessionId],
+    queryFn: () => listFeeInvoices({ studentId, academicSessionId: student?.academicSessionId ?? undefined, limit: 100, sortBy: 'dueDate', sortOrder: 'desc' }),
+    enabled: Boolean(studentId) && Boolean(student?.id) && canViewStudent && tab === 'fees',
   });
-  const feeLedgerQuery = useQuery({
-    queryKey: ['student-fee-ledger', studentId],
-    queryFn: () => getStudentFeeLedger(studentId, { page: 1, limit: 20, sortBy: 'createdAt', sortOrder: 'desc' }),
-    enabled: Boolean(studentId) && canViewStudent && tab === 'fees',
-  });
+
   const transportQuery = useQuery({
     queryKey: ['student-detail-transport', studentId, student?.classId, student?.sectionId],
     queryFn: () => listStudentTransportAssignments({
@@ -442,53 +437,103 @@ export default function StudentDetailPage() {
                     Open fee collection
                   </Link>
                 </div>
-                {feeInvoicesQuery.isLoading || feeLedgerQuery.isLoading ? (
+                {feeInvoicesQuery.isLoading ? (
                   <div className="rounded-xl border border-dashed border-slate-200 p-8 text-center text-sm text-slate-500">Loading fee details...</div>
-                ) : feeInvoicesQuery.isError || feeLedgerQuery.isError ? (
-                  <div className="rounded-xl border border-amber-200 bg-amber-50 p-6 text-sm font-semibold text-amber-800">Unable to load fee details. Check whether Fees access is enabled for this role.</div>
+                ) : feeInvoicesQuery.isError ? (
+                  <div className="rounded-xl border border-amber-200 bg-amber-50 p-6 text-sm font-semibold text-amber-800">Unable to load fee details. Check whether Fees &rarr; Invoices access is enabled for this role in the subscription plan.</div>
                 ) : (
                   <>
-                    <div className="grid gap-3 md:grid-cols-5">
-                      <InfoRow label="Invoices" value={feeInvoices.length} />
-                      <InfoRow label="Total" value={toMoney(sumInvoiceField(feeInvoices, 'totalAmount'))} />
+                    <div className="grid gap-3 sm:grid-cols-4">
+                      <InfoRow label="Total billed" value={toMoney(sumInvoiceField(feeInvoices, 'totalAmount'))} />
                       <InfoRow label="Discount" value={toMoney(sumInvoiceField(feeInvoices, 'discountAmount'))} />
                       <InfoRow label="Paid" value={toMoney(sumInvoiceField(feeInvoices, 'paidAmount'))} />
-                      <InfoRow label="Balance" value={toMoney(sumInvoiceField(feeInvoices, 'dueAmount'))} />
+                      <InfoRow label="Balance due" value={toMoney(sumInvoiceField(feeInvoices, 'dueAmount'))} />
                     </div>
-                    <div className="mt-5 overflow-x-auto rounded-xl border border-slate-100">
-                      <table className="min-w-full text-left text-sm">
-                        <thead className="bg-slate-50 text-xs uppercase text-slate-500">
-                          <tr><th className="px-3 py-2">Invoice</th><th className="px-3 py-2">Fee</th><th className="px-3 py-2">Month</th><th className="px-3 py-2">Due date</th><th className="px-3 py-2">Total</th><th className="px-3 py-2">Paid</th><th className="px-3 py-2">Balance</th><th className="px-3 py-2">Status</th></tr>
-                        </thead>
-                        <tbody>
-                          {feeInvoices.length ? feeInvoices.map((invoice) => (
-                            <tr key={invoice.id} className="border-b border-slate-100">
-                              <td className="px-3 py-2 font-semibold text-slate-900">{invoice.invoiceNumber}</td>
-                              <td className="px-3 py-2">{invoice.feeType?.name ?? '-'}</td>
-                              <td className="px-3 py-2">{invoice.feeMonth ?? '-'}</td>
-                              <td className="px-3 py-2">{formatDate(invoice.dueDate)}</td>
-                              <td className="px-3 py-2">{toMoney(invoice.totalAmount)}</td>
-                              <td className="px-3 py-2">{toMoney(invoice.paidAmount)}</td>
-                              <td className="px-3 py-2">{toMoney(invoice.dueAmount)}</td>
-                              <td className="px-3 py-2">{invoice.status}</td>
-                            </tr>
-                          )) : <tr><td colSpan={8} className="px-3 py-8 text-center text-slate-500">No fee invoices found for this student.</td></tr>}
-                        </tbody>
-                      </table>
-                    </div>
-                    <h3 className="mt-6 text-base font-bold text-slate-950">Recent Ledger</h3>
-                    <div className="mt-3 space-y-2">
-                      {(feeLedgerQuery.data?.items ?? []).length ? feeLedgerQuery.data!.items.map((entry) => (
-                        <div key={entry.id} className="grid gap-2 rounded-xl border border-slate-100 p-3 text-sm md:grid-cols-[1fr_auto_auto_auto]">
-                          <div>
-                            <p className="font-semibold text-slate-900">{entry.description}</p>
-                            <p className="text-xs text-slate-500">{formatDate(entry.createdAt)} {entry.invoice?.invoiceNumber ? `- ${entry.invoice.invoiceNumber}` : ''}</p>
+
+                    {/* Invoice + payment history */}
+                    <div className="mt-6 space-y-4">
+                      {feeInvoices.length ? feeInvoices.map((invoice) => {
+                        const statusColors: Record<string, string> = {
+                          PAID: 'bg-emerald-100 text-emerald-700',
+                          PARTIALLY_PAID: 'bg-amber-100 text-amber-700',
+                          OVERDUE: 'bg-red-100 text-red-700',
+                          ISSUED: 'bg-blue-100 text-blue-700',
+                          DRAFT: 'bg-slate-100 text-slate-600',
+                          CANCELLED: 'bg-slate-100 text-slate-400 line-through',
+                        };
+                        const payments = invoice.payments ?? [];
+                        const isPast = invoice.dueDate ? new Date(invoice.dueDate) < new Date() : false;
+                        const isUpcoming = !isPast && invoice.status !== 'PAID' && invoice.status !== 'CANCELLED';
+                        return (
+                          <div key={invoice.id} className="overflow-hidden rounded-xl border border-slate-200">
+                            {/* Invoice header */}
+                            <div className="flex flex-wrap items-center justify-between gap-2 bg-slate-50 px-4 py-3">
+                              <div>
+                                <p className="font-bold text-slate-900">
+                                  {invoice.feeType?.name ?? invoice.invoiceNumber}
+                                  {invoice.feeMonth ? <span className="ml-2 text-xs font-normal text-slate-500">({invoice.feeMonth})</span> : null}
+                                </p>
+                                <p className="text-xs text-slate-400">{invoice.invoiceNumber}</p>
+                              </div>
+                              <div className="flex flex-wrap items-center gap-2 text-sm">
+                                {isUpcoming && (
+                                  <span className="rounded-full bg-violet-100 px-2 py-0.5 text-xs font-bold text-violet-700">Upcoming</span>
+                                )}
+                                <span className={`rounded-full px-2 py-0.5 text-xs font-bold ${statusColors[invoice.status] ?? 'bg-slate-100 text-slate-600'}`}>
+                                  {invoice.status.replace(/_/g, ' ')}
+                                </span>
+                                <span className="text-xs text-slate-500">Due {formatDate(invoice.dueDate)}</span>
+                              </div>
+                            </div>
+
+                            {/* Invoice amounts */}
+                            <div className="grid grid-cols-2 divide-x divide-slate-100 border-b border-slate-100 sm:grid-cols-4">
+                              {[
+                                { label: 'Billed', value: toMoney(invoice.totalAmount) },
+                                { label: 'Discount', value: toMoney(invoice.discountAmount), className: 'text-emerald-700' },
+                                { label: 'Paid', value: toMoney(invoice.paidAmount), className: 'text-slate-900 font-bold' },
+                                { label: 'Balance', value: toMoney(invoice.dueAmount), className: Number(invoice.dueAmount) > 0 ? 'text-red-600 font-bold' : 'text-slate-400' },
+                              ].map((cell) => (
+                                <div key={cell.label} className="px-4 py-2">
+                                  <p className="text-xs font-semibold uppercase text-slate-400">{cell.label}</p>
+                                  <p className={`text-sm ${cell.className ?? 'text-slate-700'}`}>{cell.value}</p>
+                                </div>
+                              ))}
+                            </div>
+
+                            {/* Payment history rows */}
+                            {payments.length > 0 ? (
+                              <div className="divide-y divide-slate-100">
+                                {payments.map((payment) => (
+                                  <div key={payment.id} className="flex flex-wrap items-center justify-between gap-2 px-4 py-3">
+                                    <div className="flex items-center gap-3">
+                                      <div className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-emerald-100 text-emerald-700">
+                                        <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                                        </svg>
+                                      </div>
+                                      <div>
+                                        <p className="text-sm font-semibold text-slate-900">{payment.paymentNumber}</p>
+                                        <p className="text-xs text-slate-500">{payment.paymentMode.replace(/_/g, ' ')} &middot; {formatDate(payment.paidAt)}</p>
+                                      </div>
+                                    </div>
+                                    <div className="text-right">
+                                      <p className="text-sm font-bold text-emerald-700">+{toMoney(payment.amount)}</p>
+                                      {payment.receipt?.receiptNumber ? (
+                                        <p className="text-xs text-slate-400">Receipt {payment.receipt.receiptNumber}</p>
+                                      ) : null}
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
+                            ) : (
+                              <p className="px-4 py-3 text-xs text-slate-400">No payments recorded yet.</p>
+                            )}
                           </div>
-                          <p>Debit: {toMoney(entry.debit ?? entry.debitAmount)}</p>
-                          <p>Credit: {toMoney(entry.credit ?? entry.creditAmount)}</p>
-                          <p className="font-semibold">Balance: {toMoney(entry.balance ?? entry.balanceAfter)}</p>
-                        </div>
-                      )) : <p className="rounded-xl border border-dashed border-slate-200 p-6 text-sm text-slate-500">No fee ledger entries found.</p>}
+                        );
+                      }) : (
+                        <div className="rounded-xl border border-dashed border-slate-200 p-8 text-center text-sm text-slate-500">No fee invoices found for this student.</div>
+                      )}
                     </div>
                   </>
                 )}
