@@ -138,40 +138,27 @@ export const EMPLOYEE_PERMISSION_CATALOG: PermissionCatalogItem[] = [
   { code: P.leaveApproveDelete, label: 'Leave Approval - Delete', path: '/dashboard/leave/requests', group: 'Attendance' },
   { code: P.leaveBalanceView, label: 'Leave Balance - View', path: '/dashboard/leave/my', group: 'Attendance' },
   { code: P.feesOverviewView, label: 'Fee Overview - View', path: '/dashboard/fees/overview', group: 'Fees' },
-  { code: P.feesParticularsView, label: 'Fee Particulars - View', path: '/dashboard/fees/particulars', group: 'Fees' },
-  { code: P.feesParticularsCreate, label: 'Fee Particulars - Create', path: '/dashboard/fees/particulars', group: 'Fees' },
-  { code: P.feesParticularsUpdate, label: 'Fee Particulars - Update', path: '/dashboard/fees/particulars', group: 'Fees' },
-  { code: P.feesParticularsDelete, label: 'Fee Particulars - Delete', path: '/dashboard/fees/particulars', group: 'Fees' },
   { code: P.feesTypesView, label: 'Fee Types - View', path: '/dashboard/fees/types', group: 'Fees' },
   { code: P.feesTypesCreate, label: 'Fee Types - Create', path: '/dashboard/fees/types', group: 'Fees' },
   { code: P.feesTypesUpdate, label: 'Fee Types - Update', path: '/dashboard/fees/types', group: 'Fees' },
   { code: P.feesTypesDelete, label: 'Fee Types - Delete', path: '/dashboard/fees/types', group: 'Fees' },
-  { code: P.feesStructuresView, label: 'Fee Structures - View', path: '/dashboard/fees/structures', group: 'Fees' },
-  { code: P.feesStructuresCreate, label: 'Fee Structures - Create', path: '/dashboard/fees/structures', group: 'Fees' },
-  { code: P.feesStructuresUpdate, label: 'Fee Structures - Update', path: '/dashboard/fees/structures', group: 'Fees' },
-  { code: P.feesStructuresDelete, label: 'Fee Structures - Delete', path: '/dashboard/fees/structures', group: 'Fees' },
-  { code: P.feesAssignmentsView, label: 'Fee Assignments - View', path: '/dashboard/fees/assignments', group: 'Fees' },
-  { code: P.feesAssignmentsCreate, label: 'Fee Assignments - Create', path: '/dashboard/fees/assignments', group: 'Fees' },
-  { code: P.feesAssignmentsUpdate, label: 'Fee Assignments - Update', path: '/dashboard/fees/assignments', group: 'Fees' },
-  { code: P.feesAssignmentsDelete, label: 'Fee Assignments - Delete', path: '/dashboard/fees/assignments', group: 'Fees' },
-  { code: P.feesInvoiceGenerateView, label: 'Generate Invoices - View', path: '/dashboard/fees/invoice-generate', group: 'Fees' },
-  { code: P.feesInvoiceGenerateCreate, label: 'Generate Invoices - Create', path: '/dashboard/fees/invoice-generate', group: 'Fees' },
-  { code: P.feesInvoicesView, label: 'Fee Invoices - View', path: '/dashboard/fees/invoices', group: 'Fees' },
-  { code: P.feesInvoicesCancel, label: 'Fee Invoices - Cancel', path: '/dashboard/fees/invoices', group: 'Fees' },
+  { code: P.feesGroupsView, label: 'Fee Groups - View', path: '/dashboard/fees/groups', group: 'Fees' },
+  { code: P.feesGroupsCreate, label: 'Fee Groups - Create', path: '/dashboard/fees/groups', group: 'Fees' },
+  { code: P.feesGroupsUpdate, label: 'Fee Groups - Update', path: '/dashboard/fees/groups', group: 'Fees' },
+  { code: P.feesGroupsDelete, label: 'Fee Groups - Delete', path: '/dashboard/fees/groups', group: 'Fees' },
+  { code: P.feesMastersView, label: 'Fee Masters - View', path: '/dashboard/fees/masters', group: 'Fees' },
+  { code: P.feesMastersCreate, label: 'Fee Masters - Create', path: '/dashboard/fees/masters', group: 'Fees' },
+  { code: P.feesMastersUpdate, label: 'Fee Masters - Update', path: '/dashboard/fees/masters', group: 'Fees' },
+  { code: P.feesMastersDelete, label: 'Fee Masters - Delete', path: '/dashboard/fees/masters', group: 'Fees' },
   { code: P.feesCollectionView, label: 'Fee Collection - View', path: '/dashboard/fees/collection', group: 'Fees' },
   { code: P.feesCollectionCreate, label: 'Fee Collection - Create', path: '/dashboard/fees/collection', group: 'Fees' },
+  { code: P.feesCollectionReverse, label: 'Fee Collection - Reverse Payment', path: '/dashboard/fees/collection', group: 'Fees' },
   { code: P.feesReceiptsPrint, label: 'Fee Receipts - Print', path: '/dashboard/fees/collection', group: 'Fees' },
   { code: P.feesDiscountsView, label: 'Fee Discounts - View', path: '/dashboard/fees/discounts', group: 'Fees' },
   { code: P.feesDiscountsCreate, label: 'Fee Discounts - Create', path: '/dashboard/fees/discounts', group: 'Fees' },
   { code: P.feesDiscountsUpdate, label: 'Fee Discounts - Update', path: '/dashboard/fees/discounts', group: 'Fees' },
   { code: P.feesDiscountsDelete, label: 'Fee Discounts - Delete', path: '/dashboard/fees/discounts', group: 'Fees' },
   { code: P.feesDiscountsApprove, label: 'Fee Discounts - Approve/Reject', path: '/dashboard/fees/discounts', group: 'Fees' },
-  { code: P.feesFinesView, label: 'Fee Fines - View', path: '/dashboard/fees/fines', group: 'Fees' },
-  { code: P.feesFinesCreate, label: 'Fee Fines - Create', path: '/dashboard/fees/fines', group: 'Fees' },
-  { code: P.feesFinesUpdate, label: 'Fee Fines - Update', path: '/dashboard/fees/fines', group: 'Fees' },
-  { code: P.feesFinesDelete, label: 'Fee Fines - Delete', path: '/dashboard/fees/fines', group: 'Fees' },
-  { code: P.feesLedgerView, label: 'Fee Ledger - View', path: '/dashboard/fees/ledger', group: 'Fees' },
-  { code: P.feesLedgerExport, label: 'Fee Ledger - Export', path: '/dashboard/fees/ledger', group: 'Fees' },
   { code: P.feesReportsView, label: 'Fee Reports - View', path: '/dashboard/fees/reports', group: 'Fees' },
   { code: P.feesReportsExport, label: 'Fee Reports - Export', path: '/dashboard/fees/reports', group: 'Fees' },  { code: P.payrollView, label: 'Payroll - View', path: '/dashboard/payroll', group: 'Payroll' },
   { code: P.payrollGenerate, label: 'Payroll - Generate', path: '/dashboard/payroll', group: 'Payroll' },
@@ -225,16 +212,11 @@ export const getRequiredPermissionForPath = (pathname: string) => {
   if (pathname.startsWith('/dashboard/staff')) return P.staffView;
   if (pathname.startsWith('/dashboard/leave/requests')) return P.leaveApproveView;
   if (pathname.startsWith('/dashboard/leave/my')) return P.leaveApplyView;
-  if (pathname.startsWith('/dashboard/fees/particulars')) return P.feesParticularsView;
+  if (pathname.startsWith('/dashboard/fees/groups')) return P.feesGroupsView;
   if (pathname.startsWith('/dashboard/fees/types')) return P.feesTypesView;
-  if (pathname.startsWith('/dashboard/fees/structures')) return P.feesStructuresView;
-  if (pathname.startsWith('/dashboard/fees/assignments')) return P.feesAssignmentsView;
-  if (pathname.startsWith('/dashboard/fees/invoice-generate')) return P.feesInvoiceGenerateView;
-  if (pathname.startsWith('/dashboard/fees/invoices')) return P.feesInvoicesView;
+  if (pathname.startsWith('/dashboard/fees/masters')) return P.feesMastersView;
   if (pathname.startsWith('/dashboard/fees/collection')) return P.feesCollectionView;
   if (pathname.startsWith('/dashboard/fees/discounts')) return P.feesDiscountsView;
-  if (pathname.startsWith('/dashboard/fees/fines')) return P.feesFinesView;
-  if (pathname.startsWith('/dashboard/fees/ledger')) return P.feesLedgerView;
   if (pathname.startsWith('/dashboard/fees/reports')) return P.feesReportsView;
   if (pathname.startsWith('/dashboard/fees')) return P.feesOverviewView;
   if (pathname.startsWith('/dashboard/payroll/report')) return P.payrollReport;
@@ -270,7 +252,7 @@ export const getRequiredPermissionForPath = (pathname: string) => {
   if (pathname.startsWith('/dashboard/role-permissions')) return P.settingsAccess;
   if (pathname.startsWith('/dashboard/base-setup')) return P.settingsAccess;
   if (pathname.startsWith('/dashboard/sessions')) return P.settingsAccess;
-  if (pathname.startsWith('/dashboard/holidays')) return P.settingsAccess;
+  if (pathname.startsWith('/dashboard/holidays')) return P.academicsSetup;
   if (pathname.startsWith('/dashboard/sms-settings')) return P.settingsAccess;
   if (pathname.startsWith('/dashboard/settings')) return P.settingsAccess;
   if (pathname.startsWith('/dashboard/support')) return P.supportView;

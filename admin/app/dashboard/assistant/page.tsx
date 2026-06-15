@@ -135,22 +135,24 @@ export default function AssistantPage() {
   };
 
   return (
-    <div className="mx-auto flex min-h-[calc(100vh-5rem)] max-w-7xl flex-col px-6 pb-8">
-      <PageHeader
-        title="AI Assistant"
-        subtitle="Controlled school ERP assistant for help, lookup, and confirmed setup actions."
-        breadcrumbs={[{ label: 'Dashboard', href: '/dashboard' }, { label: 'AI Assistant' }]}
-      />
+    <div className="mx-auto flex h-[calc(100dvh-12rem)] min-h-0 w-full max-w-7xl flex-col overflow-hidden px-2 pb-2 sm:px-0">
+      <div className="shrink-0">
+        <PageHeader
+          title="AI Assistant"
+          subtitle="Controlled school ERP assistant for help, lookup, and confirmed setup actions."
+          breadcrumbs={[{ label: 'Dashboard', href: '/dashboard' }, { label: 'AI Assistant' }]}
+        />
+      </div>
 
-      <div className="grid flex-1 gap-4 lg:grid-cols-[1fr_20rem]">
-        <section className="flex min-h-[36rem] flex-col overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
-          <div className="flex-1 space-y-4 overflow-y-auto p-4">
+      <div className="grid min-h-0 flex-1 gap-4 lg:grid-cols-[minmax(0,1fr)_20rem]">
+        <section className="flex min-h-0 flex-col overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
+          <div className="min-h-0 flex-1 space-y-4 overflow-y-auto p-4">
             {messages.map((message) => {
               const preview = formatDataPreview(message.data);
               return (
                 <div key={message.id} className={`flex ${message.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-                  <div className={`max-w-[78%] rounded-lg px-4 py-3 text-sm leading-6 ${message.role === 'user' ? 'bg-blue-900 text-white' : 'border border-slate-200 bg-slate-50 text-slate-800'}`}>
-                    <p>{message.content}</p>
+                  <div className={`max-w-[92%] rounded-lg px-4 py-3 text-sm leading-6 sm:max-w-[78%] ${message.role === 'user' ? 'bg-blue-900 text-white' : 'border border-slate-200 bg-slate-50 text-slate-800'}`}>
+                    <p className="whitespace-pre-wrap">{message.content}</p>
                     {message.action ? (
                       <div className={`mt-3 rounded-md border px-3 py-2 text-xs ${actionTone[message.action.risk]}`}>
                         <div className="font-semibold">{message.action.summary}</div>
@@ -182,18 +184,27 @@ export default function AssistantPage() {
 
           {error ? <div className="border-t border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{error}</div> : null}
 
-          <form onSubmit={handleSubmit} className="flex gap-3 border-t border-slate-200 p-4">
-            <input
-              value={input}
-              onChange={(event) => setInput(event.target.value)}
-              className="min-h-11 flex-1 rounded-lg border border-slate-300 px-3 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
-              placeholder="Ask or request a safe setup action..."
-            />
-            <Button type="submit" disabled={!canSend}>{mutation.isPending ? 'Sending...' : 'Send'}</Button>
+          <form onSubmit={handleSubmit} className="sticky bottom-0 z-10 shrink-0 border-t border-slate-200 bg-white p-3 sm:p-4">
+            <div className="flex gap-3">
+              <textarea
+                value={input}
+                onChange={(event) => setInput(event.target.value)}
+                onKeyDown={(event) => {
+                  if (event.key === 'Enter' && !event.shiftKey) {
+                    event.preventDefault();
+                    if (canSend) submitMessage(input);
+                  }
+                }}
+                rows={1}
+                className="max-h-28 min-h-11 flex-1 resize-none rounded-lg border border-slate-300 px-3 py-2.5 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+                placeholder="Ask or request a safe setup action..."
+              />
+              <Button type="submit" disabled={!canSend}>{mutation.isPending ? 'Sending...' : 'Send'}</Button>
+            </div>
           </form>
         </section>
 
-        <aside className="space-y-4">
+        <aside className="hidden min-h-0 space-y-4 overflow-y-auto lg:block">
           <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
             <h2 className="text-sm font-semibold text-slate-900">Phase 3A templates</h2>
             <div className="mt-3 space-y-2">

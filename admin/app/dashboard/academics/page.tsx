@@ -6,6 +6,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import PageHeader from '../../../components/PageHeader';
 import { useNotify } from '../../../components/NotificationProvider';
 import { getSession } from '../../../services/auth.service';
+import SystemSetupTab from '../settings/system-setup';
 import {
   createAcademicYear,
   deleteAcademicYear,
@@ -65,6 +66,7 @@ type TabId =
   | 'classes'
   | 'sections'
   | 'subjects'
+  | 'holidays'
   | 'rooms'
   | 'times'
   | 'assign-subjects'
@@ -95,6 +97,7 @@ const tabs: Array<{ id: TabId; label: string; description: string; icon: Academi
   { id: 'classes', label: 'Classes', description: 'Class names and linked sections', icon: 'book' },
   { id: 'sections', label: 'Section', description: 'Reusable class sections', icon: 'layers' },
   { id: 'subjects', label: 'Subject', description: 'Theory and practical subjects', icon: 'book' },
+  { id: 'holidays', label: 'Holidays', description: 'School holidays and calendar exceptions', icon: 'calendar' },
   { id: 'assign-subjects', label: 'Assign Multiple Subjects', description: 'Subjects and teachers by class-section', icon: 'shuffle' },
   { id: 'class-teachers', label: 'Assign Class Teacher', description: 'Class-section teacher ownership', icon: 'teacher' },
 ];
@@ -147,6 +150,17 @@ const getErrorMessage = (error: unknown, fallback = 'Something went wrong') =>
   (error as any)?.response?.data?.error?.message ||
   (error as any)?.response?.data?.message ||
   (error instanceof Error ? error.message : fallback);
+
+type BatchAcademicYearForm = typeof emptyAcademicYearForm & { rowId: string };
+type BatchClassForm = typeof emptyClassForm & { rowId: string };
+type BatchSectionForm = typeof emptySectionForm & { rowId: string };
+type BatchSubjectForm = typeof emptySubjectForm & { rowId: string };
+
+const createBatchId = () => `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
+const createAcademicYearBatchRow = (): BatchAcademicYearForm => ({ ...emptyAcademicYearForm, rowId: createBatchId() });
+const createClassBatchRow = (): BatchClassForm => ({ ...emptyClassForm, rowId: createBatchId(), sectionIds: [] });
+const createSectionBatchRow = (): BatchSectionForm => ({ ...emptySectionForm, rowId: createBatchId() });
+const createSubjectBatchRow = (): BatchSubjectForm => ({ ...emptySubjectForm, rowId: createBatchId() });
 
 const teacherName = (teacher?: { firstName?: string; lastName?: string; employeeNo?: string | null } | null) =>
   teacher ? `${teacher.firstName ?? ''} ${teacher.lastName ?? ''}`.trim() || teacher.employeeNo || 'Teacher' : 'Unassigned';
@@ -422,6 +436,10 @@ export default function AcademicSetupPage() {
   const [classForm, setClassForm] = useState(emptyClassForm);
   const [sectionForm, setSectionForm] = useState(emptySectionForm);
   const [subjectForm, setSubjectForm] = useState(emptySubjectForm);
+  const [academicYearBatchRows, setAcademicYearBatchRows] = useState<BatchAcademicYearForm[]>(() => [createAcademicYearBatchRow()]);
+  const [classBatchRows, setClassBatchRows] = useState<BatchClassForm[]>(() => [createClassBatchRow()]);
+  const [sectionBatchRows, setSectionBatchRows] = useState<BatchSectionForm[]>(() => [createSectionBatchRow()]);
+  const [subjectBatchRows, setSubjectBatchRows] = useState<BatchSubjectForm[]>(() => [createSubjectBatchRow()]);
   const [roomForm, setRoomForm] = useState(emptyRoomForm);
   const [timeForm, setTimeForm] = useState(emptyTimeForm);
   const [assignClassId, setAssignClassId] = useState('');
@@ -540,6 +558,24 @@ export default function AcademicSetupPage() {
     onError,
   });
 
+  const academicYearBatchMutation = useMutation({
+    mutationFn: async () => {
+      const rows = academicYearBatchRows.map((row) => ({
+        name: row.name.trim(),
+        startDate: row.startDate,
+        endDate: row.endDate,
+        isActive: row.isActive,
+      }));
+      return Promise.all(rows.map((row) => createAcademicYear(row)));
+    },
+    onSuccess: async (items) => {
+      setAcademicYearBatchRows([createAcademicYearBatchRow()]);
+      closeForm('academic-years');
+      await onSuccess('Academic years saved', `${items.length} academic year${items.length === 1 ? '' : 's'} created.`);
+    },
+    onError,
+  });
+
   const classMutation = useMutation({
     mutationFn: () =>
       classForm.id
@@ -561,12 +597,42 @@ export default function AcademicSetupPage() {
     onError,
   });
 
+  const classBatchMutation = useMutation({
+    mutationFn: async () => {
+      const rows = classBatchRows.map((row) => ({
+        name: row.name.trim(),
+        academicYearId: row.academicYearId || null,
+        sectionIds: row.sectionIds,
+      }));
+      return Promise.all(rows.map((row) => createSetupClass(row)));
+    },
+    onSuccess: async (items) => {
+      setClassBatchRows([createClassBatchRow()]);
+      closeForm('classes');
+      await onSuccess('Classes saved', `${items.length} class${items.length === 1 ? '' : 'es'} created.`);
+    },
+    onError,
+  });
+
   const sectionMutation = useMutation({
     mutationFn: () => (sectionForm.id ? updateSetupSection(sectionForm.id, { name: sectionForm.name }) : createSetupSection({ name: sectionForm.name })),
     onSuccess: () => {
       setSectionForm(emptySectionForm);
       closeForm('sections');
       onSuccess('Section saved');
+    },
+    onError,
+  });
+
+  const sectionBatchMutation = useMutation({
+    mutationFn: async () => {
+      const rows = sectionBatchRows.map((row) => ({ name: row.name.trim() }));
+      return Promise.all(rows.map((row) => createSetupSection(row)));
+    },
+    onSuccess: async (items) => {
+      setSectionBatchRows([createSectionBatchRow()]);
+      closeForm('sections');
+      await onSuccess('Sections saved', `${items.length} section${items.length === 1 ? '' : 's'} created.`);
     },
     onError,
   });
@@ -580,6 +646,23 @@ export default function AcademicSetupPage() {
       setSubjectForm(emptySubjectForm);
       closeForm('subjects');
       onSuccess('Subject saved');
+    },
+    onError,
+  });
+
+  const subjectBatchMutation = useMutation({
+    mutationFn: async () => {
+      const rows = subjectBatchRows.map((row) => ({
+        name: row.name.trim(),
+        code: row.code.trim() || null,
+        type: row.type,
+      }));
+      return Promise.all(rows.map((row) => createSetupSubject(row)));
+    },
+    onSuccess: async (items) => {
+      setSubjectBatchRows([createSubjectBatchRow()]);
+      closeForm('subjects');
+      await onSuccess('Subjects saved', `${items.length} subject${items.length === 1 ? '' : 's'} created.`);
     },
     onError,
   });
@@ -784,25 +867,61 @@ export default function AcademicSetupPage() {
       [year.name, year.startDate, year.endDate].some((field) => String(field ?? '').toLowerCase().includes(value)),
     );
   }, [academicYears, search]);
+  const hasDuplicateValues = (values: string[]) => {
+    const normalized = values.map((value) => value.trim().toLowerCase()).filter(Boolean);
+    return normalized.length !== new Set(normalized).size;
+  };
 
   const validateAcademicYear = () => {
-    if (!academicYearForm.name.trim()) return notify.error('Validation error', 'Academic year name is required.');
-    if (!academicYearForm.startDate || !academicYearForm.endDate) return notify.error('Validation error', 'Start and end date are required.');
-    if (academicYearForm.endDate <= academicYearForm.startDate) return notify.error('Validation error', 'End date must be after start date.');
-    academicYearMutation.mutate();
+    if (academicYearForm.id) {
+      if (!academicYearForm.name.trim()) return notify.error('Validation error', 'Academic year name is required.');
+      if (!academicYearForm.startDate || !academicYearForm.endDate) return notify.error('Validation error', 'Start and end date are required.');
+      if (academicYearForm.endDate <= academicYearForm.startDate) return notify.error('Validation error', 'End date must be after start date.');
+      academicYearMutation.mutate();
+      return;
+    }
+    if (!academicYearBatchRows.length) return notify.error('Validation error', 'Add at least one academic year.');
+    if (academicYearBatchRows.some((row) => !row.name.trim())) return notify.error('Validation error', 'Academic year name is required for every row.');
+    if (academicYearBatchRows.some((row) => !row.startDate || !row.endDate)) return notify.error('Validation error', 'Start and end date are required for every academic year.');
+    if (academicYearBatchRows.some((row) => row.endDate <= row.startDate)) return notify.error('Validation error', 'Every end date must be after its start date.');
+    if (hasDuplicateValues(academicYearBatchRows.map((row) => row.name))) return notify.error('Validation error', 'Remove duplicate academic year names before saving.');
+    academicYearBatchMutation.mutate();
   };
   const validateClass = () => {
-    if (!classForm.name.trim()) return notify.error('Validation error', 'Class name is required.');
-    classMutation.mutate();
+    if (classForm.id) {
+      if (!classForm.name.trim()) return notify.error('Validation error', 'Class name is required.');
+      classMutation.mutate();
+      return;
+    }
+    if (!classBatchRows.length) return notify.error('Validation error', 'Add at least one class.');
+    if (classBatchRows.some((row) => !row.name.trim())) return notify.error('Validation error', 'Class name is required for every row.');
+    if (hasDuplicateValues(classBatchRows.map((row) => row.name))) return notify.error('Validation error', 'Remove duplicate class names before saving.');
+    classBatchMutation.mutate();
   };
   const validateSection = () => {
-    if (!sectionForm.name.trim()) return notify.error('Validation error', 'Section name is required.');
-    sectionMutation.mutate();
+    if (sectionForm.id) {
+      if (!sectionForm.name.trim()) return notify.error('Validation error', 'Section name is required.');
+      sectionMutation.mutate();
+      return;
+    }
+    if (!sectionBatchRows.length) return notify.error('Validation error', 'Add at least one section.');
+    if (sectionBatchRows.some((row) => !row.name.trim())) return notify.error('Validation error', 'Section name is required for every row.');
+    if (hasDuplicateValues(sectionBatchRows.map((row) => row.name))) return notify.error('Validation error', 'Remove duplicate section names before saving.');
+    sectionBatchMutation.mutate();
   };
   const validateSubject = () => {
-    if (!subjectForm.name.trim()) return notify.error('Validation error', 'Subject name is required.');
-    if (!subjectForm.code.trim()) return notify.error('Validation error', 'Subject code is required.');
-    subjectMutation.mutate();
+    if (subjectForm.id) {
+      if (!subjectForm.name.trim()) return notify.error('Validation error', 'Subject name is required.');
+      if (!subjectForm.code.trim()) return notify.error('Validation error', 'Subject code is required.');
+      subjectMutation.mutate();
+      return;
+    }
+    if (!subjectBatchRows.length) return notify.error('Validation error', 'Add at least one subject.');
+    if (subjectBatchRows.some((row) => !row.name.trim())) return notify.error('Validation error', 'Subject name is required for every row.');
+    if (subjectBatchRows.some((row) => !row.code.trim())) return notify.error('Validation error', 'Subject code is required for every row.');
+    if (hasDuplicateValues(subjectBatchRows.map((row) => row.name))) return notify.error('Validation error', 'Remove duplicate subject names before saving.');
+    if (hasDuplicateValues(subjectBatchRows.map((row) => row.code))) return notify.error('Validation error', 'Remove duplicate subject codes before saving.');
+    subjectBatchMutation.mutate();
   };
   const validateRoom = () => {
     const roomNumber = roomForm.roomNumber.trim().replace(/\s+/g, ' ');
@@ -957,7 +1076,7 @@ export default function AcademicSetupPage() {
 
       {activeTab === 'academic-years' ? (
         <SimpleCrudLayout
-          title={academicYearForm.id ? 'Edit Academic Year' : 'Add Academic Year'}
+          title={academicYearForm.id ? 'Edit Academic Year' : 'Add Academic Years'}
           listTitle="Academic Year List"
           isLoading={yearsQuery.isLoading}
           emptyMessage="No academic years found."
@@ -965,62 +1084,124 @@ export default function AcademicSetupPage() {
           isFormOpen={isFormOpen('academic-years', Boolean(academicYearForm.id))}
           onOpenForm={() => {
             setAcademicYearForm(emptyAcademicYearForm);
+            setAcademicYearBatchRows((rows) => (rows.length ? rows : [createAcademicYearBatchRow()]));
             openForm('academic-years');
           }}
           onCloseForm={() => {
             setAcademicYearForm(emptyAcademicYearForm);
+            setAcademicYearBatchRows([createAcademicYearBatchRow()]);
             closeForm('academic-years');
           }}
           search={search}
           setSearch={setSearch}
           form={
-            <>
-              <Field label="Academic year">
-                <input
-                  className={inputClass}
-                  value={academicYearForm.name}
-                  onChange={(e) => setAcademicYearForm((p) => ({ ...p, name: e.target.value }))}
-                  placeholder="Example: 2026 Year"
-                />
-              </Field>
-              <Field label="Starting date">
-                <input
-                  type="date"
-                  className={inputClass}
-                  value={academicYearForm.startDate}
-                  onChange={(e) => setAcademicYearForm((p) => ({ ...p, startDate: e.target.value }))}
-                />
-              </Field>
-              <Field label="Ending date">
-                <input
-                  type="date"
-                  className={inputClass}
-                  value={academicYearForm.endDate}
-                  onChange={(e) => setAcademicYearForm((p) => ({ ...p, endDate: e.target.value }))}
-                />
-              </Field>
-              <label className="flex items-center gap-3 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm font-semibold text-slate-700">
-                <input
-                  type="checkbox"
-                  checked={academicYearForm.isActive}
-                  onChange={(e) => setAcademicYearForm((p) => ({ ...p, isActive: e.target.checked }))}
-                />
-                Active academic year
-              </label>
-              <div className="flex gap-2">
-                <PrimaryButton icon={academicYearForm.id ? 'save' : 'plus'} disabled={academicYearMutation.isPending} onClick={validateAcademicYear}>
-                  {academicYearForm.id ? 'Update Year' : 'Save Year'}
-                </PrimaryButton>
-                {academicYearForm.id ? (
-                  <SecondaryButton icon="x" onClick={() => {
-                    setAcademicYearForm(emptyAcademicYearForm);
-                    closeForm('academic-years');
-                  }}>
-                    Cancel
-                  </SecondaryButton>
-                ) : null}
-              </div>
-            </>
+            academicYearForm.id ? (
+              <>
+                <Field label="Academic year">
+                  <input
+                    className={inputClass}
+                    value={academicYearForm.name}
+                    onChange={(e) => setAcademicYearForm((p) => ({ ...p, name: e.target.value }))}
+                    placeholder="Example: 2026 Year"
+                  />
+                </Field>
+                <Field label="Starting date">
+                  <input
+                    type="date"
+                    className={inputClass}
+                    value={academicYearForm.startDate}
+                    onChange={(e) => setAcademicYearForm((p) => ({ ...p, startDate: e.target.value }))}
+                  />
+                </Field>
+                <Field label="Ending date">
+                  <input
+                    type="date"
+                    className={inputClass}
+                    value={academicYearForm.endDate}
+                    onChange={(e) => setAcademicYearForm((p) => ({ ...p, endDate: e.target.value }))}
+                  />
+                </Field>
+                <label className="flex items-center gap-3 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm font-semibold text-slate-700">
+                  <input
+                    type="checkbox"
+                    checked={academicYearForm.isActive}
+                    onChange={(e) => setAcademicYearForm((p) => ({ ...p, isActive: e.target.checked }))}
+                  />
+                  Active academic year
+                </label>
+              </>
+            ) : (
+              <>
+                <div className="space-y-3">
+                  {academicYearBatchRows.map((row, index) => (
+                    <div key={row.rowId} className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                      <div className="mb-3 flex items-center justify-between gap-3">
+                        <h3 className="text-sm font-bold text-slate-900">Academic Year {index + 1}</h3>
+                        {academicYearBatchRows.length > 1 ? (
+                          <IconButton
+                            icon="trash"
+                            label="Remove academic year"
+                            variant="danger"
+                            size="sm"
+                            onClick={() => setAcademicYearBatchRows((rows) => rows.filter((item) => item.rowId !== row.rowId))}
+                          />
+                        ) : null}
+                      </div>
+                      <div className="grid gap-3 lg:grid-cols-[1fr_12rem_12rem]">
+                        <Field label="Academic year">
+                          <input
+                            className={inputClass}
+                            value={row.name}
+                            onChange={(e) => setAcademicYearBatchRows((rows) => rows.map((item) => item.rowId === row.rowId ? { ...item, name: e.target.value } : item))}
+                            placeholder="Example: 2027-2028"
+                          />
+                        </Field>
+                        <Field label="Starting date">
+                          <input
+                            type="date"
+                            className={inputClass}
+                            value={row.startDate}
+                            onChange={(e) => setAcademicYearBatchRows((rows) => rows.map((item) => item.rowId === row.rowId ? { ...item, startDate: e.target.value } : item))}
+                          />
+                        </Field>
+                        <Field label="Ending date">
+                          <input
+                            type="date"
+                            className={inputClass}
+                            value={row.endDate}
+                            onChange={(e) => setAcademicYearBatchRows((rows) => rows.map((item) => item.rowId === row.rowId ? { ...item, endDate: e.target.value } : item))}
+                          />
+                        </Field>
+                      </div>
+                      <label className="mt-3 flex items-center gap-3 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-700">
+                        <input
+                          type="checkbox"
+                          checked={row.isActive}
+                          onChange={(e) => setAcademicYearBatchRows((rows) => rows.map((item) => item.rowId === row.rowId ? { ...item, isActive: e.target.checked } : item))}
+                        />
+                        Active academic year
+                      </label>
+                    </div>
+                  ))}
+                </div>
+                <IconButton icon="plus" label="Add another academic year" variant="primary" onClick={() => setAcademicYearBatchRows((rows) => [...rows, createAcademicYearBatchRow()])} />
+              </>
+            )
+          }
+          footer={
+            <div className="flex gap-2">
+              <PrimaryButton icon={academicYearForm.id ? 'save' : 'plus'} disabled={academicYearMutation.isPending || academicYearBatchMutation.isPending} onClick={validateAcademicYear}>
+                {academicYearForm.id ? 'Update Year' : `Save ${academicYearBatchRows.length} Year${academicYearBatchRows.length === 1 ? '' : 's'}`}
+              </PrimaryButton>
+              {academicYearForm.id ? (
+                <SecondaryButton icon="x" onClick={() => {
+                  setAcademicYearForm(emptyAcademicYearForm);
+                  closeForm('academic-years');
+                }}>
+                  Cancel
+                </SecondaryButton>
+              ) : null}
+            </div>
           }
           table={
             <AcademicYearTable
@@ -1044,52 +1225,119 @@ export default function AcademicSetupPage() {
       {activeTab === 'classes' ? (
         <div className="space-y-5">
           <FormCard
-            title={classForm.id ? 'Edit Class' : 'Add Class'}
+            title={classForm.id ? 'Edit Class' : 'Add Classes'}
             actionLabel="Add Class"
             isOpen={isFormOpen('classes', Boolean(classForm.id))}
             onOpen={() => {
               setClassForm(emptyClassForm);
+              setClassBatchRows((rows) => (rows.length ? rows : [createClassBatchRow()]));
               openForm('classes');
             }}
             onClose={() => {
               setClassForm(emptyClassForm);
+              setClassBatchRows([createClassBatchRow()]);
               closeForm('classes');
             }}
           >
-            <Field label="Class name">
-              <input className={inputClass} value={classForm.name} onChange={(e) => setClassForm((p) => ({ ...p, name: e.target.value }))} placeholder="Example: Grade 10" />
-            </Field>
-            <Field label="Academic year">
-              <select className={inputClass} value={classForm.academicYearId} onChange={(e) => setClassForm((p) => ({ ...p, academicYearId: e.target.value }))}>
-                <option value="">Select academic year</option>
-                {(yearsQuery.data ?? []).map((year: { id: string; name: string }) => <option key={year.id} value={year.id}>{year.name}</option>)}
-              </select>
-            </Field>
-            <div>
-              <span className="mb-2 block text-xs font-bold uppercase tracking-wide text-slate-500">Sections</span>
-              <div className="grid grid-cols-2 gap-2">
-                {(sectionsQuery.data ?? []).map((section) => (
-                  <label key={section.id} className="flex items-center gap-2 rounded-xl border border-slate-200 px-3 py-2 text-sm">
-                    <input
-                      type="checkbox"
-                      checked={classFormSectionIds.has(section.id)}
-                      onChange={(event) =>
-                        setClassForm((prev) => ({
-                          ...prev,
-                          sectionIds: event.target.checked
-                            ? [...prev.sectionIds, section.id]
-                            : prev.sectionIds.filter((id) => id !== section.id),
-                        }))
-                      }
-                    />
-                    {section.name}
-                  </label>
-                ))}
-              </div>
-              {!sectionsQuery.data?.length ? <p className="mt-2 text-xs text-slate-500">Create sections first, then link them to classes.</p> : null}
-            </div>
+            {classForm.id ? (
+              <>
+                <Field label="Class name">
+                  <input className={inputClass} value={classForm.name} onChange={(e) => setClassForm((p) => ({ ...p, name: e.target.value }))} placeholder="Example: Grade 10" />
+                </Field>
+                <Field label="Academic year">
+                  <select className={inputClass} value={classForm.academicYearId} onChange={(e) => setClassForm((p) => ({ ...p, academicYearId: e.target.value }))}>
+                    <option value="">Select academic year</option>
+                    {(yearsQuery.data ?? []).map((year: { id: string; name: string }) => <option key={year.id} value={year.id}>{year.name}</option>)}
+                  </select>
+                </Field>
+                <div>
+                  <span className="mb-2 block text-xs font-bold uppercase tracking-wide text-slate-500">Sections</span>
+                  <div className="grid grid-cols-2 gap-2">
+                    {(sectionsQuery.data ?? []).map((section) => (
+                      <label key={section.id} className="flex items-center gap-2 rounded-xl border border-slate-200 px-3 py-2 text-sm">
+                        <input
+                          type="checkbox"
+                          checked={classFormSectionIds.has(section.id)}
+                          onChange={(event) =>
+                            setClassForm((prev) => ({
+                              ...prev,
+                              sectionIds: event.target.checked
+                                ? [...prev.sectionIds, section.id]
+                                : prev.sectionIds.filter((id) => id !== section.id),
+                            }))
+                          }
+                        />
+                        {section.name}
+                      </label>
+                    ))}
+                  </div>
+                  {!sectionsQuery.data?.length ? <p className="mt-2 text-xs text-slate-500">Create sections first, then link them to classes.</p> : null}
+                </div>
+              </>
+            ) : (
+              <>
+                <div className="space-y-3">
+                  {classBatchRows.map((row, index) => {
+                    const rowSectionIds = new Set(row.sectionIds);
+                    return (
+                      <div key={row.rowId} className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                        <div className="mb-3 flex items-center justify-between gap-3">
+                          <h3 className="text-sm font-bold text-slate-900">Class {index + 1}</h3>
+                          {classBatchRows.length > 1 ? (
+                            <IconButton icon="trash" label="Remove class" variant="danger" size="sm" onClick={() => setClassBatchRows((rows) => rows.filter((item) => item.rowId !== row.rowId))} />
+                          ) : null}
+                        </div>
+                        <div className="grid gap-3 lg:grid-cols-2">
+                          <Field label="Class name">
+                            <input className={inputClass} value={row.name} onChange={(e) => setClassBatchRows((rows) => rows.map((item) => item.rowId === row.rowId ? { ...item, name: e.target.value } : item))} placeholder="Example: Class 1" />
+                          </Field>
+                          <Field label="Academic year">
+                            <select className={inputClass} value={row.academicYearId} onChange={(e) => setClassBatchRows((rows) => rows.map((item) => item.rowId === row.rowId ? { ...item, academicYearId: e.target.value } : item))}>
+                              <option value="">Select academic year</option>
+                              {(yearsQuery.data ?? []).map((year: { id: string; name: string }) => <option key={year.id} value={year.id}>{year.name}</option>)}
+                            </select>
+                          </Field>
+                        </div>
+                        <div className="mt-3">
+                          <span className="mb-2 block text-xs font-bold uppercase tracking-wide text-slate-500">Sections</span>
+                          <div className="grid grid-cols-2 gap-2 md:grid-cols-3">
+                            {(sectionsQuery.data ?? []).map((section) => (
+                              <label key={section.id} className="flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm">
+                                <input
+                                  type="checkbox"
+                                  checked={rowSectionIds.has(section.id)}
+                                  onChange={(event) =>
+                                    setClassBatchRows((rows) =>
+                                      rows.map((item) =>
+                                        item.rowId === row.rowId
+                                          ? {
+                                              ...item,
+                                              sectionIds: event.target.checked
+                                                ? [...item.sectionIds, section.id]
+                                                : item.sectionIds.filter((id) => id !== section.id),
+                                            }
+                                          : item,
+                                      ),
+                                    )
+                                  }
+                                />
+                                {section.name}
+                              </label>
+                            ))}
+                          </div>
+                          {!sectionsQuery.data?.length ? <p className="mt-2 text-xs text-slate-500">Create sections first, then link them to classes.</p> : null}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+                <IconButton icon="plus" label="Add another class" variant="primary" onClick={() => setClassBatchRows((rows) => [...rows, createClassBatchRow()])} />
+              </>
+            )}
             <div className="flex gap-2">
-              <PrimaryButton icon={classForm.id ? 'save' : 'plus'} disabled={classMutation.isPending} onClick={validateClass}>{classForm.id ? 'Update Class' : 'Add Class'}</PrimaryButton>
+              <PrimaryButton icon={classForm.id ? 'save' : 'plus'} disabled={classMutation.isPending || classBatchMutation.isPending} onClick={validateClass}>
+                {classForm.id ? 'Update Class' : `Save ${classBatchRows.length} Class${classBatchRows.length === 1 ? '' : 'es'}`}
+              </PrimaryButton>
               {classForm.id ? <SecondaryButton icon="x" onClick={() => {
                 setClassForm(emptyClassForm);
                 closeForm('classes');
@@ -1121,7 +1369,7 @@ export default function AcademicSetupPage() {
 
       {activeTab === 'sections' ? (
         <SimpleCrudLayout
-          title={sectionForm.id ? 'Edit Section' : 'Add Section'}
+          title={sectionForm.id ? 'Edit Section' : 'Add Sections'}
           listTitle="Section List"
           isLoading={sectionsQuery.isLoading}
           emptyMessage="No sections found."
@@ -1129,27 +1377,52 @@ export default function AcademicSetupPage() {
           isFormOpen={isFormOpen('sections', Boolean(sectionForm.id))}
           onOpenForm={() => {
             setSectionForm(emptySectionForm);
+            setSectionBatchRows((rows) => (rows.length ? rows : [createSectionBatchRow()]));
             openForm('sections');
           }}
           onCloseForm={() => {
             setSectionForm(emptySectionForm);
+            setSectionBatchRows([createSectionBatchRow()]);
             closeForm('sections');
           }}
           search={search}
           setSearch={setSearch}
           form={
-            <>
+            sectionForm.id ? (
               <Field label="Section name">
                 <input className={inputClass} value={sectionForm.name} onChange={(e) => setSectionForm((p) => ({ ...p, name: e.target.value }))} placeholder="Example: A" />
               </Field>
-              <div className="flex gap-2">
-                <PrimaryButton icon={sectionForm.id ? 'save' : 'plus'} disabled={sectionMutation.isPending} onClick={validateSection}>{sectionForm.id ? 'Update Section' : 'Add Section'}</PrimaryButton>
-                {sectionForm.id ? <SecondaryButton icon="x" onClick={() => {
-                  setSectionForm(emptySectionForm);
-                  closeForm('sections');
-                }}>Cancel</SecondaryButton> : null}
-              </div>
-            </>
+            ) : (
+              <>
+                <div className="space-y-3">
+                  {sectionBatchRows.map((row, index) => (
+                    <div key={row.rowId} className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                      <div className="mb-3 flex items-center justify-between gap-3">
+                        <h3 className="text-sm font-bold text-slate-900">Section {index + 1}</h3>
+                        {sectionBatchRows.length > 1 ? (
+                          <IconButton icon="trash" label="Remove section" variant="danger" size="sm" onClick={() => setSectionBatchRows((rows) => rows.filter((item) => item.rowId !== row.rowId))} />
+                        ) : null}
+                      </div>
+                      <Field label="Section name">
+                        <input className={inputClass} value={row.name} onChange={(e) => setSectionBatchRows((rows) => rows.map((item) => item.rowId === row.rowId ? { ...item, name: e.target.value } : item))} placeholder="Example: A" />
+                      </Field>
+                    </div>
+                  ))}
+                </div>
+                <IconButton icon="plus" label="Add another section" variant="primary" onClick={() => setSectionBatchRows((rows) => [...rows, createSectionBatchRow()])} />
+              </>
+            )
+          }
+          footer={
+            <div className="flex gap-2">
+              <PrimaryButton icon={sectionForm.id ? 'save' : 'plus'} disabled={sectionMutation.isPending || sectionBatchMutation.isPending} onClick={validateSection}>
+                {sectionForm.id ? 'Update Section' : `Save ${sectionBatchRows.length} Section${sectionBatchRows.length === 1 ? '' : 's'}`}
+              </PrimaryButton>
+              {sectionForm.id ? <SecondaryButton icon="x" onClick={() => {
+                setSectionForm(emptySectionForm);
+                closeForm('sections');
+              }}>Cancel</SecondaryButton> : null}
+            </div>
           }
           table={<SectionTable items={sectionsQuery.data ?? []} onEdit={(item) => {
             setSectionForm({ id: item.id, name: item.name });
@@ -1160,7 +1433,7 @@ export default function AcademicSetupPage() {
 
       {activeTab === 'subjects' ? (
         <SimpleCrudLayout
-          title={subjectForm.id ? 'Edit Subject' : 'Add Subject'}
+          title={subjectForm.id ? 'Edit Subject' : 'Add Subjects'}
           listTitle="Subject List"
           isLoading={subjectsQuery.isLoading}
           emptyMessage="No subjects found."
@@ -1168,38 +1441,80 @@ export default function AcademicSetupPage() {
           isFormOpen={isFormOpen('subjects', Boolean(subjectForm.id))}
           onOpenForm={() => {
             setSubjectForm(emptySubjectForm);
+            setSubjectBatchRows((rows) => (rows.length ? rows : [createSubjectBatchRow()]));
             openForm('subjects');
           }}
           onCloseForm={() => {
             setSubjectForm(emptySubjectForm);
+            setSubjectBatchRows([createSubjectBatchRow()]);
             closeForm('subjects');
           }}
           search={search}
           setSearch={setSearch}
           form={
-            <>
-              <Field label="Subject name"><input className={inputClass} value={subjectForm.name} onChange={(e) => setSubjectForm((p) => ({ ...p, name: e.target.value }))} placeholder="Example: Mathematics" /></Field>
-              <Field label="Subject code"><input className={inputClass} value={subjectForm.code} onChange={(e) => setSubjectForm((p) => ({ ...p, code: e.target.value }))} placeholder="Example: MATH10" /></Field>
-              <Field label="Subject type">
-                <select className={inputClass} value={subjectForm.type} onChange={(e) => setSubjectForm((p) => ({ ...p, type: e.target.value as SubjectType }))}>
-                  <option value="THEORY">Theory</option>
-                  <option value="PRACTICAL">Practical</option>
-                </select>
-              </Field>
-              <div className="flex gap-2">
-                <PrimaryButton icon={subjectForm.id ? 'save' : 'plus'} disabled={subjectMutation.isPending} onClick={validateSubject}>{subjectForm.id ? 'Update Subject' : 'Add Subject'}</PrimaryButton>
-                {subjectForm.id ? <SecondaryButton icon="x" onClick={() => {
-                  setSubjectForm(emptySubjectForm);
-                  closeForm('subjects');
-                }}>Cancel</SecondaryButton> : null}
-              </div>
-            </>
+            subjectForm.id ? (
+              <>
+                <Field label="Subject name"><input className={inputClass} value={subjectForm.name} onChange={(e) => setSubjectForm((p) => ({ ...p, name: e.target.value }))} placeholder="Example: Mathematics" /></Field>
+                <Field label="Subject code"><input className={inputClass} value={subjectForm.code} onChange={(e) => setSubjectForm((p) => ({ ...p, code: e.target.value }))} placeholder="Example: MATH10" /></Field>
+                <Field label="Subject type">
+                  <select className={inputClass} value={subjectForm.type} onChange={(e) => setSubjectForm((p) => ({ ...p, type: e.target.value as SubjectType }))}>
+                    <option value="THEORY">Theory</option>
+                    <option value="PRACTICAL">Practical</option>
+                  </select>
+                </Field>
+              </>
+            ) : (
+              <>
+                <div className="space-y-3">
+                  {subjectBatchRows.map((row, index) => (
+                    <div key={row.rowId} className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                      <div className="mb-3 flex items-center justify-between gap-3">
+                        <h3 className="text-sm font-bold text-slate-900">Subject {index + 1}</h3>
+                        {subjectBatchRows.length > 1 ? (
+                          <IconButton icon="trash" label="Remove subject" variant="danger" size="sm" onClick={() => setSubjectBatchRows((rows) => rows.filter((item) => item.rowId !== row.rowId))} />
+                        ) : null}
+                      </div>
+                      <div className="grid gap-3 lg:grid-cols-[1fr_14rem_12rem]">
+                        <Field label="Subject name">
+                          <input className={inputClass} value={row.name} onChange={(e) => setSubjectBatchRows((rows) => rows.map((item) => item.rowId === row.rowId ? { ...item, name: e.target.value } : item))} placeholder="Example: Mathematics" />
+                        </Field>
+                        <Field label="Subject code">
+                          <input className={inputClass} value={row.code} onChange={(e) => setSubjectBatchRows((rows) => rows.map((item) => item.rowId === row.rowId ? { ...item, code: e.target.value } : item))} placeholder="Example: MATH10" />
+                        </Field>
+                        <Field label="Subject type">
+                          <select className={inputClass} value={row.type} onChange={(e) => setSubjectBatchRows((rows) => rows.map((item) => item.rowId === row.rowId ? { ...item, type: e.target.value as SubjectType } : item))}>
+                            <option value="THEORY">Theory</option>
+                            <option value="PRACTICAL">Practical</option>
+                          </select>
+                        </Field>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+                <IconButton icon="plus" label="Add another subject" variant="primary" onClick={() => setSubjectBatchRows((rows) => [...rows, createSubjectBatchRow()])} />
+              </>
+            )
+          }
+          footer={
+            <div className="flex gap-2">
+              <PrimaryButton icon={subjectForm.id ? 'save' : 'plus'} disabled={subjectMutation.isPending || subjectBatchMutation.isPending} onClick={validateSubject}>
+                {subjectForm.id ? 'Update Subject' : `Save ${subjectBatchRows.length} Subject${subjectBatchRows.length === 1 ? '' : 's'}`}
+              </PrimaryButton>
+              {subjectForm.id ? <SecondaryButton icon="x" onClick={() => {
+                setSubjectForm(emptySubjectForm);
+                closeForm('subjects');
+              }}>Cancel</SecondaryButton> : null}
+            </div>
           }
           table={<SubjectTable items={subjectsQuery.data ?? []} onEdit={(item) => {
             setSubjectForm({ id: item.id, name: item.name, code: item.code ?? '', type: item.type });
             openForm('subjects');
           }} onDelete={(item) => confirmDelete(`Delete subject "${item.name}"?`, () => deleteSetupSubject(item.id))} />}
         />
+      ) : null}
+
+      {activeTab === 'holidays' ? (
+        <SystemSetupTab section="holidays" showOverview={false} showSectionMenu={false} />
       ) : null}
 
       {activeTab === 'rooms' ? (
@@ -1720,6 +2035,7 @@ function SimpleCrudLayout({
   title,
   listTitle,
   form,
+  footer,
   table,
   isLoading,
   emptyMessage,
@@ -1733,6 +2049,7 @@ function SimpleCrudLayout({
   title: string;
   listTitle: string;
   form: React.ReactNode;
+  footer?: React.ReactNode;
   table: React.ReactNode;
   isLoading: boolean;
   emptyMessage: string;
@@ -1747,6 +2064,7 @@ function SimpleCrudLayout({
     <div className="space-y-5">
       <FormCard title={title} actionLabel={actionLabel} isOpen={isFormOpen} onOpen={onOpenForm} onClose={onCloseForm}>
         {form}
+        {footer ? <div className="border-t border-slate-100 pt-4">{footer}</div> : null}
       </FormCard>
       <ListCard title={listTitle} search={search} setSearch={setSearch}>
         {isLoading ? <LoadingSkeleton /> : table || <EmptyState message={emptyMessage} />}

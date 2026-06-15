@@ -281,15 +281,15 @@ export default function StudentsPage() {
                       <td className="px-4 py-4 font-semibold text-slate-900">{student.admissionNo}</td>
                       <td className="px-4 py-4 text-slate-600">{student.rollNo ?? '-'}</td>
                       <td className="px-4 py-4">
-                        <div className="flex items-center gap-3">
+                        <Link href={`/dashboard/students/${student.id}`} className="group flex items-center gap-3 rounded-xl focus:outline-none focus:ring-2 focus:ring-violet-200">
                           <div className="grid h-10 w-10 place-items-center overflow-hidden rounded-full bg-violet-100 text-sm font-bold text-violet-700">
                             {photoUrl ? <img src={photoUrl} alt={name} className="h-full w-full object-cover" /> : name.slice(0, 2).toUpperCase()}
                           </div>
                           <div>
-                            <p className="font-semibold text-slate-900">{name}</p>
+                            <p className="font-semibold text-slate-900 group-hover:text-violet-700 group-hover:underline">{name}</p>
                             <p className="text-xs text-slate-500">{student.email ?? student.parentEmail ?? '-'}</p>
                           </div>
-                        </div>
+                        </Link>
                       </td>
                       <td className="px-4 py-4 text-slate-600">{student.class?.name ?? '-'} {student.section?.name ? `- ${student.section.name}` : ''}</td>
                       <td className="px-4 py-4 text-slate-600">{student.fatherName ?? '-'}</td>

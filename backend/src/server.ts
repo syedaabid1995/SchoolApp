@@ -2,6 +2,7 @@ import { createApp, appLogger } from './app';
 import { env } from './config/env';
 import { prisma } from './config/db';
 import { initializeTelemetry } from './telemetry';
+import { startFeeGenerationWorker } from './workers/fee-generation.worker';
 import { startSubscriptionWorker } from './workers/subscription.worker';
 
 const start = async () => {
@@ -15,6 +16,9 @@ const start = async () => {
     // Start subscription worker
     startSubscriptionWorker();
     appLogger.info('subscription worker started');
+
+    startFeeGenerationWorker();
+    appLogger.info('fee generation worker started');
 
     app.listen(env.PORT, () => {
       appLogger.info({ port: env.PORT, env: env.NODE_ENV }, 'server started');

@@ -16,15 +16,28 @@ import {
   getStudent,
   resolveStudentPhotoUrl,
   resolveUploadUrl,
+  type Student,
   updateStudent,
   uploadStudentDocument,
 } from '../../../../services/student.service';
+import {
+  getStudentFeeLedger,
+  listStudentCollectionInvoices,
+  type FeeInvoice,
+} from '../../../../services/fee-management.service';
+import { listStudentTransportAssignments } from '../../../../services/transport.service';
+import { listStudentDormitoryAssignments } from '../../../../services/dormitory.service';
+import { listLibraryMembers, listMemberIssues } from '../../../../services/library.service';
 
-type TabKey = 'profile' | 'fees' | 'exam' | 'documents' | 'timeline';
+type TabKey = 'profile' | 'parents' | 'fees' | 'transport' | 'library' | 'dormitory' | 'exam' | 'documents' | 'timeline';
 
 const tabs: Array<{ key: TabKey; label: string }> = [
   { key: 'profile', label: 'Profile' },
+  { key: 'parents', label: 'Parents' },
   { key: 'fees', label: 'Fees' },
+  { key: 'transport', label: 'Transport' },
+  { key: 'library', label: 'Library' },
+  { key: 'dormitory', label: 'Dormitory' },
   { key: 'exam', label: 'Exam' },
   { key: 'documents', label: 'Documents' },
   { key: 'timeline', label: 'Timeline' },
@@ -49,6 +62,41 @@ const InfoRow = ({ label, value }: { label: string; value?: string | number | nu
     <p className="mt-1 text-sm font-semibold text-slate-900">{value || '-'}</p>
   </div>
 );
+
+const toMoney = (value?: string | number | null) => {
+  const amount = Number(value ?? 0);
+  if (Number.isNaN(amount)) return '-';
+  return amount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+};
+
+const sumInvoiceField = (items: FeeInvoice[], field: 'totalAmount' | 'discountAmount' | 'fineAmount' | 'paidAmount' | 'dueAmount') =>
+  items.reduce((sum, item) => sum + Number(item[field] ?? 0), 0);
+
+type StudentMark = NonNullable<Student['marks']>[number];
+
+const formatMark = (value?: number | string | null, fractionDigits = 2) => {
+  if (value === undefined || value === null || value === '') return '-';
+  const amount = Number(value);
+  if (Number.isNaN(amount)) return '-';
+  return amount.toLocaleString(undefined, { minimumFractionDigits: fractionDigits, maximumFractionDigits: fractionDigits });
+};
+
+const isPassingMark = (mark: StudentMark) => {
+  const status = String(mark.status ?? '').toUpperCase();
+  if (status === 'FAIL' || status === 'FAILED') return false;
+  if (status === 'PASS' || status === 'PASSED') return true;
+  const obtained = Number(mark.marks ?? 0);
+  const passMarks = Number(mark.examPaper?.passMarks ?? 0);
+  return obtained >= passMarks;
+};
+
+const getExamDivision = (percentage: number, result: 'Pass' | 'Fail') => {
+  if (result === 'Fail') return 'Fail';
+  if (percentage >= 60) return 'First';
+  if (percentage >= 45) return 'Second';
+  if (percentage >= 33) return 'Third';
+  return 'Fail';
+};
 
 export default function StudentDetailPage() {
   const params = useParams();
@@ -80,6 +128,74 @@ export default function StudentDetailPage() {
   });
   const student = studentQuery.data;
   const displayName = student ? student.fullName ?? `${student.firstName} ${student.lastName}`.trim() : '';
+
+  const feeInvoicesQuery = useQuery({
+    queryKey: ['student-fee-invoices', studentId],
+    queryFn: () => listStudentCollectionInvoices(studentId),
+    enabled: Boolean(studentId) && canViewStudent && tab === 'fees',
+  });
+  const feeLedgerQuery = useQuery({
+    queryKey: ['student-fee-ledger', studentId],
+    queryFn: () => getStudentFeeLedger(studentId, { page: 1, limit: 20, sortBy: 'createdAt', sortOrder: 'desc' }),
+    enabled: Boolean(studentId) && canViewStudent && tab === 'fees',
+  });
+  const transportQuery = useQuery({
+    queryKey: ['student-detail-transport', studentId, student?.classId, student?.sectionId],
+    queryFn: () => listStudentTransportAssignments({
+      classId: student?.classId ?? undefined,
+      sectionId: student?.sectionId ?? undefined,
+      search: student?.classId ? undefined : student?.admissionNo || displayName,
+      active: 'all',
+    }),
+    enabled: Boolean(student?.id) && canViewStudent && tab === 'transport',
+  });
+  const dormitoryQuery = useQuery({
+    queryKey: ['student-detail-dormitory', studentId, student?.classId, student?.sectionId],
+    queryFn: () => listStudentDormitoryAssignments({
+      classId: student?.classId ?? undefined,
+      sectionId: student?.sectionId ?? undefined,
+      search: student?.classId ? undefined : student?.admissionNo || displayName,
+      active: 'all',
+    }),
+    enabled: Boolean(student?.id) && canViewStudent && tab === 'dormitory',
+  });
+  const libraryMembersQuery = useQuery({
+    queryKey: ['student-detail-library-members', studentId, student?.admissionNo],
+    queryFn: () => listLibraryMembers({ search: student?.admissionNo || displayName, active: true }),
+    enabled: Boolean(student?.id) && canViewStudent && tab === 'library',
+  });
+  const libraryMember = (libraryMembersQuery.data ?? []).find((member) => member.studentId === studentId || member.fullName.toLowerCase() === displayName.toLowerCase());
+  const libraryIssuesQuery = useQuery({
+    queryKey: ['student-detail-library-issues', studentId, libraryMember?.id],
+    queryFn: () => listMemberIssues(libraryMember!.id),
+    enabled: Boolean(libraryMember?.id) && canViewStudent && tab === 'library',
+  });
+  const feeInvoices = feeInvoicesQuery.data?.items ?? [];
+  const transportAssignments = (transportQuery.data ?? []).filter((item) => item.student?.id === studentId);
+  const dormitoryAssignments = (dormitoryQuery.data ?? []).filter((item) => item.student?.id === studentId);
+  const libraryIssues = libraryIssuesQuery.data ?? [];
+  const examGroups = Object.values(
+    (student?.marks ?? []).reduce<Record<string, { id: string; name: string; marks: StudentMark[] }>>((groups, mark) => {
+      const examId = mark.examPaper?.exam?.id ?? 'unassigned';
+      const examName = mark.examPaper?.exam?.name ?? 'Unassigned Exam';
+      if (!groups[examId]) groups[examId] = { id: examId, name: examName, marks: [] };
+      groups[examId].marks.push(mark);
+      return groups;
+    }, {}),
+  ).map((exam) => {
+    const grandTotal = exam.marks.reduce((sum, mark) => sum + Number(mark.examPaper?.maxMarks ?? 0), 0);
+    const totalObtained = exam.marks.reduce((sum, mark) => sum + Number(mark.marks ?? 0), 0);
+    const percentage = grandTotal > 0 ? (totalObtained / grandTotal) * 100 : 0;
+    const result: 'Pass' | 'Fail' = exam.marks.every(isPassingMark) ? 'Pass' : 'Fail';
+    return {
+      ...exam,
+      grandTotal,
+      totalObtained,
+      percentage,
+      result,
+      division: getExamDivision(percentage, result),
+    };
+  });
 
   useEffect(() => {
     if (!student) return;
@@ -184,7 +300,7 @@ export default function StudentDetailPage() {
       <div className="mx-auto w-full max-w-[1500px] px-4 py-6 lg:px-8">
         <PageHeader
           title={displayName}
-          subtitle="View profile, fees, exam results, documents, and timeline."
+          subtitle="View profile, parents, fees, transport, library, dormitory, exam results, documents, and timeline."
           breadcrumbs={[{ label: 'Dashboard', href: '/dashboard' }, { label: 'Students', href: '/dashboard/students' }, { label: displayName }]}
         />
 
@@ -272,38 +388,285 @@ export default function StudentDetailPage() {
               </section>
             )}
 
+            {tab === 'parents' && (
+              <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+                <h2 className="mb-4 text-lg font-bold text-slate-950">Parents & Guardians</h2>
+                <div className="grid gap-4 md:grid-cols-3">
+                  <InfoRow label="Father name" value={student.fatherName} />
+                  <InfoRow label="Father phone" value={student.fatherPhone} />
+                  <InfoRow label="Father occupation" value={student.fatherOccupation} />
+                  <InfoRow label="Mother name" value={student.motherName} />
+                  <InfoRow label="Mother phone" value={student.motherPhone} />
+                  <InfoRow label="Mother occupation" value={student.motherOccupation} />
+                  <InfoRow label="Guardian name" value={student.guardianName} />
+                  <InfoRow label="Guardian relationship" value={student.guardianRelationship} />
+                  <InfoRow label="Parent email" value={student.parentEmail} />
+                </div>
+                <h3 className="mt-6 text-base font-bold text-slate-950">Linked Parent Accounts</h3>
+                <div className="mt-3 grid gap-3 md:grid-cols-2">
+                  {student.parentLinks?.length ? student.parentLinks.map((link) => (
+                    <div key={link.parentId} className="rounded-xl border border-slate-100 bg-slate-50 p-4">
+                      <p className="font-bold text-slate-950">{link.parent.firstName} {link.parent.lastName}</p>
+                      <p className="mt-1 text-sm text-slate-600">{link.parent.phone ?? 'No phone'}</p>
+                      <p className="text-sm text-slate-600">{link.parent.email ?? 'No email'}</p>
+                    </div>
+                  )) : <p className="rounded-xl border border-dashed border-slate-200 p-6 text-sm text-slate-500">No parent login account is linked.</p>}
+                </div>
+                <h3 className="mt-6 text-base font-bold text-slate-950">Guardian Records</h3>
+                <div className="mt-3 grid gap-3 md:grid-cols-2">
+                  {student.guardians?.length ? student.guardians.map((guardian) => (
+                    <div key={guardian.id} className="rounded-xl border border-slate-100 p-4">
+                      <div className="flex items-start justify-between gap-3">
+                        <div>
+                          <p className="font-bold text-slate-950">{guardian.name}</p>
+                          <p className="text-xs font-semibold uppercase text-violet-600">{guardian.type}{guardian.isPrimary ? ' - Primary' : ''}</p>
+                        </div>
+                        {guardian.relation ? <span className="rounded-full bg-slate-100 px-2 py-1 text-xs font-bold text-slate-600">{guardian.relation}</span> : null}
+                      </div>
+                      <div className="mt-3 grid gap-2 text-sm text-slate-600">
+                        <p>Phone: {guardian.phone ?? '-'}</p>
+                        <p>Email: {guardian.email ?? '-'}</p>
+                        <p>Occupation: {guardian.occupation ?? '-'}</p>
+                      </div>
+                    </div>
+                  )) : <p className="rounded-xl border border-dashed border-slate-200 p-6 text-sm text-slate-500">No additional guardian records found.</p>}
+                </div>
+              </section>
+            )}
+
             {tab === 'fees' && (
               <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-                <h2 className="mb-4 text-lg font-bold text-slate-950">Fees</h2>
-                <div className="rounded-xl border border-dashed border-slate-200 p-8 text-center text-sm text-slate-500">
-                  Fee groups, payments, discounts, fines, paid amount, balance, and grand total will appear here when the fees module is connected.
+                <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+                  <h2 className="text-lg font-bold text-slate-950">Fees</h2>
+                  <Link href={`/dashboard/fees/collection?studentId=${student.id}`} className="rounded-xl border border-violet-200 bg-violet-50 px-3 py-2 text-sm font-bold text-violet-700">
+                    Open fee collection
+                  </Link>
                 </div>
+                {feeInvoicesQuery.isLoading || feeLedgerQuery.isLoading ? (
+                  <div className="rounded-xl border border-dashed border-slate-200 p-8 text-center text-sm text-slate-500">Loading fee details...</div>
+                ) : feeInvoicesQuery.isError || feeLedgerQuery.isError ? (
+                  <div className="rounded-xl border border-amber-200 bg-amber-50 p-6 text-sm font-semibold text-amber-800">Unable to load fee details. Check whether Fees access is enabled for this role.</div>
+                ) : (
+                  <>
+                    <div className="grid gap-3 md:grid-cols-5">
+                      <InfoRow label="Invoices" value={feeInvoices.length} />
+                      <InfoRow label="Total" value={toMoney(sumInvoiceField(feeInvoices, 'totalAmount'))} />
+                      <InfoRow label="Discount" value={toMoney(sumInvoiceField(feeInvoices, 'discountAmount'))} />
+                      <InfoRow label="Paid" value={toMoney(sumInvoiceField(feeInvoices, 'paidAmount'))} />
+                      <InfoRow label="Balance" value={toMoney(sumInvoiceField(feeInvoices, 'dueAmount'))} />
+                    </div>
+                    <div className="mt-5 overflow-x-auto rounded-xl border border-slate-100">
+                      <table className="min-w-full text-left text-sm">
+                        <thead className="bg-slate-50 text-xs uppercase text-slate-500">
+                          <tr><th className="px-3 py-2">Invoice</th><th className="px-3 py-2">Fee</th><th className="px-3 py-2">Month</th><th className="px-3 py-2">Due date</th><th className="px-3 py-2">Total</th><th className="px-3 py-2">Paid</th><th className="px-3 py-2">Balance</th><th className="px-3 py-2">Status</th></tr>
+                        </thead>
+                        <tbody>
+                          {feeInvoices.length ? feeInvoices.map((invoice) => (
+                            <tr key={invoice.id} className="border-b border-slate-100">
+                              <td className="px-3 py-2 font-semibold text-slate-900">{invoice.invoiceNumber}</td>
+                              <td className="px-3 py-2">{invoice.feeType?.name ?? '-'}</td>
+                              <td className="px-3 py-2">{invoice.feeMonth ?? '-'}</td>
+                              <td className="px-3 py-2">{formatDate(invoice.dueDate)}</td>
+                              <td className="px-3 py-2">{toMoney(invoice.totalAmount)}</td>
+                              <td className="px-3 py-2">{toMoney(invoice.paidAmount)}</td>
+                              <td className="px-3 py-2">{toMoney(invoice.dueAmount)}</td>
+                              <td className="px-3 py-2">{invoice.status}</td>
+                            </tr>
+                          )) : <tr><td colSpan={8} className="px-3 py-8 text-center text-slate-500">No fee invoices found for this student.</td></tr>}
+                        </tbody>
+                      </table>
+                    </div>
+                    <h3 className="mt-6 text-base font-bold text-slate-950">Recent Ledger</h3>
+                    <div className="mt-3 space-y-2">
+                      {(feeLedgerQuery.data?.items ?? []).length ? feeLedgerQuery.data!.items.map((entry) => (
+                        <div key={entry.id} className="grid gap-2 rounded-xl border border-slate-100 p-3 text-sm md:grid-cols-[1fr_auto_auto_auto]">
+                          <div>
+                            <p className="font-semibold text-slate-900">{entry.description}</p>
+                            <p className="text-xs text-slate-500">{formatDate(entry.createdAt)} {entry.invoice?.invoiceNumber ? `- ${entry.invoice.invoiceNumber}` : ''}</p>
+                          </div>
+                          <p>Debit: {toMoney(entry.debit ?? entry.debitAmount)}</p>
+                          <p>Credit: {toMoney(entry.credit ?? entry.creditAmount)}</p>
+                          <p className="font-semibold">Balance: {toMoney(entry.balance ?? entry.balanceAfter)}</p>
+                        </div>
+                      )) : <p className="rounded-xl border border-dashed border-slate-200 p-6 text-sm text-slate-500">No fee ledger entries found.</p>}
+                    </div>
+                  </>
+                )}
+              </section>
+            )}
+
+            {tab === 'transport' && (
+              <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+                <h2 className="mb-4 text-lg font-bold text-slate-950">Transport</h2>
+                {transportQuery.isLoading ? (
+                  <div className="rounded-xl border border-dashed border-slate-200 p-8 text-center text-sm text-slate-500">Loading transport assignment...</div>
+                ) : transportQuery.isError ? (
+                  <div className="rounded-xl border border-amber-200 bg-amber-50 p-6 text-sm font-semibold text-amber-800">Unable to load transport details. Check whether Transport access is enabled for this role.</div>
+                ) : transportAssignments.length ? (
+                  <div className="grid gap-3 md:grid-cols-2">
+                    {transportAssignments.map((assignment) => (
+                      <div key={assignment.id} className="rounded-xl border border-slate-100 p-4">
+                        <div className="flex items-start justify-between gap-3">
+                          <p className="font-bold text-slate-950">{assignment.route.title}</p>
+                          <span className={`rounded-full px-2 py-1 text-xs font-bold ${assignment.active ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-600'}`}>{assignment.active ? 'Active' : 'Inactive'}</span>
+                        </div>
+                        <div className="mt-3 grid gap-2 md:grid-cols-2">
+                          <InfoRow label="Fare" value={toMoney(assignment.route.fare)} />
+                          <InfoRow label="Vehicle" value={assignment.vehicle?.vehicleNumber} />
+                          <InfoRow label="Driver" value={assignment.vehicle?.driverName} />
+                          <InfoRow label="Driver contact" value={assignment.vehicle?.driverContact} />
+                        </div>
+                        {assignment.note ? <p className="mt-3 text-sm text-slate-600">{assignment.note}</p> : null}
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="rounded-xl border border-dashed border-slate-200 p-8 text-center text-sm text-slate-500">This student is not assigned to transport.</div>
+                )}
+              </section>
+            )}
+
+            {tab === 'library' && (
+              <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+                <h2 className="mb-4 text-lg font-bold text-slate-950">Library</h2>
+                {libraryMembersQuery.isLoading || libraryIssuesQuery.isLoading ? (
+                  <div className="rounded-xl border border-dashed border-slate-200 p-8 text-center text-sm text-slate-500">Loading library details...</div>
+                ) : libraryMembersQuery.isError || libraryIssuesQuery.isError ? (
+                  <div className="rounded-xl border border-amber-200 bg-amber-50 p-6 text-sm font-semibold text-amber-800">Unable to load library details. Check whether Library access is enabled for this role.</div>
+                ) : libraryMember ? (
+                  <>
+                    <div className="grid gap-3 md:grid-cols-4">
+                      <InfoRow label="Member code" value={libraryMember.memberCode} />
+                      <InfoRow label="Member status" value={libraryMember.active ? 'Active' : 'Inactive'} />
+                      <InfoRow label="Phone" value={libraryMember.phone} />
+                      <InfoRow label="Issued books" value={libraryIssues.length} />
+                    </div>
+                    <div className="mt-5 overflow-x-auto rounded-xl border border-slate-100">
+                      <table className="min-w-full text-left text-sm">
+                        <thead className="bg-slate-50 text-xs uppercase text-slate-500">
+                          <tr><th className="px-3 py-2">Book</th><th className="px-3 py-2">Book No</th><th className="px-3 py-2">Issue Date</th><th className="px-3 py-2">Return Date</th><th className="px-3 py-2">Status</th></tr>
+                        </thead>
+                        <tbody>
+                          {libraryIssues.length ? libraryIssues.map((issue) => (
+                            <tr key={issue.id} className="border-b border-slate-100">
+                              <td className="px-3 py-2 font-semibold text-slate-900">{issue.book?.title ?? '-'}</td>
+                              <td className="px-3 py-2">{issue.book?.bookNumber ?? '-'}</td>
+                              <td className="px-3 py-2">{formatDate(issue.issueDate)}</td>
+                              <td className="px-3 py-2">{formatDate(issue.returnDate ?? issue.returnedAt)}</td>
+                              <td className="px-3 py-2">{issue.status}</td>
+                            </tr>
+                          )) : <tr><td colSpan={5} className="px-3 py-8 text-center text-slate-500">No library issues found for this student.</td></tr>}
+                        </tbody>
+                      </table>
+                    </div>
+                  </>
+                ) : (
+                  <div className="rounded-xl border border-dashed border-slate-200 p-8 text-center text-sm text-slate-500">This student is not registered as a library member.</div>
+                )}
+              </section>
+            )}
+
+            {tab === 'dormitory' && (
+              <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+                <h2 className="mb-4 text-lg font-bold text-slate-950">Dormitory</h2>
+                {dormitoryQuery.isLoading ? (
+                  <div className="rounded-xl border border-dashed border-slate-200 p-8 text-center text-sm text-slate-500">Loading dormitory assignment...</div>
+                ) : dormitoryQuery.isError ? (
+                  <div className="rounded-xl border border-amber-200 bg-amber-50 p-6 text-sm font-semibold text-amber-800">Unable to load dormitory details. Check whether Dormitory access is enabled for this role.</div>
+                ) : dormitoryAssignments.length ? (
+                  <div className="grid gap-3 md:grid-cols-2">
+                    {dormitoryAssignments.map((assignment) => (
+                      <div key={assignment.id} className="rounded-xl border border-slate-100 p-4">
+                        <div className="flex items-start justify-between gap-3">
+                          <p className="font-bold text-slate-950">{assignment.dormitory.name}</p>
+                          <span className={`rounded-full px-2 py-1 text-xs font-bold ${assignment.active ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-600'}`}>{assignment.active ? 'Active' : 'Inactive'}</span>
+                        </div>
+                        <div className="mt-3 grid gap-2 md:grid-cols-2">
+                          <InfoRow label="Room" value={assignment.room?.roomNumber} />
+                          <InfoRow label="Room type" value={assignment.room?.roomType?.name} />
+                          <InfoRow label="Beds" value={assignment.room?.bedCount} />
+                          <InfoRow label="Cost per bed" value={toMoney(assignment.room?.costPerBed)} />
+                        </div>
+                        {assignment.note ? <p className="mt-3 text-sm text-slate-600">{assignment.note}</p> : null}
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="rounded-xl border border-dashed border-slate-200 p-8 text-center text-sm text-slate-500">This student is not assigned to a dormitory.</div>
+                )}
               </section>
             )}
 
             {tab === 'exam' && (
               <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-                <h2 className="mb-4 text-lg font-bold text-slate-950">Exam</h2>
-                <div className="overflow-x-auto">
-                  <table className="min-w-full text-left text-sm">
-                    <thead className="bg-slate-50 text-xs uppercase text-slate-500">
-                      <tr><th className="px-3 py-2">Exam</th><th className="px-3 py-2">Subject</th><th className="px-3 py-2">Marks</th><th className="px-3 py-2">Grade</th><th className="px-3 py-2">Status</th></tr>
-                    </thead>
-                    <tbody>
-                      {student.marks?.length ? student.marks.map((mark) => (
-                        <tr key={mark.id} className="border-b border-slate-100">
-                          <td className="px-3 py-2">{mark.examPaper?.exam?.name ?? '-'}</td>
-                          <td className="px-3 py-2">{mark.examPaper?.subject?.name ?? '-'}</td>
-                          <td className="px-3 py-2">{mark.marks} / {mark.examPaper?.maxMarks ?? '-'}</td>
-                          <td className="px-3 py-2">{mark.grade ?? '-'}</td>
-                          <td className="px-3 py-2">{mark.status ?? '-'}</td>
-                        </tr>
-                      )) : (
-                        <tr><td colSpan={5} className="px-3 py-8 text-center text-slate-500">No exam results found.</td></tr>
-                      )}
-                    </tbody>
-                  </table>
-                </div>
+                <h2 className="mb-4 text-lg font-bold text-slate-950">Exam Results</h2>
+                {examGroups.length ? (
+                  <div className="space-y-6">
+                    {examGroups.map((exam) => (
+                      <div key={exam.id} className="overflow-hidden rounded-xl border border-slate-200">
+                        <div className="border-b border-slate-200 bg-slate-100 px-4 py-3 text-lg font-bold text-slate-950">
+                          {exam.name}
+                        </div>
+                        <div className="overflow-x-auto">
+                          <table className="min-w-full text-left text-sm">
+                            <thead className="bg-white text-xs uppercase text-slate-500">
+                              <tr>
+                                <th className="px-3 py-3">Subject</th>
+                                <th className="px-3 py-3">Max Marks</th>
+                                <th className="px-3 py-3">Min Marks</th>
+                                <th className="px-3 py-3">Marks Obtained</th>
+                                <th className="px-3 py-3">Result</th>
+                                <th className="px-3 py-3">Grade</th>
+                                <th className="px-3 py-3">Note</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {exam.marks.map((mark) => {
+                                const subjectName = mark.examPaper?.subject?.name ?? '-';
+                                const subjectCode = mark.examPaper?.subject?.code;
+                                const passed = isPassingMark(mark);
+                                return (
+                                  <tr key={mark.id} className="border-t border-slate-100">
+                                    <td className="px-3 py-3 font-semibold text-slate-900">
+                                      {subjectName}{subjectCode ? ` (${subjectCode})` : ''}
+                                    </td>
+                                    <td className="px-3 py-3">{formatMark(mark.examPaper?.maxMarks)}</td>
+                                    <td className="px-3 py-3">{formatMark(mark.examPaper?.passMarks)}</td>
+                                    <td className="px-3 py-3 font-bold text-slate-950">{formatMark(mark.marks)}</td>
+                                    <td className="px-3 py-3">
+                                      <span className={`rounded-md px-2 py-1 text-xs font-bold ${passed ? 'bg-emerald-500 text-white' : 'bg-red-500 text-white'}`}>
+                                        {passed ? 'Pass' : 'Fail'}
+                                      </span>
+                                    </td>
+                                    <td className="px-3 py-3">{mark.grade ?? '-'}</td>
+                                    <td className="px-3 py-3">{mark.status ?? '-'}</td>
+                                  </tr>
+                                );
+                              })}
+                            </tbody>
+                          </table>
+                        </div>
+                        <div className="grid gap-3 bg-slate-100 px-4 py-4 text-sm font-bold text-slate-950 md:grid-cols-2 xl:grid-cols-6">
+                          <div>Grand Total : {formatMark(exam.grandTotal, 0)}</div>
+                          <div>Total Obtain Marks : {formatMark(exam.totalObtained, 0)}</div>
+                          <div>Percentage : {formatMark(exam.percentage, 2)}</div>
+                          <div>Rank : -</div>
+                          <div>
+                            Result :
+                            <span className={`ml-2 rounded-md px-2 py-1 text-xs font-bold ${exam.result === 'Pass' ? 'bg-emerald-500 text-white' : 'bg-red-500 text-white'}`}>
+                              {exam.result}
+                            </span>
+                          </div>
+                          <div>Division : {exam.division}</div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="rounded-xl border border-dashed border-slate-200 p-8 text-center text-sm text-slate-500">
+                    No exam results found.
+                  </div>
+                )}
               </section>
             )}
 

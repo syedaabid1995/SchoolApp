@@ -8,7 +8,16 @@ import { useNotify } from '../../../../components/NotificationProvider';
 import { getSession } from '../../../../services/auth.service';
 import { listAcademicYears } from '../../../../services/academic.service';
 import { listSetupClasses, listSetupSections } from '../../../../services/academic-setup.service';
+import {
+  createFeeCarryForward,
+  generateCarryForwardInvoice,
+  previewFeeCarryForward,
+  type FeeCarryForward,
+} from '../../../../services/fee-management.service';
 import { previewStudentPromotion, promoteStudents, type StudentPromotionResult } from '../../../../services/student-operations.service';
+
+const money = (value: number | string | null | undefined) =>
+  new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 2 }).format(Number(value ?? 0));
 
 export default function StudentPromotionPage() {
   const notify = useNotify();
@@ -22,6 +31,8 @@ export default function StudentPromotionPage() {
     note: '',
   });
   const [results, setResults] = useState<Record<string, StudentPromotionResult>>({});
+  const [carryForwardPreview, setCarryForwardPreview] = useState<Awaited<ReturnType<typeof previewFeeCarryForward>> | null>(null);
+  const [carryForwardRecords, setCarryForwardRecords] = useState<FeeCarryForward[]>([]);
 
   const { data: session, isLoading: sessionLoading } = useQuery({ queryKey: ['session'], queryFn: getSession });
   const isSchoolAdmin = session?.role === 'SCHOOL_ADMIN';
@@ -29,6 +40,7 @@ export default function StudentPromotionPage() {
   const hasPermission = (code: string) => isSchoolAdmin || permissionCodes.includes(code);
   const canViewPromotion = hasPermission('student.promote.view');
   const canCreatePromotion = hasPermission('student.promote.create');
+  const canCreateCarryForward = isSchoolAdmin || permissionCodes.includes('fees.carry-forward.create') || permissionCodes.includes('fees.carry-forwards.create');
   const yearsQuery = useQuery({ queryKey: ['academic-years'], queryFn: () => listAcademicYears(), enabled: canViewPromotion });
   const classesQuery = useQuery({ queryKey: ['setup-classes'], queryFn: () => listSetupClasses(), enabled: canViewPromotion });
   const sectionsQuery = useQuery({ queryKey: ['setup-sections'], queryFn: () => listSetupSections(), enabled: canViewPromotion });
@@ -82,6 +94,59 @@ export default function StudentPromotionPage() {
     onError: (error: any) => notify.error('Promotion failed', error?.response?.data?.error?.message ?? error.message ?? 'Unable to promote students.'),
   });
 
+  const selectedCarryForwardStudentIds = () => Object.entries(results).filter(([, result]) => result === 'PASS').map(([studentId]) => studentId);
+
+  const previewCarryForwardMutation = useMutation({
+    mutationFn: () => {
+      if (!form.fromAcademicSessionId || !form.toAcademicSessionId) throw new Error('Current and promote sessions are required.');
+      const studentIds = selectedCarryForwardStudentIds();
+      if (!studentIds.length) throw new Error('Mark at least one student as pass before previewing carry-forward.');
+      return previewFeeCarryForward({
+        fromAcademicSessionId: form.fromAcademicSessionId,
+        toAcademicSessionId: form.toAcademicSessionId,
+        academicSessionId: form.fromAcademicSessionId,
+        studentIds,
+      });
+    },
+    onSuccess: (data) => {
+      setCarryForwardPreview(data);
+      notify.success('Carry-forward preview ready', `${data.items.length} student balance(s) found.`);
+    },
+    onError: (error: any) => notify.error('Carry-forward preview failed', error?.response?.data?.error?.message ?? error.message ?? 'Unable to preview carry-forward.'),
+  });
+
+  const createCarryForwardMutation = useMutation({
+    mutationFn: () => {
+      if (!form.fromAcademicSessionId || !form.toAcademicSessionId) throw new Error('Current and promote sessions are required.');
+      const studentIds = selectedCarryForwardStudentIds();
+      if (!studentIds.length) throw new Error('Mark at least one student as pass before creating carry-forward.');
+      return createFeeCarryForward({
+        fromAcademicSessionId: form.fromAcademicSessionId,
+        toAcademicSessionId: form.toAcademicSessionId,
+        academicSessionId: form.fromAcademicSessionId,
+        studentIds,
+      });
+    },
+    onSuccess: (data) => {
+      setCarryForwardRecords(data.items);
+      notify.success('Carry-forward created', `${data.items.length} carry-forward record(s) created.`);
+    },
+    onError: (error: any) => notify.error('Carry-forward failed', error?.response?.data?.error?.message ?? error.message ?? 'Unable to create carry-forward.'),
+  });
+
+  const generateCarryForwardInvoicesMutation = useMutation({
+    mutationFn: async () => {
+      const pending = carryForwardRecords.filter((item) => item.status === 'PENDING');
+      if (!pending.length) throw new Error('Create pending carry-forward records before generating invoices.');
+      return Promise.all(pending.map((item) => generateCarryForwardInvoice(item.id, { academicSessionId: form.toAcademicSessionId })));
+    },
+    onSuccess: (items) => {
+      setCarryForwardRecords(items.map((item) => item.carryForward));
+      notify.success('Carry-forward invoices generated', `${items.length} invoice(s) generated in the target session.`);
+    },
+    onError: (error: any) => notify.error('Invoice generation failed', error?.response?.data?.error?.message ?? error.message ?? 'Unable to generate carry-forward invoices.'),
+  });
+
   if (sessionLoading || !session?.role) return <FullPageLoader label="Checking promotion access..." />;
   if (!canViewPromotion) {
     return (
@@ -132,9 +197,67 @@ export default function StudentPromotionPage() {
           </div>
           <div className="mt-4 flex flex-wrap gap-2">
             <button onClick={loadStudents} className="rounded-xl bg-[var(--theme-button-bg)] px-4 py-2 text-sm font-bold text-[var(--theme-button-text)] shadow-sm">Search Students</button>
+            <button
+              disabled={!canCreateCarryForward || !students.length || previewCarryForwardMutation.isPending}
+              onClick={() => previewCarryForwardMutation.mutate()}
+              className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-bold text-slate-700 disabled:opacity-50"
+            >
+              Preview Carry-Forward
+            </button>
+            <button
+              disabled={!canCreateCarryForward || !students.length || createCarryForwardMutation.isPending}
+              onClick={() => window.confirm('Create carry-forward records for passed students?') && createCarryForwardMutation.mutate()}
+              className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-bold text-slate-700 disabled:opacity-50"
+            >
+              Generate Carry-Forward
+            </button>
+            <button
+              disabled={!canCreateCarryForward || !carryForwardRecords.some((item) => item.status === 'PENDING') || generateCarryForwardInvoicesMutation.isPending}
+              onClick={() => window.confirm('Generate invoices for pending carry-forward records?') && generateCarryForwardInvoicesMutation.mutate()}
+              className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-bold text-slate-700 disabled:opacity-50"
+            >
+              Generate CF Invoices
+            </button>
             <button onClick={() => window.print()} className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-bold text-slate-700">Print</button>
           </div>
         </section>
+
+        {(carryForwardPreview || carryForwardRecords.length) ? (
+          <section className="mb-5 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+            <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <h2 className="text-lg font-bold text-slate-950">Carry-Forward</h2>
+                <p className="text-sm text-slate-500">
+                  {carryForwardPreview ? `${carryForwardPreview.items.length} preview item(s), total ${money(carryForwardPreview.totalAmount)}.` : `${carryForwardRecords.length} generated record(s).`}
+                </p>
+              </div>
+            </div>
+            <div className="overflow-x-auto rounded-2xl border border-slate-200">
+              <table className="min-w-full divide-y divide-slate-100 text-sm">
+                <thead className="bg-slate-50 text-left text-xs uppercase text-slate-500">
+                  <tr><th className="px-4 py-3">Student</th><th className="px-4 py-3">Invoices</th><th className="px-4 py-3 text-right">Amount</th><th className="px-4 py-3">Status</th></tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {carryForwardRecords.length ? carryForwardRecords.map((item) => (
+                    <tr key={item.id}>
+                      <td className="px-4 py-3 font-semibold">{item.student?.fullName ?? item.studentId}</td>
+                      <td className="px-4 py-3">{item.generatedInvoice?.invoiceNumber ?? '-'}</td>
+                      <td className="px-4 py-3 text-right font-bold">{money(item.amount)}</td>
+                      <td className="px-4 py-3">{item.status}</td>
+                    </tr>
+                  )) : carryForwardPreview?.items.map((item) => (
+                    <tr key={item.studentId}>
+                      <td className="px-4 py-3 font-semibold">{item.student.fullName}</td>
+                      <td className="px-4 py-3">{item.invoices.map((invoice) => invoice.invoiceNumber).join(', ') || '-'}</td>
+                      <td className="px-4 py-3 text-right font-bold">{money(item.amount)}</td>
+                      <td className="px-4 py-3">Preview</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </section>
+        ) : null}
 
         <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
           <div className="mb-4 flex flex-wrap items-center justify-between gap-3">

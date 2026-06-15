@@ -21,11 +21,13 @@
 body {
   @apply bg-sand text-ink;
   scroll-behavior: smooth;
+  overflow-x: hidden;
 }
 
 .dashboard-shell {
   color-scheme: light;
   background: var(--shell-bg);
+  overflow-x: hidden;
 }
 
 .dashboard-shell-dark {

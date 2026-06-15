@@ -4,10 +4,15 @@ import {
   activateFeeDiscount,
   activateFeeAssignment,
   cancelFeeInvoice,
+  cancelFeeCarryForward,
   collectFeePayment,
   approveFeeDiscount,
+  createFeeCarryForward,
   createFeeDiscount,
   createFeeFine,
+  createFeeFineRule,
+  createFeeGroup,
+  createFeeMaster,
   createFeeParticular,
   createFeeStructure,
   createFeeType,
@@ -16,32 +21,46 @@ import {
   deleteFeeAssignment,
   deleteFeeDiscount,
   deleteFeeFine,
+  deleteFeeFineRule,
+  deleteFeeGroup,
+  deleteFeeMaster,
   deleteFeeParticular,
   deleteFeeStructure,
   deleteFeeType,
+  duplicateFeeMaster,
   duplicateFeeStructure,
   exportFeeLedgerExcel,
   exportFeeLedgerPdf,
   exportFeeReports,
   generateFeeInvoices,
+  generateCarryForwardInvoice,
   getFeeMetadata,
   getFeeReports,
   getStudentFeeLedger,
   listStudentCollectionInvoices,
   listFeeAssignments,
+  listFeeCarryForwards,
   listFeeDiscounts,
+  listFeeFineRules,
   listFeeFines,
+  listFeeGroups,
   listFeeInvoices,
+  listFeeMasters,
   listFeeParticulars,
   listFeePayments,
   listFeeStructures,
   listFeeTypes,
   previewFeeInvoices,
+  previewFeeCarryForward,
+  reverseFeePayment,
   searchFeeCollectionStudents,
   rejectFeeDiscount,
   updateFeeAssignment,
   updateFeeParticular,
   updateFeeDiscount,
+  updateFeeFineRule,
+  updateFeeGroup,
+  updateFeeMaster,
   updateFeeStructure,
   updateFeeType,
 } from '../controllers/feeManagement.controller';
@@ -65,6 +84,19 @@ feeManagementRouter.post('/types', createFeeType);
 feeManagementRouter.patch('/types/:id', updateFeeType);
 feeManagementRouter.delete('/types/:id', deleteFeeType);
 
+feeManagementRouter.get('/groups', listFeeGroups);
+feeManagementRouter.post('/groups', createFeeGroup);
+feeManagementRouter.patch('/groups/:id', updateFeeGroup);
+feeManagementRouter.delete('/groups/:id', deleteFeeGroup);
+
+feeManagementRouter.get('/masters', listFeeMasters);
+feeManagementRouter.post('/masters', createFeeMaster);
+feeManagementRouter.patch('/masters/:id', updateFeeMaster);
+feeManagementRouter.delete('/masters/:id', deleteFeeMaster);
+feeManagementRouter.post('/masters/:id/duplicate', duplicateFeeMaster);
+feeManagementRouter.get('/masters/:masterId/fine-rules', listFeeFineRules);
+feeManagementRouter.post('/masters/:masterId/fine-rules', createFeeFineRule);
+
 feeManagementRouter.get('/structures', listFeeStructures);
 feeManagementRouter.post('/structures', createFeeStructure);
 feeManagementRouter.patch('/structures/:id', updateFeeStructure);
@@ -83,8 +115,15 @@ feeManagementRouter.post('/invoices/preview', previewFeeInvoices);
 feeManagementRouter.post('/invoices/generate', generateFeeInvoices);
 feeManagementRouter.patch('/invoices/:id/cancel', cancelFeeInvoice);
 
+feeManagementRouter.get('/carry-forwards', listFeeCarryForwards);
+feeManagementRouter.post('/carry-forwards/preview', previewFeeCarryForward);
+feeManagementRouter.post('/carry-forwards', createFeeCarryForward);
+feeManagementRouter.post('/carry-forwards/:id/generate-invoice', generateCarryForwardInvoice);
+feeManagementRouter.patch('/carry-forwards/:id/cancel', cancelFeeCarryForward);
+
 feeManagementRouter.get('/payments', listFeePayments);
 feeManagementRouter.post('/payments', collectFeePayment);
+feeManagementRouter.post('/payments/:id/reverse', reverseFeePayment);
 feeManagementRouter.get('/collection/students', searchFeeCollectionStudents);
 feeManagementRouter.get('/collection/students/:studentId/invoices', listStudentCollectionInvoices);
 
@@ -107,6 +146,10 @@ feeManagementRouter.patch('/discounts/:id/deactivate', deactivateFeeDiscount);
 feeManagementRouter.get('/fines', listFeeFines);
 feeManagementRouter.post('/fines', createFeeFine);
 feeManagementRouter.delete('/fines/:id', deleteFeeFine);
+
+feeManagementRouter.get('/fine-rules', listFeeFineRules);
+feeManagementRouter.patch('/fine-rules/:id', updateFeeFineRule);
+feeManagementRouter.delete('/fine-rules/:id', deleteFeeFineRule);
 
 feeManagementRouter.get('/reports/export', exportFeeReports);
 feeManagementRouter.get('/reports', getFeeReports);

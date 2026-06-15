@@ -81,17 +81,15 @@ const safeRecord = (value: unknown) =>
 const safeString = (value: unknown) => (typeof value === 'string' && value.trim() ? value.trim() : null);
 
 export const getAdminDashboardMetrics = async (schoolId: string) => {
-  const todayStart = new Date();
-  todayStart.setHours(0, 0, 0, 0);
-  const todayEnd = new Date();
-  todayEnd.setHours(23, 59, 59, 999);
+  const todayStart = startOfUtcDay(new Date());
+  const todayEnd = addUtcDays(todayStart, 1);
 
-  const [studentCount, teacherCount, classCount, pendingApprovals, attendanceRecords] = await Promise.all([
-    prisma.student.count({ where: { schoolId } }),
-    prisma.teacherProfile.count({ where: { schoolId } }),
+  const [studentCount, teacherCount, classCount, pendingApprovals, periodAttendanceRecords, studentAttendanceRecords] = await Promise.all([
+    prisma.student.count({ where: { schoolId, status: 'ENROLLED' } }),
+    prisma.teacherProfile.count({ where: { schoolId, isActive: true } }),
     prisma.class.count({ where: { schoolId } }),
     prisma.attendanceSession.count({
-      where: { schoolId, approvalStatus: 'PENDING', date: { gte: todayStart, lte: todayEnd } },
+      where: { schoolId, approvalStatus: 'PENDING', date: { gte: todayStart, lt: todayEnd } },
     }),
     attendanceReadService.getStudentAttendance({
       schoolId,
@@ -99,15 +97,24 @@ export const getAdminDashboardMetrics = async (schoolId: string) => {
       toDate: todayEnd,
       source: 'period-attendance',
     }),
+    prisma.studentAttendanceRecord.findMany({
+      where: {
+        session: {
+          schoolId,
+          date: { gte: todayStart, lt: todayEnd },
+        },
+      },
+      select: { status: true },
+    }),
   ]);
 
-  const statusMap = attendanceRecords.reduce<Record<string, number>>((acc, row) => {
+  const statusMap = [...periodAttendanceRecords, ...studentAttendanceRecords].reduce<Record<string, number>>((acc, row) => {
     acc[row.status] = (acc[row.status] ?? 0) + 1;
     return acc;
   }, {});
 
   const total = Object.values(statusMap).reduce((sum, val) => sum + val, 0);
-  const present = (statusMap.PRESENT ?? 0) + (statusMap.LATE ?? 0) + (statusMap.EXCUSED ?? 0);
+  const present = (statusMap.PRESENT ?? 0) + (statusMap.LATE ?? 0) + (statusMap.EXCUSED ?? 0) + (statusMap.HALF_DAY ?? 0) * 0.5;
   const attendanceRate = total > 0 ? Math.round((present / total) * 100) : 0;
 
   const result = {

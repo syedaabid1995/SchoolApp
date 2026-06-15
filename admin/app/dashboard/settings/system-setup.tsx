@@ -96,6 +96,13 @@ const newId = (prefix: string) =>
 const countBaseItems = (baseSetups: BaseSetups) =>
   Object.values(baseSetups).reduce((sum, items) => sum + (Array.isArray(items) ? items.length : 0), 0);
 
+const normalizeBaseSetups = (baseSetups?: Partial<BaseSetups> | null): BaseSetups => ({
+  gender: Array.isArray(baseSetups?.gender) ? baseSetups.gender : [],
+  religion: Array.isArray(baseSetups?.religion) ? baseSetups.religion : [],
+  bloodGroup: Array.isArray(baseSetups?.bloodGroup) ? baseSetups.bloodGroup : [],
+  caste: Array.isArray(baseSetups?.caste) ? baseSetups.caste : [],
+});
+
 const formatFileSize = (value: number) => {
   if (!value) return '0 KB';
   if (value >= 1024 * 1024) return `${(value / 1024 / 1024).toFixed(1)} MB`;
@@ -211,11 +218,12 @@ export default function SystemSetupTab({
   const [general, setGeneral] = useState<GeneralSchoolSettings | null>(null);
   const [paymentGateways, setPaymentGateways] = useState<PaymentGatewaySettings[]>([]);
   const [selectedGatewayId, setSelectedGatewayId] = useState('paypal');
-  const [baseSetups, setBaseSetups] = useState<BaseSetups>({ gender: [], religion: [], bloodGroup: [] });
+  const [baseSetups, setBaseSetups] = useState<BaseSetups>({ gender: [], religion: [], bloodGroup: [], caste: [] });
   const [newBaseValues, setNewBaseValues] = useState<Record<keyof BaseSetups, string>>({
     gender: '',
     religion: '',
     bloodGroup: '',
+    caste: '',
   });
   const [sessions, setSessions] = useState<SchoolSessionSetting[]>([]);
   const [sessionDraft, setSessionDraft] = useState('');
@@ -270,7 +278,7 @@ export default function SystemSetupTab({
     setGeneral(data.general);
     setPaymentGateways(data.paymentGateways);
     setSelectedGatewayId(data.paymentGateways.find((gateway) => gateway.enabled)?.id ?? data.paymentGateways[0]?.id ?? 'paypal');
-    setBaseSetups(data.baseSetups);
+    setBaseSetups(normalizeBaseSetups(data.baseSetups));
     setSessions(data.sessions);
     setHolidays(data.holidays);
     setSmsSettings(data.smsSettings);
@@ -282,7 +290,7 @@ export default function SystemSetupTab({
     onSuccess: (next) => {
       setGeneral(next.general);
       setPaymentGateways(next.paymentGateways);
-      setBaseSetups(next.baseSetups);
+      setBaseSetups(normalizeBaseSetups(next.baseSetups));
       setSessions(next.sessions);
       setHolidays(next.holidays);
       setSmsSettings(next.smsSettings);
@@ -338,21 +346,21 @@ export default function SystemSetupTab({
   const addBaseItem = (group: keyof BaseSetups) => {
     const value = newBaseValues[group].trim();
     if (!value) return;
-    setBaseSetups((current) => ({ ...current, [group]: [...current[group], value] }));
+    setBaseSetups((current) => ({ ...current, [group]: [...(current[group] ?? []), value] }));
     setNewBaseValues((current) => ({ ...current, [group]: '' }));
   };
 
   const updateBaseItem = (group: keyof BaseSetups, index: number, value: string) => {
     setBaseSetups((current) => ({
       ...current,
-      [group]: current[group].map((item, itemIndex) => (itemIndex === index ? value : item)),
+      [group]: (current[group] ?? []).map((item, itemIndex) => (itemIndex === index ? value : item)),
     }));
   };
 
   const removeBaseItem = (group: keyof BaseSetups, index: number) => {
     setBaseSetups((current) => ({
       ...current,
-      [group]: current[group].filter((_, itemIndex) => itemIndex !== index),
+      [group]: (current[group] ?? []).filter((_, itemIndex) => itemIndex !== index),
     }));
   };
 
@@ -748,6 +756,7 @@ export default function SystemSetupTab({
       { key: 'gender', label: 'Gender' },
       { key: 'religion', label: 'Religion' },
       { key: 'bloodGroup', label: 'Blood Group' },
+      { key: 'caste', label: 'Caste' },
     ];
     return (
       <SectionPanel
@@ -755,17 +764,17 @@ export default function SystemSetupTab({
         subtitle="Master values used across student, staff, and admission forms."
         actions={<button className={primaryButtonClass} onClick={() => saveSettings({ baseSetups })}>Save Base Setup</button>}
       >
-        <div className="grid gap-5 lg:grid-cols-3">
+        <div className="grid gap-5 lg:grid-cols-4">
           {groups.map((group) => (
             <div key={group.key} className="rounded-2xl border border-[var(--shell-border)] bg-[var(--shell-subtle)] p-4">
               <div className="mb-4 flex items-center justify-between gap-3">
                 <h3 className="font-black text-[var(--shell-text)]">{group.label}</h3>
                 <span className="rounded-full bg-[var(--shell-card)] px-2.5 py-1 text-xs font-black text-[var(--shell-muted)]">
-                  {baseSetups[group.key].length}
+                  {(baseSetups[group.key] ?? []).length}
                 </span>
               </div>
               <div className="space-y-2">
-                {baseSetups[group.key].map((item, index) => (
+                {(baseSetups[group.key] ?? []).map((item, index) => (
                   <div key={`${group.key}-${index}`} className="grid grid-cols-[1fr_auto] gap-2">
                     <input className={inputClass} value={item} onChange={(event) => updateBaseItem(group.key, index, event.target.value)} />
                     <button className={dangerButtonClass} onClick={() => removeBaseItem(group.key, index)}>Delete</button>
@@ -1180,7 +1189,7 @@ export default function SystemSetupTab({
       {showOverview ? <section className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         {[
           { label: 'Enabled Gateways', value: enabledGateways, detail: `${paymentGateways.length} configured` },
-          { label: 'Base Setup Items', value: countBaseItems(baseSetups), detail: 'Gender, religion, blood group' },
+          { label: 'Base Setup Items', value: countBaseItems(baseSetups), detail: 'Gender, religion, blood group, caste' },
           { label: 'Sessions', value: sessions.length, detail: 'Academic terms configured' },
           { label: 'Challan Banks', value: feeChallanBanks.length, detail: `${feeChallanBanks.filter((bank) => bank.isActive).length} active` },
         ].map((item) => (

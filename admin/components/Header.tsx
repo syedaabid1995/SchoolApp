@@ -399,7 +399,7 @@ export const Header = ({
   ];
 
   return (
-    <header className="sticky top-0 z-30 border-b border-[var(--shell-border)] bg-[var(--shell-header)] px-4 py-3 text-[var(--shell-text)] shadow-sm backdrop-blur-xl transition-colors sm:px-6">
+    <header className="sticky top-0 z-50 border-b border-[var(--shell-border)] bg-[var(--shell-header)] px-4 py-3 text-[var(--shell-text)] shadow-sm backdrop-blur-xl transition-colors sm:px-6">
       <div className="flex items-center justify-between gap-3">
         <div className="flex min-w-0 items-center gap-3">
           <button
@@ -446,7 +446,7 @@ export const Header = ({
               </label>
             </form>
             {showGlobalSearch ? (
-              <div className="absolute left-2 right-2 top-12 z-40 mx-auto max-w-xl overflow-hidden rounded-2xl border border-[var(--shell-border)] bg-[var(--shell-card)] text-sm text-[var(--shell-text)] shadow-2xl">
+              <div className="absolute left-2 right-2 top-12 z-50 mx-auto max-w-xl overflow-hidden rounded-2xl border border-[var(--shell-border)] bg-[var(--shell-card)] text-sm text-[var(--shell-text)] shadow-2xl">
                 <div className="border-b border-[var(--shell-border)] px-3 py-2 text-xs font-bold uppercase tracking-[0.14em] text-[var(--shell-muted)]">
                   Super Admin Search
                 </div>
@@ -539,7 +539,7 @@ export const Header = ({
               ) : null}
             </button>
             {showNotifications ? (
-              <div className="absolute right-0 mt-2 w-80 max-w-[calc(100vw-2rem)] rounded-2xl border border-[var(--shell-border)] bg-[var(--shell-card)] p-3 text-sm text-[var(--shell-text)] shadow-xl">
+              <div className="absolute right-0 z-50 mt-2 w-80 max-w-[calc(100vw-2rem)] rounded-2xl border border-[var(--shell-border)] bg-[var(--shell-card)] p-3 text-sm text-[var(--shell-text)] shadow-xl">
                 <div className="flex items-center justify-between">
                   <p className="text-sm font-bold">Notifications</p>
                   <span className="text-xs text-[var(--shell-muted)]">{notificationCount} new</span>
@@ -593,7 +593,7 @@ export const Header = ({
             </button>
 
             {showProfile ? (
-              <div className="absolute right-0 mt-2 w-72 max-w-[calc(100vw-2rem)] rounded-2xl border border-[var(--shell-border)] bg-[var(--shell-card)] p-3 text-sm text-[var(--shell-text)] shadow-xl">
+              <div className="absolute right-0 z-50 mt-2 w-72 max-w-[calc(100vw-2rem)] rounded-2xl border border-[var(--shell-border)] bg-[var(--shell-card)] p-3 text-sm text-[var(--shell-text)] shadow-xl">
                 <div className="rounded-xl bg-[var(--shell-subtle)] p-3">
                   <p className="font-bold">{resolvedName}</p>
                   <p className="mt-1 break-all text-xs text-[var(--shell-muted)]">{email ?? 'No email'}</p>
@@ -641,7 +641,7 @@ export const Header = ({
               autoFocus
             />
           </form>
-          <div className="absolute left-0 right-0 top-12 z-40 overflow-hidden rounded-2xl border border-[var(--shell-border)] bg-[var(--shell-card)] text-sm text-[var(--shell-text)] shadow-2xl">
+          <div className="absolute left-0 right-0 top-12 z-50 overflow-hidden rounded-2xl border border-[var(--shell-border)] bg-[var(--shell-card)] text-sm text-[var(--shell-text)] shadow-2xl">
             <div className="max-h-80 overflow-y-auto p-2">
               {globalSearchResults.map((item) => (
                 <button

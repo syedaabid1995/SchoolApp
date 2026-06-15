@@ -8,7 +8,7 @@ export default function BaseSetupPage() {
     <div className="space-y-5 pb-12">
       <PageHeader
         title="Base Setup"
-        subtitle="Manage gender, religion, and blood group master data."
+        subtitle="Manage gender, religion, blood group, and caste master data."
         breadcrumbs={[
           { label: 'Dashboard', href: '/dashboard' },
           { label: 'Base Setup' },

@@ -186,16 +186,11 @@ const iconForItem = (item: NavItem): IconName => {
 
 const feeNavItems: NavItem[] = [
   { href: '/dashboard/fees/overview', label: 'Fee Overview', icon: 'FO' },
-  { href: '/dashboard/fees/particulars', label: 'Fee Particulars', icon: 'FP' },
+  { href: '/dashboard/fees/groups', label: 'Fee Groups', icon: 'FG' },
   { href: '/dashboard/fees/types', label: 'Fee Types', icon: 'FT' },
-  { href: '/dashboard/fees/structures', label: 'Fee Structures', icon: 'ST' },
-  { href: '/dashboard/fees/assignments', label: 'Fee Assignments', icon: 'AS' },
-  { href: '/dashboard/fees/invoice-generate', label: 'Generate Invoices', icon: 'GI' },
-  { href: '/dashboard/fees/invoices', label: 'Invoice List', icon: 'IN' },
+  { href: '/dashboard/fees/masters', label: 'Fee Masters', icon: 'FM' },
   { href: '/dashboard/fees/collection', label: 'Fee Collection', icon: 'FC' },
   { href: '/dashboard/fees/discounts', label: 'Fee Discounts', icon: 'FD' },
-  { href: '/dashboard/fees/fines', label: 'Fee Fines', icon: 'FF' },
-  { href: '/dashboard/fees/ledger', label: 'Fee Ledger', icon: 'FL' },
   { href: '/dashboard/fees/reports', label: 'Fee Reports', icon: 'FR' },
 ];
 
@@ -244,7 +239,6 @@ const platformSections: NavSection[] = [
       { href: '/dashboard/role-permissions', label: 'Role Permissions', icon: 'RP' },
       { href: '/dashboard/base-setup', label: 'Base Setup', icon: 'BS' },
       { href: '/dashboard/sessions', label: 'Sessions', icon: 'SN' },
-      { href: '/dashboard/holidays', label: 'Holidays', icon: 'HD' },
       { href: '/dashboard/sms-settings', label: 'SMS Settings', icon: 'SM' },
       { href: '/dashboard/settings', label: 'Settings', icon: 'ST' },
       { href: '/dashboard/settings?tab=backups', label: 'Backups', icon: 'BK' },
@@ -467,7 +461,6 @@ export const Sidebar = ({
           { href: '/dashboard/settings/branding', label: 'Branding', icon: 'BR' },
           { href: '/dashboard/base-setup', label: 'Base Setup', icon: 'BS' },
           { href: '/dashboard/sessions', label: 'Sessions', icon: 'SN' },
-          { href: '/dashboard/holidays', label: 'Holidays', icon: 'HD' },
           { href: '/dashboard/settings', label: 'System Setting', icon: 'SS' },
           { href: '/change-password', label: 'Change Password', icon: 'PW' },
         ],
@@ -544,7 +537,7 @@ export const Sidebar = ({
       ) : null}
 
       <aside
-        className={`fixed left-0 top-0 z-50 flex h-screen w-[18.5rem] transform flex-col border-r border-[var(--shell-sidebar-border)] bg-[var(--shell-sidebar)] px-3 py-3 text-[var(--shell-sidebar-text)] shadow-2xl shadow-slate-950/10 transition-transform duration-300 ease-in-out lg:static lg:translate-x-0 ${
+        className={`fixed left-0 top-0 z-50 flex h-screen w-[18.5rem] shrink-0 transform flex-col border-r border-[var(--shell-sidebar-border)] bg-[var(--shell-sidebar)] px-3 py-3 text-[var(--shell-sidebar-text)] shadow-2xl shadow-slate-950/10 transition-transform duration-300 ease-in-out lg:static lg:translate-x-0 ${
           isOpen ? 'translate-x-0' : '-translate-x-full'
         }`}
       >

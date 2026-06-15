@@ -160,7 +160,7 @@ const assignableStudentStatus = 'ENROLLED' as const;
 const legacyDiscountTypes = ['SCHOLARSHIP', 'SIBLING_DISCOUNT', 'STAFF_CHILD_DISCOUNT', 'SPECIAL_DISCOUNT'] as const;
 const discountValueTypes = ['PERCENTAGE', 'FIXED'] as const;
 const discountApprovalStatuses = ['DRAFT', 'PENDING_APPROVAL', 'APPROVED', 'REJECTED', 'ACTIVE', 'INACTIVE'] as const;
-const discountTargetTypes = ['STUDENT', 'CLASS', 'SECTION', 'CATEGORY', 'FEE_TYPE', 'ALL'] as const;
+const discountTargetTypes = ['STUDENT', 'CLASS', 'SECTION', 'CATEGORY', 'FEE_TYPE', 'FEE_GROUP', 'FEE_MASTER', 'ALL'] as const;
 const approvedDiscountStatuses = ['APPROVED', 'ACTIVE'] as const;
 
 type LegacyDiscountType = (typeof legacyDiscountTypes)[number];
@@ -183,6 +183,8 @@ type NormalizedDiscountPayload = {
   sectionId: string | null;
   categoryId: string | null;
   feeTypeId: string | null;
+  feeGroupId: string | null;
+  feeMasterId: string | null;
   particularId: string | null;
   discountType: LegacyDiscountType;
   valueType: FeeDiscountValueType;
@@ -266,6 +268,7 @@ const assertStudent = async (schoolId: string, studentId: string, academicSessio
   if (!found) throw new HttpError(404, 'Student not found');
 };
 
+
 const assertFeeType = async (schoolId: string, academicSessionId: string, feeTypeId: string) => {
   const found = await FeeReportingRepository.feeType.findFirst({
     where: { id: feeTypeId, schoolId, academicSessionId, deletedAt: null },
@@ -273,6 +276,24 @@ const assertFeeType = async (schoolId: string, academicSessionId: string, feeTyp
   });
   if (!found) throw new HttpError(404, 'Fee type not found');
   if (found.status !== 'ACTIVE') throw new HttpError(400, 'Inactive fee type cannot be used');
+};
+
+const assertFeeGroup = async (schoolId: string, academicSessionId: string, feeGroupId: string) => {
+  const found = await FeeReportingRepository.feeGroup.findFirst({
+    where: { id: feeGroupId, schoolId, academicSessionId, deletedAt: null },
+    select: { id: true, status: true },
+  });
+  if (!found) throw new HttpError(404, 'Fee group not found');
+  if (found.status !== 'ACTIVE') throw new HttpError(400, 'Inactive fee group cannot be used');
+};
+
+const assertFeeMaster = async (schoolId: string, academicSessionId: string, feeMasterId: string) => {
+  const found = await FeeReportingRepository.feeMaster.findFirst({
+    where: { id: feeMasterId, schoolId, academicSessionId, deletedAt: null },
+    select: { id: true, status: true },
+  });
+  if (!found) throw new HttpError(404, 'Fee master not found');
+  if (found.status !== 'ACTIVE') throw new HttpError(400, 'Inactive fee master cannot be used');
 };
 
 const assertStudentCategory = async (schoolId: string, categoryId: string) => {
@@ -309,6 +330,8 @@ const discountSchema = z.object({
   sectionId: uuidSchema.optional().nullable(),
   categoryId: uuidSchema.optional().nullable(),
   feeTypeId: uuidSchema.optional().nullable(),
+  feeGroupId: uuidSchema.optional().nullable(),
+  feeMasterId: uuidSchema.optional().nullable(),
   particularId: uuidSchema.optional().nullable(),
   discountType: z.string().trim().optional(),
   valueType: z.enum(discountValueTypes).optional(),
@@ -348,9 +371,13 @@ const normalizeDiscountPayload = (payload: z.infer<typeof discountSchema>, fallb
           ? 'CLASS'
           : payload.categoryId
             ? 'CATEGORY'
-            : payload.feeTypeId
-              ? 'FEE_TYPE'
-              : 'ALL');
+            : payload.feeMasterId
+              ? 'FEE_MASTER'
+              : payload.feeGroupId
+                ? 'FEE_GROUP'
+                : payload.feeTypeId
+                  ? 'FEE_TYPE'
+                  : 'ALL');
   const validFrom = payload.validFrom ?? null;
   const validTo = payload.validTo ?? null;
   if (validFrom && validTo && validTo < validFrom) throw new HttpError(400, 'validTo cannot be before validFrom');
@@ -365,6 +392,8 @@ const normalizeDiscountPayload = (payload: z.infer<typeof discountSchema>, fallb
     sectionId: payload.sectionId ?? null,
     categoryId: payload.categoryId ?? null,
     feeTypeId: payload.feeTypeId ?? null,
+    feeGroupId: payload.feeGroupId ?? null,
+    feeMasterId: payload.feeMasterId ?? null,
     particularId: payload.particularId ?? null,
     discountType: legacyType,
     valueType,
@@ -384,25 +413,33 @@ const normalizeDiscountPayload = (payload: z.infer<typeof discountSchema>, fallb
 function validateDiscountTarget(payload: NormalizedDiscountPayload) {
   if (payload.targetType === 'STUDENT') {
     if (!payload.studentId) throw new HttpError(400, 'studentId is required for STUDENT discount');
-    if (payload.classId || payload.sectionId || payload.categoryId) throw new HttpError(400, 'STUDENT discount cannot include class, section, or category target');
+    if (payload.classId || payload.sectionId || payload.categoryId || payload.feeGroupId || payload.feeMasterId) throw new HttpError(400, 'STUDENT discount cannot include class, section, category, fee group, or fee master target');
   }
   if (payload.targetType === 'CLASS') {
     if (!payload.classId) throw new HttpError(400, 'classId is required for CLASS discount');
-    if (payload.studentId || payload.sectionId || payload.categoryId) throw new HttpError(400, 'CLASS discount cannot include student, section, or category target');
+    if (payload.studentId || payload.sectionId || payload.categoryId || payload.feeGroupId || payload.feeMasterId) throw new HttpError(400, 'CLASS discount cannot include student, section, category, fee group, or fee master target');
   }
   if (payload.targetType === 'SECTION') {
     if (!payload.sectionId) throw new HttpError(400, 'sectionId is required for SECTION discount');
-    if (payload.studentId || payload.categoryId) throw new HttpError(400, 'SECTION discount cannot include student or category target');
+    if (payload.studentId || payload.categoryId || payload.feeGroupId || payload.feeMasterId) throw new HttpError(400, 'SECTION discount cannot include student, category, fee group, or fee master target');
   }
   if (payload.targetType === 'CATEGORY') {
     if (!payload.categoryId) throw new HttpError(400, 'categoryId is required for CATEGORY discount');
-    if (payload.studentId || payload.classId || payload.sectionId) throw new HttpError(400, 'CATEGORY discount cannot include student, class, or section target');
+    if (payload.studentId || payload.classId || payload.sectionId || payload.feeGroupId || payload.feeMasterId) throw new HttpError(400, 'CATEGORY discount cannot include student, class, section, fee group, or fee master target');
   }
   if (payload.targetType === 'FEE_TYPE') {
     if (!payload.feeTypeId) throw new HttpError(400, 'feeTypeId is required for FEE_TYPE discount');
-    if (payload.studentId || payload.classId || payload.sectionId || payload.categoryId) throw new HttpError(400, 'FEE_TYPE discount cannot include student, class, section, or category target');
+    if (payload.studentId || payload.classId || payload.sectionId || payload.categoryId || payload.feeGroupId || payload.feeMasterId) throw new HttpError(400, 'FEE_TYPE discount cannot include student, class, section, category, fee group, or fee master target');
   }
-  if (payload.targetType === 'ALL' && (payload.studentId || payload.classId || payload.sectionId || payload.categoryId || payload.feeTypeId)) {
+  if (payload.targetType === 'FEE_GROUP') {
+    if (!payload.feeGroupId) throw new HttpError(400, 'feeGroupId is required for FEE_GROUP discount');
+    if (payload.studentId || payload.classId || payload.sectionId || payload.categoryId || payload.feeTypeId || payload.feeMasterId) throw new HttpError(400, 'FEE_GROUP discount cannot include another target field');
+  }
+  if (payload.targetType === 'FEE_MASTER') {
+    if (!payload.feeMasterId) throw new HttpError(400, 'feeMasterId is required for FEE_MASTER discount');
+    if (payload.studentId || payload.classId || payload.sectionId || payload.categoryId || payload.feeTypeId || payload.feeGroupId) throw new HttpError(400, 'FEE_MASTER discount cannot include another target field');
+  }
+  if (payload.targetType === 'ALL' && (payload.studentId || payload.classId || payload.sectionId || payload.categoryId || payload.feeTypeId || payload.feeGroupId || payload.feeMasterId)) {
     throw new HttpError(400, 'ALL discount cannot include a specific target field');
   }
 }
@@ -413,6 +450,8 @@ const assertDiscountReferences = async (scope: FeeTenantScope, payload: Normaliz
   if (payload.sectionId) await assertSection(scope.schoolId, payload.sectionId);
   if (payload.categoryId) await assertStudentCategory(scope.schoolId, payload.categoryId);
   if (payload.feeTypeId) await assertFeeType(scope.schoolId, scope.academicSessionId, payload.feeTypeId);
+  if (payload.feeGroupId) await assertFeeGroup(scope.schoolId, scope.academicSessionId, payload.feeGroupId);
+  if (payload.feeMasterId) await assertFeeMaster(scope.schoolId, scope.academicSessionId, payload.feeMasterId);
   if (payload.particularId) await assertParticulars(scope.schoolId, scope.academicSessionId, [payload.particularId]);
 };
 
@@ -441,6 +480,8 @@ const assertNoDuplicateActiveDiscount = async (scope: FeeTenantScope, payload: N
       sectionId: payload.sectionId,
       categoryId: payload.categoryId,
       feeTypeId: payload.feeTypeId,
+      feeGroupId: payload.feeGroupId,
+      feeMasterId: payload.feeMasterId,
       ...(and.length ? { AND: and } : {}),
     },
     select: { id: true },
@@ -448,7 +489,7 @@ const assertNoDuplicateActiveDiscount = async (scope: FeeTenantScope, payload: N
   if (duplicate) throw new HttpError(409, 'Duplicate active discount exists for the same target, fee type, and date range');
 };
 
-const buildDiscountInvoiceWhere = (scope: FeeTenantScope, discount: Pick<NormalizedDiscountPayload, 'targetType' | 'studentId' | 'classId' | 'sectionId' | 'categoryId' | 'feeTypeId'>): Prisma.FeeInvoiceWhereInput => ({
+const buildDiscountInvoiceWhere = (scope: FeeTenantScope, discount: Pick<NormalizedDiscountPayload, 'targetType' | 'studentId' | 'classId' | 'sectionId' | 'categoryId' | 'feeTypeId' | 'feeGroupId' | 'feeMasterId'>): Prisma.FeeInvoiceWhereInput => ({
   ...tenantScopeOnly(scope),
   deletedAt: null,
   status: { in: ['PAID', 'PARTIALLY_PAID'] },
@@ -488,7 +529,7 @@ const assertDiscountDoesNotExceedCurrentPayable = async (scope: FeeTenantScope, 
 
 const buildDiscountTargetInvoiceWhere = (
   scope: FeeTenantScope,
-  discount: Pick<FeeDiscount, 'targetType' | 'studentId' | 'classId' | 'sectionId' | 'categoryId' | 'feeTypeId'>,
+  discount: Pick<FeeDiscount, 'targetType' | 'studentId' | 'classId' | 'sectionId' | 'categoryId' | 'feeTypeId' | 'feeGroupId' | 'feeMasterId'>,
 ): Prisma.FeeInvoiceWhereInput => ({
   ...tenantScopeOnly(scope),
   deletedAt: null,

@@ -28,12 +28,20 @@ export type WeeklyAnalytics = {
   enrollment: number[];
   performance: number[];
   days: string[];
-};
+} | Array<{
+  date: string;
+  attendanceRate: number;
+  enrollment: number;
+  performance: number;
+}>;
 
 export type PerformanceMetrics = {
   overallScore: number;
   attendanceRate: number;
   satisfactionRate: number;
+  exams?: number;
+  marks?: number;
+  students?: number;
 };
 
 export type RecentActivity = {
@@ -214,22 +222,22 @@ export type PlatformSystemStatus = {
 };
 
 export const getAdminDashboardMetrics = async () => {
-  const { data } = await api.get<AdminDashboardMetrics>('/admin/dashboard');
+  const { data } = await api.get<AdminDashboardMetrics>('/dashboard');
   return data;
 };
 
 export const getWeeklyAnalytics = async () => {
-  const { data } = await api.get<WeeklyAnalytics>('/admin/dashboard/analytics/weekly');
+  const { data } = await api.get<WeeklyAnalytics>('/dashboard/analytics/weekly');
   return data;
 };
 
 export const getPerformanceMetrics = async () => {
-  const { data } = await api.get<PerformanceMetrics>('/admin/dashboard/performance');
+  const { data } = await api.get<PerformanceMetrics>('/dashboard/performance');
   return data;
 };
 
 export const getRecentActivities = async () => {
-  const { data } = await api.get<RecentActivity[]>('/admin/dashboard/activities');
+  const { data } = await api.get<RecentActivity[]>('/dashboard/activities');
   return data;
 };
 

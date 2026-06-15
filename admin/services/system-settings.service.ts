@@ -36,6 +36,7 @@ export type BaseSetups = {
   gender: string[];
   religion: string[];
   bloodGroup: string[];
+  caste: string[];
 };
 
 export type SchoolSessionSetting = {

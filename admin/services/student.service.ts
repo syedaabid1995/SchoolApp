@@ -206,6 +206,9 @@ export const createStudent = async (payload: {
   sectionId?: string | null;
   schoolId?: string;
   siblingIds?: string[];
+  feeGroupIds?: string[];
+  discountIds?: string[];
+  generateInvoices?: boolean;
 }) => {
   const { data } = await api.post('/students/students', payload);
   return data;

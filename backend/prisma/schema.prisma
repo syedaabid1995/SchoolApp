@@ -140,15 +140,23 @@ model School {
   libraryIssues                  LibraryIssue[]
   feeParticulars                 FeeParticular[]
   feeTypes                       FeeType[]
+  feeGroups                      FeeGroup[]
+  feeMasters                     FeeMaster[]
+  feeFineRules                   FeeFineRule[]
   feeStructures                  FeeStructure[]
   studentFeeAssignments          StudentFeeAssignment[]
+  studentFeeGroupAssignments     StudentFeeGroupAssignment[]
   feeInvoices                    FeeInvoice[]
   feePayments                    FeePayment[]
+  feePaymentReversals            FeePaymentReversal[]
   feeReceipts                    FeeReceipt[]
   feePaymentAllocations          FeePaymentAllocation[]
   feeDiscounts                   FeeDiscount[]
+  feeDiscountInstallments        FeeDiscountInstallment[]
   feeFines                       FeeFine[]
   feeLedgers                     FeeLedger[]
+  feeCarryForwards               FeeCarryForward[]
+  feeInvoiceGenerationJobs       FeeInvoiceGenerationJob[]
   feeNotifications               FeeNotification[]
   numberSequences                NumberSequence[]
   onboardingChecklist            SchoolOnboardingChecklist[]
@@ -481,15 +489,24 @@ model AcademicYear {
   timetableEntries               TimetableEntry[]
   feeParticulars                 FeeParticular[]
   feeTypes                       FeeType[]
+  feeGroups                      FeeGroup[]
+  feeMasters                     FeeMaster[]
+  feeFineRules                   FeeFineRule[]
   feeStructures                  FeeStructure[]
   studentFeeAssignments          StudentFeeAssignment[]
+  studentFeeGroupAssignments     StudentFeeGroupAssignment[]
   feeInvoices                    FeeInvoice[]
   feePayments                    FeePayment[]
+  feePaymentReversals            FeePaymentReversal[]
   feeReceipts                    FeeReceipt[]
   feePaymentAllocations          FeePaymentAllocation[]
   feeDiscounts                   FeeDiscount[]
+  feeDiscountInstallments        FeeDiscountInstallment[]
   feeFines                       FeeFine[]
   feeLedgers                     FeeLedger[]
+  feeCarryForwardsFrom           FeeCarryForward[]               @relation("FeeCarryForwardFromSession")
+  feeCarryForwardsTo             FeeCarryForward[]               @relation("FeeCarryForwardToSession")
+  feeInvoiceGenerationJobs       FeeInvoiceGenerationJob[]
   feeNotifications               FeeNotification[]
   numberSequences                NumberSequence[]
 
@@ -822,12 +839,16 @@ model Student {
   homeworkEvaluations      HomeworkEvaluation[]
   libraryMemberships       LibraryMember[]
   feeAssignments           StudentFeeAssignment[]
+  feeGroupAssignments      StudentFeeGroupAssignment[]
   feeInvoices              FeeInvoice[]
   feePayments              FeePayment[]
+  feePaymentReversals      FeePaymentReversal[]
   feeReceipts              FeeReceipt[]
   feePaymentAllocations    FeePaymentAllocation[]
   feeDiscounts             FeeDiscount[]
   feeLedgers               FeeLedger[]
+  feeCarryForwards         FeeCarryForward[]
+  feeInvoiceGenerationJobs FeeInvoiceGenerationJob[]
   feeNotifications         FeeNotification[]
   examSeatingAllocations   ExamSeatingAllocation[]
 
@@ -2957,6 +2978,8 @@ enum FeePaymentStatus {
   SUCCESS
   FAILED
   REFUNDED
+  PARTIALLY_REVERSED
+  REVERSED
 }
 
 enum FeeDiscountType {
@@ -2986,6 +3009,8 @@ enum FeeDiscountTargetType {
   SECTION
   CATEGORY
   FEE_TYPE
+  FEE_GROUP
+  FEE_MASTER
   ALL
 }
 
@@ -3001,6 +3026,8 @@ enum FeeLedgerEntryType {
   DISCOUNT_CREDIT
   FINE_DEBIT
   PAYMENT_CREDIT
+  PAYMENT_REVERSAL
+  CARRY_FORWARD_DEBIT
   CANCELLATION_REVERSAL
   FINE_WAIVER
   DISCOUNT_REVERSAL
@@ -3036,6 +3063,33 @@ enum NumberSequenceType {
   INVOICE
   PAYMENT
   RECEIPT
+  REVERSAL
+}
+
+enum FeeFineRuleType {
+  PERCENTAGE
+  FIXED_AMOUNT
+  CUMULATIVE
+}
+
+enum FeeAssignmentSource {
+  ADMISSION
+  MANUAL
+  PROMOTION
+  TRANSPORT
+}
+
+enum FeeCarryForwardStatus {
+  PENDING
+  GENERATED
+  CANCELLED
+}
+
+enum FeeInvoiceGenerationJobStatus {
+  QUEUED
+  PROCESSING
+  COMPLETED
+  FAILED
 }
 
 model FeeParticular {
@@ -3087,6 +3141,7 @@ model FeeType {
 
   school          School         @relation(fields: [schoolId], references: [id], onDelete: Cascade)
   academicSession AcademicYear   @relation(fields: [academicSessionId], references: [id], onDelete: Cascade)
+  masters         FeeMaster[]
   structures      FeeStructure[]
   invoices        FeeInvoice[]
   discounts       FeeDiscount[]
@@ -3122,6 +3177,7 @@ model FeeStructure {
   items           FeeStructureItem[]
   assignments     StudentFeeAssignment[]
   invoices        FeeInvoice[]
+  legacyFeeMasters FeeMaster[]
 
   @@unique([schoolId, academicSessionId, classId, sectionId, feeTypeId])
   @@index([schoolId, academicSessionId])
@@ -3211,6 +3267,7 @@ model FeeInvoice {
   sectionId         String?          @map("section_id") @db.Uuid
   feeStructureId    String?          @map("fee_structure_id") @db.Uuid
   feeTypeId         String?          @map("fee_type_id") @db.Uuid
+  feeGroupId        String?          @map("fee_group_id") @db.Uuid
   invoiceNumber     String           @map("invoice_number")
   feeMonth          String?          @map("fee_month")
   issueDate         DateTime         @default(now()) @map("issue_date")
@@ -3235,6 +3292,7 @@ model FeeInvoice {
   section            Section?               @relation(fields: [sectionId], references: [id], onDelete: SetNull)
   feeStructure       FeeStructure?          @relation(fields: [feeStructureId], references: [id], onDelete: SetNull)
   feeType            FeeType?               @relation(fields: [feeTypeId], references: [id], onDelete: SetNull)
+  feeGroup           FeeGroup?              @relation(fields: [feeGroupId], references: [id], onDelete: SetNull)
   items              FeeInvoiceItem[]
   payments           FeePayment[]
   receipts           FeeReceipt[]
@@ -3242,6 +3300,8 @@ model FeeInvoice {
   ledgers            FeeLedger[]
   fines              FeeFine[]
   notifications      FeeNotification[]
+  generatedCarryForwards FeeCarryForward[]  @relation("GeneratedCarryForwardInvoice")
+  carryForwardSourceItems FeeCarryForwardItem[] @relation("CarryForwardSourceInvoice")
 
   @@unique([schoolId, invoiceNumber])
   @@unique([schoolId, academicSessionId, studentId, feeStructureId, feeTypeId, feeMonth], name: "unique_student_fee_invoice_period")
@@ -3249,6 +3309,7 @@ model FeeInvoice {
   @@index([studentId])
   @@index([classId])
   @@index([sectionId])
+  @@index([feeGroupId])
   @@index([status])
   @@index([deletedAt])
   @@map("fee_invoices")
@@ -3258,6 +3319,7 @@ model FeeInvoiceItem {
   id             String   @id @default(uuid()) @db.Uuid
   invoiceId      String   @map("invoice_id") @db.Uuid
   particularId   String?  @map("particular_id") @db.Uuid
+  feeMasterId    String?  @map("fee_master_id") @db.Uuid
   name           String
   amount         Decimal  @db.Decimal(12, 2)
   discountAmount Decimal  @default(0) @map("discount_amount") @db.Decimal(12, 2)
@@ -3269,9 +3331,11 @@ model FeeInvoiceItem {
 
   invoice    FeeInvoice     @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
   particular FeeParticular? @relation(fields: [particularId], references: [id], onDelete: SetNull)
+  feeMaster  FeeMaster?     @relation(fields: [feeMasterId], references: [id], onDelete: SetNull)
 
   @@index([invoiceId])
   @@index([particularId])
+  @@index([feeMasterId])
   @@map("fee_invoice_items")
 }
 
@@ -3304,6 +3368,7 @@ model FeePayment {
   receipt         FeeReceipt?
   allocations     FeePaymentAllocation[]
   ledgers         FeeLedger[]
+  reversals       FeePaymentReversal[]
 
   @@unique([schoolId, paymentNumber])
   @@unique([schoolId, idempotencyKey], name: "unique_school_fee_payment_idempotency")
@@ -3371,12 +3436,16 @@ model FeeDiscount {
   schoolId          String                @map("school_id") @db.Uuid
   academicSessionId String                @map("academic_session_id") @db.Uuid
   discountName      String?               @map("discount_name")
+  code              String?
+  description       String?
   targetType        FeeDiscountTargetType @default(STUDENT) @map("target_type")
   studentId         String?               @map("student_id") @db.Uuid
   classId           String?               @map("class_id") @db.Uuid
   sectionId         String?               @map("section_id") @db.Uuid
   categoryId        String?               @map("category_id") @db.Uuid
   feeTypeId         String?               @map("fee_type_id") @db.Uuid
+  feeGroupId        String?               @map("fee_group_id") @db.Uuid
+  feeMasterId       String?               @map("fee_master_id") @db.Uuid
   particularId      String?               @map("particular_id") @db.Uuid
   discountType      FeeDiscountType       @map("discount_type")
   valueType         FeeValueType          @map("value_type")
@@ -3384,6 +3453,7 @@ model FeeDiscount {
   amount            Decimal?              @db.Decimal(12, 2)
   validFrom         DateTime?             @map("valid_from")
   validTo           DateTime?             @map("valid_to")
+  expiryDate        DateTime?             @map("expiry_date")
   approvalStatus    FeeApprovalStatus     @default(PENDING_APPROVAL) @map("approval_status")
   approvedById      String?               @map("approved_by_id") @db.Uuid
   approvedAt        DateTime?             @map("approved_at")
@@ -3392,6 +3462,7 @@ model FeeDiscount {
   createdById       String?               @map("created_by_id") @db.Uuid
   updatedById       String?               @map("updated_by_id") @db.Uuid
   deletedAt         DateTime?             @map("deleted_at")
+  deletedById       String?               @map("deleted_by_id") @db.Uuid
   createdAt         DateTime              @default(now()) @map("created_at")
   updatedAt         DateTime              @updatedAt @map("updated_at")
 
@@ -3402,7 +3473,10 @@ model FeeDiscount {
   section         Section?         @relation(fields: [sectionId], references: [id], onDelete: SetNull)
   category        StudentCategory? @relation(fields: [categoryId], references: [id], onDelete: SetNull)
   feeType         FeeType?         @relation(fields: [feeTypeId], references: [id], onDelete: SetNull)
+  feeGroup        FeeGroup?        @relation(fields: [feeGroupId], references: [id], onDelete: SetNull)
+  feeMaster       FeeMaster?       @relation(fields: [feeMasterId], references: [id], onDelete: SetNull)
   particular      FeeParticular?   @relation(fields: [particularId], references: [id], onDelete: SetNull)
+  installments    FeeDiscountInstallment[]
   ledgers         FeeLedger[]
 
   @@index([schoolId, academicSessionId])
@@ -3411,12 +3485,166 @@ model FeeDiscount {
   @@index([sectionId])
   @@index([categoryId])
   @@index([feeTypeId])
+  @@index([feeGroupId])
+  @@index([feeMasterId])
   @@index([targetType])
   @@index([createdById])
   @@index([updatedById])
   @@index([approvalStatus])
   @@index([deletedAt])
   @@map("fee_discounts")
+}
+
+model FeeGroup {
+  id                String          @id @default(uuid()) @db.Uuid
+  schoolId          String          @map("school_id") @db.Uuid
+  academicSessionId String          @map("academic_session_id") @db.Uuid
+  name              String
+  normalizedName    String          @map("normalized_name")
+  description       String?
+  status            FeeRecordStatus @default(ACTIVE)
+  deletedAt         DateTime?       @map("deleted_at")
+  deletedById       String?         @map("deleted_by_id") @db.Uuid
+  createdAt         DateTime        @default(now()) @map("created_at")
+  updatedAt         DateTime        @updatedAt @map("updated_at")
+
+  school          School                      @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  academicSession AcademicYear                @relation(fields: [academicSessionId], references: [id], onDelete: Cascade)
+  masters         FeeMaster[]
+  assignments     StudentFeeGroupAssignment[]
+  discounts       FeeDiscount[]
+  invoices        FeeInvoice[]
+
+  @@unique([schoolId, academicSessionId, normalizedName], name: "unique_fee_group_normalized_name")
+  @@index([schoolId, academicSessionId])
+  @@index([status])
+  @@index([deletedAt])
+  @@map("fee_groups")
+}
+
+model FeeMaster {
+  id                String          @id @default(uuid()) @db.Uuid
+  schoolId          String          @map("school_id") @db.Uuid
+  academicSessionId String          @map("academic_session_id") @db.Uuid
+  feeGroupId        String          @map("fee_group_id") @db.Uuid
+  feeTypeId         String          @map("fee_type_id") @db.Uuid
+  name              String
+  normalizedName    String          @map("normalized_name")
+  code              String
+  description       String?
+  dueDate           DateTime        @map("due_date")
+  amount            Decimal         @db.Decimal(12, 2)
+  effectiveFrom     DateTime?       @map("effective_from")
+  effectiveTo       DateTime?       @map("effective_to")
+  isLegacy          Boolean         @default(false) @map("is_legacy")
+  legacyStructureId String?         @map("legacy_structure_id") @db.Uuid
+  status            FeeRecordStatus @default(ACTIVE)
+  sortOrder         Int             @default(0) @map("sort_order")
+  deletedAt         DateTime?       @map("deleted_at")
+  deletedById       String?         @map("deleted_by_id") @db.Uuid
+  createdAt         DateTime        @default(now()) @map("created_at")
+  updatedAt         DateTime        @updatedAt @map("updated_at")
+
+  school               School                   @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  academicSession      AcademicYear             @relation(fields: [academicSessionId], references: [id], onDelete: Cascade)
+  feeGroup             FeeGroup                 @relation(fields: [feeGroupId], references: [id], onDelete: Restrict)
+  feeType              FeeType                  @relation(fields: [feeTypeId], references: [id], onDelete: Restrict)
+  legacyStructure      FeeStructure?            @relation(fields: [legacyStructureId], references: [id], onDelete: SetNull)
+  fineRules            FeeFineRule[]
+  invoiceItems         FeeInvoiceItem[]
+  discounts            FeeDiscount[]
+  discountInstallments FeeDiscountInstallment[]
+
+  @@unique([schoolId, academicSessionId, feeGroupId, code], name: "unique_fee_master_group_code")
+  @@index([schoolId, academicSessionId])
+  @@index([feeGroupId])
+  @@index([feeTypeId])
+  @@index([dueDate])
+  @@index([effectiveFrom, effectiveTo])
+  @@index([legacyStructureId])
+  @@index([status])
+  @@index([deletedAt])
+  @@map("fee_masters")
+}
+
+model FeeFineRule {
+  id                String          @id @default(uuid()) @db.Uuid
+  schoolId          String          @map("school_id") @db.Uuid
+  academicSessionId String          @map("academic_session_id") @db.Uuid
+  feeMasterId       String          @map("fee_master_id") @db.Uuid
+  fineType          FeeFineRuleType @map("fine_type")
+  amount            Decimal         @db.Decimal(12, 2)
+  daysFrom          Int             @map("days_from")
+  daysTo            Int?            @map("days_to")
+  status            FeeRecordStatus @default(ACTIVE)
+  deletedAt         DateTime?       @map("deleted_at")
+  deletedById       String?         @map("deleted_by_id") @db.Uuid
+  createdAt         DateTime        @default(now()) @map("created_at")
+  updatedAt         DateTime        @updatedAt @map("updated_at")
+
+  school          School       @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  academicSession AcademicYear @relation(fields: [academicSessionId], references: [id], onDelete: Cascade)
+  feeMaster       FeeMaster    @relation(fields: [feeMasterId], references: [id], onDelete: Cascade)
+
+  @@index([schoolId, academicSessionId])
+  @@index([feeMasterId])
+  @@index([fineType])
+  @@index([daysFrom, daysTo])
+  @@index([status])
+  @@index([deletedAt])
+  @@map("fee_fine_rules")
+}
+
+model StudentFeeGroupAssignment {
+  id                String                     @id @default(uuid()) @db.Uuid
+  schoolId          String                     @map("school_id") @db.Uuid
+  academicSessionId String                     @map("academic_session_id") @db.Uuid
+  studentId         String                     @map("student_id") @db.Uuid
+  feeGroupId        String                     @map("fee_group_id") @db.Uuid
+  source            FeeAssignmentSource        @default(MANUAL)
+  assignedAt        DateTime                   @default(now()) @map("assigned_at")
+  status            StudentFeeAssignmentStatus @default(ACTIVE)
+  notes             String?
+  createdById       String?                    @map("created_by_id") @db.Uuid
+  deletedAt         DateTime?                  @map("deleted_at")
+  deletedById       String?                    @map("deleted_by_id") @db.Uuid
+  createdAt         DateTime                   @default(now()) @map("created_at")
+  updatedAt         DateTime                   @updatedAt @map("updated_at")
+
+  school          School       @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  academicSession AcademicYear @relation(fields: [academicSessionId], references: [id], onDelete: Cascade)
+  student         Student      @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  feeGroup        FeeGroup     @relation(fields: [feeGroupId], references: [id], onDelete: Restrict)
+
+  @@index([schoolId, academicSessionId])
+  @@index([studentId])
+  @@index([feeGroupId])
+  @@index([source])
+  @@index([status])
+  @@index([deletedAt])
+  @@map("student_fee_group_assignments")
+}
+
+model FeeDiscountInstallment {
+  id                String    @id @default(uuid()) @db.Uuid
+  schoolId          String    @map("school_id") @db.Uuid
+  academicSessionId String    @map("academic_session_id") @db.Uuid
+  discountId        String    @map("discount_id") @db.Uuid
+  feeMasterId       String    @map("fee_master_id") @db.Uuid
+  deletedAt         DateTime? @map("deleted_at")
+  deletedById       String?   @map("deleted_by_id") @db.Uuid
+  createdAt         DateTime  @default(now()) @map("created_at")
+
+  school          School       @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  academicSession AcademicYear @relation(fields: [academicSessionId], references: [id], onDelete: Cascade)
+  discount        FeeDiscount  @relation(fields: [discountId], references: [id], onDelete: Cascade)
+  feeMaster       FeeMaster    @relation(fields: [feeMasterId], references: [id], onDelete: Cascade)
+
+  @@index([schoolId, academicSessionId])
+  @@index([discountId])
+  @@index([feeMasterId])
+  @@index([deletedAt])
+  @@map("fee_discount_installments")
 }
 
 model FeeFine {
@@ -3458,6 +3686,8 @@ model FeeLedger {
   receiptId         String?            @map("receipt_id") @db.Uuid
   discountId        String?            @map("discount_id") @db.Uuid
   fineId            String?            @map("fine_id") @db.Uuid
+  paymentReversalId String?            @map("payment_reversal_id") @db.Uuid
+  carryForwardId    String?            @map("carry_forward_id") @db.Uuid
   type              FeeLedgerEntryType @map("entry_type")
   description       String
   debitAmount       Decimal            @default(0) @map("debit") @db.Decimal(12, 2)
@@ -3475,14 +3705,114 @@ model FeeLedger {
   receipt         FeeReceipt?  @relation(fields: [receiptId], references: [id], onDelete: SetNull)
   discount        FeeDiscount? @relation(fields: [discountId], references: [id], onDelete: SetNull)
   fine            FeeFine?     @relation(fields: [fineId], references: [id], onDelete: SetNull)
+  paymentReversal FeePaymentReversal? @relation(fields: [paymentReversalId], references: [id], onDelete: SetNull)
+  carryForward    FeeCarryForward?    @relation(fields: [carryForwardId], references: [id], onDelete: SetNull)
 
   @@index([schoolId, academicSessionId])
   @@index([studentId])
   @@index([invoiceId])
   @@index([receiptId])
+  @@index([paymentReversalId])
+  @@index([carryForwardId])
   @@index([type])
   @@index([entryDate])
   @@map("fee_ledgers")
+}
+
+model FeePaymentReversal {
+  id                String   @id @default(uuid()) @db.Uuid
+  schoolId          String   @map("school_id") @db.Uuid
+  academicSessionId String   @map("academic_session_id") @db.Uuid
+  paymentId         String   @map("payment_id") @db.Uuid
+  studentId         String   @map("student_id") @db.Uuid
+  reversalNumber    String   @map("reversal_number")
+  reversedAmount    Decimal  @map("reversed_amount") @db.Decimal(12, 2)
+  reason            String
+  reversedById      String   @map("reversed_by_id") @db.Uuid
+  reversedAt        DateTime @default(now()) @map("reversed_at")
+  createdAt         DateTime @default(now()) @map("created_at")
+
+  school          School       @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  academicSession AcademicYear @relation(fields: [academicSessionId], references: [id], onDelete: Cascade)
+  payment         FeePayment   @relation(fields: [paymentId], references: [id], onDelete: Restrict)
+  student         Student      @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  ledgers         FeeLedger[]
+
+  @@unique([schoolId, reversalNumber])
+  @@index([schoolId, academicSessionId])
+  @@index([paymentId])
+  @@index([studentId])
+  @@map("fee_payment_reversals")
+}
+
+model FeeCarryForward {
+  id                    String                @id @default(uuid()) @db.Uuid
+  schoolId              String                @map("school_id") @db.Uuid
+  fromAcademicSessionId String                @map("from_academic_session_id") @db.Uuid
+  toAcademicSessionId   String                @map("to_academic_session_id") @db.Uuid
+  studentId             String                @map("student_id") @db.Uuid
+  amount                Decimal               @db.Decimal(12, 2)
+  generatedInvoiceId    String?               @map("generated_invoice_id") @db.Uuid
+  status                FeeCarryForwardStatus @default(PENDING)
+  createdById           String?               @map("created_by_id") @db.Uuid
+  createdAt             DateTime              @default(now()) @map("created_at")
+  updatedAt             DateTime              @updatedAt @map("updated_at")
+
+  school              School                  @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  fromAcademicSession AcademicYear            @relation("FeeCarryForwardFromSession", fields: [fromAcademicSessionId], references: [id], onDelete: Restrict)
+  toAcademicSession   AcademicYear            @relation("FeeCarryForwardToSession", fields: [toAcademicSessionId], references: [id], onDelete: Restrict)
+  student             Student                 @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  generatedInvoice    FeeInvoice?             @relation("GeneratedCarryForwardInvoice", fields: [generatedInvoiceId], references: [id], onDelete: SetNull)
+  items               FeeCarryForwardItem[]
+  ledgers             FeeLedger[]
+
+  @@index([schoolId])
+  @@index([fromAcademicSessionId])
+  @@index([toAcademicSessionId])
+  @@index([studentId])
+  @@index([generatedInvoiceId])
+  @@index([status])
+  @@map("fee_carry_forwards")
+}
+
+model FeeCarryForwardItem {
+  id              String   @id @default(uuid()) @db.Uuid
+  carryForwardId  String   @map("carry_forward_id") @db.Uuid
+  sourceInvoiceId String   @map("source_invoice_id") @db.Uuid
+  amount          Decimal  @db.Decimal(12, 2)
+  createdAt       DateTime @default(now()) @map("created_at")
+
+  carryForward FeeCarryForward @relation(fields: [carryForwardId], references: [id], onDelete: Cascade)
+  sourceInvoice FeeInvoice     @relation("CarryForwardSourceInvoice", fields: [sourceInvoiceId], references: [id], onDelete: Restrict)
+
+  @@index([carryForwardId])
+  @@index([sourceInvoiceId])
+  @@map("fee_carry_forward_items")
+}
+
+model FeeInvoiceGenerationJob {
+  id                String                        @id @default(uuid()) @db.Uuid
+  schoolId          String                        @map("school_id") @db.Uuid
+  academicSessionId String                        @map("academic_session_id") @db.Uuid
+  studentId         String?                       @map("student_id") @db.Uuid
+  source            FeeAssignmentSource
+  status            FeeInvoiceGenerationJobStatus @default(QUEUED)
+  payload           Json
+  result            Json?
+  error             String?
+  createdById       String?                       @map("created_by_id") @db.Uuid
+  createdAt         DateTime                      @default(now()) @map("created_at")
+  updatedAt         DateTime                      @updatedAt @map("updated_at")
+
+  school          School       @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  academicSession AcademicYear @relation(fields: [academicSessionId], references: [id], onDelete: Cascade)
+  student         Student?     @relation(fields: [studentId], references: [id], onDelete: Cascade)
+
+  @@index([schoolId, academicSessionId])
+  @@index([studentId])
+  @@index([source])
+  @@index([status])
+  @@map("fee_invoice_generation_jobs")
 }
 
 model FeeNotification {

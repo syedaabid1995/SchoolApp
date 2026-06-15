@@ -45,6 +45,7 @@ import { teacherRouter } from './routes/teacher.routes';
 import { staffRouter } from './routes/staff.routes';
 import { attendanceSummaryRouter } from './routes/attendanceSummary.routes';
 import { adminDashboardRouter } from './routes/adminDashboard.routes';
+import { dashboardRouter } from './routes/dashboard.routes';
 import { adminSystemRouter } from './routes/adminSystem.routes';
 import { adminUserRouter } from './routes/adminUser.routes';
 import { userRouter } from './routes/user.routes';
@@ -203,6 +204,7 @@ export const createApp = () => {
   app.use('/api/v1/teachers', teacherRouter);
   app.use('/api/v1/staff', staffRouter);
   app.use('/api/v1/attendance-summary', attendanceSummaryRouter);
+  app.use('/api/v1/dashboard', dashboardRouter);
   app.use('/api/v1/admin/dashboard', adminDashboardRouter);
   app.use('/api/v1/admin/users', adminUserRouter);
   app.use('/api/v1/admin/support', adminSupportRouter);

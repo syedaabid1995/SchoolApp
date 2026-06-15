@@ -17,6 +17,8 @@ import { buildQueryFingerprint, cacheKeys } from '../../../../services/cache/cac
 import { rememberCache, setCacheHeader } from '../../../../services/cache/cache.service';
 import { cacheTTL } from '../../../../services/cache/cache.ttl';
 import { invalidateStudentCache, invalidateAttendanceCache } from '../../../../services/cache/cache.invalidation';
+import { logger } from '../../../../config/logger';
+import { feeGenerationQueue } from '../../../../queues';
 
 const requireSchoolAdmin = (req: Request) => {
   if (!req.auth?.userId) throw new HttpError(401, 'Unauthorized');
@@ -82,6 +84,50 @@ const ensureRollIsUnique = async (
   if (existing) throw new HttpError(409, 'Roll number already exists for this class, section, and session');
 };
 
+const ensureAdmissionFeeReferences = async (
+  schoolId: string,
+  academicSessionId: string | null | undefined,
+  payload: { feeGroupIds?: string[]; discountIds?: string[] },
+) => {
+  const requestedFeeGroupIds = payload.feeGroupIds ?? [];
+  const requestedDiscountIds = payload.discountIds ?? [];
+  const feeGroupIds = Array.from(new Set(requestedFeeGroupIds));
+  const discountIds = Array.from(new Set(requestedDiscountIds));
+  if (!feeGroupIds.length && !discountIds.length) return;
+  if (!academicSessionId) throw new HttpError(400, 'academicSessionId is required to assign fees during admission');
+  if (requestedFeeGroupIds.length !== feeGroupIds.length) throw new HttpError(400, 'Duplicate fee groups are not allowed');
+  if (requestedDiscountIds.length !== discountIds.length) throw new HttpError(400, 'Duplicate fee discounts are not allowed');
+  if (discountIds.length && !feeGroupIds.length) throw new HttpError(400, 'Discounts cannot be selected without a fee group');
+
+  const [feeGroups, discounts] = await Promise.all([
+    feeGroupIds.length
+      ? StudentEnrollmentRepository.feeGroup.findMany({
+          where: { schoolId, academicSessionId, id: { in: feeGroupIds }, deletedAt: null, status: 'ACTIVE' },
+          select: { id: true },
+        })
+      : Promise.resolve([]),
+    discountIds.length
+      ? StudentEnrollmentRepository.feeDiscount.findMany({
+          where: {
+            schoolId,
+            academicSessionId,
+            id: { in: discountIds },
+            deletedAt: null,
+            approvalStatus: { in: ['APPROVED', 'ACTIVE'] },
+          },
+          select: { id: true, validTo: true, expiryDate: true },
+        })
+      : Promise.resolve([]),
+  ]);
+
+  if (feeGroups.length !== feeGroupIds.length) throw new HttpError(404, 'One or more fee groups were not found');
+  if (discounts.length !== discountIds.length) throw new HttpError(404, 'One or more approved fee discounts were not found');
+  const now = new Date();
+  if (discounts.some((discount) => (discount.expiryDate && discount.expiryDate < now) || (discount.validTo && discount.validTo < now))) {
+    throw new HttpError(400, 'Expired discounts cannot be selected');
+  }
+};
+
 const createSchema = z.object({
   admissionNo: z.string().min(1),
   rollNo: z.string().optional(),
@@ -131,6 +177,9 @@ const createSchema = z.object({
   sectionId: z.string().uuid().optional().nullable(),
   schoolId: z.string().uuid().optional(),
   siblingIds: z.array(z.string().uuid()).optional(),
+  feeGroupIds: z.array(z.string().uuid()).optional(),
+  discountIds: z.array(z.string().uuid()).optional(),
+  generateInvoices: z.boolean().optional().default(true),
 });
 
 const updateSchema = z.object({
@@ -355,6 +404,7 @@ export const createStudent = async (req: Request, res: Response) => {
   await enforceLimits(schoolId, 'students');
   await ensureAcademicScope(schoolId, payload);
   await ensureRollIsUnique(schoolId, payload);
+  await ensureAdmissionFeeReferences(schoolId, payload.academicSessionId, payload);
 
   const existing = await StudentEnrollmentRepository.student.findFirst({
     where: { schoolId, admissionNo: payload.admissionNo },
@@ -368,7 +418,7 @@ export const createStudent = async (req: Request, res: Response) => {
   const [firstName, ...rest] = fullName.split(/\s+/);
   const lastName = rest.join(' ') || 'Student';
 
-  const student = await StudentEnrollmentRepository.$transaction(async (tx) => {
+  const result = await StudentEnrollmentRepository.$transaction(async (tx) => {
     const createdStudent = await tx.student.create({
       data: {
         admissionNo: normalizeText(payload.admissionNo)!,
@@ -516,28 +566,80 @@ export const createStudent = async (req: Request, res: Response) => {
       },
     });
 
-    return createdStudent;
+    const feeGroupIds = Array.from(new Set(payload.feeGroupIds ?? []));
+    const discountIds = Array.from(new Set(payload.discountIds ?? []));
+    let feeInvoiceGenerationJob = null;
+    if (payload.academicSessionId && (feeGroupIds.length || discountIds.length)) {
+      if (feeGroupIds.length) {
+        await tx.studentFeeGroupAssignment.createMany({
+          data: feeGroupIds.map((feeGroupId) => ({
+            schoolId,
+            academicSessionId: payload.academicSessionId!,
+            studentId: createdStudent.id,
+            feeGroupId,
+            source: 'ADMISSION',
+            createdById: auth.userId,
+          })),
+          skipDuplicates: true,
+        });
+      }
+
+      if (payload.generateInvoices) {
+        feeInvoiceGenerationJob = await tx.feeInvoiceGenerationJob.create({
+          data: {
+            schoolId,
+            academicSessionId: payload.academicSessionId,
+            studentId: createdStudent.id,
+            source: 'ADMISSION',
+            payload: { feeGroupIds, discountIds },
+            createdById: auth.userId,
+          },
+        });
+      }
+    }
+
+    return { student: createdStudent, feeInvoiceGenerationJob };
   });
 
   await AuditLogService.record(req, {
     schoolId,
     entityType: 'STUDENT',
-    entityId: student.id,
+    entityId: result.student.id,
     action: 'CREATE',
       afterState: {
-      admissionNo: student.admissionNo,
-      rollNo: student.rollNo,
-      fullName: student.fullName,
-      academicSessionId: student.academicSessionId,
-      classId: student.classId,
-      sectionId: student.sectionId,
-      status: student.status,
+      admissionNo: result.student.admissionNo,
+      rollNo: result.student.rollNo,
+      fullName: result.student.fullName,
+      academicSessionId: result.student.academicSessionId,
+      classId: result.student.classId,
+      sectionId: result.student.sectionId,
+      status: result.student.status,
+      feeInvoiceGenerationJobId: result.feeInvoiceGenerationJob?.id ?? null,
     },
   });
 
-  await invalidateStudentCache(schoolId, student.id);
+  await invalidateStudentCache(schoolId, result.student.id);
 
-  res.status(201).json(student);
+  if (result.feeInvoiceGenerationJob) {
+    await feeGenerationQueue
+      .add(
+        'admission-fee-generation',
+        { jobId: result.feeInvoiceGenerationJob.id },
+        { jobId: result.feeInvoiceGenerationJob.id, attempts: 3, backoff: { type: 'exponential', delay: 5000 } },
+      )
+      .catch(async (err) => {
+        logger.warn({ err, feeInvoiceGenerationJobId: result.feeInvoiceGenerationJob?.id }, 'failed to enqueue admission fee generation job');
+        await StudentEnrollmentRepository.feeInvoiceGenerationJob.update({
+          where: { id: result.feeInvoiceGenerationJob!.id },
+          data: { status: 'FAILED', error: 'Unable to enqueue fee generation job' },
+        }).catch((updateErr) => logger.warn({ err: updateErr }, 'failed to mark admission fee generation job failed'));
+      });
+  }
+
+  res.status(201).json({
+    ...result.student,
+    feeInvoiceGenerationJob: result.feeInvoiceGenerationJob,
+  });
 };
 
 export const updateStudent = async (req: Request, res: Response) => {

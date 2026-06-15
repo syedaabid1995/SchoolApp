@@ -211,7 +211,7 @@ export default function DashboardClientLayout({
   if (!isSuperAdmin && !canAccessRoute) {
     return (
       <div
-        className={`dashboard-shell dashboard-shell-${resolvedThemeMode} flex h-screen bg-[var(--shell-bg)] text-[var(--shell-text)]`}
+        className={`dashboard-shell dashboard-shell-${resolvedThemeMode} flex h-screen w-full overflow-hidden bg-[var(--shell-bg)] text-[var(--shell-text)]`}
         style={shellStyle}
       >
         <Sidebar
@@ -223,7 +223,7 @@ export default function DashboardClientLayout({
           platformName={platformSettings.platformName}
           platformSubtitle={platformSettings.consoleName}
         />
-        <div className="flex flex-1 flex-col h-screen">
+        <div className="flex h-screen min-w-0 flex-1 flex-col overflow-hidden">
           <Header
             role={effectiveRole}
             email={email}
@@ -235,7 +235,7 @@ export default function DashboardClientLayout({
             onThemeModeChange={updateThemeMode}
             consoleTitle={platformSettings.consoleName}
           />
-          <main className="flex-1 overflow-y-auto bg-[var(--shell-bg)] p-4 transition-all duration-200 sm:p-6">
+          <main className="min-w-0 flex-1 overflow-y-auto overflow-x-hidden bg-[var(--shell-bg)] p-4 transition-all duration-200 sm:p-6">
             <AccessDeniedPanel />
           </main>
         </div>
@@ -249,7 +249,7 @@ export default function DashboardClientLayout({
 
   return (
     <div
-      className={`dashboard-shell dashboard-shell-${resolvedThemeMode} ${isSuperAdminLayout ? 'super-admin-console' : ''} flex h-screen bg-[var(--shell-bg)] text-[var(--shell-text)]`}
+      className={`dashboard-shell dashboard-shell-${resolvedThemeMode} ${isSuperAdminLayout ? 'super-admin-console' : ''} flex h-screen w-full overflow-hidden bg-[var(--shell-bg)] text-[var(--shell-text)]`}
       style={shellStyle}
     >
       <Sidebar
@@ -261,7 +261,7 @@ export default function DashboardClientLayout({
         platformName={platformSettings.platformName}
         platformSubtitle={platformSettings.consoleName}
       />
-      <div className="flex flex-1 flex-col h-screen">
+      <div className="flex h-screen min-w-0 flex-1 flex-col overflow-hidden">
         <Header
           role={effectiveRole}
           email={email}
@@ -276,22 +276,22 @@ export default function DashboardClientLayout({
         <main
           className={
             isSuperAdminLayout
-              ? 'flex-1 overflow-y-auto bg-[var(--shell-bg)] p-4 transition-all duration-200 sm:p-6 lg:p-8'
-              : 'flex-1 overflow-y-auto bg-[var(--shell-bg)] p-4 transition-all duration-200 sm:p-6'
+              ? 'min-w-0 flex-1 overflow-y-auto overflow-x-hidden bg-[var(--shell-bg)] p-4 transition-all duration-200 sm:p-6 lg:p-8'
+              : 'min-w-0 flex-1 overflow-y-auto overflow-x-hidden bg-[var(--shell-bg)] p-4 transition-all duration-200 sm:p-6'
           }
         >
-          <div className={isSuperAdminLayout ? 'mx-auto max-w-[1500px] animate-fade-in' : 'mx-auto max-w-7xl animate-fade-in'}>
+          <div className={isSuperAdminLayout ? 'mx-auto w-full min-w-0 max-w-[1500px] animate-fade-in' : 'mx-auto w-full min-w-0 max-w-7xl animate-fade-in'}>
             {children}
           </div>
         </main>
         <footer
           className={
             isSuperAdminLayout
-              ? 'flex-shrink-0 border-t border-[var(--shell-border)] bg-[var(--shell-card)] px-4 py-3 text-xs text-[var(--shell-muted)] transition-all duration-200 sm:px-6'
-              : 'theme-footer flex-shrink-0 border-t border-white/10 px-4 py-3 text-xs text-white/80 backdrop-blur-md transition-all duration-200 sm:px-6'
+              ? 'min-w-0 flex-shrink-0 overflow-hidden border-t border-[var(--shell-border)] bg-[var(--shell-card)] px-4 py-3 text-xs text-[var(--shell-muted)] transition-all duration-200 sm:px-6'
+              : 'theme-footer min-w-0 flex-shrink-0 overflow-hidden border-t border-white/10 px-4 py-3 text-xs text-white/80 backdrop-blur-md transition-all duration-200 sm:px-6'
           }
         >
-          <div className={isSuperAdminLayout ? 'mx-auto max-w-[1500px]' : 'mx-auto max-w-7xl'}>
+          <div className={isSuperAdminLayout ? 'mx-auto w-full min-w-0 max-w-[1500px]' : 'mx-auto w-full min-w-0 max-w-7xl'}>
             {isSuperAdminLayout ? platformSettings.footerText : defaultLoginBranding.footerText}
           </div>
         </footer>

@@ -1,6 +1,5 @@
 import type { Request, Response } from 'express';
 import { z } from 'zod';
-import crypto from 'crypto';
 import { prisma } from '../config/db';
 import { HttpError } from '../middlewares/error.middleware';
 import { resolveSchoolId } from '../utils/tenant';
@@ -29,6 +28,15 @@ const updateSchema = z.object({
   schoolId: z.string().uuid().optional(),
 });
 const idSchema = z.string().uuid();
+
+const buildParentTempPassword = (firstName: string, lastName: string, phone?: string | null) => {
+  const namePart = `${firstName}${lastName}`.replace(/[^a-zA-Z0-9]/g, '').slice(0, 4).toLowerCase();
+  const phonePart = String(phone ?? '').replace(/\D/g, '').slice(-4);
+  if (!namePart || phonePart.length < 4) {
+    throw new HttpError(400, 'Parent name and last 4 mobile digits are required to create parent login password');
+  }
+  return `${namePart}@${phonePart}`;
+};
 
 export const createParent = async (req: Request, res: Response) => {
   const payload = createSchema.parse(req.body);
@@ -78,7 +86,7 @@ export const createParent = async (req: Request, res: Response) => {
       if (existingUser) {
         userId = existingUser.id;
       } else {
-        tempPassword = crypto.randomBytes(9).toString('base64url');
+        tempPassword = buildParentTempPassword(payload.firstName, payload.lastName, payload.phone);
         const passwordHash = await hashPassword(tempPassword);
         const createdUser = await tx.user.create({
           data: {

@@ -11,6 +11,8 @@ export type CreateLedgerEntryInput = {
   receiptId?: string | null;
   discountId?: string | null;
   fineId?: string | null;
+  paymentReversalId?: string | null;
+  carryForwardId?: string | null;
   type: FeeLedgerEntryType;
   debitAmount?: Prisma.Decimal | number | string;
   creditAmount?: Prisma.Decimal | number | string;
@@ -44,6 +46,8 @@ export const createLedgerEntry = async (tx: LedgerClient, input: CreateLedgerEnt
       receiptId: input.receiptId ?? null,
       discountId: input.discountId ?? null,
       fineId: input.fineId ?? null,
+      paymentReversalId: input.paymentReversalId ?? null,
+      carryForwardId: input.carryForwardId ?? null,
       type: input.type,
       description: input.description,
       debitAmount,

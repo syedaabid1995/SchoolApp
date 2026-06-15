@@ -11,9 +11,11 @@ export type FeePaymentMode = 'CASH' | 'UPI' | 'BANK_TRANSFER' | 'CHEQUE' | 'CARD
 export type FeeDiscountType = 'SCHOLARSHIP' | 'SIBLING_DISCOUNT' | 'STAFF_CHILD_DISCOUNT' | 'SPECIAL_DISCOUNT';
 export type FeeValueType = 'PERCENTAGE' | 'FIXED';
 export type FeeApprovalStatus = 'DRAFT' | 'PENDING_APPROVAL' | 'APPROVED' | 'REJECTED' | 'ACTIVE' | 'INACTIVE';
-export type FeeDiscountTargetType = 'STUDENT' | 'CLASS' | 'SECTION' | 'CATEGORY' | 'FEE_TYPE' | 'ALL';
+export type FeeDiscountTargetType = 'STUDENT' | 'CLASS' | 'SECTION' | 'CATEGORY' | 'FEE_TYPE' | 'FEE_GROUP' | 'FEE_MASTER' | 'ALL';
 export type FeeAssignmentTargetType = 'CLASS' | 'SECTION' | 'STUDENT' | 'GROUP' | 'CATEGORY' | 'TRANSPORT_ROUTE';
 export type FeeFineType = 'FIXED' | 'DAILY' | 'MONTHLY';
+export type FeeFineRuleType = 'PERCENTAGE' | 'FIXED_AMOUNT' | 'CUMULATIVE';
+export type FeeCarryForwardStatus = 'PENDING' | 'GENERATED' | 'CANCELLED';
 
 export type FeePagination = {
   page: number;
@@ -74,6 +76,66 @@ export type FeeType = {
   description?: string | null;
   status: FeeRecordStatus;
   sortOrder: number;
+};
+
+export type FeeGroup = {
+  id: string;
+  schoolId: string;
+  academicSessionId: string;
+  name: string;
+  normalizedName?: string;
+  description?: string | null;
+  status: FeeRecordStatus;
+  deletedAt?: string | null;
+  deletedById?: string | null;
+  createdAt?: string;
+  updatedAt?: string;
+  _count?: { masters?: number; assignments?: number; invoices?: number };
+};
+
+export type FeeFineRule = {
+  id: string;
+  schoolId: string;
+  academicSessionId: string;
+  feeMasterId: string;
+  fineType: FeeFineRuleType;
+  amount: number | string;
+  daysFrom: number;
+  daysTo?: number | null;
+  status: FeeRecordStatus;
+  deletedAt?: string | null;
+  deletedById?: string | null;
+  createdAt?: string;
+  updatedAt?: string;
+};
+
+export type FeeMaster = {
+  id: string;
+  schoolId: string;
+  academicSessionId: string;
+  feeGroupId: string;
+  feeTypeId: string;
+  name: string;
+  normalizedName?: string;
+  code: string;
+  description?: string | null;
+  dueDate: string;
+  amount: number | string;
+  effectiveFrom?: string | null;
+  effectiveTo?: string | null;
+  isLegacy: boolean;
+  legacyStructureId?: string | null;
+  status: FeeRecordStatus;
+  sortOrder: number;
+  deletedAt?: string | null;
+  deletedById?: string | null;
+  createdAt?: string;
+  updatedAt?: string;
+  feeGroup?: Pick<FeeGroup, 'id' | 'name' | 'status'>;
+  feeType?: Pick<FeeType, 'id' | 'name' | 'code' | 'schedule' | 'status'>;
+  legacyStructure?: Pick<FeeStructure, 'id' | 'name'> | null;
+  fineRules?: FeeFineRule[];
+  _count?: { invoiceItems?: number; discountInstallments?: number };
 };
 
 export type FeeStructureItem = {
@@ -143,7 +205,9 @@ export type FeeAssignmentsResponse = {
 export type FeeInvoiceItem = {
   id: string;
   particularId?: string | null;
+  feeMasterId?: string | null;
   description: string;
+  name?: string;
   amount: number | string;
   discountAmount: number | string;
   fineAmount: number | string;
@@ -162,12 +226,27 @@ export type FeePayment = {
   chequeNumber?: string | null;
   bankName?: string | null;
   idempotencyKey?: string | null;
-  status: 'SUCCESS' | 'FAILED' | 'REFUNDED' | 'CANCELLED';
+  status: 'PENDING' | 'SUCCESS' | 'FAILED' | 'REFUNDED' | 'PARTIALLY_REVERSED' | 'REVERSED' | 'CANCELLED';
   paidAt: string;
   invoice?: { invoiceNumber: string };
   student?: { fullName: string; admissionNo: string };
   receipt?: FeeReceipt | null;
   allocations?: FeePaymentAllocation[];
+  reversals?: FeePaymentReversal[];
+};
+
+export type FeePaymentReversal = {
+  id: string;
+  schoolId: string;
+  academicSessionId: string;
+  paymentId: string;
+  studentId: string;
+  reversalNumber: string;
+  reversedAmount: number | string;
+  reason: string;
+  reversedById: string;
+  reversedAt: string;
+  createdAt: string;
 };
 
 export type FeeReceipt = {
@@ -316,15 +395,24 @@ export type FeeCollectionPaymentResponse = {
   idempotent: boolean;
 };
 
+export type FeePaymentReversalResponse = {
+  reversal: FeePaymentReversal;
+  payment: FeePayment;
+};
+
 export type FeeDiscount = {
   id: string;
   discountName?: string | null;
+  code?: string | null;
+  description?: string | null;
   targetType: FeeDiscountTargetType;
   studentId?: string | null;
   classId?: string | null;
   sectionId?: string | null;
   categoryId?: string | null;
   feeTypeId?: string | null;
+  feeGroupId?: string | null;
+  feeMasterId?: string | null;
   particularId?: string | null;
   discountType: FeeDiscountType;
   valueType: FeeValueType;
@@ -332,6 +420,7 @@ export type FeeDiscount = {
   amount?: number | string | null;
   validFrom?: string | null;
   validTo?: string | null;
+  expiryDate?: string | null;
   approvalStatus: FeeApprovalStatus;
   approvedById?: string | null;
   approvedAt?: string | null;
@@ -342,6 +431,31 @@ export type FeeDiscount = {
   section?: { id?: string; name: string } | null;
   category?: { id: string; name: string } | null;
   feeType?: Pick<FeeType, 'id' | 'name' | 'schedule'> | null;
+  feeGroup?: Pick<FeeGroup, 'id' | 'name'> | null;
+  feeMaster?: Pick<FeeMaster, 'id' | 'name' | 'code'> | null;
+  installments?: Array<{ id: string; feeMasterId: string; feeMaster?: Pick<FeeMaster, 'id' | 'name' | 'code'> }>;
+};
+
+export type FeeCarryForward = {
+  id: string;
+  schoolId: string;
+  fromAcademicSessionId: string;
+  toAcademicSessionId: string;
+  studentId: string;
+  amount: number | string;
+  generatedInvoiceId?: string | null;
+  status: FeeCarryForwardStatus;
+  createdById?: string | null;
+  createdAt: string;
+  updatedAt: string;
+  student?: Pick<FeeStudentOption, 'id' | 'admissionNo' | 'fullName'>;
+  generatedInvoice?: Pick<FeeInvoice, 'id' | 'invoiceNumber' | 'dueAmount' | 'status'> | null;
+  items?: Array<{
+    id: string;
+    sourceInvoiceId: string;
+    amount: number | string;
+    sourceInvoice?: Pick<FeeInvoice, 'id' | 'invoiceNumber' | 'dueAmount' | 'status'>;
+  }>;
 };
 
 export type FeeFine = {
@@ -405,6 +519,8 @@ export type FeeReportParams = FeeScopeParams & {
   sectionId?: string;
   studentId?: string;
   feeTypeId?: string;
+  feeGroupId?: string;
+  feeMasterId?: string;
   feeStructureId?: string;
   paymentMode?: FeePaymentMode;
   status?: string;
@@ -469,6 +585,89 @@ export const updateFeeType = async (id: string, payload: Partial<FeeType> & FeeS
 
 export const deleteFeeType = async (id: string, params?: FeeScopeParams) => {
   await api.delete(`/fees/types/${id}`, { params });
+};
+
+export const listFeeGroups = async (params?: FeeScopeParams & { page?: number; limit?: number; search?: string; status?: FeeRecordStatus }) => {
+  const { data } = await api.get<FeeListResponse<FeeGroup>>('/fees/groups', { params: sanitizeParams(params) });
+  return data;
+};
+
+export const createFeeGroup = async (payload: FeeScopeParams & { name: string; description?: string | null; status?: FeeRecordStatus }) => {
+  const { data } = await api.post<FeeGroup>('/fees/groups', payload);
+  return data;
+};
+
+export const updateFeeGroup = async (id: string, payload: FeeScopeParams & Partial<Pick<FeeGroup, 'name' | 'description' | 'status'>>) => {
+  const { data } = await api.patch<FeeGroup>(`/fees/groups/${id}`, payload);
+  return data;
+};
+
+export const deleteFeeGroup = async (id: string, params?: FeeScopeParams) => {
+  await api.delete(`/fees/groups/${id}`, { params });
+};
+
+export const listFeeMasters = async (params?: FeeScopeParams & { page?: number; limit?: number; search?: string; status?: FeeRecordStatus; feeGroupId?: string; feeTypeId?: string }) => {
+  const { data } = await api.get<FeeListResponse<FeeMaster>>('/fees/masters', { params: sanitizeParams(params) });
+  return data;
+};
+
+export const createFeeMaster = async (payload: FeeScopeParams & {
+  feeGroupId: string;
+  feeTypeId: string;
+  name: string;
+  code?: string | null;
+  description?: string | null;
+  dueDate: string;
+  amount: number;
+  effectiveFrom?: string | null;
+  effectiveTo?: string | null;
+  isLegacy?: boolean;
+  legacyStructureId?: string | null;
+  status?: FeeRecordStatus;
+  sortOrder?: number;
+}) => {
+  const { data } = await api.post<FeeMaster>('/fees/masters', payload);
+  return data;
+};
+
+export const updateFeeMaster = async (id: string, payload: FeeScopeParams & Partial<Parameters<typeof createFeeMaster>[0]>) => {
+  const { data } = await api.patch<FeeMaster>(`/fees/masters/${id}`, payload);
+  return data;
+};
+
+export const deleteFeeMaster = async (id: string, params?: FeeScopeParams) => {
+  await api.delete(`/fees/masters/${id}`, { params });
+};
+
+export const duplicateFeeMaster = async (id: string, payload?: FeeScopeParams & { feeGroupId?: string; feeTypeId?: string; dueDate?: string; effectiveFrom?: string | null; effectiveTo?: string | null }) => {
+  const { data } = await api.post<FeeMaster>(`/fees/masters/${id}/duplicate`, payload ?? {});
+  return data;
+};
+
+export const listFeeFineRules = async (params?: FeeScopeParams & { feeMasterId?: string }) => {
+  const { data } = await api.get<FeeFineRule[]>('/fees/fine-rules', { params: sanitizeParams(params) });
+  return data;
+};
+
+export const createFeeFineRule = async (feeMasterId: string, payload: FeeScopeParams & {
+  fineType: FeeFineRuleType;
+  amount: number;
+  daysFrom: number;
+  daysTo?: number | null;
+  status?: FeeRecordStatus;
+}) => {
+  const { data } = await api.post<FeeFineRule>(`/fees/masters/${feeMasterId}/fine-rules`, payload);
+  return data;
+};
+
+export const updateFeeFineRule = async (id: string, payload: FeeScopeParams & Partial<Omit<FeeFineRule, 'id' | 'schoolId' | 'academicSessionId' | 'createdAt' | 'updatedAt'>>) => {
+  const { data } = await api.patch<FeeFineRule>(`/fees/fine-rules/${id}`, payload);
+  return data;
+};
+
+export const deleteFeeFineRule = async (id: string, params?: FeeScopeParams) => {
+  const { data } = await api.delete<FeeFineRule>(`/fees/fine-rules/${id}`, { params });
+  return data;
 };
 
 export const listFeeStructures = async (params?: FeeScopeParams & { page?: number; limit?: number; classId?: string }) => {
@@ -615,6 +814,40 @@ export const listFeePayments = async (params?: FeeScopeParams & { page?: number;
   return data;
 };
 
+export const reverseFeePayment = async (id: string, payload: FeeScopeParams & { reason: string; amount?: number }) => {
+  const { data } = await api.post<FeePaymentReversalResponse>(`/fees/payments/${id}/reverse`, payload);
+  return data;
+};
+
+export const listFeeCarryForwards = async (params?: FeeScopeParams & { page?: number; limit?: number; status?: FeeCarryForwardStatus; studentId?: string }) => {
+  const { data } = await api.get<FeeListResponse<FeeCarryForward>>('/fees/carry-forwards', { params: sanitizeParams(params) });
+  return data;
+};
+
+export const previewFeeCarryForward = async (payload: FeeScopeParams & {
+  fromAcademicSessionId: string;
+  toAcademicSessionId: string;
+  studentIds?: string[];
+}) => {
+  const { data } = await api.post<{ items: Array<{ studentId: string; student: FeeStudentOption; amount: number | string; invoices: Array<Pick<FeeInvoice, 'id' | 'invoiceNumber' | 'dueDate' | 'dueAmount' | 'status'>> }>; totalAmount: number | string }>('/fees/carry-forwards/preview', payload);
+  return data;
+};
+
+export const createFeeCarryForward = async (payload: Parameters<typeof previewFeeCarryForward>[0]) => {
+  const { data } = await api.post<{ items: FeeCarryForward[] }>('/fees/carry-forwards', payload);
+  return data;
+};
+
+export const generateCarryForwardInvoice = async (id: string, payload?: FeeScopeParams) => {
+  const { data } = await api.post<{ carryForward: FeeCarryForward; invoice: FeeInvoice }>(`/fees/carry-forwards/${id}/generate-invoice`, payload ?? {});
+  return data;
+};
+
+export const cancelFeeCarryForward = async (id: string, payload?: FeeScopeParams & { reason?: string | null }) => {
+  const { data } = await api.patch<FeeCarryForward>(`/fees/carry-forwards/${id}/cancel`, payload ?? {});
+  return data;
+};
+
 export const searchFeeCollectionStudents = async (params?: FeeScopeParams & { search?: string; classId?: string; sectionId?: string }) => {
   const { data } = await api.get<{ items: FeeCollectionStudent[] }>('/fees/collection/students', { params: sanitizeParams(params) });
   return data;
@@ -641,6 +874,8 @@ export const listFeeDiscounts = async (params?: FeeScopeParams & {
   sectionId?: string;
   categoryId?: string;
   feeTypeId?: string;
+  feeGroupId?: string;
+  feeMasterId?: string;
   dateFrom?: string;
   dateTo?: string;
   sortBy?: string;
@@ -652,18 +887,23 @@ export const listFeeDiscounts = async (params?: FeeScopeParams & {
 
 export const createFeeDiscount = async (payload: FeeScopeParams & {
   discountName?: string | null;
+  code?: string | null;
+  description?: string | null;
   targetType: FeeDiscountTargetType;
   studentId?: string | null;
   classId?: string | null;
   sectionId?: string | null;
   categoryId?: string | null;
   feeTypeId?: string | null;
+  feeGroupId?: string | null;
+  feeMasterId?: string | null;
   particularId?: string | null;
   discountType: FeeValueType;
   discountValue: number;
   amount?: number | null;
   validFrom?: string | null;
   validTo?: string | null;
+  expiryDate?: string | null;
   status?: FeeApprovalStatus;
   reason?: string | null;
   note?: string | null;

@@ -77,6 +77,7 @@ const defaultBaseSetups = {
   gender: ['Male', 'Female', 'Others'],
   religion: ['Islam', 'Hinduism', 'Christianity', 'Buddhism', 'Others'],
   bloodGroup: ['A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-'],
+  caste: ['General', 'OBC', 'SC', 'ST', 'Others'],
 };
 
 const defaultSessions = [

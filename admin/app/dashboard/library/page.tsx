@@ -34,8 +34,8 @@ type TabId = 'books' | 'categories' | 'members' | 'issue' | 'issued';
 type AcademicOption = { id: string; name: string; code?: string | null; classId?: string | null };
 
 const tabs: Array<{ id: TabId; label: string; description: string }> = [
-  { id: 'books', label: 'Book List', description: 'Add, edit, and delete books' },
   { id: 'categories', label: 'Book Categories', description: 'Manage category list' },
+  { id: 'books', label: 'Book List', description: 'Add, edit, and delete books' },
   { id: 'members', label: 'Add Member', description: 'Create and cancel library members' },
   { id: 'issue', label: 'Issue Books', description: 'Issue or return books to members' },
   { id: 'issued', label: 'Issued Book List', description: 'Search issued book records' },
@@ -114,10 +114,10 @@ const DangerButton = ({ children, onClick, disabled }: { children: React.ReactNo
   </button>
 );
 
-const FormCard = ({ title, children }: { title: string; children: React.ReactNode }) => (
-  <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+const FormCard = ({ title, children, bodyClassName = 'space-y-4' }: { title: string; children: React.ReactNode; bodyClassName?: string }) => (
+  <section className="min-w-0 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
     <h2 className="text-lg font-bold text-slate-950">{title}</h2>
-    <div className="mt-4 space-y-4">{children}</div>
+    <div className={`mt-4 ${bodyClassName}`}>{children}</div>
   </section>
 );
 
@@ -126,20 +126,22 @@ const ListCard = ({
   children,
   search,
   setSearch,
+  bodyClassName = 'min-w-0',
 }: {
   title: string;
   children: React.ReactNode;
   search?: string;
   setSearch?: (value: string) => void;
+  bodyClassName?: string;
 }) => (
-  <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+  <section className="min-w-0 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
     <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
       <h2 className="text-lg font-bold text-slate-950">{title}</h2>
       {setSearch ? (
         <input className={`${inputClass} sm:max-w-xs`} placeholder="Quick search..." value={search ?? ''} onChange={(event) => setSearch(event.target.value)} />
       ) : null}
     </div>
-    <div className="mt-4">{children}</div>
+    <div className={`mt-4 ${bodyClassName}`}>{children}</div>
   </section>
 );
 
@@ -158,7 +160,7 @@ const EmptyState = ({ message }: { message: string }) => (
 export default function LibraryPage() {
   const queryClient = useQueryClient();
   const notify = useNotify();
-  const [activeTab, setActiveTab] = useState<TabId>('books');
+  const [activeTab, setActiveTab] = useState<TabId>('categories');
   const [selectedSchoolId, setSelectedSchoolId] = useState('');
   const [bookSearch, setBookSearch] = useState('');
   const [categorySearch, setCategorySearch] = useState('');
@@ -375,7 +377,7 @@ export default function LibraryPage() {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="min-w-0 space-y-6">
       <PageHeader title="Library" subtitle="Manage books, categories, members, issue records, and issued book reports." actions={pageActions} />
 
       <div className="rounded-2xl border border-slate-200 bg-white p-2 shadow-sm">
@@ -502,9 +504,9 @@ export default function LibraryPage() {
       ) : null}
 
       {effectiveSchoolId && activeTab === 'issue' ? (
-        <div className="grid gap-5 xl:grid-cols-[360px_1fr]">
-          <div className="space-y-5">
-            <FormCard title="Members">
+        <div className="grid min-w-0 gap-5 xl:grid-cols-[360px_minmax(0,1fr)]">
+          <div className="min-w-0 space-y-5">
+            <FormCard title="Members" bodyClassName="space-y-4">
               <input className={inputClass} placeholder="Search member..." value={memberSearch} onChange={(event) => setMemberSearch(event.target.value)} />
               {membersQuery.isFetching ? <LoadingSkeleton /> : <IssueMemberList items={members} selectedId={selectedMemberId} onSelect={(item) => setSelectedMemberId(item.id)} />}
             </FormCard>
@@ -524,7 +526,7 @@ export default function LibraryPage() {
               <PrimaryButton disabled={issueMutation.isPending || !selectedMemberId} onClick={validateIssue}>Issue Book</PrimaryButton>
             </FormCard>
           </div>
-          <ListCard title="Issued Book">
+          <ListCard title="Issued Book" bodyClassName="min-w-0 max-h-[calc(100dvh-20rem)] overflow-y-auto pr-1">
             <MemberIssuePanel
               member={selectedMember}
               issues={memberIssuesQuery.data ?? []}
@@ -587,7 +589,7 @@ function TwoColumnSection({
   setSearch?: (value: string) => void;
 }) {
   return (
-    <div className="grid gap-5 xl:grid-cols-[380px_1fr]">
+    <div className="grid min-w-0 gap-5 xl:grid-cols-[380px_1fr]">
       <FormCard title={title}>{form}</FormCard>
       <ListCard title={listTitle} search={search} setSearch={setSearch}>
         {isLoading ? <LoadingSkeleton /> : table || <EmptyState message={emptyMessage} />}
@@ -661,7 +663,7 @@ function IssueMemberList({ items, selectedId, onSelect }: { items: LibraryMember
   const activeItems = items.filter((item) => item.active);
   if (!activeItems.length) return <EmptyState message="No active members found." />;
   return (
-    <div className="space-y-2">
+    <div className="max-h-80 min-h-48 space-y-2 overflow-y-auto pr-1">
       {activeItems.map((item) => (
         <button
           key={item.id}
@@ -690,8 +692,8 @@ function MemberIssuePanel({
 }) {
   if (!member) return <EmptyState message="Select a member to issue or return books." />;
   return (
-    <div className="space-y-5">
-      <div className="grid gap-4 lg:grid-cols-[280px_1fr]">
+    <div className="min-w-0 space-y-5">
+      <div className="grid min-w-0 gap-4 lg:grid-cols-[280px_minmax(0,1fr)]">
         <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
           <div className="flex items-center gap-3">
             <div className="flex h-14 w-14 items-center justify-center rounded-xl bg-purple-100 text-lg font-bold text-purple-700">
@@ -708,7 +710,7 @@ function MemberIssuePanel({
             <InfoRow label="Email" value={member.email || '-'} />
           </div>
         </div>
-        <div>
+        <div className="min-w-0">
           {isLoading ? (
             <LoadingSkeleton />
           ) : (
@@ -764,9 +766,9 @@ function IssuedTable({ rows }: { rows: LibraryIssue[] }) {
 
 function DataTable({ headers, children }: { headers: string[]; children: React.ReactNode }) {
   return (
-    <div className="overflow-x-auto rounded-xl border border-slate-200">
+    <div className="max-h-[calc(100dvh-24rem)] min-h-40 overflow-auto rounded-xl border border-slate-200">
       <table className="w-full min-w-[860px] text-left text-sm">
-        <thead className="bg-slate-50 text-xs uppercase text-slate-500">
+        <thead className="sticky top-0 z-10 bg-slate-50 text-xs uppercase text-slate-500 shadow-[0_1px_0_0_rgba(226,232,240,1)]">
           <tr>{headers.map((header) => <th key={header} className={`px-4 py-3 ${header === 'Actions' ? 'text-right' : ''}`}>{header}</th>)}</tr>
         </thead>
         <tbody className="divide-y divide-slate-100 bg-white">{children}</tbody>

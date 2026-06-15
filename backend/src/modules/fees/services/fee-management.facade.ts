@@ -5,8 +5,17 @@ export {
   getStudentFeeLedger,
   listFeePayments,
   listStudentCollectionInvoices,
+  reverseFeePayment,
   searchFeeCollectionStudents,
 } from './collection/fee-collection.service';
+
+export {
+  cancelFeeCarryForward,
+  createFeeCarryForward,
+  generateCarryForwardInvoice,
+  listFeeCarryForwards,
+  previewFeeCarryForward,
+} from './carry-forward/fee-carry-forward.service';
 
 export {
   cancelFeeInvoice,
@@ -31,6 +40,22 @@ export {
   deleteFeeFine,
   listFeeFines,
 } from './fine/fee-fine.service';
+
+export {
+  createFeeFineRule,
+  createFeeGroup,
+  createFeeMaster,
+  deleteFeeFineRule,
+  deleteFeeGroup,
+  deleteFeeMaster,
+  duplicateFeeMaster,
+  listFeeFineRules,
+  listFeeGroups,
+  listFeeMasters,
+  updateFeeFineRule,
+  updateFeeGroup,
+  updateFeeMaster,
+} from './master/fee-master.service';
 
 export {
   activateFeeAssignment,

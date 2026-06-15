@@ -27,6 +27,8 @@ import {
   collectFeePayment,
   createFeeDiscount,
   createFeeFine,
+  createFeeGroup,
+  createFeeMaster,
   createFeeParticular,
   createFeeStructure,
   createFeeType,
@@ -35,9 +37,12 @@ import {
   deleteFeeAssignment,
   deleteFeeDiscount,
   deleteFeeFine,
+  deleteFeeGroup,
+  deleteFeeMaster,
   deleteFeeParticular,
   deleteFeeStructure,
   deleteFeeType,
+  duplicateFeeMaster,
   duplicateFeeStructure,
   exportFeeReports,
   generateFeeInvoices,
@@ -48,33 +53,39 @@ import {
   listFeeAssignments,
   listFeeDiscounts,
   listFeeFines,
+  listFeeGroups,
   listFeeInvoices,
+  listFeeMasters,
   listFeeParticulars,
   listFeePayments,
   listFeeStructures,
   listFeeTypes,
   previewFeeInvoices,
   rejectFeeDiscount,
+  reverseFeePayment,
   searchFeeCollectionStudents,
   updateFeeAssignment,
   updateFeeDiscount,
+  updateFeeGroup,
+  updateFeeMaster,
   updateFeeParticular,
   updateFeeStructure,
   updateFeeType,
   type FeeApprovalStatus,
   type FeeAssignmentTargetType,
-  type FeeClassOption,
   type FeeCollectionSchedule,
   type FeeCollectionStudent,
   type FeeDiscount,
   type FeeDiscountTargetType,
   type FeeFine,
   type FeeFineType,
+  type FeeGroup,
   type FeeInvoice,
   type FeeInvoicePreviewResponse,
   type FeeInvoiceSortBy,
   type FeeInvoiceStatus,
   type FeeListResponse,
+  type FeeMaster,
   type FeeParticular,
   type FeeParticularType,
   type FeePayment,
@@ -83,7 +94,6 @@ import {
   type FeeReportRow,
   type FeeReportType,
   type FeeRecordStatus,
-  type FeeReports,
   type FeeScopeParams,
   type FeeSectionOption,
   type FeeStructure,
@@ -97,6 +107,8 @@ export type FeeSectionId =
   | 'overview'
   | 'particulars'
   | 'types'
+  | 'groups'
+  | 'masters'
   | 'structures'
   | 'assignments'
   | 'invoice-generate'
@@ -131,17 +143,12 @@ const getListItems = <T,>(response?: T[] | FeeListResponse<T>) => {
 };
 
 const tabs: Array<{ id: TabId; label: string; href: string; description: string }> = [
-  { id: 'overview', label: 'Fee Overview', href: '/dashboard/fees/overview', description: 'Follow the full fee workflow from setup to reports.' },
-  { id: 'particulars', label: 'Fee Particulars', href: '/dashboard/fees/particulars', description: 'Create and manage fee heads such as tuition, transport, hostel, discounts, fines, and previous balance.' },
-  { id: 'types', label: 'Fee Types', href: '/dashboard/fees/types', description: 'Create and manage fee schedules such as monthly, quarterly, yearly, and one-time fees.' },
-  { id: 'structures', label: 'Fee Structures', href: '/dashboard/fees/structures', description: 'Build class-wise fee plans with particulars and schedules.' },
-  { id: 'assignments', label: 'Fee Assignments', href: '/dashboard/fees/assignments', description: 'Assign fee structures to classes, sections, or students.' },
-  { id: 'invoice-generate', label: 'Generate Invoices', href: '/dashboard/fees/invoice-generate', description: 'Generate invoices by student, class, section, or full school using active fee assignments.' },
-  { id: 'invoices', label: 'Fee Invoice List', href: '/dashboard/fees/invoices', description: 'Search, print, export, and manage issued student fee invoices.' },
+  { id: 'overview', label: 'Fee Overview', href: '/dashboard/fees/overview', description: 'Follow the fee workflow from groups and types to masters, collections, discounts, and reports.' },
+  { id: 'groups', label: 'Fee Groups', href: '/dashboard/fees/groups', description: 'Create school fee buckets such as School Fees, Annual Fees, and Transport Fees.' },
+  { id: 'types', label: 'Fee Types', href: '/dashboard/fees/types', description: 'Create fee classifications such as Tuition Fee, Admission Fee, Exam Fee, and Development Fee.' },
+  { id: 'masters', label: 'Fee Masters', href: '/dashboard/fees/masters', description: 'Create billable fee heads inside groups with due dates, amounts, and fine rules.' },
   { id: 'collection', label: 'Fee Collection', href: '/dashboard/fees/collection', description: 'Collect payments, issue receipts, and print invoices.' },
   { id: 'discounts', label: 'Fee Discounts', href: '/dashboard/fees/discounts', description: 'Manage scholarships, waivers, sibling concessions, and special discounts.' },
-  { id: 'fines', label: 'Fee Fines', href: '/dashboard/fees/fines', description: 'Manage late-payment fine rules and grace periods.' },
-  { id: 'ledger', label: 'Fee Ledger', href: '/dashboard/fees/ledger', description: 'Review student-wise debit, credit, and balance entries.' },
   { id: 'reports', label: 'Fee Reports', href: '/dashboard/fees/reports', description: 'Analyze collections, dues, outstanding balances, and concessions.' },
 ];
 
@@ -149,6 +156,8 @@ const sectionViewPermissions: Record<TabId, string> = {
   overview: 'fees.overview.view',
   particulars: 'fees.particulars.view',
   types: 'fees.types.view',
+  groups: 'fees.groups.view',
+  masters: 'fees.masters.view',
   structures: 'fees.structures.view',
   assignments: 'fees.assignments.view',
   'invoice-generate': 'fees.invoice-generate.view',
@@ -164,7 +173,7 @@ const feeSectionIds = tabs.map((tab) => tab.id);
 const isFeeSectionId = (value: string): value is TabId => feeSectionIds.includes(value as TabId);
 const feeSectionFromPath = (pathname: string): TabId => {
   const segment = pathname.split('/').filter(Boolean).pop() ?? '';
-  if (segment === 'setup') return 'particulars';
+  if (segment === 'setup') return 'overview';
   return isFeeSectionId(segment) ? segment : 'overview';
 };
 const feeSectionHref = (section: TabId) => tabs.find((tab) => tab.id === section)?.href ?? '/dashboard/fees/overview';
@@ -190,7 +199,7 @@ const reportTypes: FeeReportType[] = [
 ];
 const assignmentTargetTypes: FeeAssignmentTargetType[] = ['CLASS', 'SECTION', 'STUDENT', 'GROUP', 'CATEGORY', 'TRANSPORT_ROUTE'];
 const discountValueTypes: FeeValueType[] = ['FIXED', 'PERCENTAGE'];
-const discountTargetTypes: FeeDiscountTargetType[] = ['STUDENT', 'CLASS', 'SECTION', 'CATEGORY', 'FEE_TYPE', 'ALL'];
+const discountTargetTypes: FeeDiscountTargetType[] = ['STUDENT', 'CLASS', 'SECTION', 'CATEGORY', 'FEE_TYPE', 'FEE_GROUP', 'FEE_MASTER', 'ALL'];
 const discountStatuses: FeeApprovalStatus[] = ['DRAFT', 'PENDING_APPROVAL', 'APPROVED', 'REJECTED', 'ACTIVE', 'INACTIVE'];
 const fineTypes: FeeFineType[] = ['FIXED', 'DAILY', 'MONTHLY'];
 
@@ -214,6 +223,27 @@ const feeTypeSchema = z.object({
   description: z.string().trim().optional(),
   status: z.enum(['ACTIVE', 'INACTIVE']).default('ACTIVE'),
   sortOrder: z.coerce.number().int().min(0).default(0),
+});
+
+const feeGroupSchema = z.object({
+  name: z.string().trim().min(1, 'Name is required'),
+  description: z.string().trim().optional(),
+  status: z.enum(['ACTIVE', 'INACTIVE']).default('ACTIVE'),
+});
+
+const feeMasterSchema = z.object({
+  feeGroupId: z.string().min(1, 'Fee group is required'),
+  feeTypeId: z.string().min(1, 'Fee type is required'),
+  description: z.string().trim().optional(),
+  amount: z.coerce.number().positive('Amount must be greater than zero'),
+  effectiveFrom: z.string().optional(),
+  effectiveTo: z.string().optional(),
+  status: z.enum(['ACTIVE', 'INACTIVE']).default('ACTIVE'),
+  sortOrder: z.coerce.number().int().min(0).default(0),
+}).superRefine((payload, ctx) => {
+  if (payload.effectiveFrom && payload.effectiveTo && payload.effectiveTo < payload.effectiveFrom) {
+    ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['effectiveTo'], message: 'Effective to cannot be before effective from' });
+  }
 });
 
 const structureSchema = z.object({
@@ -296,17 +326,22 @@ const paymentSchema = z.object({
 
 const discountSchema = z.object({
   discountName: z.string().trim().min(1, 'Discount name is required'),
+  code: z.string().trim().optional(),
+  description: z.string().trim().optional(),
   targetType: z.enum(discountTargetTypes),
   studentId: z.string().optional(),
   classId: z.string().optional(),
   sectionId: z.string().optional(),
   categoryId: z.string().optional(),
   feeTypeId: z.string().optional(),
+  feeGroupId: z.string().optional(),
+  feeMasterId: z.string().optional(),
   discountType: z.enum(discountValueTypes),
   discountValue: z.coerce.number().positive('Discount value must be greater than zero'),
   amount: z.coerce.number().min(0).optional(),
   validFrom: z.string().optional(),
   validTo: z.string().optional(),
+  expiryDate: z.string().optional(),
   status: z.enum(discountStatuses).default('PENDING_APPROVAL'),
   reason: z.string().trim().optional(),
   note: z.string().trim().optional(),
@@ -323,6 +358,8 @@ const discountSchema = z.object({
     SECTION: 'sectionId',
     CATEGORY: 'categoryId',
     FEE_TYPE: 'feeTypeId',
+    FEE_GROUP: 'feeGroupId',
+    FEE_MASTER: 'feeMasterId',
   };
   const requiredField = requiredByTarget[payload.targetType];
   if (requiredField && !payload[requiredField]) {
@@ -341,6 +378,8 @@ const fineSchema = z.object({
 
 type ParticularForm = z.infer<typeof particularSchema>;
 type FeeTypeForm = z.infer<typeof feeTypeSchema>;
+type FeeGroupForm = z.infer<typeof feeGroupSchema>;
+type FeeMasterForm = z.infer<typeof feeMasterSchema>;
 type StructureForm = z.infer<typeof structureSchema>;
 type AssignmentForm = z.infer<typeof assignmentSchema>;
 type InvoiceForm = z.infer<typeof invoiceSchema>;
@@ -614,6 +653,8 @@ export default function FeesWorkspace({ initialSection }: { initialSection?: Fee
   const [selectedSchoolId, setSelectedSchoolId] = useState('');
   const [selectedAcademicSessionId, setSelectedAcademicSessionId] = useState('');
   const [particularPage, setParticularPage] = useState(1);
+  const [feeGroupPage, setFeeGroupPage] = useState(1);
+  const [feeMasterPage, setFeeMasterPage] = useState(1);
   const [structurePage, setStructurePage] = useState(1);
   const [invoicePage, setInvoicePage] = useState(1);
   const [assignmentPage, setAssignmentPage] = useState(1);
@@ -622,6 +663,8 @@ export default function FeesWorkspace({ initialSection }: { initialSection?: Fee
   const [finePage, setFinePage] = useState(1);
   const [ledgerPage, setLedgerPage] = useState(1);
   const [particularSearch, setParticularSearch] = useState('');
+  const [feeGroupFilters, setFeeGroupFilters] = useState<{ search: string; status: '' | FeeRecordStatus }>({ search: '', status: '' });
+  const [feeMasterFilters, setFeeMasterFilters] = useState<{ search: string; status: '' | FeeRecordStatus; feeGroupId: string; feeTypeId: string }>({ search: '', status: '', feeGroupId: '', feeTypeId: '' });
   const [invoiceStatus, setInvoiceStatus] = useState<'' | FeeInvoiceStatus>('');
   const [invoiceFilters, setInvoiceFilters] = useState<{
     search: string;
@@ -637,6 +680,8 @@ export default function FeesWorkspace({ initialSection }: { initialSection?: Fee
   const [paymentFilters, setPaymentFilters] = useState<{ search: string; paymentMode: '' | FeePaymentMode; status: string }>({ search: '', paymentMode: '', status: '' });
   const [editingParticular, setEditingParticular] = useState<FeeParticular | null>(null);
   const [editingFeeType, setEditingFeeType] = useState<FeeType | null>(null);
+  const [editingFeeGroup, setEditingFeeGroup] = useState<FeeGroup | null>(null);
+  const [editingFeeMaster, setEditingFeeMaster] = useState<FeeMaster | null>(null);
   const [editingStructure, setEditingStructure] = useState<FeeStructure | null>(null);
   const [structureRows, setStructureRows] = useState<StructureDraftItem[]>([{ id: crypto.randomUUID(), particularId: '', amount: '', isOptional: false }]);
   const [selectedInvoice, setSelectedInvoice] = useState<FeeInvoice | null>(null);
@@ -650,6 +695,8 @@ export default function FeesWorkspace({ initialSection }: { initialSection?: Fee
   const [collectionSearch, setCollectionSearch] = useState('');
   const [selectedCollectionStudentId, setSelectedCollectionStudentId] = useState('');
   const [collectionAllocations, setCollectionAllocations] = useState<Record<string, string>>({});
+  const [reversalPayment, setReversalPayment] = useState<FeePayment | null>(null);
+  const [reversalReason, setReversalReason] = useState('');
   const [ledgerStudentId, setLedgerStudentId] = useState('');
   const [reportFilters, setReportFilters] = useState<{
     type: FeeReportType;
@@ -659,17 +706,27 @@ export default function FeesWorkspace({ initialSection }: { initialSection?: Fee
     sectionId: string;
     studentId: string;
     feeTypeId: string;
+    feeGroupId: string;
+    feeMasterId: string;
     feeStructureId: string;
     paymentMode: '' | FeePaymentMode;
     status: string;
     collectedById: string;
-  }>({ type: 'daily_collection', dateFrom: '', dateTo: '', classId: '', sectionId: '', studentId: '', feeTypeId: '', feeStructureId: '', paymentMode: '', status: '', collectedById: '' });
+  }>({ type: 'daily_collection', dateFrom: '', dateTo: '', classId: '', sectionId: '', studentId: '', feeTypeId: '', feeGroupId: '', feeMasterId: '', feeStructureId: '', paymentMode: '', status: '', collectedById: '' });
   const [editingDiscount, setEditingDiscount] = useState<FeeDiscount | null>(null);
   const [discountFilters, setDiscountFilters] = useState<{ search: string; status: '' | FeeApprovalStatus; targetType: '' | FeeDiscountTargetType }>({ search: '', status: '', targetType: '' });
   const [editingAssignment, setEditingAssignment] = useState<StudentFeeAssignment | null>(null);
   const [assignmentFilters, setAssignmentFilters] = useState({ search: '', classId: '', sectionId: '', feeStructureId: '', status: '' });
   const [fineFilters, setFineFilters] = useState<{ search: string; status: '' | FeeRecordStatus }>({ search: '', status: '' });
   const [confirmAction, setConfirmAction] = useState<ConfirmAction | null>(null);
+  const [showParticularForm, setShowParticularForm] = useState(false);
+  const [showFeeTypeForm, setShowFeeTypeForm] = useState(false);
+  const [showFeeGroupForm, setShowFeeGroupForm] = useState(false);
+  const [showFeeMasterForm, setShowFeeMasterForm] = useState(false);
+  const [showStructureForm, setShowStructureForm] = useState(false);
+  const [showAssignmentForm, setShowAssignmentForm] = useState(false);
+  const [showDiscountForm, setShowDiscountForm] = useState(false);
+  const [showFineForm, setShowFineForm] = useState(false);
 
 
   const goToTab = useCallback((section: TabId, params?: Record<string, string>) => {
@@ -694,6 +751,12 @@ export default function FeesWorkspace({ initialSection }: { initialSection?: Fee
   const canCreateFeeType = can('fees.types.create');
   const canUpdateFeeType = can('fees.types.update');
   const canDeleteFeeType = can('fees.types.delete');
+  const canCreateFeeGroup = can('fees.groups.create');
+  const canUpdateFeeGroup = can('fees.groups.update');
+  const canDeleteFeeGroup = can('fees.groups.delete');
+  const canCreateFeeMaster = can('fees.masters.create');
+  const canUpdateFeeMaster = can('fees.masters.update');
+  const canDeleteFeeMaster = can('fees.masters.delete');
   const canCreateStructure = can('fees.structures.create');
   const canUpdateStructure = can('fees.structures.update');
   const canDeleteStructure = can('fees.structures.delete');
@@ -703,6 +766,7 @@ export default function FeesWorkspace({ initialSection }: { initialSection?: Fee
   const canCreateInvoice = can('fees.invoice-generate.create');
   const canCancelInvoice = can('fees.invoices.cancel');
   const canCreateCollection = can('fees.collection.create');
+  const canReversePayment = can('fees.collection.reverse');
   const canPrintReceipt = can('fees.receipts.print');
   const canCreateDiscount = can('fees.discounts.create');
   const canUpdateDiscount = can('fees.discounts.update');
@@ -813,6 +877,30 @@ export default function FeesWorkspace({ initialSection }: { initialSection?: Fee
   const feeTypesQuery = useQuery({
     queryKey: ['fees', 'types', effectiveSchoolId, scopedWithSession.academicSessionId],
     queryFn: () => listFeeTypes(scopedWithSession),
+    enabled: canQuery && Boolean(scopedWithSession.academicSessionId),
+  });
+  const feeGroupsQuery = useQuery({
+    queryKey: ['fees', 'groups', effectiveSchoolId, scopedWithSession.academicSessionId, feeGroupPage, feeGroupFilters],
+    queryFn: () => listFeeGroups({
+      ...scopedWithSession,
+      page: feeGroupPage,
+      limit: 12,
+      search: feeGroupFilters.search || undefined,
+      status: feeGroupFilters.status || undefined,
+    }),
+    enabled: canQuery && Boolean(scopedWithSession.academicSessionId),
+  });
+  const feeMastersQuery = useQuery({
+    queryKey: ['fees', 'masters', effectiveSchoolId, scopedWithSession.academicSessionId, feeMasterPage, feeMasterFilters],
+    queryFn: () => listFeeMasters({
+      ...scopedWithSession,
+      page: feeMasterPage,
+      limit: 12,
+      search: feeMasterFilters.search || undefined,
+      status: feeMasterFilters.status || undefined,
+      feeGroupId: feeMasterFilters.feeGroupId || undefined,
+      feeTypeId: feeMasterFilters.feeTypeId || undefined,
+    }),
     enabled: canQuery && Boolean(scopedWithSession.academicSessionId),
   });
   const structuresQuery = useQuery({
@@ -932,6 +1020,8 @@ export default function FeesWorkspace({ initialSection }: { initialSection?: Fee
       sectionId: reportFilters.sectionId || undefined,
       studentId: reportFilters.studentId || undefined,
       feeTypeId: reportFilters.feeTypeId || undefined,
+      feeGroupId: reportFilters.feeGroupId || undefined,
+      feeMasterId: reportFilters.feeMasterId || undefined,
       feeStructureId: reportFilters.feeStructureId || undefined,
       paymentMode: reportFilters.paymentMode || undefined,
       status: reportFilters.status || undefined,
@@ -943,6 +1033,11 @@ export default function FeesWorkspace({ initialSection }: { initialSection?: Fee
   const particulars = particularsQuery.data?.items ?? metadata?.particulars ?? [];
   const feeTypes = feeTypesQuery.data ?? metadata?.feeTypes ?? [];
   const activeFeeTypes = useMemo(() => feeTypes.filter((type) => type.status === 'ACTIVE'), [feeTypes]);
+  const feeGroups = feeGroupsQuery.data?.items ?? [];
+  const allFeeGroups = feeGroupsQuery.data?.items ?? [];
+  const feeMasters = feeMastersQuery.data?.items ?? [];
+  const activeFeeGroups = useMemo(() => allFeeGroups.filter((group) => group.status === 'ACTIVE'), [allFeeGroups]);
+  const activeFeeMasters = useMemo(() => feeMasters.filter((master) => master.status === 'ACTIVE'), [feeMasters]);
   const [invoicePreview, setInvoicePreview] = useState<FeeInvoicePreviewResponse | null>(null);
   const structures = structuresQuery.data?.items ?? metadata?.structures ?? [];
   const invoices = invoicesQuery.data?.items ?? [];
@@ -975,6 +1070,8 @@ export default function FeesWorkspace({ initialSection }: { initialSection?: Fee
         sectionId: reportFilters.sectionId || undefined,
         studentId: reportFilters.studentId || undefined,
         feeTypeId: reportFilters.feeTypeId || undefined,
+        feeGroupId: reportFilters.feeGroupId || undefined,
+        feeMasterId: reportFilters.feeMasterId || undefined,
         feeStructureId: reportFilters.feeStructureId || undefined,
         paymentMode: reportFilters.paymentMode || undefined,
         status: reportFilters.status || undefined,
@@ -999,6 +1096,14 @@ export default function FeesWorkspace({ initialSection }: { initialSection?: Fee
     resolver: zodResolver(feeTypeSchema) as any,
     defaultValues: { name: '', code: '', schedule: 'MONTHLY', description: '', status: 'ACTIVE', sortOrder: 0 },
   });
+  const feeGroupForm = useForm<FeeGroupForm>({
+    resolver: zodResolver(feeGroupSchema) as any,
+    defaultValues: { name: '', description: '', status: 'ACTIVE' },
+  });
+  const feeMasterForm = useForm<FeeMasterForm>({
+    resolver: zodResolver(feeMasterSchema) as any,
+    defaultValues: { feeGroupId: '', feeTypeId: '', description: '', amount: 0, effectiveFrom: today(), effectiveTo: '', status: 'ACTIVE', sortOrder: 0 },
+  });
   const structureForm = useForm<StructureForm>({
     resolver: zodResolver(structureSchema) as any,
     defaultValues: { name: '', classId: '', sectionId: '', feeTypeId: '', effectiveFrom: today(), effectiveTo: '', status: 'ACTIVE' },
@@ -1017,7 +1122,7 @@ export default function FeesWorkspace({ initialSection }: { initialSection?: Fee
   });
   const discountForm = useForm<DiscountForm>({
     resolver: zodResolver(discountSchema) as any,
-    defaultValues: { discountName: '', targetType: 'STUDENT', studentId: '', classId: '', sectionId: '', categoryId: '', feeTypeId: '', discountType: 'FIXED', discountValue: 0, amount: undefined, validFrom: today(), validTo: '', status: 'PENDING_APPROVAL', reason: '', note: '' },
+    defaultValues: { discountName: '', code: '', description: '', targetType: 'STUDENT', studentId: '', classId: '', sectionId: '', categoryId: '', feeTypeId: '', feeGroupId: '', feeMasterId: '', discountType: 'FIXED', discountValue: 0, amount: undefined, validFrom: today(), validTo: '', expiryDate: '', status: 'PENDING_APPROVAL', reason: '', note: '' },
   });
   const fineForm = useForm<FineForm>({
     resolver: zodResolver(fineSchema) as any,
@@ -1026,24 +1131,39 @@ export default function FeesWorkspace({ initialSection }: { initialSection?: Fee
 
   const resetParticularForm = () => {
     setEditingParticular(null);
+    setShowParticularForm(false);
     particularForm.reset({ name: '', code: '', type: 'CHARGE', description: '', isMandatory: false, status: 'ACTIVE', sortOrder: 0 });
   };
   const resetFeeTypeForm = () => {
     setEditingFeeType(null);
+    setShowFeeTypeForm(false);
     feeTypeForm.reset({ name: '', code: '', schedule: 'MONTHLY', description: '', status: 'ACTIVE', sortOrder: 0 });
+  };
+  const resetFeeGroupForm = () => {
+    setEditingFeeGroup(null);
+    setShowFeeGroupForm(false);
+    feeGroupForm.reset({ name: '', description: '', status: 'ACTIVE' });
+  };
+  const resetFeeMasterForm = () => {
+    setEditingFeeMaster(null);
+    setShowFeeMasterForm(false);
+    feeMasterForm.reset({ feeGroupId: '', feeTypeId: '', description: '', amount: 0, effectiveFrom: today(), effectiveTo: '', status: 'ACTIVE', sortOrder: 0 });
   };
   const resetStructureForm = () => {
     setEditingStructure(null);
+    setShowStructureForm(false);
     structureForm.reset({ name: '', classId: '', sectionId: '', feeTypeId: '', effectiveFrom: today(), effectiveTo: '', status: 'ACTIVE' });
     setStructureRows([{ id: crypto.randomUUID(), particularId: '', amount: '', isOptional: false }]);
   };
   const resetAssignmentForm = () => {
     setEditingAssignment(null);
+    setShowAssignmentForm(false);
     assignmentForm.reset({ feeStructureId: '', targetType: 'CLASS', classId: '', sectionId: '', studentId: '', studentIds: [], groupId: '', categoryId: '', transportRouteId: '', overrideAmount: undefined, startMonth: today().slice(0, 7), endMonth: '', status: 'ACTIVE', notes: '' });
   };
   const resetDiscountForm = () => {
     setEditingDiscount(null);
-    discountForm.reset({ discountName: '', targetType: 'STUDENT', studentId: '', classId: '', sectionId: '', categoryId: '', feeTypeId: '', discountType: 'FIXED', discountValue: 0, amount: undefined, validFrom: today(), validTo: '', status: 'PENDING_APPROVAL', reason: '', note: '' });
+    setShowDiscountForm(false);
+    discountForm.reset({ discountName: '', code: '', description: '', targetType: 'STUDENT', studentId: '', classId: '', sectionId: '', categoryId: '', feeTypeId: '', feeGroupId: '', feeMasterId: '', discountType: 'FIXED', discountValue: 0, amount: undefined, validFrom: today(), validTo: '', expiryDate: '', status: 'PENDING_APPROVAL', reason: '', note: '' });
   };
 
   const saveParticularMutation = useMutation({
@@ -1070,6 +1190,44 @@ export default function FeesWorkspace({ initialSection }: { initialSection?: Fee
       invalidateFees();
     },
     onError: (error) => notify.error('Unable to save fee type', errorMessage(error)),
+  });
+
+  const saveFeeGroupMutation = useMutation({
+    mutationFn: (payload: FeeGroupForm) => {
+      const body = { ...scopedWithSession, ...payload, description: payload.description || undefined };
+      return editingFeeGroup ? updateFeeGroup(editingFeeGroup.id, body) : createFeeGroup(body);
+    },
+    onSuccess: () => {
+      notify.success(editingFeeGroup ? 'Fee group updated' : 'Fee group added');
+      resetFeeGroupForm();
+      invalidateFees();
+    },
+    onError: (error) => notify.error('Unable to save fee group', errorMessage(error)),
+  });
+
+  const saveFeeMasterMutation = useMutation({
+    mutationFn: (payload: FeeMasterForm) => {
+      const endOfMonth = (() => { const d = new Date(); d.setMonth(d.getMonth() + 1, 0); return d.toISOString().slice(0, 10); })();
+      const group = allFeeGroups.find((g) => g.id === payload.feeGroupId);
+      const type = activeFeeTypes.find((t) => t.id === payload.feeTypeId);
+      const autoName = [group?.name, type?.name].filter(Boolean).join(' - ') || 'Fee Master';
+      const body = {
+        ...scopedWithSession,
+        ...payload,
+        name: autoName,
+        dueDate: endOfMonth,
+        description: payload.description || undefined,
+        effectiveFrom: payload.effectiveFrom || null,
+        effectiveTo: payload.effectiveTo || null,
+      };
+      return editingFeeMaster ? updateFeeMaster(editingFeeMaster.id, body) : createFeeMaster(body);
+    },
+    onSuccess: () => {
+      notify.success(editingFeeMaster ? 'Fee master updated' : 'Fee master added');
+      resetFeeMasterForm();
+      invalidateFees();
+    },
+    onError: (error) => notify.error('Unable to save fee master', errorMessage(error)),
   });
 
   const saveStructureMutation = useMutation({
@@ -1115,6 +1273,33 @@ export default function FeesWorkspace({ initialSection }: { initialSection?: Fee
       invalidateFees();
     },
     onError: (error) => notify.error('Unable to remove fee type', errorMessage(error)),
+  });
+
+  const deleteFeeGroupMutation = useMutation({
+    mutationFn: (id: string) => deleteFeeGroup(id, scopedWithSession),
+    onSuccess: () => {
+      notify.success('Fee group removed');
+      invalidateFees();
+    },
+    onError: (error) => notify.error('Unable to remove fee group', errorMessage(error)),
+  });
+
+  const deleteFeeMasterMutation = useMutation({
+    mutationFn: (id: string) => deleteFeeMaster(id, scopedWithSession),
+    onSuccess: () => {
+      notify.success('Fee master removed');
+      invalidateFees();
+    },
+    onError: (error) => notify.error('Unable to remove fee master', errorMessage(error)),
+  });
+
+  const duplicateFeeMasterMutation = useMutation({
+    mutationFn: (master: FeeMaster) => duplicateFeeMaster(master.id, { ...scopedWithSession }),
+    onSuccess: () => {
+      notify.success('Fee master duplicated');
+      invalidateFees();
+    },
+    onError: (error) => notify.error('Unable to duplicate fee master', errorMessage(error)),
   });
 
   const deleteStructureMutation = useMutation({
@@ -1257,39 +1442,61 @@ export default function FeesWorkspace({ initialSection }: { initialSection?: Fee
     onError: (error) => notify.error('Unable to collect payment', errorMessage(error)),
   });
 
+  const reversePaymentMutation = useMutation({
+    mutationFn: ({ payment, reason }: { payment: FeePayment; reason: string }) =>
+      reverseFeePayment(payment.id, { ...scopedWithSession, reason }),
+    onSuccess: (result) => {
+      notify.success('Payment reversed', `${result.reversal.reversalNumber} was created.`);
+      setReversalPayment(null);
+      setReversalReason('');
+      invalidateFees();
+    },
+    onError: (error) => notify.error('Unable to reverse payment', errorMessage(error)),
+  });
+
   const discountMutation = useMutation({
     mutationFn: (payload: DiscountForm) =>
       (editingDiscount ? updateFeeDiscount(editingDiscount.id, {
         ...scopedWithSession,
         discountName: payload.discountName,
+        code: payload.code || null,
+        description: payload.description || null,
         targetType: payload.targetType,
         studentId: payload.targetType === 'STUDENT' ? payload.studentId || null : null,
         classId: payload.targetType === 'CLASS' || payload.targetType === 'SECTION' ? payload.classId || null : null,
         sectionId: payload.targetType === 'SECTION' ? payload.sectionId || null : null,
         categoryId: payload.targetType === 'CATEGORY' ? payload.categoryId || null : null,
         feeTypeId: payload.targetType === 'FEE_TYPE' ? payload.feeTypeId || null : null,
+        feeGroupId: payload.targetType === 'FEE_GROUP' ? payload.feeGroupId || null : null,
+        feeMasterId: payload.targetType === 'FEE_MASTER' ? payload.feeMasterId || null : null,
         discountType: payload.discountType,
         discountValue: payload.discountValue,
         amount: payload.amount ?? null,
         validFrom: payload.validFrom || null,
         validTo: payload.validTo || null,
+        expiryDate: payload.expiryDate || null,
         status: payload.status,
         reason: payload.reason || null,
         note: payload.note || null,
       }) : createFeeDiscount({
         ...scopedWithSession,
         discountName: payload.discountName,
+        code: payload.code || null,
+        description: payload.description || null,
         targetType: payload.targetType,
         studentId: payload.targetType === 'STUDENT' ? payload.studentId || null : null,
         classId: payload.targetType === 'CLASS' || payload.targetType === 'SECTION' ? payload.classId || null : null,
         sectionId: payload.targetType === 'SECTION' ? payload.sectionId || null : null,
         categoryId: payload.targetType === 'CATEGORY' ? payload.categoryId || null : null,
         feeTypeId: payload.targetType === 'FEE_TYPE' ? payload.feeTypeId || null : null,
+        feeGroupId: payload.targetType === 'FEE_GROUP' ? payload.feeGroupId || null : null,
+        feeMasterId: payload.targetType === 'FEE_MASTER' ? payload.feeMasterId || null : null,
         discountType: payload.discountType,
         discountValue: payload.discountValue,
         amount: payload.amount ?? null,
         validFrom: payload.validFrom || null,
         validTo: payload.validTo || null,
+        expiryDate: payload.expiryDate || null,
         status: payload.status,
         reason: payload.reason || null,
         note: payload.note || null,
@@ -1332,6 +1539,7 @@ export default function FeesWorkspace({ initialSection }: { initialSection?: Fee
     onSuccess: () => {
       notify.success('Fine rule saved');
       fineForm.reset({ name: '', particularId: '', fineType: 'FIXED', amount: 0, graceDays: 0, status: 'ACTIVE' });
+      setShowFineForm(false);
       invalidateFees();
     },
     onError: (error) => notify.error('Unable to save fine', errorMessage(error)),
@@ -1357,6 +1565,7 @@ export default function FeesWorkspace({ initialSection }: { initialSection?: Fee
       status: item.status,
       sortOrder: item.sortOrder ?? 0,
     });
+    setShowParticularForm(false);
     goToTab('particulars');
   };
 
@@ -1371,6 +1580,33 @@ export default function FeesWorkspace({ initialSection }: { initialSection?: Fee
       sortOrder: item.sortOrder ?? 0,
     });
     goToTab('types');
+  };
+
+  const editFeeGroup = (item: FeeGroup) => {
+    setEditingFeeGroup(item);
+    feeGroupForm.reset({
+      name: item.name,
+      description: item.description ?? '',
+      status: item.status,
+    });
+    setShowFeeGroupForm(false);
+    goToTab('groups');
+  };
+
+  const editFeeMaster = (item: FeeMaster) => {
+    setEditingFeeMaster(item);
+    feeMasterForm.reset({
+      feeGroupId: item.feeGroupId,
+      feeTypeId: item.feeTypeId,
+      description: item.description ?? '',
+      amount: numberValue(item.amount),
+      effectiveFrom: item.effectiveFrom ? item.effectiveFrom.slice(0, 10) : '',
+      effectiveTo: item.effectiveTo ? item.effectiveTo.slice(0, 10) : '',
+      status: item.status,
+      sortOrder: item.sortOrder ?? 0,
+    });
+    setShowFeeMasterForm(false);
+    goToTab('masters');
   };
 
   const editStructure = (item: FeeStructure) => {
@@ -1389,6 +1625,7 @@ export default function FeesWorkspace({ initialSection }: { initialSection?: Fee
         ? item.items.map((row) => ({ id: row.id ?? crypto.randomUUID(), particularId: row.particularId, amount: String(row.amount ?? ''), isOptional: row.isOptional }))
         : [{ id: crypto.randomUUID(), particularId: '', amount: '', isOptional: false }],
     );
+    setShowStructureForm(false);
     goToTab('structures');
   };
 
@@ -1410,6 +1647,7 @@ export default function FeesWorkspace({ initialSection }: { initialSection?: Fee
       status: item.status,
       notes: item.notes ?? '',
     });
+    setShowAssignmentForm(false);
     goToTab('assignments');
   };
 
@@ -1423,15 +1661,21 @@ export default function FeesWorkspace({ initialSection }: { initialSection?: Fee
       sectionId: item.sectionId ?? '',
       categoryId: item.categoryId ?? '',
       feeTypeId: item.feeTypeId ?? '',
+      feeGroupId: item.feeGroupId ?? '',
+      feeMasterId: item.feeMasterId ?? '',
       discountType: item.valueType,
       discountValue: numberValue(item.value),
       amount: item.amount === null || item.amount === undefined ? undefined : numberValue(item.amount),
       validFrom: item.validFrom ? item.validFrom.slice(0, 10) : '',
       validTo: item.validTo ? item.validTo.slice(0, 10) : '',
+      expiryDate: item.expiryDate ? item.expiryDate.slice(0, 10) : '',
       status: item.approvalStatus,
       reason: item.reason ?? '',
       note: item.note ?? '',
+      code: item.code ?? '',
+      description: item.description ?? '',
     });
+    setShowDiscountForm(false);
     goToTab('discounts');
   };
 
@@ -1614,6 +1858,34 @@ export default function FeesWorkspace({ initialSection }: { initialSection?: Fee
           }}
         />
       ) : null}
+      {reversalPayment ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/50 px-4 py-6">
+          <div className="w-full max-w-lg rounded-2xl border border-slate-200 bg-white p-6 shadow-2xl">
+            <p className="text-xs font-black uppercase tracking-wide text-amber-600">Reverse payment</p>
+            <h3 className="mt-2 text-xl font-black text-slate-950">{reversalPayment.paymentNumber}</h3>
+            <p className="mt-2 text-sm text-slate-600">
+              {reversalPayment.student?.fullName ?? '-'} - {money(reversalPayment.amount)} collected on {dateValue(reversalPayment.paidAt)}
+            </p>
+            <Field label="Reversal Reason">
+              <textarea
+                className={`${inputClass} mt-3 min-h-28`}
+                value={reversalReason}
+                onChange={(event) => setReversalReason(event.target.value)}
+                placeholder="Enter audit reason for reversing this payment"
+              />
+            </Field>
+            <div className="mt-6 flex justify-end gap-2">
+              <SecondaryButton onClick={() => { setReversalPayment(null); setReversalReason(''); }}>Cancel</SecondaryButton>
+              <PrimaryButton
+                disabled={reversePaymentMutation.isPending || reversalReason.trim().length < 3}
+                onClick={() => reversePaymentMutation.mutate({ payment: reversalPayment, reason: reversalReason.trim() })}
+              >
+                {reversePaymentMutation.isPending ? 'Reversing...' : 'Reverse Payment'}
+              </PrimaryButton>
+            </div>
+          </div>
+        </div>
+      ) : null}
       <div className="mx-auto w-full max-w-[1580px] px-4 py-6 lg:px-8">
         <PageHeader
           title={activeTab === 'overview' ? 'Fee Management' : activeTabMeta.label}
@@ -1679,13 +1951,6 @@ export default function FeesWorkspace({ initialSection }: { initialSection?: Fee
           </div>
         </div>
 
-        <div className="mb-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-          <StatCard label="Collected" value={money(totalCollected)} note="Successful fee payments" />
-          <StatCard label="Outstanding" value={money(reports?.totalOutstanding ?? totalDue)} note={`${dueInvoices.length} invoices with balance`} />
-          <StatCard label="Invoiced" value={money(reports?.totalInvoiced ?? invoices.reduce((sum, invoice) => sum + numberValue(invoice.totalAmount), 0))} note="Current session invoices" />
-          <StatCard label="Setup Coverage" value={`${structures.length} structures`} note={`${particulars.length} particulars, ${feeTypes.length} fee types`} />
-        </div>
-
         {metadataQuery.isLoading ? <DashboardSkeleton /> : null}
 
         {metadataQuery.isError && !academicSessions.length ? (
@@ -1703,18 +1968,14 @@ export default function FeesWorkspace({ initialSection }: { initialSection?: Fee
 
         {activeTab === 'overview' ? (
           <div className="grid gap-5 xl:grid-cols-[1.2fr_0.8fr]">
-            <Card title="Fee Operations" subtitle="Use this module in order: setup particulars, create class structures, assign students, generate invoices, then collect payments.">
+            <Card title="Fee Operations" subtitle="Use this module in order: create groups, classify fee types, configure fee masters, then collect payments and review reports.">
               <div className="grid gap-3 md:grid-cols-2">
                 {[
-                  ['Particulars', `${particulars.length} active charge heads`, 'particulars'],
-                  ['Fee Types', `${feeTypes.length} fee schedules`, 'types'],
-                  ['Structures', `${structures.length} class-wise fee plans`, 'structures'],
-                  ['Assignments', `${assignments.length} student mappings`, 'assignments'],
-                  ['Generate Invoices', 'Create student invoices from assignments', 'invoice-generate'],
-                  ['Invoice List', `${invoicesQuery.data?.pagination.total ?? invoices.length} generated invoices`, 'invoices'],
+                  ['Fee Groups', `${feeGroupsQuery.data?.pagination.total ?? feeGroups.length} groups`, 'groups'],
+                  ['Fee Types', `${feeTypes.length} fee classifications`, 'types'],
+                  ['Fee Masters', `${feeMastersQuery.data?.pagination.total ?? feeMasters.length} billable heads`, 'masters'],
                   ['Collections', `${payments.length} recent payments`, 'collection'],
                   ['Discounts', `${discounts.length} waivers and concessions`, 'discounts'],
-                  ['Fines', `${fines.length} fine rules`, 'fines'],
                   ['Reports', 'Collection, due, class-wise summary', 'reports'],
                 ].filter(([, , tab]) => canViewSection(tab as TabId)).map(([title, note, tab]) => (
                   <button key={title} type="button" onClick={() => goToTab(tab as TabId)} className="rounded-2xl border border-slate-200 bg-slate-50 p-4 text-left transition hover:border-violet-200 hover:bg-violet-50">
@@ -1756,51 +2017,38 @@ export default function FeesWorkspace({ initialSection }: { initialSection?: Fee
         ) : null}
 
         {activeTab === 'particulars' ? (
-          <div className="grid gap-5 xl:grid-cols-[0.78fr_1.22fr]">
-            <Card title={editingParticular ? 'Edit Fee Particular' : 'Add Fee Particular'} subtitle="Create charge heads such as tuition, transport, hostel, fine, discount, or previous balance.">
-              <form className="space-y-3" onSubmit={particularForm.handleSubmit((payload) => (editingParticular ? canUpdateParticular : canCreateParticular) && saveParticularMutation.mutate(payload))}>
-                <Field label="Name" error={particularForm.formState.errors.name?.message}>
-                  <input className={inputClass} {...particularForm.register('name')} placeholder="Monthly Tuition Fee" />
-                </Field>
-                <div className="grid gap-3 sm:grid-cols-2">
-                  <Field label="Code">
-                    <input className={inputClass} {...particularForm.register('code')} placeholder="TUITION" />
+          <div className="space-y-5">
+            {(editingParticular || showParticularForm) ? (
+              <Card title={editingParticular ? 'Edit Fee Particular' : 'Add Fee Particular'} subtitle="Create charge heads such as tuition, transport, hostel, fine, discount, or previous balance.">
+                <form className="space-y-3" onSubmit={particularForm.handleSubmit((payload) => (editingParticular ? canUpdateParticular : canCreateParticular) && saveParticularMutation.mutate(payload))}>
+                  <Field label="Name" error={particularForm.formState.errors.name?.message}>
+                    <input className={inputClass} {...particularForm.register('name')} placeholder="Monthly Tuition Fee" />
                   </Field>
-                  <Field label="Type">
-                    <select className={inputClass} {...particularForm.register('type')}>
-                      {particularTypes.map((type) => <option key={type} value={type}>{labelize(type)}</option>)}
-                    </select>
-                  </Field>
-                </div>
-                <div className="grid gap-3 sm:grid-cols-2">
-                  <Field label="Status">
-                    <select className={inputClass} {...particularForm.register('status')}>
-                      <option value="ACTIVE">Active</option>
-                      <option value="INACTIVE">Inactive</option>
-                    </select>
-                  </Field>
-                  <Field label="Sort Order">
-                    <input type="number" className={inputClass} {...particularForm.register('sortOrder')} />
-                  </Field>
-                </div>
-                <label className="flex items-center gap-2 text-sm font-bold text-slate-700">
-                  <input type="checkbox" className="h-4 w-4 rounded border-slate-300" {...particularForm.register('isMandatory')} />
-                  Mandatory fee
-                </label>
-                <Field label="Description">
-                  <textarea className={`${inputClass} min-h-20`} {...particularForm.register('description')} />
-                </Field>
-                <div className="flex gap-2">
-                  {(editingParticular ? canUpdateParticular : canCreateParticular) ? <PrimaryButton type="submit" disabled={saveParticularMutation.isPending}>{editingParticular ? 'Update' : 'Save'}</PrimaryButton> : null}
-                  {editingParticular ? <SecondaryButton onClick={resetParticularForm}>Cancel</SecondaryButton> : null}
-                </div>
-              </form>
-            </Card>
-
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    <Field label="Code"><input className={inputClass} {...particularForm.register('code')} placeholder="TUITION" /></Field>
+                    <Field label="Type"><select className={inputClass} {...particularForm.register('type')}>{particularTypes.map((type) => <option key={type} value={type}>{labelize(type)}</option>)}</select></Field>
+                  </div>
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    <Field label="Status"><select className={inputClass} {...particularForm.register('status')}><option value="ACTIVE">Active</option><option value="INACTIVE">Inactive</option></select></Field>
+                    <Field label="Sort Order"><input type="number" className={inputClass} {...particularForm.register('sortOrder')} /></Field>
+                  </div>
+                  <label className="flex items-center gap-2 text-sm font-bold text-slate-700">
+                    <input type="checkbox" className="h-4 w-4 rounded border-slate-300" {...particularForm.register('isMandatory')} />
+                    Mandatory fee
+                  </label>
+                  <Field label="Description"><textarea className={`${inputClass} min-h-20`} {...particularForm.register('description')} /></Field>
+                  <div className="flex gap-2">
+                    {(editingParticular ? canUpdateParticular : canCreateParticular) ? <PrimaryButton type="submit" disabled={saveParticularMutation.isPending}>{editingParticular ? 'Update' : 'Save'}</PrimaryButton> : null}
+                    <SecondaryButton onClick={() => { resetParticularForm(); setShowParticularForm(false); }}>Cancel</SecondaryButton>
+                  </div>
+                </form>
+              </Card>
+            ) : null}
             <Card
               title="Fee Particular List"
               actions={
                 <div className="flex items-center gap-2">
+                  {canCreateParticular ? <PrimaryButton onClick={() => { resetParticularForm(); setShowParticularForm(true); }}>+ Add</PrimaryButton> : null}
                   <SecondaryButton disabled={particularPage <= 1} onClick={() => setParticularPage((page) => Math.max(1, page - 1))}>Prev</SecondaryButton>
                   <SecondaryButton disabled={(particularsQuery.data?.pagination.totalPages ?? 1) <= particularPage} onClick={() => setParticularPage((page) => page + 1)}>Next</SecondaryButton>
                 </div>
@@ -1812,44 +2060,33 @@ export default function FeesWorkspace({ initialSection }: { initialSection?: Fee
         ) : null}
 
         {activeTab === 'types' ? (
-          <div className="grid gap-5 xl:grid-cols-[0.78fr_1.22fr]">
-            <Card title={editingFeeType ? 'Edit Fee Type' : 'Add Fee Type'} subtitle="Define schedules such as monthly, quarterly, yearly, or one-time fees.">
-              <form className="space-y-3" onSubmit={feeTypeForm.handleSubmit((payload) => (editingFeeType ? canUpdateFeeType : canCreateFeeType) && saveFeeTypeMutation.mutate(payload))}>
-                <Field label="Name" error={feeTypeForm.formState.errors.name?.message}>
-                  <input className={inputClass} {...feeTypeForm.register('name')} placeholder="Monthly" />
-                </Field>
-                <div className="grid gap-3 sm:grid-cols-2">
-                  <Field label="Code">
-                    <input className={inputClass} {...feeTypeForm.register('code')} placeholder="MONTHLY" />
+          <div className="space-y-5">
+            {(editingFeeType || showFeeTypeForm) ? (
+              <Card title={editingFeeType ? 'Edit Fee Type' : 'Add Fee Type'} subtitle="Define schedules such as monthly, quarterly, yearly, or one-time fees.">
+                <form className="space-y-3" onSubmit={feeTypeForm.handleSubmit((payload) => (editingFeeType ? canUpdateFeeType : canCreateFeeType) && saveFeeTypeMutation.mutate(payload))}>
+                  <Field label="Name" error={feeTypeForm.formState.errors.name?.message}>
+                    <input className={inputClass} {...feeTypeForm.register('name')} placeholder="Monthly" />
                   </Field>
-                  <Field label="Schedule">
-                    <select className={inputClass} {...feeTypeForm.register('schedule')}>
-                      {schedules.map((schedule) => <option key={schedule} value={schedule}>{labelize(schedule)}</option>)}
-                    </select>
-                  </Field>
-                </div>
-                <div className="grid gap-3 sm:grid-cols-2">
-                  <Field label="Status">
-                    <select className={inputClass} {...feeTypeForm.register('status')}>
-                      <option value="ACTIVE">Active</option>
-                      <option value="INACTIVE">Inactive</option>
-                    </select>
-                  </Field>
-                  <Field label="Sort Order">
-                    <input type="number" className={inputClass} {...feeTypeForm.register('sortOrder')} />
-                  </Field>
-                </div>
-                <Field label="Description">
-                  <textarea className={`${inputClass} min-h-16`} {...feeTypeForm.register('description')} />
-                </Field>
-                <div className="flex gap-2">
-                  {(editingFeeType ? canUpdateFeeType : canCreateFeeType) ? <PrimaryButton type="submit" disabled={saveFeeTypeMutation.isPending}>{editingFeeType ? 'Update' : 'Save'}</PrimaryButton> : null}
-                  {editingFeeType ? <SecondaryButton onClick={resetFeeTypeForm}>Cancel</SecondaryButton> : null}
-                </div>
-              </form>
-            </Card>
-
-            <Card title="Fee Type List">
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    <Field label="Code"><input className={inputClass} {...feeTypeForm.register('code')} placeholder="MONTHLY" /></Field>
+                    <Field label="Schedule"><select className={inputClass} {...feeTypeForm.register('schedule')}>{schedules.map((schedule) => <option key={schedule} value={schedule}>{labelize(schedule)}</option>)}</select></Field>
+                  </div>
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    <Field label="Status"><select className={inputClass} {...feeTypeForm.register('status')}><option value="ACTIVE">Active</option><option value="INACTIVE">Inactive</option></select></Field>
+                    <Field label="Sort Order"><input type="number" className={inputClass} {...feeTypeForm.register('sortOrder')} /></Field>
+                  </div>
+                  <Field label="Description"><textarea className={`${inputClass} min-h-16`} {...feeTypeForm.register('description')} /></Field>
+                  <div className="flex gap-2">
+                    {(editingFeeType ? canUpdateFeeType : canCreateFeeType) ? <PrimaryButton type="submit" disabled={saveFeeTypeMutation.isPending}>{editingFeeType ? 'Update' : 'Save'}</PrimaryButton> : null}
+                    <SecondaryButton onClick={() => { resetFeeTypeForm(); setShowFeeTypeForm(false); }}>Cancel</SecondaryButton>
+                  </div>
+                </form>
+              </Card>
+            ) : null}
+            <Card
+              title="Fee Type List"
+              actions={canCreateFeeType ? <PrimaryButton onClick={() => { resetFeeTypeForm(); setShowFeeTypeForm(true); }}>+ Add</PrimaryButton> : null}
+            >
               <div className="overflow-x-auto rounded-2xl border border-slate-200">
                 <table className="min-w-full divide-y divide-slate-100 text-sm">
                   <thead className="bg-slate-50 text-left text-xs uppercase text-slate-500">
@@ -1890,77 +2127,228 @@ export default function FeesWorkspace({ initialSection }: { initialSection?: Fee
             </Card>
           </div>
         ) : null}
-        {activeTab === 'structures' ? (
-          <div className="grid gap-5 xl:grid-cols-[0.84fr_1.16fr]">
-            <Card title={editingStructure ? 'Edit Class Fee Structure' : 'Add Class Fee Structure'} subtitle="Build class-wise fee structures with one or more particulars.">
-              <form className="space-y-4" onSubmit={structureForm.handleSubmit((payload) => (editingStructure ? canUpdateStructure : canCreateStructure) && saveStructureMutation.mutate(payload))}>
-                <div className="grid gap-3 md:grid-cols-2">
-                  <Field label="Structure Name">
-                    <input className={inputClass} {...structureForm.register('name')} placeholder="Class 1 Monthly Fee" />
-                  </Field>
-                  <Field label="Fee Type" error={structureForm.formState.errors.feeTypeId?.message}>
-                    <select className={inputClass} {...structureForm.register('feeTypeId')}>
-                      <option value="">Select type</option>
-                      {activeFeeTypes.map((type) => <option key={type.id} value={type.id}>{type.name}</option>)}
-                    </select>
-                  </Field>
-                  <Field label="Class" error={structureForm.formState.errors.classId?.message}>
-                    <select className={inputClass} {...structureForm.register('classId')}>
-                      <option value="">Select class</option>
-                      {classes.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
-                    </select>
-                  </Field>
-                  <Field label="Section">
-                    <select className={inputClass} {...structureForm.register('sectionId')}>
-                      <option value="">All sections</option>
-                      {selectedSectionOptions(sections, watchedStructureClassId).map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
-                    </select>
-                  </Field>
-                  <Field label="Effective From">
-                    <input type="date" className={inputClass} {...structureForm.register('effectiveFrom')} />
-                  </Field>
-                  <Field label="Effective To">
-                    <input type="date" className={inputClass} {...structureForm.register('effectiveTo')} />
-                  </Field>
-                </div>
-                <div className="rounded-2xl border border-slate-200 bg-slate-50 p-3">
-                  <div className="mb-3 flex items-center justify-between">
-                    <p className="text-sm font-black text-slate-900">Particular Items</p>
-                    {(editingStructure ? canUpdateStructure : canCreateStructure) ? <PrimaryButton onClick={() => setStructureRows((rows) => [...rows, { id: crypto.randomUUID(), particularId: '', amount: '', isOptional: false }])}>Add Item</PrimaryButton> : null}
-                  </div>
-                  <div className="space-y-3">
-                    {structureRows.map((row, index) => (
-                      <div key={row.id} className="grid gap-2 rounded-xl border border-slate-200 bg-white p-3 md:grid-cols-[1fr_9rem_7rem_3rem] md:items-end">
-                        <Field label={`Particular ${index + 1}`}>
-                          <select className={inputClass} value={row.particularId} onChange={(event) => setStructureRows((rows) => rows.map((item) => item.id === row.id ? { ...item, particularId: event.target.value } : item))}>
-                            <option value="">Select particular</option>
-                            {particulars.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
-                          </select>
-                        </Field>
-                        <Field label="Amount">
-                          <input type="number" min="0.01" step="0.01" className={inputClass} value={row.amount} onChange={(event) => setStructureRows((rows) => rows.map((item) => item.id === row.id ? { ...item, amount: event.target.value } : item))} />
-                        </Field>
-                        <label className="flex h-10 items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3 text-sm font-bold text-slate-600">
-                          <input type="checkbox" checked={row.isOptional} onChange={(event) => setStructureRows((rows) => rows.map((item) => item.id === row.id ? { ...item, isOptional: event.target.checked } : item))} />
-                          Optional
-                        </label>
-                        {(editingStructure ? canUpdateStructure : canCreateStructure) ? <IconButton title="Remove item" tone="danger" onClick={() => setStructureRows((rows) => rows.length === 1 ? rows : rows.filter((item) => item.id !== row.id))}>D</IconButton> : null}
-                      </div>
-                    ))}
-                  </div>
-                  <div className="mt-3 flex justify-end text-sm font-black text-slate-950">Total: {money(structureTotal(structureRows))}</div>
-                </div>
-                <div className="flex gap-2">
-                  {(editingStructure ? canUpdateStructure : canCreateStructure) ? <PrimaryButton type="submit" disabled={saveStructureMutation.isPending}>{editingStructure ? 'Update Structure' : 'Save Structure'}</PrimaryButton> : null}
-                  {editingStructure ? <SecondaryButton onClick={resetStructureForm}>Cancel</SecondaryButton> : null}
-                </div>
-              </form>
-            </Card>
 
+        {activeTab === 'groups' ? (
+          <div className="space-y-5">
+            {(editingFeeGroup || showFeeGroupForm) ? (
+              <Card title={editingFeeGroup ? 'Edit Fee Group' : 'Add Fee Group'} subtitle="Group related fee heads for assignment during admission and reporting.">
+                <form className="space-y-3" onSubmit={feeGroupForm.handleSubmit((payload) => (editingFeeGroup ? canUpdateFeeGroup : canCreateFeeGroup) && saveFeeGroupMutation.mutate(payload))}>
+                  <Field label="Name" error={feeGroupForm.formState.errors.name?.message}>
+                    <input className={inputClass} {...feeGroupForm.register('name')} placeholder="School Fees" />
+                  </Field>
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    <Field label="Status">
+                      <select className={inputClass} {...feeGroupForm.register('status')}>
+                        <option value="ACTIVE">Active</option>
+                        <option value="INACTIVE">Inactive</option>
+                      </select>
+                    </Field>
+                  </div>
+                  <Field label="Description">
+                    <textarea className={`${inputClass} min-h-20`} {...feeGroupForm.register('description')} placeholder="Tuition, computer, lab, and library fees" />
+                  </Field>
+                  <div className="flex gap-2">
+                    {(editingFeeGroup ? canUpdateFeeGroup : canCreateFeeGroup) ? <PrimaryButton type="submit" disabled={saveFeeGroupMutation.isPending}>{editingFeeGroup ? 'Update' : 'Save'}</PrimaryButton> : null}
+                    <SecondaryButton onClick={() => { resetFeeGroupForm(); setShowFeeGroupForm(false); }}>Cancel</SecondaryButton>
+                  </div>
+                </form>
+              </Card>
+            ) : null}
+            <Card
+              title="Fee Group List"
+              actions={
+                <>
+                  {canCreateFeeGroup ? <PrimaryButton onClick={() => { resetFeeGroupForm(); setShowFeeGroupForm(true); }}>+ Add</PrimaryButton> : null}
+                  <SecondaryButton disabled={feeGroupPage <= 1} onClick={() => setFeeGroupPage((page) => Math.max(1, page - 1))}>Prev</SecondaryButton>
+                  <SecondaryButton disabled={(feeGroupsQuery.data?.pagination.totalPages ?? 1) <= feeGroupPage} onClick={() => setFeeGroupPage((page) => page + 1)}>Next</SecondaryButton>
+                </>
+              }
+            >
+              <div className="mb-4 grid gap-3 md:grid-cols-2">
+                <Field label="Search">
+                  <input className={inputClass} value={feeGroupFilters.search} onChange={(event) => { setFeeGroupFilters((current) => ({ ...current, search: event.target.value })); setFeeGroupPage(1); }} placeholder="School Fees, Annual Fees..." />
+                </Field>
+                <Field label="Status">
+                  <select className={inputClass} value={feeGroupFilters.status} onChange={(event) => { setFeeGroupFilters((current) => ({ ...current, status: event.target.value as '' | FeeRecordStatus })); setFeeGroupPage(1); }}>
+                    <option value="">All statuses</option>
+                    <option value="ACTIVE">Active</option>
+                    <option value="INACTIVE">Inactive</option>
+                  </select>
+                </Field>
+              </div>
+              <div className="overflow-x-auto rounded-2xl border border-slate-200">
+                <table className="min-w-full divide-y divide-slate-100 text-sm">
+                  <thead className="bg-slate-50 text-left text-xs uppercase text-slate-500">
+                    <tr><th className="px-4 py-3">Group</th><th className="px-4 py-3">Masters</th><th className="px-4 py-3">Assignments</th><th className="px-4 py-3">Status</th><th className="px-4 py-3">Action</th></tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {feeGroups.map((item) => (
+                      <tr key={item.id} className="hover:bg-slate-50">
+                        <td className="px-4 py-3"><p className="font-bold text-slate-900">{item.name}</p><p className="text-xs text-slate-500">{item.description || '-'}</p></td>
+                        <td className="px-4 py-3">{item._count?.masters ?? 0}</td>
+                        <td className="px-4 py-3">{item._count?.assignments ?? 0}</td>
+                        <td className="px-4 py-3"><Badge tone={statusTone(item.status)}>{item.status}</Badge></td>
+                        <td className="px-4 py-3">
+                          <div className="flex gap-2">
+                            {canUpdateFeeGroup ? <IconButton title="Edit" onClick={() => editFeeGroup(item)}>E</IconButton> : null}
+                            {canDeleteFeeGroup ? (
+                              <IconButton
+                                title="Delete"
+                                tone="danger"
+                                onClick={() => requestConfirmation({
+                                  title: 'Delete fee group',
+                                  itemName: item.name,
+                                  message: 'Fee groups already used by masters, assignments, or invoices cannot be deleted.',
+                                  confirmLabel: 'Delete',
+                                  onConfirm: () => deleteFeeGroupMutation.mutate(item.id),
+                                })}
+                              >
+                                D
+                              </IconButton>
+                            ) : null}
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                    {!feeGroups.length ? <tr><td colSpan={5} className="px-4 py-8 text-center text-slate-500">No fee groups found.</td></tr> : null}
+                  </tbody>
+                </table>
+              </div>
+            </Card>
+          </div>
+        ) : null}
+
+        {activeTab === 'masters' ? (
+          <div className="space-y-5">
+            {(editingFeeMaster || showFeeMasterForm) ? (
+              <Card title={editingFeeMaster ? 'Edit Fee Master' : 'Add Fee Master'} subtitle="Create billable fee heads inside a fee group.">
+                <form className="space-y-3" onSubmit={feeMasterForm.handleSubmit((payload) => (editingFeeMaster ? canUpdateFeeMaster : canCreateFeeMaster) && saveFeeMasterMutation.mutate(payload))}>
+                  <div className="grid gap-3 md:grid-cols-2">
+                    <Field label="Fee Group" error={feeMasterForm.formState.errors.feeGroupId?.message}>
+                      <select className={inputClass} {...feeMasterForm.register('feeGroupId')}><option value="">Select group</option>{activeFeeGroups.map((group) => <option key={group.id} value={group.id}>{group.name}</option>)}</select>
+                    </Field>
+                    <Field label="Fee Type" error={feeMasterForm.formState.errors.feeTypeId?.message}>
+                      <select className={inputClass} {...feeMasterForm.register('feeTypeId')}><option value="">Select type</option>{activeFeeTypes.map((type) => <option key={type.id} value={type.id}>{type.name}</option>)}</select>
+                    </Field>
+                    <Field label="Amount" error={feeMasterForm.formState.errors.amount?.message}><input type="number" min="0.01" step="0.01" className={inputClass} {...feeMasterForm.register('amount')} /></Field>
+                    <Field label="Effective From"><input type="date" className={inputClass} {...feeMasterForm.register('effectiveFrom')} /></Field>
+                    <Field label="Effective To" error={feeMasterForm.formState.errors.effectiveTo?.message}><input type="date" className={inputClass} {...feeMasterForm.register('effectiveTo')} /></Field>
+                    <Field label="Status"><select className={inputClass} {...feeMasterForm.register('status')}><option value="ACTIVE">Active</option><option value="INACTIVE">Inactive</option></select></Field>
+                    <Field label="Sort Order"><input type="number" min="0" className={inputClass} {...feeMasterForm.register('sortOrder')} /></Field>
+                  </div>
+                  <Field label="Description"><textarea className={`${inputClass} min-h-20`} {...feeMasterForm.register('description')} /></Field>
+                  <div className="flex gap-2">
+                    {(editingFeeMaster ? canUpdateFeeMaster : canCreateFeeMaster) ? <PrimaryButton type="submit" disabled={saveFeeMasterMutation.isPending}>{editingFeeMaster ? 'Update' : 'Save'}</PrimaryButton> : null}
+                    <SecondaryButton onClick={() => { resetFeeMasterForm(); setShowFeeMasterForm(false); }}>Cancel</SecondaryButton>
+                  </div>
+                </form>
+              </Card>
+            ) : null}
+            <Card
+              title="Fee Master List"
+              actions={
+                <>
+                  {canCreateFeeMaster ? <PrimaryButton onClick={() => { resetFeeMasterForm(); setShowFeeMasterForm(true); }}>+ Add</PrimaryButton> : null}
+                  <SecondaryButton disabled={feeMasterPage <= 1} onClick={() => setFeeMasterPage((page) => Math.max(1, page - 1))}>Prev</SecondaryButton>
+                  <SecondaryButton disabled={(feeMastersQuery.data?.pagination.totalPages ?? 1) <= feeMasterPage} onClick={() => setFeeMasterPage((page) => page + 1)}>Next</SecondaryButton>
+                </>
+              }
+            >
+              <div className="mb-4 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+                <Field label="Search"><input className={inputClass} value={feeMasterFilters.search} onChange={(event) => { setFeeMasterFilters((current) => ({ ...current, search: event.target.value })); setFeeMasterPage(1); }} placeholder="Tuition, lab, computer..." /></Field>
+                <Field label="Group"><select className={inputClass} value={feeMasterFilters.feeGroupId} onChange={(event) => { setFeeMasterFilters((current) => ({ ...current, feeGroupId: event.target.value })); setFeeMasterPage(1); }}><option value="">All groups</option>{activeFeeGroups.map((group) => <option key={group.id} value={group.id}>{group.name}</option>)}</select></Field>
+                <Field label="Type"><select className={inputClass} value={feeMasterFilters.feeTypeId} onChange={(event) => { setFeeMasterFilters((current) => ({ ...current, feeTypeId: event.target.value })); setFeeMasterPage(1); }}><option value="">All types</option>{feeTypes.map((type) => <option key={type.id} value={type.id}>{type.name}</option>)}</select></Field>
+                <Field label="Status"><select className={inputClass} value={feeMasterFilters.status} onChange={(event) => { setFeeMasterFilters((current) => ({ ...current, status: event.target.value as '' | FeeRecordStatus })); setFeeMasterPage(1); }}><option value="">All statuses</option><option value="ACTIVE">Active</option><option value="INACTIVE">Inactive</option></select></Field>
+              </div>
+              <div className="overflow-x-auto rounded-2xl border border-slate-200">
+                <table className="min-w-full divide-y divide-slate-100 text-sm">
+                  <thead className="bg-slate-50 text-left text-xs uppercase text-slate-500">
+                    <tr><th className="px-4 py-3">Master</th><th className="px-4 py-3">Group</th><th className="px-4 py-3">Type</th><th className="px-4 py-3">Due</th><th className="px-4 py-3">Amount</th><th className="px-4 py-3">Status</th><th className="px-4 py-3">Action</th></tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {feeMasters.map((item) => (
+                      <tr key={item.id} className="hover:bg-slate-50">
+                        <td className="px-4 py-3"><p className="font-bold text-slate-900">{item.name}</p><p className="text-xs text-slate-500">{item.code}</p></td>
+                        <td className="px-4 py-3">{item.feeGroup?.name ?? '-'}</td>
+                        <td className="px-4 py-3">{item.feeType?.name ?? '-'}</td>
+                        <td className="px-4 py-3">{dateValue(item.dueDate)}</td>
+                        <td className="px-4 py-3 font-black text-slate-950">{money(item.amount)}</td>
+                        <td className="px-4 py-3"><Badge tone={statusTone(item.status)}>{item.status}</Badge></td>
+                        <td className="px-4 py-3">
+                          <div className="flex gap-2">
+                            {canUpdateFeeMaster ? <IconButton title="Edit" onClick={() => editFeeMaster(item)}>E</IconButton> : null}
+                            {canCreateFeeMaster ? <IconButton title="Duplicate" onClick={() => duplicateFeeMasterMutation.mutate(item)}>C</IconButton> : null}
+                            {canDeleteFeeMaster ? (
+                              <IconButton
+                                title="Delete"
+                                tone="danger"
+                                onClick={() => requestConfirmation({
+                                  title: 'Delete fee master',
+                                  itemName: item.name,
+                                  message: 'Fee masters already used by invoices or discounts cannot be deleted.',
+                                  confirmLabel: 'Delete',
+                                  onConfirm: () => deleteFeeMasterMutation.mutate(item.id),
+                                })}
+                              >
+                                D
+                              </IconButton>
+                            ) : null}
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                    {!feeMasters.length ? <tr><td colSpan={7} className="px-4 py-8 text-center text-slate-500">No fee masters found.</td></tr> : null}
+                  </tbody>
+                </table>
+              </div>
+            </Card>
+          </div>
+        ) : null}
+        {activeTab === 'structures' ? (
+          <div className="space-y-5">
+            {(editingStructure || showStructureForm) ? (
+              <Card title={editingStructure ? 'Edit Class Fee Structure' : 'Add Class Fee Structure'} subtitle="Build class-wise fee structures with one or more particulars.">
+                <form className="space-y-4" onSubmit={structureForm.handleSubmit((payload) => (editingStructure ? canUpdateStructure : canCreateStructure) && saveStructureMutation.mutate(payload))}>
+                  <div className="grid gap-3 md:grid-cols-2">
+                    <Field label="Structure Name"><input className={inputClass} {...structureForm.register('name')} placeholder="Class 1 Monthly Fee" /></Field>
+                    <Field label="Fee Type" error={structureForm.formState.errors.feeTypeId?.message}><select className={inputClass} {...structureForm.register('feeTypeId')}><option value="">Select type</option>{activeFeeTypes.map((type) => <option key={type.id} value={type.id}>{type.name}</option>)}</select></Field>
+                    <Field label="Class" error={structureForm.formState.errors.classId?.message}><select className={inputClass} {...structureForm.register('classId')}><option value="">Select class</option>{classes.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></Field>
+                    <Field label="Section"><select className={inputClass} {...structureForm.register('sectionId')}><option value="">All sections</option>{selectedSectionOptions(sections, watchedStructureClassId).map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></Field>
+                    <Field label="Effective From"><input type="date" className={inputClass} {...structureForm.register('effectiveFrom')} /></Field>
+                    <Field label="Effective To"><input type="date" className={inputClass} {...structureForm.register('effectiveTo')} /></Field>
+                  </div>
+                  <div className="rounded-2xl border border-slate-200 bg-slate-50 p-3">
+                    <div className="mb-3 flex items-center justify-between">
+                      <p className="text-sm font-black text-slate-900">Particular Items</p>
+                      {(editingStructure ? canUpdateStructure : canCreateStructure) ? <PrimaryButton onClick={() => setStructureRows((rows) => [...rows, { id: crypto.randomUUID(), particularId: '', amount: '', isOptional: false }])}>Add Item</PrimaryButton> : null}
+                    </div>
+                    <div className="space-y-3">
+                      {structureRows.map((row, index) => (
+                        <div key={row.id} className="grid gap-2 rounded-xl border border-slate-200 bg-white p-3 md:grid-cols-[1fr_9rem_7rem_3rem] md:items-end">
+                          <Field label={`Particular ${index + 1}`}><select className={inputClass} value={row.particularId} onChange={(event) => setStructureRows((rows) => rows.map((item) => item.id === row.id ? { ...item, particularId: event.target.value } : item))}><option value="">Select particular</option>{particulars.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></Field>
+                          <Field label="Amount"><input type="number" min="0.01" step="0.01" className={inputClass} value={row.amount} onChange={(event) => setStructureRows((rows) => rows.map((item) => item.id === row.id ? { ...item, amount: event.target.value } : item))} /></Field>
+                          <label className="flex h-10 items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3 text-sm font-bold text-slate-600">
+                            <input type="checkbox" checked={row.isOptional} onChange={(event) => setStructureRows((rows) => rows.map((item) => item.id === row.id ? { ...item, isOptional: event.target.checked } : item))} />
+                            Optional
+                          </label>
+                          {(editingStructure ? canUpdateStructure : canCreateStructure) ? <IconButton title="Remove item" tone="danger" onClick={() => setStructureRows((rows) => rows.length === 1 ? rows : rows.filter((item) => item.id !== row.id))}>D</IconButton> : null}
+                        </div>
+                      ))}
+                    </div>
+                    <div className="mt-3 flex justify-end text-sm font-black text-slate-950">Total: {money(structureTotal(structureRows))}</div>
+                  </div>
+                  <div className="flex gap-2">
+                    {(editingStructure ? canUpdateStructure : canCreateStructure) ? <PrimaryButton type="submit" disabled={saveStructureMutation.isPending}>{editingStructure ? 'Update Structure' : 'Save Structure'}</PrimaryButton> : null}
+                    <SecondaryButton onClick={() => { resetStructureForm(); setShowStructureForm(false); }}>Cancel</SecondaryButton>
+                  </div>
+                </form>
+              </Card>
+            ) : null}
             <Card
               title="Class Fee Structure List"
               actions={
                 <>
+                  {canCreateStructure ? <PrimaryButton onClick={() => { resetStructureForm(); setShowStructureForm(true); }}>+ Add</PrimaryButton> : null}
                   <SecondaryButton disabled={structurePage <= 1} onClick={() => setStructurePage((page) => Math.max(1, page - 1))}>Prev</SecondaryButton>
                   <SecondaryButton disabled={(structuresQuery.data?.pagination.totalPages ?? 1) <= structurePage} onClick={() => setStructurePage((page) => page + 1)}>Next</SecondaryButton>
                 </>
@@ -2014,97 +2402,42 @@ export default function FeesWorkspace({ initialSection }: { initialSection?: Fee
         ) : null}
 
         {activeTab === 'assignments' ? (
-          <div className="grid gap-5 xl:grid-cols-[0.8fr_1.2fr]">
+          <div className="space-y-5">
+            {(editingAssignment || showAssignmentForm) ? (
+              <Card
+                title={editingAssignment ? 'Edit Fee Assignment' : 'Assign Fee Structure'}
+                subtitle="Assign a structure by class, section, student, group, category, or transport route."
+                actions={<SecondaryButton onClick={() => { resetAssignmentForm(); setShowAssignmentForm(false); }}>Cancel</SecondaryButton>}
+              >
+                <form className="space-y-3" onSubmit={assignmentForm.handleSubmit((payload) => (editingAssignment ? canUpdateAssignment : canCreateAssignment) && assignMutation.mutate(payload))}>
+                  <Field label="Fee Structure" error={assignmentForm.formState.errors.feeStructureId?.message}>
+                    <select className={inputClass} {...assignmentForm.register('feeStructureId')}><option value="">Select structure</option>{structures.map((structure) => <option key={structure.id} value={structure.id}>{structure.name} - {structure.class?.name}</option>)}</select>
+                  </Field>
+                  <Field label="Target Type">
+                    <select className={inputClass} {...assignmentForm.register('targetType')}>{assignmentTargetTypes.map((type) => <option key={type} value={type}>{labelize(type)}</option>)}</select>
+                  </Field>
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    {watchedAssignmentTargetType === 'CLASS' || watchedAssignmentTargetType === 'SECTION' ? (<Field label="Class" error={assignmentForm.formState.errors.classId?.message}><select className={inputClass} {...assignmentForm.register('classId')}><option value="">Select class</option>{classes.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></Field>) : null}
+                    {watchedAssignmentTargetType === 'SECTION' ? (<Field label="Section" error={assignmentForm.formState.errors.sectionId?.message}><select className={inputClass} {...assignmentForm.register('sectionId')}><option value="">Select section</option>{selectedSectionOptions(sections, watchedAssignmentClassId).map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></Field>) : null}
+                    {watchedAssignmentTargetType === 'STUDENT' ? (<Field label="Student" error={assignmentForm.formState.errors.studentId?.message}><select className={inputClass} {...assignmentForm.register('studentId')}><option value="">Select student</option>{students.map((student) => <option key={student.id} value={student.id}>{student.fullName} ({student.admissionNo})</option>)}</select></Field>) : null}
+                    {watchedAssignmentTargetType === 'GROUP' ? (<Field label="Group" error={assignmentForm.formState.errors.groupId?.message}><select className={inputClass} {...assignmentForm.register('groupId')}><option value="">Select group</option>{studentGroups.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></Field>) : null}
+                    {watchedAssignmentTargetType === 'CATEGORY' ? (<Field label="Category" error={assignmentForm.formState.errors.categoryId?.message}><select className={inputClass} {...assignmentForm.register('categoryId')}><option value="">Select category</option>{studentCategories.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></Field>) : null}
+                    {watchedAssignmentTargetType === 'TRANSPORT_ROUTE' ? (<Field label="Transport Route" error={assignmentForm.formState.errors.transportRouteId?.message}><select className={inputClass} {...assignmentForm.register('transportRouteId')}><option value="">Select route</option>{transportRoutes.map((item) => <option key={item.id} value={item.id}>{item.title}</option>)}</select></Field>) : null}
+                    <Field label="Override Amount" error={assignmentForm.formState.errors.overrideAmount?.message}><input type="number" min="0" step="0.01" className={inputClass} {...assignmentForm.register('overrideAmount')} placeholder="Optional" /></Field>
+                    <Field label="Start Month" error={assignmentForm.formState.errors.startMonth?.message}><input type="month" className={inputClass} {...assignmentForm.register('startMonth')} /></Field>
+                    <Field label="End Month" error={assignmentForm.formState.errors.endMonth?.message}><input type="month" className={inputClass} {...assignmentForm.register('endMonth')} /></Field>
+                    <Field label="Status"><select className={inputClass} {...assignmentForm.register('status')}><option value="ACTIVE">Active</option><option value="INACTIVE">Inactive</option></select></Field>
+                  </div>
+                  <Field label="Notes"><textarea className={`${inputClass} min-h-20`} {...assignmentForm.register('notes')} /></Field>
+                  {(editingAssignment ? canUpdateAssignment : canCreateAssignment) ? <PrimaryButton type="submit" disabled={assignMutation.isPending}>{editingAssignment ? 'Update Assignment' : 'Assign Fees'}</PrimaryButton> : null}
+                </form>
+              </Card>
+            ) : null}
             <Card
-              title={editingAssignment ? 'Edit Fee Assignment' : 'Assign Fee Structure'}
-              subtitle="Assign a structure by class, section, student, group, category, or transport route."
-              actions={editingAssignment ? <SecondaryButton onClick={resetAssignmentForm}>Cancel</SecondaryButton> : null}
+              title="Student Fee Assignments"
+              subtitle="Review assignment targets and matched assigned/unassigned students."
+              actions={canCreateAssignment ? <PrimaryButton onClick={() => { resetAssignmentForm(); setShowAssignmentForm(true); }}>+ Add</PrimaryButton> : null}
             >
-              <form className="space-y-3" onSubmit={assignmentForm.handleSubmit((payload) => (editingAssignment ? canUpdateAssignment : canCreateAssignment) && assignMutation.mutate(payload))}>
-                <Field label="Fee Structure" error={assignmentForm.formState.errors.feeStructureId?.message}>
-                  <select className={inputClass} {...assignmentForm.register('feeStructureId')}>
-                    <option value="">Select structure</option>
-                    {structures.map((structure) => <option key={structure.id} value={structure.id}>{structure.name} - {structure.class?.name}</option>)}
-                  </select>
-                </Field>
-                <Field label="Target Type">
-                  <select className={inputClass} {...assignmentForm.register('targetType')}>
-                    {assignmentTargetTypes.map((type) => <option key={type} value={type}>{labelize(type)}</option>)}
-                  </select>
-                </Field>
-                <div className="grid gap-3 sm:grid-cols-2">
-                  {watchedAssignmentTargetType === 'CLASS' || watchedAssignmentTargetType === 'SECTION' ? (
-                    <Field label="Class" error={assignmentForm.formState.errors.classId?.message}>
-                      <select className={inputClass} {...assignmentForm.register('classId')}>
-                        <option value="">Select class</option>
-                        {classes.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
-                      </select>
-                    </Field>
-                  ) : null}
-                  {watchedAssignmentTargetType === 'SECTION' ? (
-                    <Field label="Section" error={assignmentForm.formState.errors.sectionId?.message}>
-                      <select className={inputClass} {...assignmentForm.register('sectionId')}>
-                        <option value="">Select section</option>
-                        {selectedSectionOptions(sections, watchedAssignmentClassId).map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
-                      </select>
-                    </Field>
-                  ) : null}
-                  {watchedAssignmentTargetType === 'STUDENT' ? (
-                    <Field label="Student" error={assignmentForm.formState.errors.studentId?.message}>
-                      <select className={inputClass} {...assignmentForm.register('studentId')}>
-                        <option value="">Select student</option>
-                        {students.map((student) => <option key={student.id} value={student.id}>{student.fullName} ({student.admissionNo})</option>)}
-                      </select>
-                    </Field>
-                  ) : null}
-                  {watchedAssignmentTargetType === 'GROUP' ? (
-                    <Field label="Group" error={assignmentForm.formState.errors.groupId?.message}>
-                      <select className={inputClass} {...assignmentForm.register('groupId')}>
-                        <option value="">Select group</option>
-                        {studentGroups.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
-                      </select>
-                    </Field>
-                  ) : null}
-                  {watchedAssignmentTargetType === 'CATEGORY' ? (
-                    <Field label="Category" error={assignmentForm.formState.errors.categoryId?.message}>
-                      <select className={inputClass} {...assignmentForm.register('categoryId')}>
-                        <option value="">Select category</option>
-                        {studentCategories.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
-                      </select>
-                    </Field>
-                  ) : null}
-                  {watchedAssignmentTargetType === 'TRANSPORT_ROUTE' ? (
-                    <Field label="Transport Route" error={assignmentForm.formState.errors.transportRouteId?.message}>
-                      <select className={inputClass} {...assignmentForm.register('transportRouteId')}>
-                        <option value="">Select route</option>
-                        {transportRoutes.map((item) => <option key={item.id} value={item.id}>{item.title}</option>)}
-                      </select>
-                    </Field>
-                  ) : null}
-                  <Field label="Override Amount" error={assignmentForm.formState.errors.overrideAmount?.message}>
-                    <input type="number" min="0" step="0.01" className={inputClass} {...assignmentForm.register('overrideAmount')} placeholder="Optional" />
-                  </Field>
-                  <Field label="Start Month" error={assignmentForm.formState.errors.startMonth?.message}>
-                    <input type="month" className={inputClass} {...assignmentForm.register('startMonth')} />
-                  </Field>
-                  <Field label="End Month" error={assignmentForm.formState.errors.endMonth?.message}>
-                    <input type="month" className={inputClass} {...assignmentForm.register('endMonth')} />
-                  </Field>
-                  <Field label="Status">
-                    <select className={inputClass} {...assignmentForm.register('status')}>
-                      <option value="ACTIVE">Active</option>
-                      <option value="INACTIVE">Inactive</option>
-                    </select>
-                  </Field>
-                </div>
-                <Field label="Notes">
-                  <textarea className={`${inputClass} min-h-20`} {...assignmentForm.register('notes')} />
-                </Field>
-                {(editingAssignment ? canUpdateAssignment : canCreateAssignment) ? <PrimaryButton type="submit" disabled={assignMutation.isPending}>{editingAssignment ? 'Update Assignment' : 'Assign Fees'}</PrimaryButton> : null}
-              </form>
-            </Card>
-
-            <Card title="Student Fee Assignments" subtitle="Review assignment targets and matched assigned/unassigned students.">
               <div className="mb-4 grid gap-3 md:grid-cols-5">
                 <Field label="Search">
                   <input
@@ -2722,21 +3055,44 @@ export default function FeesWorkspace({ initialSection }: { initialSection?: Fee
                       <option value="SUCCESS">Success</option>
                       <option value="FAILED">Failed</option>
                       <option value="REFUNDED">Refunded</option>
+                      <option value="PARTIALLY_REVERSED">Partially reversed</option>
+                      <option value="REVERSED">Reversed</option>
                     </select>
                   </Field>
                 </div>
                 <div className="space-y-3">
                   {payments.map((payment) => (
-                    <div key={payment.id} className="flex flex-col gap-3 rounded-xl border border-slate-200 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
-                      <div>
-                        <p className="font-bold text-slate-950">{payment.paymentNumber}</p>
-                        <p className="text-xs text-slate-500">{payment.student?.fullName ?? '-'} - {labelize(payment.paymentMode)}</p>
-                        <p className="text-xs text-slate-400">{payment.allocations?.length ?? 1} invoice allocation(s)</p>
+                    <div key={payment.id} className="rounded-xl border border-slate-200 px-4 py-3">
+                      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                        <div>
+                          <div className="flex flex-wrap items-center gap-2">
+                            <p className="font-bold text-slate-950">{payment.paymentNumber}</p>
+                            <Badge tone={statusTone(payment.status)}>{labelize(payment.status)}</Badge>
+                          </div>
+                          <p className="text-xs text-slate-500">{payment.student?.fullName ?? '-'} - {labelize(payment.paymentMode)}</p>
+                          <p className="text-xs text-slate-400">{payment.allocations?.length ?? 1} invoice allocation(s)</p>
+                        </div>
+                        <div className="flex flex-col items-start gap-2 sm:items-end">
+                          <p className="font-black text-slate-950">{money(payment.amount)}</p>
+                          <p className="text-xs text-slate-500">{dateValue(payment.paidAt)}</p>
+                          {canReversePayment && payment.status === 'SUCCESS' ? (
+                            <SecondaryButton onClick={() => setReversalPayment(payment)}>Reverse</SecondaryButton>
+                          ) : null}
+                        </div>
                       </div>
-                      <div className="text-right">
-                        <p className="font-black text-slate-950">{money(payment.amount)}</p>
-                        <p className="text-xs text-slate-500">{dateValue(payment.paidAt)}</p>
-                      </div>
+                      {payment.reversals?.length ? (
+                        <div className="mt-3 rounded-xl bg-amber-50 p-3 text-xs text-amber-900">
+                          <p className="font-black uppercase">Reversal history</p>
+                          <div className="mt-2 space-y-1">
+                            {payment.reversals.map((reversal) => (
+                              <div key={reversal.id} className="flex flex-wrap justify-between gap-2">
+                                <span>{reversal.reversalNumber} - {reversal.reason}</span>
+                                <span className="font-bold">{money(reversal.reversedAmount)} on {dateValue(reversal.reversedAt)}</span>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      ) : null}
                     </div>
                   ))}
                   {!payments.length ? <EmptyState message="No payments collected yet. Search a student, select pending invoices, and collect payment to generate receipts." /> : null}
@@ -2838,97 +3194,45 @@ export default function FeesWorkspace({ initialSection }: { initialSection?: Fee
         ) : null}
 
         {activeTab === 'discounts' ? (
-          <div className="grid gap-5 xl:grid-cols-2">
+          <div className="space-y-5">
+            {(editingDiscount || showDiscountForm) ? (
+              <Card
+                title={editingDiscount ? 'Edit Discount / Waiver' : 'Add Discount / Waiver'}
+                subtitle="Create auditable discounts by student, class, section, category, fee type, or all students."
+                actions={<SecondaryButton onClick={() => { resetDiscountForm(); setShowDiscountForm(false); }}>Cancel</SecondaryButton>}
+              >
+                <form className="space-y-3" onSubmit={discountForm.handleSubmit((payload) => (editingDiscount ? canUpdateDiscount : canCreateDiscount) && discountMutation.mutate(payload))}>
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    <Field label="Discount Name" error={discountForm.formState.errors.discountName?.message}><input className={inputClass} {...discountForm.register('discountName')} placeholder="Sibling concession" /></Field>
+                    <Field label="Code"><input className={inputClass} {...discountForm.register('code')} placeholder="SIBLING_10" /></Field>
+                    <Field label="Target Type" error={discountForm.formState.errors.targetType?.message}><select className={inputClass} {...discountForm.register('targetType')}>{discountTargetTypes.map((type) => <option key={type} value={type}>{labelize(type)}</option>)}</select></Field>
+                    {watchedDiscountTargetType === 'STUDENT' ? (<Field label="Student" error={discountForm.formState.errors.studentId?.message}><select className={inputClass} {...discountForm.register('studentId')}><option value="">Select student</option>{students.map((student) => <option key={student.id} value={student.id}>{student.fullName} ({student.admissionNo})</option>)}</select></Field>) : null}
+                    {watchedDiscountTargetType === 'CLASS' || watchedDiscountTargetType === 'SECTION' ? (<Field label="Class" error={discountForm.formState.errors.classId?.message}><select className={inputClass} {...discountForm.register('classId')}><option value="">Select class</option>{classes.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></Field>) : null}
+                    {watchedDiscountTargetType === 'SECTION' ? (<Field label="Section" error={discountForm.formState.errors.sectionId?.message}><select className={inputClass} {...discountForm.register('sectionId')}><option value="">Select section</option>{selectedSectionOptions(sections, watchedDiscountClassId).map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></Field>) : null}
+                    {watchedDiscountTargetType === 'CATEGORY' ? (<Field label="Category" error={discountForm.formState.errors.categoryId?.message}><select className={inputClass} {...discountForm.register('categoryId')}><option value="">Select category</option>{studentCategories.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></Field>) : null}
+                    {watchedDiscountTargetType === 'FEE_TYPE' ? (<Field label="Fee Type" error={discountForm.formState.errors.feeTypeId?.message}><select className={inputClass} {...discountForm.register('feeTypeId')}><option value="">Select fee type</option>{activeFeeTypes.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></Field>) : null}
+                    {watchedDiscountTargetType === 'FEE_GROUP' ? (<Field label="Fee Group" error={discountForm.formState.errors.feeGroupId?.message}><select className={inputClass} {...discountForm.register('feeGroupId')}><option value="">Select fee group</option>{activeFeeGroups.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></Field>) : null}
+                    {watchedDiscountTargetType === 'FEE_MASTER' ? (<Field label="Fee Master" error={discountForm.formState.errors.feeMasterId?.message}><select className={inputClass} {...discountForm.register('feeMasterId')}><option value="">Select fee master</option>{activeFeeMasters.map((item) => <option key={item.id} value={item.id}>{item.name} ({item.code})</option>)}</select></Field>) : null}
+                    <Field label="Discount Type"><select className={inputClass} {...discountForm.register('discountType')}><option value="FIXED">Fixed</option><option value="PERCENTAGE">Percentage</option></select></Field>
+                    <Field label="Discount Value" error={discountForm.formState.errors.discountValue?.message}><input type="number" min="0" step="0.01" className={inputClass} {...discountForm.register('discountValue')} /></Field>
+                    <Field label="Fixed Amount Override"><input type="number" min="0" step="0.01" className={inputClass} {...discountForm.register('amount')} placeholder="Optional" /></Field>
+                    <Field label="Valid From"><input type="date" className={inputClass} {...discountForm.register('validFrom')} /></Field>
+                    <Field label="Valid To" error={discountForm.formState.errors.validTo?.message}><input type="date" className={inputClass} {...discountForm.register('validTo')} /></Field>
+                    <Field label="Expiry Date"><input type="date" className={inputClass} {...discountForm.register('expiryDate')} /></Field>
+                  </div>
+                  <Field label="Description"><textarea className={`${inputClass} min-h-16`} {...discountForm.register('description')} /></Field>
+                  <Field label="Status"><select className={inputClass} {...discountForm.register('status')} disabled={!canApproveDiscount}>{discountStatuses.map((status) => <option key={status} value={status}>{labelize(status)}</option>)}</select></Field>
+                  <Field label="Reason"><textarea className={`${inputClass} min-h-16`} {...discountForm.register('reason')} placeholder="Approval reason, scholarship note, sibling concession reference..." /></Field>
+                  <Field label="Note"><textarea className={`${inputClass} min-h-16`} {...discountForm.register('note')} /></Field>
+                  {(editingDiscount ? canUpdateDiscount : canCreateDiscount) ? <PrimaryButton type="submit" disabled={discountMutation.isPending}>{editingDiscount ? 'Update Discount' : 'Save Discount'}</PrimaryButton> : null}
+                </form>
+              </Card>
+            ) : null}
             <Card
-              title={editingDiscount ? 'Edit Discount / Waiver' : 'Add Discount / Waiver'}
-              subtitle="Create auditable discounts by student, class, section, category, fee type, or all students."
-              actions={editingDiscount ? <SecondaryButton onClick={resetDiscountForm}>Cancel</SecondaryButton> : null}
+              title="Discount List"
+              subtitle="Filter by lifecycle status and target. Approval actions are visible only to School Admins."
+              actions={canCreateDiscount ? <PrimaryButton onClick={() => { resetDiscountForm(); setShowDiscountForm(true); }}>+ Add</PrimaryButton> : null}
             >
-              <form className="space-y-3" onSubmit={discountForm.handleSubmit((payload) => (editingDiscount ? canUpdateDiscount : canCreateDiscount) && discountMutation.mutate(payload))}>
-                <div className="grid gap-3 sm:grid-cols-2">
-                  <Field label="Discount Name" error={discountForm.formState.errors.discountName?.message}>
-                    <input className={inputClass} {...discountForm.register('discountName')} placeholder="Sibling concession" />
-                  </Field>
-                  <Field label="Target Type" error={discountForm.formState.errors.targetType?.message}>
-                    <select className={inputClass} {...discountForm.register('targetType')}>
-                      {discountTargetTypes.map((type) => <option key={type} value={type}>{labelize(type)}</option>)}
-                    </select>
-                  </Field>
-                  {watchedDiscountTargetType === 'STUDENT' ? (
-                    <Field label="Student" error={discountForm.formState.errors.studentId?.message}>
-                      <select className={inputClass} {...discountForm.register('studentId')}>
-                        <option value="">Select student</option>
-                        {students.map((student) => <option key={student.id} value={student.id}>{student.fullName} ({student.admissionNo})</option>)}
-                      </select>
-                    </Field>
-                  ) : null}
-                  {watchedDiscountTargetType === 'CLASS' || watchedDiscountTargetType === 'SECTION' ? (
-                  <Field label="Class" error={discountForm.formState.errors.classId?.message}>
-                    <select className={inputClass} {...discountForm.register('classId')}>
-                      <option value="">Select class</option>
-                      {classes.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
-                    </select>
-                  </Field>
-                  ) : null}
-                  {watchedDiscountTargetType === 'SECTION' ? (
-                  <Field label="Section" error={discountForm.formState.errors.sectionId?.message}>
-                    <select className={inputClass} {...discountForm.register('sectionId')}>
-                      <option value="">Select section</option>
-                      {selectedSectionOptions(sections, watchedDiscountClassId).map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
-                    </select>
-                  </Field>
-                  ) : null}
-                  {watchedDiscountTargetType === 'CATEGORY' ? (
-                  <Field label="Category" error={discountForm.formState.errors.categoryId?.message}>
-                    <select className={inputClass} {...discountForm.register('categoryId')}>
-                      <option value="">Select category</option>
-                      {studentCategories.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
-                    </select>
-                  </Field>
-                  ) : null}
-                  {watchedDiscountTargetType === 'FEE_TYPE' ? (
-                  <Field label="Fee Type" error={discountForm.formState.errors.feeTypeId?.message}>
-                    <select className={inputClass} {...discountForm.register('feeTypeId')}>
-                      <option value="">Select fee type</option>
-                      {activeFeeTypes.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
-                    </select>
-                  </Field>
-                  ) : null}
-                  <Field label="Discount Type">
-                    <select className={inputClass} {...discountForm.register('discountType')}>
-                      <option value="FIXED">Fixed</option>
-                      <option value="PERCENTAGE">Percentage</option>
-                    </select>
-                  </Field>
-                  <Field label="Discount Value" error={discountForm.formState.errors.discountValue?.message}>
-                    <input type="number" min="0" step="0.01" className={inputClass} {...discountForm.register('discountValue')} />
-                  </Field>
-                  <Field label="Fixed Amount Override">
-                    <input type="number" min="0" step="0.01" className={inputClass} {...discountForm.register('amount')} placeholder="Optional" />
-                  </Field>
-                  <Field label="Valid From">
-                    <input type="date" className={inputClass} {...discountForm.register('validFrom')} />
-                  </Field>
-                  <Field label="Valid To" error={discountForm.formState.errors.validTo?.message}>
-                    <input type="date" className={inputClass} {...discountForm.register('validTo')} />
-                  </Field>
-                </div>
-                <Field label="Status">
-                  <select className={inputClass} {...discountForm.register('status')} disabled={!canApproveDiscount}>
-                    {discountStatuses.map((status) => <option key={status} value={status}>{labelize(status)}</option>)}
-                  </select>
-                </Field>
-                <Field label="Reason">
-                  <textarea className={`${inputClass} min-h-16`} {...discountForm.register('reason')} placeholder="Approval reason, scholarship note, sibling concession reference..." />
-                </Field>
-                <Field label="Note">
-                  <textarea className={`${inputClass} min-h-16`} {...discountForm.register('note')} />
-                </Field>
-                {(editingDiscount ? canUpdateDiscount : canCreateDiscount) ? <PrimaryButton type="submit" disabled={discountMutation.isPending}>{editingDiscount ? 'Update Discount' : 'Save Discount'}</PrimaryButton> : null}
-              </form>
-            </Card>
-
-            <Card title="Discount List" subtitle="Filter by lifecycle status and target. Approval actions are visible only to School Admins.">
               <div className="mb-4 grid gap-3 sm:grid-cols-3">
                 <Field label="Search">
                   <input
@@ -2960,12 +3264,14 @@ export default function FeesWorkspace({ initialSection }: { initialSection?: Fee
                     <div className="flex flex-wrap items-start justify-between gap-3">
                       <div>
                         <p className="font-black text-slate-950">{item.discountName ?? labelize(item.discountType)}</p>
+                        <p className="text-xs font-bold uppercase text-slate-400">{item.code ?? 'No code'}</p>
                         <p className="text-sm text-slate-500">
-                          {labelize(item.targetType)} - {item.student?.fullName ?? item.class?.name ?? item.section?.name ?? item.category?.name ?? item.feeType?.name ?? 'All students'}
+                          {labelize(item.targetType)} - {item.student?.fullName ?? item.class?.name ?? item.section?.name ?? item.category?.name ?? item.feeType?.name ?? item.feeGroup?.name ?? item.feeMaster?.name ?? 'All students'}
                         </p>
                         <p className="text-xs text-slate-400">
-                          {labelize(item.valueType)} {item.value} {item.validFrom ? `from ${item.validFrom.slice(0, 10)}` : ''} {item.validTo ? `to ${item.validTo.slice(0, 10)}` : ''}
+                          {labelize(item.valueType)} {item.value} {item.validFrom ? `from ${item.validFrom.slice(0, 10)}` : ''} {item.validTo ? `to ${item.validTo.slice(0, 10)}` : ''} {item.expiryDate ? `expires ${item.expiryDate.slice(0, 10)}` : ''}
                         </p>
+                        {item.description ? <p className="mt-1 text-xs text-slate-500">{item.description}</p> : null}
                       </div>
                       <Badge tone={statusTone(item.approvalStatus)}>{labelize(item.approvalStatus)}</Badge>
                     </div>
@@ -3030,42 +3336,31 @@ export default function FeesWorkspace({ initialSection }: { initialSection?: Fee
         ) : null}
 
         {activeTab === 'fines' ? (
-          <div className="grid gap-5 xl:grid-cols-2">
-            <Card title="Add Fine Rule" subtitle="Create late fee rules with grace days.">
-              <form className="space-y-3" onSubmit={fineForm.handleSubmit((payload) => canCreateFine && fineMutation.mutate(payload))}>
-                <Field label="Fine Name" error={fineForm.formState.errors.name?.message}>
-                  <input className={inputClass} {...fineForm.register('name')} placeholder="Late Payment Fine" />
-                </Field>
-                <div className="grid gap-3 sm:grid-cols-2">
-                  <Field label="Particular">
-                    <select className={inputClass} {...fineForm.register('particularId')}>
-                      <option value="">No particular</option>
-                      {particulars.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
-                    </select>
+          <div className="space-y-5">
+            {showFineForm ? (
+              <Card title="Add Fine Rule" subtitle="Create late fee rules with grace days.">
+                <form className="space-y-3" onSubmit={fineForm.handleSubmit((payload) => canCreateFine && fineMutation.mutate(payload))}>
+                  <Field label="Fine Name" error={fineForm.formState.errors.name?.message}>
+                    <input className={inputClass} {...fineForm.register('name')} placeholder="Late Payment Fine" />
                   </Field>
-                  <Field label="Fine Type">
-                    <select className={inputClass} {...fineForm.register('fineType')}>
-                      {fineTypes.map((type) => <option key={type} value={type}>{labelize(type)}</option>)}
-                    </select>
-                  </Field>
-                  <Field label="Amount">
-                    <input type="number" min="0" className={inputClass} {...fineForm.register('amount')} />
-                  </Field>
-                  <Field label="Grace Days">
-                    <input type="number" min="0" className={inputClass} {...fineForm.register('graceDays')} />
-                  </Field>
-                </div>
-                <Field label="Status">
-                  <select className={inputClass} {...fineForm.register('status')}>
-                    <option value="ACTIVE">Active</option>
-                    <option value="INACTIVE">Inactive</option>
-                  </select>
-                </Field>
-                {canCreateFine ? <PrimaryButton type="submit" disabled={fineMutation.isPending}>Save Fine</PrimaryButton> : null}
-              </form>
-            </Card>
-
-            <Card title="Fine Rules">
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    <Field label="Particular"><select className={inputClass} {...fineForm.register('particularId')}><option value="">No particular</option>{particulars.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></Field>
+                    <Field label="Fine Type"><select className={inputClass} {...fineForm.register('fineType')}>{fineTypes.map((type) => <option key={type} value={type}>{labelize(type)}</option>)}</select></Field>
+                    <Field label="Amount"><input type="number" min="0" className={inputClass} {...fineForm.register('amount')} /></Field>
+                    <Field label="Grace Days"><input type="number" min="0" className={inputClass} {...fineForm.register('graceDays')} /></Field>
+                  </div>
+                  <Field label="Status"><select className={inputClass} {...fineForm.register('status')}><option value="ACTIVE">Active</option><option value="INACTIVE">Inactive</option></select></Field>
+                  <div className="flex gap-2">
+                    {canCreateFine ? <PrimaryButton type="submit" disabled={fineMutation.isPending}>Save Fine</PrimaryButton> : null}
+                    <SecondaryButton onClick={() => setShowFineForm(false)}>Cancel</SecondaryButton>
+                  </div>
+                </form>
+              </Card>
+            ) : null}
+            <Card
+              title="Fine Rules"
+              actions={canCreateFine ? <PrimaryButton onClick={() => setShowFineForm(true)}>+ Add</PrimaryButton> : null}
+            >
               <div className="mb-4 grid gap-3 sm:grid-cols-2">
                 <Field label="Search">
                   <input
@@ -3244,6 +3539,18 @@ export default function FeesWorkspace({ initialSection }: { initialSection?: Fee
                     {feeTypes.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
                   </select>
                 </Field>
+                <Field label="Fee Group">
+                  <select className={inputClass} value={reportFilters.feeGroupId} onChange={(event) => setReportFilters((current) => ({ ...current, feeGroupId: event.target.value, feeMasterId: '' }))}>
+                    <option value="">All fee groups</option>
+                    {feeGroups.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
+                  </select>
+                </Field>
+                <Field label="Fee Master">
+                  <select className={inputClass} value={reportFilters.feeMasterId} onChange={(event) => setReportFilters((current) => ({ ...current, feeMasterId: event.target.value }))}>
+                    <option value="">All fee masters</option>
+                    {feeMasters.filter((item) => !reportFilters.feeGroupId || item.feeGroupId === reportFilters.feeGroupId).map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
+                  </select>
+                </Field>
                 <Field label="Fee Structure">
                   <select className={inputClass} value={reportFilters.feeStructureId} onChange={(event) => setReportFilters((current) => ({ ...current, feeStructureId: event.target.value }))}>
                     <option value="">All structures</option>
@@ -3264,7 +3571,7 @@ export default function FeesWorkspace({ initialSection }: { initialSection?: Fee
                 </Field>
                 <div className="flex items-end gap-2">
                   <PrimaryButton onClick={() => reportsQuery.refetch()} disabled={reportsQuery.isFetching}>Generate Report</PrimaryButton>
-                  <SecondaryButton onClick={() => setReportFilters({ type: 'daily_collection', dateFrom: '', dateTo: '', classId: '', sectionId: '', studentId: '', feeTypeId: '', feeStructureId: '', paymentMode: '', status: '', collectedById: '' })}>Reset</SecondaryButton>
+                  <SecondaryButton onClick={() => setReportFilters({ type: 'daily_collection', dateFrom: '', dateTo: '', classId: '', sectionId: '', studentId: '', feeTypeId: '', feeGroupId: '', feeMasterId: '', feeStructureId: '', paymentMode: '', status: '', collectedById: '' })}>Reset</SecondaryButton>
                 </div>
               </div>
               <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-7">
@@ -3309,4 +3616,3 @@ export default function FeesWorkspace({ initialSection }: { initialSection?: Fee
     </div>
   );
 }
-

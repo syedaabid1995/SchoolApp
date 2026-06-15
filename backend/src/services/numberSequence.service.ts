@@ -19,6 +19,7 @@ const DEFAULT_PREFIX: Record<NumberSequenceType, string> = {
   INVOICE: 'INV',
   PAYMENT: 'PAY',
   RECEIPT: 'RCP',
+  REVERSAL: 'REV',
 };
 
 const MAX_RETRIES = 3;
