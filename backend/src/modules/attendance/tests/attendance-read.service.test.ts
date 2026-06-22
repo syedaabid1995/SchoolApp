@@ -4,6 +4,7 @@ import test from 'node:test';
 import { PeriodAttendanceReadAdapter } from '../adapters/period-attendance.adapter';
 import { SessionAttendanceReadAdapter } from '../adapters/session-attendance.adapter';
 import { StaffAttendanceReadAdapter } from '../adapters/staff-attendance.adapter';
+import type { StudentDailyAttendance } from '../models/attendance-read-model';
 import { AttendanceReadService } from '../services/attendance-read.service';
 
 const SCHOOL_ID = '11111111-1111-4111-8111-111111111111';
@@ -23,6 +24,23 @@ const comparableStudentRow = (row: any) => ({
   sectionId: row.sectionId,
   date: row.date,
   status: row.status,
+});
+
+const canonicalRecord = (overrides: Partial<StudentDailyAttendance> = {}): StudentDailyAttendance => ({
+  source: 'period-attendance' as const,
+  sourceId: 'period-record',
+  schoolId: SCHOOL_ID,
+  studentId: STUDENT_ID,
+  classId: CLASS_ID,
+  sectionId: SECTION_ID,
+  academicSessionId: ACADEMIC_SESSION_ID,
+  date: '2026-02-01',
+  status: 'PRESENT',
+  note: null,
+  sessionId: SESSION_ID,
+  periodId: null,
+  timetableEntryId: null,
+  ...overrides,
 });
 
 test('attendance adapters translate canonical student attendance sources into the same daily shape', async () => {
@@ -201,6 +219,153 @@ test('AttendanceReadService combines canonical student sources without source-sp
   assert.equal(summary.late, 1);
   assert.equal(summary.excused, 1);
   assert.equal(analytics.attendanceRate, 100);
+});
+
+test('canonical daily attendance preserves legacy monthly percentage behavior', async () => {
+  const service = new AttendanceReadService({
+    sessionAttendanceAdapter: {
+      source: 'session-attendance',
+      getStudentAttendance: async () => [
+        canonicalRecord({ source: 'session-attendance', sourceId: 'daily-present', date: '2026-02-01', status: 'PRESENT' }),
+        canonicalRecord({ source: 'session-attendance', sourceId: 'daily-absent', date: '2026-02-02', status: 'ABSENT' }),
+      ],
+    },
+    periodAttendanceAdapter: {
+      source: 'period-attendance',
+      getStudentAttendance: async () => [],
+    },
+  });
+
+  const summary = await service.getAttendanceSummary({
+    schoolId: SCHOOL_ID,
+    studentId: STUDENT_ID,
+    fromDate: '2026-02-01',
+    toDate: '2026-02-28',
+  });
+
+  assert.equal(summary.totalRecords, 2);
+  assert.equal(summary.present, 1);
+  assert.equal(summary.absent, 1);
+  assert.equal(summary.byStudent[0].percentage, 50);
+});
+
+test('canonical twice daily attendance rolls up slot records as attendance units', async () => {
+  const service = new AttendanceReadService({
+    sessionAttendanceAdapter: {
+      source: 'session-attendance',
+      getStudentAttendance: async () => [],
+    },
+    periodAttendanceAdapter: {
+      source: 'period-attendance',
+      getStudentAttendance: async () => [
+        canonicalRecord({
+          sourceId: 'morning-present',
+          status: 'PRESENT',
+          unit: { mode: 'TWICE_DAILY', unitType: 'SLOT', slotId: 'morning', periodId: null, timetableEntryId: null },
+        }),
+        canonicalRecord({
+          sourceId: 'afternoon-absent',
+          status: 'ABSENT',
+          unit: { mode: 'TWICE_DAILY', unitType: 'SLOT', slotId: 'afternoon', periodId: null, timetableEntryId: null },
+        }),
+      ],
+    },
+  });
+
+  const mixed = await service.getAttendanceSummary({ schoolId: SCHOOL_ID, studentId: STUDENT_ID, date: '2026-02-01' });
+  assert.equal(mixed.totalRecords, 2);
+  assert.equal(mixed.present, 1);
+  assert.equal(mixed.absent, 1);
+  assert.equal(mixed.byStudent[0].percentage, 50);
+
+  const fullPresentService = new AttendanceReadService({
+    sessionAttendanceAdapter: { source: 'session-attendance', getStudentAttendance: async () => [] },
+    periodAttendanceAdapter: {
+      source: 'period-attendance',
+      getStudentAttendance: async () => [
+        canonicalRecord({ sourceId: 'morning-present', status: 'PRESENT' }),
+        canonicalRecord({ sourceId: 'afternoon-present', status: 'PRESENT' }),
+      ],
+    },
+  });
+  const fullPresent = await fullPresentService.getAttendanceSummary({ schoolId: SCHOOL_ID, studentId: STUDENT_ID, date: '2026-02-01' });
+  assert.equal(fullPresent.byStudent[0].percentage, 100);
+
+  const fullAbsentService = new AttendanceReadService({
+    sessionAttendanceAdapter: { source: 'session-attendance', getStudentAttendance: async () => [] },
+    periodAttendanceAdapter: {
+      source: 'period-attendance',
+      getStudentAttendance: async () => [
+        canonicalRecord({ sourceId: 'morning-absent', status: 'ABSENT' }),
+        canonicalRecord({ sourceId: 'afternoon-absent', status: 'ABSENT' }),
+      ],
+    },
+  });
+  const fullAbsent = await fullAbsentService.getAttendanceSummary({ schoolId: SCHOOL_ID, studentId: STUDENT_ID, date: '2026-02-01' });
+  assert.equal(fullAbsent.byStudent[0].percentage, 0);
+});
+
+test('canonical period wise attendance percentages support daily and wider date aggregations', async () => {
+  const records = Array.from({ length: 8 }, (_, index) =>
+    canonicalRecord({
+      sourceId: `period-${index + 1}`,
+      status: index < 6 ? 'PRESENT' : 'ABSENT',
+      periodId: `period-${index + 1}`,
+      unit: { mode: 'PERIOD_WISE', unitType: 'PERIOD', slotId: null, periodId: `period-${index + 1}`, timetableEntryId: null },
+    }),
+  );
+  const service = new AttendanceReadService({
+    sessionAttendanceAdapter: { source: 'session-attendance', getStudentAttendance: async () => [] },
+    periodAttendanceAdapter: { source: 'period-attendance', getStudentAttendance: async () => records },
+  });
+
+  const daily = await service.getAttendanceSummary({ schoolId: SCHOOL_ID, studentId: STUDENT_ID, date: '2026-02-01' });
+  const monthly = await service.getAttendanceSummary({ schoolId: SCHOOL_ID, studentId: STUDENT_ID, fromDate: '2026-02-01', toDate: '2026-02-28' });
+  const term = await service.getAttendanceSummary({ schoolId: SCHOOL_ID, studentId: STUDENT_ID, fromDate: '2026-01-01', toDate: '2026-03-31' });
+  const annual = await service.getAttendanceSummary({ schoolId: SCHOOL_ID, studentId: STUDENT_ID, fromDate: '2026-01-01', toDate: '2026-12-31' });
+
+  for (const summary of [daily, monthly, term, annual]) {
+    assert.equal(summary.totalRecords, 8);
+    assert.equal(summary.present, 6);
+    assert.equal(summary.absent, 2);
+    assert.equal(summary.byStudent[0].percentage, 75);
+  }
+});
+
+test('canonical mixed-mode dedupe gives V2 precedence over legacy daily rows', async () => {
+  const service = new AttendanceReadService({
+    sessionAttendanceAdapter: {
+      source: 'session-attendance',
+      getStudentAttendance: async () => [
+        canonicalRecord({
+          source: 'session-attendance',
+          sourceId: 'legacy-daily',
+          academicSessionId: null,
+          status: 'ABSENT',
+        }),
+      ],
+    },
+    periodAttendanceAdapter: {
+      source: 'period-attendance',
+      getStudentAttendance: async () => [
+        canonicalRecord({
+          sourceId: 'v2-daily',
+          academicSessionId: ACADEMIC_SESSION_ID,
+          status: 'PRESENT',
+          unit: { mode: 'DAILY', unitType: 'DAY', slotId: null, periodId: null, timetableEntryId: null },
+        }),
+      ],
+    },
+  });
+
+  const records = await service.getStudentAttendance({ schoolId: SCHOOL_ID, studentId: STUDENT_ID, date: '2026-02-01' });
+  const summary = await service.getAttendanceSummary({ schoolId: SCHOOL_ID, studentId: STUDENT_ID, date: '2026-02-01' });
+
+  assert.deepEqual(records.map((record) => record.sourceId), ['v2-daily']);
+  assert.equal(summary.totalRecords, 1);
+  assert.equal(summary.present, 1);
+  assert.equal(summary.absent, 0);
+  assert.equal(summary.byStudent[0].percentage, 100);
 });
 
 test('AttendanceReadService reads student attendance holidays from canonical holiday storage', async () => {

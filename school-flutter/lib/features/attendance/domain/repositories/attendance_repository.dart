@@ -15,4 +15,26 @@ abstract class AttendanceRepository {
     StudentAttendanceQuery query,
   );
   Future<void> saveStudentAttendance(StudentAttendanceSaveRequest request);
+  Future<AttendanceConfiguration> getResolvedAttendanceConfig(
+    AttendanceScopeQuery query,
+  );
+  Future<List<AttendanceUnit>> getAttendanceUnits(AttendanceScopeQuery query);
+  Future<AttendanceSheet> getAttendanceSheet(AttendanceSheetQuery query);
+  Future<AttendanceSheet> saveAttendanceSheet(
+    AttendanceSheetSaveRequest request,
+  );
+  Future<AttendanceSheetSession> lockAttendanceSheet({
+    required String sessionId,
+    String? reason,
+  });
+  Future<AttendanceSheetSession> reopenAttendanceSheet({
+    required String sessionId,
+    String? reason,
+  });
+  Future<List<AttendanceConfiguration>> listAttendanceConfigurations({
+    String? academicYearId,
+    String? classId,
+    String? sectionId,
+    bool? active,
+  });
 }

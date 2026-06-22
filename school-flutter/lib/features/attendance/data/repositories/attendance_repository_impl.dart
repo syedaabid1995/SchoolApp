@@ -19,6 +19,9 @@ class AttendanceRepositoryImpl implements AttendanceRepository {
   static const _historyCacheKey = 'attendance.teacher.history';
   static const _studentOptionsCacheKey = 'attendance.student.options';
   static const _studentSheetCachePrefix = 'attendance.student.sheet.';
+  static const _attendanceV2ConfigCachePrefix = 'attendance.v2.config.';
+  static const _attendanceV2UnitsCachePrefix = 'attendance.v2.units.';
+  static const _attendanceV2SheetCachePrefix = 'attendance.v2.sheet.';
 
   final AttendanceRemoteDatasource _remote;
   final HiveCacheService? _cache;
@@ -106,11 +109,7 @@ class AttendanceRepositoryImpl implements AttendanceRepository {
       await _cache?.writeCached(_studentOptionsCacheKey, {
         'academicYears': [
           for (final item in options.academicYears)
-            {
-              'id': item.id,
-              'name': item.name,
-              'isActive': item.isActive,
-            },
+            {'id': item.id, 'name': item.name, 'isActive': item.isActive},
         ],
         'classes': [
           for (final item in options.classes)
@@ -126,12 +125,15 @@ class AttendanceRepositoryImpl implements AttendanceRepository {
               'id': item.id,
               'name': item.name,
               'classId': item.classId,
+              'classIds': item.classIds,
             },
         ],
       });
       return options;
     } catch (error) {
-      final cached = _cache?.read<Map<dynamic, dynamic>>(_studentOptionsCacheKey);
+      final cached = _cache?.read<Map<dynamic, dynamic>>(
+        _studentOptionsCacheKey,
+      );
       if (cached != null) {
         return StudentAttendanceOptionsModel.fromJson(
           cached.map((key, value) => MapEntry(key.toString(), value)),
@@ -193,4 +195,153 @@ class AttendanceRepositoryImpl implements AttendanceRepository {
     final date = query.date.toIso8601String().split('T').first;
     return '$_studentSheetCachePrefix${query.academicSessionId}.${query.classId}.${query.sectionId}.$date';
   }
+
+  @override
+  Future<AttendanceConfiguration> getResolvedAttendanceConfig(
+    AttendanceScopeQuery query,
+  ) async {
+    final cacheKey = _attendanceV2ConfigCacheKey(query);
+    try {
+      final config = await _remote.getResolvedAttendanceConfig(query);
+      await _cache?.writeCached(cacheKey, config.toJson());
+      return config;
+    } catch (error) {
+      final cached = _cache?.read<Map<dynamic, dynamic>>(cacheKey);
+      if (cached != null) {
+        return AttendanceConfigurationModel.fromJson(
+          cached.map((key, value) => MapEntry(key.toString(), value)),
+        );
+      }
+      throw ErrorHandler.toFailure(error);
+    }
+  }
+
+  @override
+  Future<List<AttendanceUnit>> getAttendanceUnits(
+    AttendanceScopeQuery query,
+  ) async {
+    final cacheKey = _attendanceV2UnitsCacheKey(query);
+    try {
+      final units = await _remote.getAttendanceUnits(query);
+      await _cache?.writeCached(cacheKey, [
+        for (final unit in units) unit.toJson(),
+      ]);
+      return units;
+    } catch (error) {
+      final cached = _cache?.read<List<dynamic>>(cacheKey);
+      if (cached != null) {
+        return [
+          for (final item in cached)
+            if (item is Map)
+              AttendanceUnitModel.fromJson(
+                item.map((key, value) => MapEntry(key.toString(), value)),
+              ),
+        ];
+      }
+      throw ErrorHandler.toFailure(error);
+    }
+  }
+
+  @override
+  Future<AttendanceSheet> getAttendanceSheet(AttendanceSheetQuery query) async {
+    final cacheKey = _attendanceV2SheetCacheKey(query);
+    try {
+      final sheet = await _remote.getAttendanceSheet(query);
+      await _cache?.writeCached(cacheKey, sheet.toJson());
+      return sheet;
+    } catch (error) {
+      final cached = _cache?.read<Map<dynamic, dynamic>>(cacheKey);
+      if (cached != null) {
+        return AttendanceSheetModel.fromJson(
+          cached.map((key, value) => MapEntry(key.toString(), value)),
+        );
+      }
+      throw ErrorHandler.toFailure(error);
+    }
+  }
+
+  @override
+  Future<AttendanceSheet> saveAttendanceSheet(
+    AttendanceSheetSaveRequest request,
+  ) async {
+    try {
+      final sheet = await _remote.saveAttendanceSheet(request);
+      await _cache?.writeCached(
+        _attendanceV2SheetCacheKey(request.query),
+        sheet.toJson(),
+      );
+      return sheet;
+    } catch (error) {
+      final failure = ErrorHandler.toFailure(error);
+      if (failure is NetworkFailure && _mutationQueue != null) {
+        await _mutationQueue.enqueue(
+          type: 'attendance.sheet.save',
+          payload: {
+            'dedupeKey': request.query.offlineKey,
+            ...attendanceSheetSavePayload(request),
+          },
+          dedupeKey: request.query.offlineKey,
+        );
+      }
+      throw failure;
+    }
+  }
+
+  @override
+  Future<AttendanceSheetSession> lockAttendanceSheet({
+    required String sessionId,
+    String? reason,
+  }) async {
+    try {
+      return await _remote.lockAttendanceSheet(
+        sessionId: sessionId,
+        reason: reason,
+      );
+    } catch (error) {
+      throw ErrorHandler.toFailure(error);
+    }
+  }
+
+  @override
+  Future<AttendanceSheetSession> reopenAttendanceSheet({
+    required String sessionId,
+    String? reason,
+  }) async {
+    try {
+      return await _remote.reopenAttendanceSheet(
+        sessionId: sessionId,
+        reason: reason,
+      );
+    } catch (error) {
+      throw ErrorHandler.toFailure(error);
+    }
+  }
+
+  @override
+  Future<List<AttendanceConfiguration>> listAttendanceConfigurations({
+    String? academicYearId,
+    String? classId,
+    String? sectionId,
+    bool? active,
+  }) async {
+    try {
+      return await _remote.listAttendanceConfigurations(
+        academicYearId: academicYearId,
+        classId: classId,
+        sectionId: sectionId,
+        active: active,
+      );
+    } catch (error) {
+      throw ErrorHandler.toFailure(error);
+    }
+  }
+
+  String _attendanceV2ConfigCacheKey(AttendanceScopeQuery query) =>
+      '$_attendanceV2ConfigCachePrefix${query.academicYearId}.${query.classId}.${query.sectionId ?? 'none'}.${query.dateKey}';
+
+  String _attendanceV2UnitsCacheKey(AttendanceScopeQuery query) =>
+      '$_attendanceV2UnitsCachePrefix${query.academicYearId}.${query.classId}.${query.sectionId ?? 'none'}.${query.dateKey}';
+
+  String _attendanceV2SheetCacheKey(AttendanceSheetQuery query) =>
+      '$_attendanceV2SheetCachePrefix${query.offlineKey}';
 }

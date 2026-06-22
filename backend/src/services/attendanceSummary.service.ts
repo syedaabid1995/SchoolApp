@@ -1,4 +1,3 @@
-import { prisma } from '../config/db';
 import { attendanceReadService } from '../modules/attendance/services/attendance-read.service';
 import type { StudentDailyAttendance } from '../modules/attendance/models/attendance-read-model';
 
@@ -55,34 +54,20 @@ export const getAttendanceSummary = async (params: {
       classId,
       fromDate: dateFrom,
       toDate: dateTo,
-      source: 'period-attendance',
     }),
     attendanceReadService.getStudentAttendance({
       schoolId,
       fromDate: dateFrom,
       toDate: dateTo,
-      source: 'period-attendance',
     }),
   ]);
 
-  const approvalCounts = await prisma.attendanceSession.groupBy({
-    by: ['approvalStatus'],
-    where: {
-      schoolId,
-      date: { gte: dateFrom, lte: dateTo },
-    },
-    _count: { _all: true },
-  });
+  const approvalCounts = await attendanceReadService.getAttendanceApprovalCounts({ schoolId, fromDate: dateFrom, toDate: dateTo });
 
   const totals = records.reduce((acc, record) => {
     applyStatus(acc, record.status);
     return acc;
   }, blankCounts());
-
-  const approvalMap = approvalCounts.reduce<Record<string, number>>((acc, row) => {
-    acc[row.approvalStatus] = row._count._all;
-    return acc;
-  }, {});
 
   return {
     totals: {
@@ -93,9 +78,9 @@ export const getAttendanceSummary = async (params: {
       excused: totals.excused,
     },
     approvals: {
-      pending: approvalMap.PENDING ?? 0,
-      approved: approvalMap.APPROVED ?? 0,
-      rejected: approvalMap.REJECTED ?? 0,
+      pending: approvalCounts.PENDING,
+      approved: approvalCounts.APPROVED,
+      rejected: approvalCounts.REJECTED,
     },
     daily: groupDaily(records),
     byClass: groupByClass(byClassRecords),

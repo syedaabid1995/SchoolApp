@@ -9,6 +9,11 @@ class AppConfig {
     defaultValue: 'https://schoolapp-6a6f.onrender.com/api/v1',
   );
 
+  static const attendanceV2 = bool.fromEnvironment(
+    'ATTENDANCE_V2',
+    defaultValue: false,
+  );
+
   static const connectTimeout = Duration(seconds: 20);
   static const receiveTimeout = Duration(seconds: 30);
 }

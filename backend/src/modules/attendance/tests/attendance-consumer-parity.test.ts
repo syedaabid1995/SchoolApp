@@ -82,8 +82,7 @@ test('analytics consumers preserve attendance rate and weekly response shapes th
 });
 
 test('student daily report maps canonical attendance back to the existing report row shape', async () => {
-  const restoreRead = replaceMethod(attendanceReadService, 'getStudentAttendance', (async (params: any) => {
-    assert.equal(params.source, 'session-attendance');
+  const restoreRead = replaceMethod(attendanceReadService, 'getStudentAttendance', (async () => {
     return [canonicalStudentRecord({ source: 'session-attendance', sourceId: 'sr-1', status: 'LATE' })];
   }) as any);
   const restoreStudents = replaceMethod(prisma.student, 'findMany', (async () => [
@@ -139,8 +138,7 @@ test('student attendance load preserves holiday and row payload through Attendan
   const restoreStudents = replaceMethod(prisma.student, 'findMany', (async () => [
     { id: STUDENT_ID, admissionNo: 'ADM-1', rollNo: '7', fullName: 'Asha Rao', firstName: 'Asha', lastName: 'Rao' },
   ]) as any);
-  const restoreRead = replaceMethod(attendanceReadService, 'getStudentAttendance', (async (params: any) => {
-    assert.equal(params.source, 'session-attendance');
+  const restoreRead = replaceMethod(attendanceReadService, 'getStudentAttendance', (async () => {
     return [
       canonicalStudentRecord({
         source: 'session-attendance',
@@ -209,8 +207,7 @@ test('student attendance monthly report preserves holiday totals and daily rows 
   const restoreStudents = replaceMethod(prisma.student, 'findMany', (async () => [
     { id: STUDENT_ID, admissionNo: 'ADM-1', rollNo: '7', fullName: null, firstName: 'Asha', lastName: 'Rao' },
   ]) as any);
-  const restoreRead = replaceMethod(attendanceReadService, 'getStudentAttendance', (async (params: any) => {
-    assert.equal(params.source, 'session-attendance');
+  const restoreRead = replaceMethod(attendanceReadService, 'getStudentAttendance', (async () => {
     return [
       canonicalStudentRecord({
         source: 'session-attendance',

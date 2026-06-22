@@ -84,31 +84,19 @@ export const getAdminDashboardMetrics = async (schoolId: string) => {
   const todayStart = startOfUtcDay(new Date());
   const todayEnd = addUtcDays(todayStart, 1);
 
-  const [studentCount, teacherCount, classCount, pendingApprovals, periodAttendanceRecords, studentAttendanceRecords] = await Promise.all([
+  const [studentCount, teacherCount, classCount, approvalCounts, attendanceRecords] = await Promise.all([
     prisma.student.count({ where: { schoolId, status: 'ENROLLED' } }),
     prisma.teacherProfile.count({ where: { schoolId, isActive: true } }),
     prisma.class.count({ where: { schoolId } }),
-    prisma.attendanceSession.count({
-      where: { schoolId, approvalStatus: 'PENDING', date: { gte: todayStart, lt: todayEnd } },
-    }),
+    attendanceReadService.getAttendanceApprovalCounts({ schoolId, fromDate: todayStart, toDate: todayEnd }),
     attendanceReadService.getStudentAttendance({
       schoolId,
       fromDate: todayStart,
       toDate: todayEnd,
-      source: 'period-attendance',
-    }),
-    prisma.studentAttendanceRecord.findMany({
-      where: {
-        session: {
-          schoolId,
-          date: { gte: todayStart, lt: todayEnd },
-        },
-      },
-      select: { status: true },
     }),
   ]);
 
-  const statusMap = [...periodAttendanceRecords, ...studentAttendanceRecords].reduce<Record<string, number>>((acc, row) => {
+  const statusMap = attendanceRecords.reduce<Record<string, number>>((acc, row) => {
     acc[row.status] = (acc[row.status] ?? 0) + 1;
     return acc;
   }, {});
@@ -121,7 +109,7 @@ export const getAdminDashboardMetrics = async (schoolId: string) => {
     totalStudents: studentCount,
     totalTeachers: teacherCount,
     attendanceRateToday: attendanceRate,
-    pendingApprovals,
+    pendingApprovals: approvalCounts.PENDING,
     activeClasses: classCount,
   };
   return result;

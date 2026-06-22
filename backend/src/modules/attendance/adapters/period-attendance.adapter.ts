@@ -36,11 +36,12 @@ export class PeriodAttendanceReadAdapter implements StudentAttendanceAdapter {
           schoolId: params.schoolId,
           ...(sessionDate ? { date: sessionDate } : {}),
         },
-        ...(params.classId || params.sectionId !== undefined
+        ...(params.classId || params.sectionId !== undefined || params.academicSessionId
           ? {
               student: {
                 ...(params.classId ? { classId: params.classId } : {}),
                 ...(params.sectionId !== undefined ? { sectionId: params.sectionId } : {}),
+                ...(params.academicSessionId ? { academicSessionId: params.academicSessionId } : {}),
               },
             }
           : {}),
@@ -57,15 +58,22 @@ export class PeriodAttendanceReadAdapter implements StudentAttendanceAdapter {
       sourceId: row.id,
       schoolId: row.session.schoolId,
       studentId: row.studentId,
-      classId: row.student?.classId ?? null,
-      sectionId: row.student?.sectionId ?? null,
-      academicSessionId: row.student?.academicSessionId ?? null,
+      classId: row.session.classId ?? row.student?.classId ?? null,
+      sectionId: row.session.sectionId ?? row.student?.sectionId ?? null,
+      academicSessionId: row.session.academicYearId ?? row.student?.academicSessionId ?? null,
       date: toDateKey(row.session.date),
       status: row.status,
       note: row.manualOverrideReason ?? null,
       sessionId: row.sessionId,
       periodId: row.session.periodId,
       timetableEntryId: row.session.timetableEntryId ?? null,
+      unit: {
+        mode: row.session.mode,
+        unitType: row.session.unitType,
+        slotId: row.session.slotId ?? null,
+        periodId: row.session.periodId ?? null,
+        timetableEntryId: row.session.timetableEntryId ?? null,
+      },
     }));
   }
 

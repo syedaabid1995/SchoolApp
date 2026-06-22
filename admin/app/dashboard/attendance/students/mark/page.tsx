@@ -1,25 +1,69 @@
 'use client';
 
 import { useMemo, useState } from 'react';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import PageHeader from '../../../../../components/PageHeader';
 import Button from '../../../../../components/Button';
-import { useQuery } from '@tanstack/react-query';
+import { useNotify } from '../../../../../components/NotificationProvider';
 import { createStudentAttendanceSession, type StudentAttendanceStatus, updateStudentAttendanceSession } from '../../../../../services/attendanceP1.service';
-import { getAttendanceMode, listClasses, listSections } from '../../../../../services/academic.service';
+import { getAttendanceMode, listAcademicYears, listClasses, listSections } from '../../../../../services/academic.service';
 import { getSession } from '../../../../../services/auth.service';
 import { listStudents } from '../../../../../services/student.service';
 import { listAttendancePeriods } from '../../../../../services/attendance.service';
+import {
+  loadAttendanceSheet,
+  lockAttendanceSheet,
+  resolveAttendanceConfiguration,
+  resolveAttendanceUnits,
+  saveAttendanceSheet,
+  type AttendanceStatus,
+  type AttendanceUnitType,
+  type ResolvedAttendanceUnit,
+} from '../../../../../services/attendanceV2.service';
 
-type Row = { studentId: string; name: string; admissionNo: string; status: StudentAttendanceStatus; remarks: string };
+type LegacyRow = { studentId: string; name: string; admissionNo: string; status: StudentAttendanceStatus; remarks: string };
+type SheetRow = { studentId: string; name: string; admissionNo: string; rollNo?: string | null; status: AttendanceStatus; note: string };
+type SectionOption = { id: string; name: string; classId?: string | null; classSections?: Array<{ classId: string }> };
 
-const statusStyles: Record<StudentAttendanceStatus, string> = {
+const legacyStatusStyles: Record<StudentAttendanceStatus, string> = {
   PRESENT: 'bg-emerald-50 border-emerald-300 text-emerald-700',
   ABSENT: 'bg-rose-50 border-rose-300 text-rose-700',
   LATE: 'bg-amber-50 border-amber-300 text-amber-700',
   HALF_DAY: 'bg-sky-50 border-sky-300 text-sky-700',
 };
 
-export default function StudentAttendanceMarkPage() {
+const sheetStatuses: AttendanceStatus[] = ['PRESENT', 'LATE', 'ABSENT', 'EXCUSED'];
+const sheetStatusStyles: Record<AttendanceStatus, string> = {
+  PRESENT: 'bg-emerald-50 border-emerald-300 text-emerald-700',
+  LATE: 'bg-amber-50 border-amber-300 text-amber-700',
+  ABSENT: 'bg-rose-50 border-rose-300 text-rose-700',
+  EXCUSED: 'bg-sky-50 border-sky-300 text-sky-700',
+};
+
+const today = () => new Date().toISOString().slice(0, 10);
+const errorMessage = (error: any, fallback: string) =>
+  error?.response?.data?.error?.message ?? error?.response?.data?.message ?? fallback;
+
+const unitKey = (unit: ResolvedAttendanceUnit) =>
+  [unit.unitType, unit.slotId ?? unit.slotType ?? '', unit.periodId ?? '', unit.timetableEntryId ?? ''].join(':');
+
+const buildUnitPayload = (unit: ResolvedAttendanceUnit) => ({
+  unitType: unit.unitType as AttendanceUnitType,
+  slotId: unit.slotId ?? undefined,
+  slotType: unit.slotType ?? undefined,
+  periodId: unit.periodId ?? undefined,
+  timetableEntryId: unit.timetableEntryId ?? undefined,
+});
+
+const studentName = (student: { fullName?: string | null; firstName?: string | null; lastName?: string | null }) =>
+  student.fullName || `${student.firstName ?? ''} ${student.lastName ?? ''}`.trim() || 'Unnamed student';
+
+const sectionsForClass = (sections: SectionOption[] | undefined, classId: string) =>
+  (sections ?? []).filter((section) =>
+    classId ? section.classId === classId || section.classSections?.some((link) => link.classId === classId) : true,
+  );
+
+function LegacyStudentAttendanceMarkPage({ onUseV2 }: { onUseV2: () => void }) {
   const { data: session } = useQuery({ queryKey: ['session'], queryFn: getSession });
   const schoolId = session?.schoolId ?? undefined;
   const { data: classes } = useQuery({
@@ -50,27 +94,20 @@ export default function StudentAttendanceMarkPage() {
 
   const [classId, setClassId] = useState('');
   const [sectionId, setSectionId] = useState('');
-  const [date, setDate] = useState(new Date().toISOString().slice(0, 10));
+  const [date, setDate] = useState(today());
   const [periodId, setPeriodId] = useState('');
   const [shiftKey, setShiftKey] = useState('MORNING');
   const [sessionId, setSessionId] = useState('');
-  const [sessionMeta, setSessionMeta] = useState<{
-    status?: 'DRAFT' | 'LOCKED';
-    lockedAt?: string | null;
-    lockedById?: string | null;
-  }>({});
-  const [rows, setRows] = useState<Row[]>([]);
+  const [sessionMeta, setSessionMeta] = useState<{ status?: 'DRAFT' | 'LOCKED'; lockedAt?: string | null; lockedById?: string | null }>({});
+  const [rows, setRows] = useState<LegacyRow[]>([]);
   const [message, setMessage] = useState('');
   const [loading, setLoading] = useState(false);
-  const today = new Date().toISOString().slice(0, 10);
+
   const mode = attendanceMode?.mode ?? 'DAILY';
   const requiresPeriod = mode === 'PERIOD_WISE';
   const requiresShift = mode === 'SHIFT_WISE';
 
-  const sectionOptions = useMemo(
-    () => (sections ?? []).filter((section: { classId: string }) => section.classId === classId),
-    [sections, classId],
-  );
+  const sectionOptions = useMemo(() => sectionsForClass(sections, classId), [sections, classId]);
   const sectionRequired = sectionOptions.length > 0;
   const filteredStudents = useMemo(
     () =>
@@ -91,6 +128,7 @@ export default function StudentAttendanceMarkPage() {
         date,
         periodId: requiresPeriod ? periodId : undefined,
         shiftKey: requiresShift ? shiftKey : undefined,
+        schoolId,
       });
       setSessionId(result.id);
       setSessionMeta({ status: result.status, lockedAt: result.lockedAt ?? null, lockedById: result.lockedById ?? null });
@@ -105,7 +143,7 @@ export default function StudentAttendanceMarkPage() {
       );
       setMessage('Session loaded. Mark attendance and save.');
     } catch (err: any) {
-      setMessage(err?.response?.data?.error?.message ?? 'Failed to load students');
+      setMessage(errorMessage(err, 'Failed to load students'));
     } finally {
       setLoading(false);
     }
@@ -119,172 +157,350 @@ export default function StudentAttendanceMarkPage() {
       const updated = await updateStudentAttendanceSession(sessionId, {
         records: rows.map((row) => ({ studentId: row.studentId, status: row.status, remarks: row.remarks || undefined })),
         submit,
+        schoolId,
       });
       setSessionMeta({ status: updated.status, lockedAt: updated.lockedAt ?? null, lockedById: updated.lockedById ?? null });
       setMessage(submit ? 'Attendance submitted and locked.' : 'Draft saved successfully.');
     } catch (err: any) {
-      setMessage(err?.response?.data?.error?.message ?? 'Failed to save attendance');
+      setMessage(errorMessage(err, 'Failed to save attendance'));
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-indigo-50/30 to-blue-50/40">
-      <div className="mx-auto max-w-7xl pr-6 pb-12">
+    <div className="min-h-screen bg-slate-100 pb-10">
+      <div className="mx-auto max-w-7xl px-4 py-6 lg:px-8">
         <PageHeader
           title="Student Attendance"
-          subtitle="Select class and date, then mark each student quickly."
+          subtitle="Legacy attendance flow. Use this only while older daily attendance screens are being phased out."
+          actions={<Button variant="outline" size="sm" onClick={onUseV2}>Use V2 Flow</Button>}
         />
 
-      <div className="rounded-2xl border bg-white p-4 shadow-sm">
-        <div className="grid gap-3 md:grid-cols-4">
-          <select
-            className="rounded-lg border px-3 py-2 text-sm"
-            value={classId}
-            onChange={(event) => {
-              setClassId(event.target.value);
-              setSectionId('');
-              setRows([]);
-              setSessionId('');
-            }}
-          >
-            <option value="">Select class</option>
-            {(classes ?? []).map((item: { id: string; name: string }) => (
-              <option key={item.id} value={item.id}>
-                {item.name}
-              </option>
-            ))}
-          </select>
-          <select
-            className="rounded-lg border px-3 py-2 text-sm"
-            value={sectionId}
-            onChange={(event) => {
-              setSectionId(event.target.value);
-              setRows([]);
-              setSessionId('');
-            }}
-            disabled={!classId || !sectionRequired}
-          >
-            <option value="">{!classId ? 'Select class first' : sectionRequired ? 'Select section' : 'No section needed'}</option>
-            {sectionOptions.map((item: { id: string; name: string }) => (
-              <option key={item.id} value={item.id}>
-                {item.name}
-              </option>
-            ))}
-          </select>
-          <input className="rounded-lg border px-3 py-2 text-sm" type="date" max={today} value={date} onChange={(event) => setDate(event.target.value)} />
-          {requiresPeriod ? (
-            <select
-              className="rounded-lg border px-3 py-2 text-sm"
-              value={periodId}
-              onChange={(event) => setPeriodId(event.target.value)}
-            >
-              <option value="">Select period</option>
-              {(periods ?? []).map((period) => (
-                <option key={period.id} value={period.id}>
-                  {period.name} ({period.startTime}-{period.endTime})
-                </option>
-              ))}
+        <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+          <div className="grid gap-3 md:grid-cols-4">
+            <select className="rounded-lg border px-3 py-2 text-sm" value={classId} onChange={(event) => { setClassId(event.target.value); setSectionId(''); setRows([]); setSessionId(''); }}>
+              <option value="">Select class</option>
+              {(classes ?? []).map((item: { id: string; name: string }) => <option key={item.id} value={item.id}>{item.name}</option>)}
             </select>
-          ) : null}
-          {requiresShift ? (
-            <select
-              className="rounded-lg border px-3 py-2 text-sm"
-              value={shiftKey}
-              onChange={(event) => setShiftKey(event.target.value)}
-            >
-              <option value="MORNING">Morning</option>
-              <option value="AFTERNOON">Afternoon</option>
-              <option value="EVENING">Evening</option>
+            <select className="rounded-lg border px-3 py-2 text-sm" value={sectionId} onChange={(event) => { setSectionId(event.target.value); setRows([]); setSessionId(''); }} disabled={!classId || !sectionRequired}>
+              <option value="">{!classId ? 'Select class first' : sectionRequired ? 'Select section' : 'No section needed'}</option>
+              {sectionOptions.map((item: { id: string; name: string }) => <option key={item.id} value={item.id}>{item.name}</option>)}
             </select>
-          ) : null}
-          <Button
-            variant="primary"
-            size="sm"
-            onClick={upsertSession}
-            disabled={!classId || (sectionRequired && !sectionId) || (requiresPeriod && !periodId)}
-            loading={loading}
-          >
-            Load Students
-          </Button>
-        </div>
-        <p className="mt-3 text-xs text-slate-500">
-          Attendance mode: <span className="font-semibold">{mode}</span>
-        </p>
-      </div>
-
-      <div className="flex flex-wrap gap-2 text-xs">
-        {(['PRESENT', 'ABSENT', 'LATE', 'HALF_DAY'] as StudentAttendanceStatus[]).map((status) => (
-          <span key={status} className={`rounded-full border px-3 py-1 ${statusStyles[status]}`}>
-            {status}
-          </span>
-        ))}
-      </div>
-
-      {sessionId ? (
-        <div className="rounded-2xl border bg-white shadow-sm">
-          {sessionMeta.status === 'LOCKED' ? (
-            <div className="flex flex-wrap items-center justify-between gap-2 border-b bg-amber-50 px-4 py-3 text-sm text-amber-900">
-              <div className="flex items-center gap-2">
-                <span className="inline-flex h-2 w-2 rounded-full bg-amber-500" />
-                <span>Attendance is locked.</span>
-              </div>
-              <div className="text-xs text-amber-800">
-                {sessionMeta.lockedAt ? `Locked at ${new Date(sessionMeta.lockedAt).toLocaleString()}` : null}
-                {sessionMeta.lockedById ? ` • Locked by ${sessionMeta.lockedById}` : null}
-              </div>
-            </div>
-          ) : null}
-          <div className="grid grid-cols-12 border-b bg-slate-50 px-4 py-3 text-xs font-semibold uppercase tracking-wide text-slate-600">
-            <div className="col-span-2">Admission No</div>
-            <div className="col-span-3">Name</div>
-            <div className="col-span-5">Status</div>
-            <div className="col-span-2">Remarks</div>
+            <input className="rounded-lg border px-3 py-2 text-sm" type="date" max={today()} value={date} onChange={(event) => setDate(event.target.value)} />
+            {requiresPeriod ? (
+              <select className="rounded-lg border px-3 py-2 text-sm" value={periodId} onChange={(event) => setPeriodId(event.target.value)}>
+                <option value="">Select period</option>
+                {(periods ?? []).map((period) => <option key={period.id} value={period.id}>{period.name} ({period.startTime}-{period.endTime})</option>)}
+              </select>
+            ) : null}
+            {requiresShift ? (
+              <select className="rounded-lg border px-3 py-2 text-sm" value={shiftKey} onChange={(event) => setShiftKey(event.target.value)}>
+                <option value="MORNING">Morning</option>
+                <option value="AFTERNOON">Afternoon</option>
+              </select>
+            ) : null}
+            <Button variant="primary" size="sm" onClick={upsertSession} disabled={!classId || (sectionRequired && !sectionId) || (requiresPeriod && !periodId)} loading={loading}>
+              Load Students
+            </Button>
           </div>
-          {rows.map((row, index) => (
-            <div key={row.studentId} className="grid grid-cols-12 items-center gap-2 border-b px-4 py-3 last:border-b-0">
-              <div className="col-span-2 text-sm font-medium text-slate-700">{row.admissionNo}</div>
-              <div className="col-span-3 text-sm">{row.name}</div>
-              <div className="col-span-5 flex flex-wrap gap-2">
-                {(['PRESENT', 'ABSENT', 'LATE', 'HALF_DAY'] as StudentAttendanceStatus[]).map((option) => (
-                  <button
-                    key={option}
-                    type="button"
-                    className={`rounded-full border px-3 py-1 text-xs font-medium ${
-                      row.status === option ? statusStyles[option] : 'border-slate-200 text-slate-600 hover:bg-slate-50'
-                    }`}
-                    onClick={() => setRows((prev) => prev.map((item, idx) => (idx === index ? { ...item, status: option } : item)))}
-                  >
-                    {option}
-                  </button>
-                ))}
-              </div>
-              <div className="col-span-2">
-                <input
-                  className="w-full rounded border px-2 py-1 text-sm"
-                  placeholder="Remarks"
-                  value={row.remarks}
-                  onChange={(event) => setRows((prev) => prev.map((item, idx) => (idx === index ? { ...item, remarks: event.target.value } : item)))}
-                />
-              </div>
-            </div>
-          ))}
-          {!rows.length ? <p className="px-4 py-5 text-sm text-slate-500">No students found for selected class/section.</p> : null}
+          <p className="mt-3 text-xs text-slate-500">Attendance mode: <span className="font-semibold">{mode}</span></p>
         </div>
-      ) : null}
 
-      <div className="flex gap-2">
-        <Button variant="primary" size="sm" onClick={() => save(false)} disabled={!sessionId} loading={loading}>
-          Save Draft
-        </Button>
-        <Button variant="primary" size="sm" onClick={() => save(true)} disabled={!sessionId} loading={loading}>
-          Submit & Lock
-        </Button>
-      </div>
+        {sessionId ? (
+          <div className="mt-4 rounded-xl border border-slate-200 bg-white shadow-sm">
+            {sessionMeta.status === 'LOCKED' ? (
+              <div className="border-b bg-amber-50 px-4 py-3 text-sm text-amber-900">Attendance is locked.</div>
+            ) : null}
+            <div className="grid grid-cols-12 border-b bg-slate-50 px-4 py-3 text-xs font-semibold uppercase tracking-wide text-slate-600">
+              <div className="col-span-2">Admission No</div>
+              <div className="col-span-3">Name</div>
+              <div className="col-span-5">Status</div>
+              <div className="col-span-2">Remarks</div>
+            </div>
+            {rows.map((row, index) => (
+              <div key={row.studentId} className="grid grid-cols-12 items-center gap-2 border-b px-4 py-3 last:border-b-0">
+                <div className="col-span-2 text-sm font-medium text-slate-700">{row.admissionNo}</div>
+                <div className="col-span-3 text-sm">{row.name}</div>
+                <div className="col-span-5 flex flex-wrap gap-2">
+                  {(['PRESENT', 'ABSENT', 'LATE', 'HALF_DAY'] as StudentAttendanceStatus[]).map((option) => (
+                    <button key={option} type="button" className={`rounded-full border px-3 py-1 text-xs font-medium ${row.status === option ? legacyStatusStyles[option] : 'border-slate-200 text-slate-600 hover:bg-slate-50'}`} onClick={() => setRows((prev) => prev.map((item, idx) => (idx === index ? { ...item, status: option } : item)))}>
+                      {option}
+                    </button>
+                  ))}
+                </div>
+                <div className="col-span-2">
+                  <input className="w-full rounded border px-2 py-1 text-sm" placeholder="Remarks" value={row.remarks} onChange={(event) => setRows((prev) => prev.map((item, idx) => (idx === index ? { ...item, remarks: event.target.value } : item)))} />
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : null}
 
-        {message ? <p className="rounded border bg-slate-50 px-3 py-2 text-sm text-slate-700">{message}</p> : null}
+        <div className="mt-4 flex gap-2">
+          <Button variant="primary" size="sm" onClick={() => save(false)} disabled={!sessionId} loading={loading}>Save Draft</Button>
+          <Button variant="primary" size="sm" onClick={() => save(true)} disabled={!sessionId} loading={loading}>Submit & Lock</Button>
+        </div>
+        {message ? <p className="mt-4 rounded border bg-slate-50 px-3 py-2 text-sm text-slate-700">{message}</p> : null}
       </div>
     </div>
   );
+}
+
+function StudentAttendanceMarkV2Page({ onUseLegacy }: { onUseLegacy: () => void }) {
+  const notify = useNotify();
+  const queryClient = useQueryClient();
+  const { data: session } = useQuery({ queryKey: ['session'], queryFn: getSession });
+  const schoolId = session?.schoolId ?? undefined;
+  const role = session?.role;
+  const isSchoolAdmin = role === 'SCHOOL_ADMIN';
+  const permissionCodes = session?.permissionCodes ?? [];
+  const hasPermission = (code: string) => isSchoolAdmin || permissionCodes.includes(code);
+  const canView = role === 'SUPER_ADMIN' || hasPermission('attendance.view') || hasPermission('attendance.create') || hasPermission('attendance.edit');
+  const canMark = role !== 'SUPER_ADMIN' && (hasPermission('attendance.create') || hasPermission('attendance.edit'));
+  const canLock = role !== 'SUPER_ADMIN' && hasPermission('attendance.edit');
+
+  const { data: years } = useQuery({ queryKey: ['academic-years', schoolId], queryFn: () => listAcademicYears({ schoolId }), enabled: Boolean(schoolId) });
+  const { data: classes } = useQuery({ queryKey: ['classes', schoolId], queryFn: () => listClasses({ schoolId }), enabled: Boolean(schoolId) });
+  const { data: sections } = useQuery({ queryKey: ['sections', schoolId], queryFn: () => listSections({ schoolId }), enabled: Boolean(schoolId) });
+
+  const [criteria, setCriteria] = useState({ academicYearId: '', classId: '', sectionId: '', date: today() });
+  const [selectedUnitKey, setSelectedUnitKey] = useState('');
+  const [rows, setRows] = useState<SheetRow[]>([]);
+  const [loadedSessionId, setLoadedSessionId] = useState('');
+
+  const activeYear = useMemo(
+    () => (years ?? []).find((year: { isActive?: boolean }) => year.isActive) ?? (years ?? [])[0],
+    [years],
+  );
+  const effectiveCriteria = { ...criteria, academicYearId: criteria.academicYearId || activeYear?.id || '' };
+  const sectionOptions = useMemo(() => sectionsForClass(sections, effectiveCriteria.classId), [sections, effectiveCriteria.classId]);
+  const sectionRequired = sectionOptions.length > 0;
+  const canResolve = Boolean(schoolId && effectiveCriteria.academicYearId && effectiveCriteria.classId && effectiveCriteria.date && (!sectionRequired || effectiveCriteria.sectionId));
+  const resetSheetState = () => {
+    setRows([]);
+    setLoadedSessionId('');
+    setSelectedUnitKey('');
+  };
+  const changeClass = (classId: string) => {
+    const options = sectionsForClass(sections, classId);
+    const sectionStillValid = Boolean(criteria.sectionId && options.some((section) => section.id === criteria.sectionId));
+    setCriteria({ ...criteria, classId, sectionId: sectionStillValid ? criteria.sectionId : '' });
+    resetSheetState();
+  };
+
+  const resolutionQuery = useQuery({
+    queryKey: ['attendance-v2-resolution', schoolId, effectiveCriteria],
+    queryFn: () => resolveAttendanceConfiguration({ ...effectiveCriteria, schoolId }),
+    enabled: canView && canResolve,
+    retry: false,
+  });
+
+  const unitsQuery = useQuery({
+    queryKey: ['attendance-v2-units', schoolId, effectiveCriteria],
+    queryFn: () => resolveAttendanceUnits({ ...effectiveCriteria, schoolId }),
+    enabled: canView && canResolve,
+    retry: false,
+  });
+
+  const units = unitsQuery.data?.units ?? resolutionQuery.data?.units ?? [];
+  const selectedUnit = units.find((unit) => unitKey(unit) === selectedUnitKey) ?? units[0];
+  const mode = resolutionQuery.data?.mode ?? unitsQuery.data?.configuration.mode;
+
+  const sheetQuery = useQuery({
+    queryKey: ['attendance-v2-sheet', schoolId, effectiveCriteria, selectedUnit ? unitKey(selectedUnit) : 'none'],
+    queryFn: () => loadAttendanceSheet({ ...effectiveCriteria, schoolId, ...buildUnitPayload(selectedUnit!) }),
+    enabled: canView && canResolve && Boolean(selectedUnit),
+    retry: false,
+  });
+
+  const sheet = sheetQuery.data;
+  const isLocked = sheet?.session?.status === 'CLOSED' || Boolean(sheet?.session?.lockedAt);
+
+  const loadRows = async () => {
+    if (!selectedUnit) {
+      notify.warning('No attendance unit', mode === 'PERIOD_WISE' ? 'No timetable entry or fallback period is configured.' : 'No attendance unit is available.');
+      return;
+    }
+    const result = await sheetQuery.refetch();
+    if (result.data) {
+      setLoadedSessionId(result.data.session?.id ?? '');
+      setRows(
+        result.data.rows.map((row) => ({
+          studentId: row.student.id,
+          name: studentName(row.student),
+          admissionNo: row.student.admissionNo,
+          rollNo: row.student.rollNo,
+          status: row.status ?? 'PRESENT',
+          note: row.manualOverrideReason ?? '',
+        })),
+      );
+    }
+  };
+
+  const saveMutation = useMutation({
+    mutationFn: async () => {
+      if (!selectedUnit) throw new Error('Select an attendance unit first.');
+      return saveAttendanceSheet({
+        ...effectiveCriteria,
+        schoolId,
+        ...buildUnitPayload(selectedUnit),
+        records: rows.map((row) => ({ studentId: row.studentId, status: row.status, manualOverrideReason: row.note || undefined })),
+      });
+    },
+    onSuccess: (data) => {
+      setLoadedSessionId(data.session?.id ?? '');
+      queryClient.invalidateQueries({ queryKey: ['attendance-v2-sheet'] });
+      notify.success('Attendance saved', `${rows.length} records were saved for ${selectedUnit?.label ?? 'the selected unit'}.`);
+    },
+    onError: (error: any) => notify.error('Unable to save attendance', errorMessage(error, 'Please check the sheet and try again.')),
+  });
+
+  const lockMutation = useMutation({
+    mutationFn: () => lockAttendanceSheet(loadedSessionId || sheet?.session?.id || '', { schoolId, reason: 'Locked from admin attendance sheet' }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['attendance-v2-sheet'] });
+      notify.success('Attendance locked', 'This sheet can no longer be edited.');
+    },
+    onError: (error: any) => notify.error('Unable to lock attendance', errorMessage(error, 'Please try again.')),
+  });
+
+  if (!canView) {
+    return (
+      <section className="rounded-xl border border-rose-100 bg-rose-50 p-8 text-center">
+        <p className="text-sm font-bold uppercase tracking-wide text-rose-600">Permission not available</p>
+        <h1 className="mt-2 text-2xl font-bold text-rose-950">Student attendance is not enabled for your role.</h1>
+      </section>
+    );
+  }
+
+  return (
+    <div className="min-h-screen bg-slate-100 pb-10">
+      <div className="mx-auto w-full max-w-[1500px] px-4 py-6 lg:px-8">
+        <PageHeader
+          title="Student Attendance"
+          subtitle="Resolve attendance configuration, choose the daily slot or period, and mark the canonical attendance sheet."
+          breadcrumbs={[{ label: 'Dashboard', href: '/dashboard' }, { label: 'Attendance', href: '/dashboard/attendance/overview' }, { label: 'Students' }]}
+          actions={<Button variant="outline" size="sm" onClick={onUseLegacy}>Use Legacy Flow</Button>}
+        />
+
+        <section className="mb-5 rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+          <div className="mb-4 grid gap-3 md:grid-cols-4">
+            <select value={effectiveCriteria.academicYearId} onChange={(event) => { setCriteria({ ...criteria, academicYearId: event.target.value }); resetSheetState(); }} className="rounded-xl border border-slate-200 px-3 py-2 text-sm">
+              <option value="">Select academic year</option>
+              {(years ?? []).map((year: { id: string; name: string }) => <option key={year.id} value={year.id}>{year.name}</option>)}
+            </select>
+            <select value={effectiveCriteria.classId} onChange={(event) => changeClass(event.target.value)} className="rounded-xl border border-slate-200 px-3 py-2 text-sm">
+              <option value="">Select class</option>
+              {(classes ?? []).map((item: { id: string; name: string }) => <option key={item.id} value={item.id}>{item.name}</option>)}
+            </select>
+            <select value={effectiveCriteria.sectionId} onChange={(event) => { setCriteria({ ...criteria, sectionId: event.target.value }); resetSheetState(); }} disabled={!effectiveCriteria.classId || !sectionRequired} className="rounded-xl border border-slate-200 px-3 py-2 text-sm disabled:bg-slate-50">
+              <option value="">{!effectiveCriteria.classId ? 'Select class first' : sectionRequired ? 'Select section' : 'No section needed'}</option>
+              {sectionOptions.map((item: { id: string; name: string }) => <option key={item.id} value={item.id}>{item.name}</option>)}
+            </select>
+            <input type="date" max={today()} value={effectiveCriteria.date} onChange={(event) => { setCriteria({ ...criteria, date: event.target.value }); resetSheetState(); }} className="rounded-xl border border-slate-200 px-3 py-2 text-sm" />
+          </div>
+
+          <div className="grid gap-3 lg:grid-cols-[1fr_2fr_auto] lg:items-end">
+            <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
+              <p className="text-xs font-bold uppercase tracking-wide text-slate-500">Resolved mode</p>
+              <p className="mt-1 text-lg font-black text-slate-950">{mode ?? 'Select criteria'}</p>
+              <p className="text-xs text-slate-500">Source: {resolutionQuery.data?.source ?? 'Not resolved'}</p>
+            </div>
+            <div>
+              <label className="mb-1 block text-xs font-bold uppercase tracking-wide text-slate-500">Attendance unit</label>
+              <select value={selectedUnit ? unitKey(selectedUnit) : ''} onChange={(event) => { setSelectedUnitKey(event.target.value); setRows([]); }} disabled={!units.length} className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm disabled:bg-slate-50">
+                {!units.length ? <option value="">No units available</option> : null}
+                {units.map((unit) => (
+                  <option key={unitKey(unit)} value={unitKey(unit)}>
+                    {unit.label}
+                    {unit.source === 'PERIOD_FALLBACK' ? ' (period fallback)' : ''}
+                    {unit.startTime ? ` ${unit.startTime}-${unit.endTime ?? ''}` : ''}
+                  </option>
+                ))}
+              </select>
+              {selectedUnit ? (
+                <p className="mt-2 text-xs text-slate-500">
+                  Unit: {selectedUnit.unitType}
+                  {selectedUnit.subjectId ? ` • Subject ${selectedUnit.subjectId}` : ''}
+                  {selectedUnit.teacherId ? ` • Teacher ${selectedUnit.teacherId}` : ''}
+                </p>
+              ) : null}
+            </div>
+            <Button variant="primary" size="sm" onClick={loadRows} disabled={!canResolve || !selectedUnit || sheetQuery.isFetching} loading={sheetQuery.isFetching}>
+              Load Sheet
+            </Button>
+          </div>
+
+          {resolutionQuery.isError ? <p className="mt-3 rounded-lg border border-rose-100 bg-rose-50 px-3 py-2 text-sm text-rose-700">{errorMessage(resolutionQuery.error, 'Unable to resolve attendance configuration.')}</p> : null}
+          {!units.length && canResolve && !unitsQuery.isFetching && !unitsQuery.isError ? <p className="mt-3 rounded-lg border border-amber-100 bg-amber-50 px-3 py-2 text-sm text-amber-800">No attendance units are configured for the selected class, section, and date.</p> : null}
+          {unitsQuery.isError ? <p className="mt-3 rounded-lg border border-rose-100 bg-rose-50 px-3 py-2 text-sm text-rose-700">{errorMessage(unitsQuery.error, 'Unable to resolve attendance units.')}</p> : null}
+        </section>
+
+        <section className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+          <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <h2 className="text-lg font-bold text-slate-950">Attendance Sheet</h2>
+              <p className="text-sm text-slate-500">{rows.length ? `${rows.length} students loaded for ${selectedUnit?.label ?? 'selected unit'}.` : 'Load a sheet to start marking attendance.'}</p>
+            </div>
+            {isLocked ? (
+              <span className="rounded-full border border-amber-200 bg-amber-50 px-3 py-1 text-xs font-bold text-amber-700">Locked</span>
+            ) : null}
+          </div>
+
+          <div className="overflow-x-auto rounded-xl border border-slate-200">
+            <table className="min-w-full divide-y divide-slate-100 text-sm">
+              <thead className="bg-slate-50 text-left text-xs uppercase text-slate-500">
+                <tr>
+                  <th className="px-4 py-3">Admission No</th>
+                  <th className="px-4 py-3">Roll No</th>
+                  <th className="px-4 py-3">Student</th>
+                  <th className="px-4 py-3">Status</th>
+                  <th className="px-4 py-3">Note</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {rows.length ? (
+                  rows.map((row) => (
+                    <tr key={row.studentId}>
+                      <td className="px-4 py-3 font-semibold text-slate-700">{row.admissionNo}</td>
+                      <td className="px-4 py-3">{row.rollNo ?? '-'}</td>
+                      <td className="px-4 py-3">{row.name}</td>
+                      <td className="px-4 py-3">
+                        <div className="flex flex-wrap gap-2">
+                          {sheetStatuses.map((status) => (
+                            <button key={status} type="button" disabled={!canMark || isLocked} onClick={() => setRows((current) => current.map((item) => item.studentId === row.studentId ? { ...item, status } : item))} className={`rounded-full border px-3 py-1 text-xs font-bold disabled:cursor-not-allowed disabled:opacity-60 ${row.status === status ? sheetStatusStyles[status] : 'border-slate-200 bg-white text-slate-500'}`}>
+                              {status}
+                            </button>
+                          ))}
+                        </div>
+                      </td>
+                      <td className="px-4 py-3">
+                        <input disabled={!canMark || isLocked} value={row.note} onChange={(event) => setRows((current) => current.map((item) => item.studentId === row.studentId ? { ...item, note: event.target.value } : item))} className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm disabled:bg-slate-50" />
+                      </td>
+                    </tr>
+                  ))
+                ) : (
+                  <tr><td colSpan={5} className="px-4 py-10 text-center text-slate-500">No sheet loaded.</td></tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+
+          <div className="mt-4 flex flex-wrap justify-end gap-2">
+            <Button variant="outline" size="sm" onClick={() => sheetQuery.refetch()} disabled={!selectedUnit || sheetQuery.isFetching}>Refresh</Button>
+            <Button variant="primary" size="sm" onClick={() => saveMutation.mutate()} disabled={!canMark || isLocked || !rows.length || saveMutation.isPending} loading={saveMutation.isPending}>Save Sheet</Button>
+            <Button variant="danger" size="sm" onClick={() => lockMutation.mutate()} disabled={!canLock || isLocked || !(loadedSessionId || sheet?.session?.id) || lockMutation.isPending} loading={lockMutation.isPending}>Lock Sheet</Button>
+          </div>
+          {role === 'SUPER_ADMIN' ? <p className="mt-3 text-xs text-slate-500">Super Admin can view configuration resolution but cannot mark or lock school attendance.</p> : null}
+        </section>
+      </div>
+    </div>
+  );
+}
+
+export default function StudentAttendanceMarkPage() {
+  const [flow, setFlow] = useState<'v2' | 'legacy'>('v2');
+  if (flow === 'legacy') return <LegacyStudentAttendanceMarkPage onUseV2={() => setFlow('v2')} />;
+  return <StudentAttendanceMarkV2Page onUseLegacy={() => setFlow('legacy')} />;
 }

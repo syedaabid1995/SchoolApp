@@ -356,6 +356,8 @@ export const Sidebar = ({
         id: 'attendance',
         label: 'Attendance',
         items: [
+          { href: '/dashboard/attendance/settings', label: 'Attendance Settings', icon: 'AS' },
+          { href: '/dashboard/attendance/students/mark', label: 'Mark Attendance', icon: 'MA' },
           { href: '/dashboard/students/attendance', label: 'Student Attendance', icon: 'SA' },
           { href: '/dashboard/staff/attendance', label: 'Staff Attendance', icon: 'EA' },
           { href: '/dashboard/leave/my', label: 'Apply Leave', icon: 'LV' },

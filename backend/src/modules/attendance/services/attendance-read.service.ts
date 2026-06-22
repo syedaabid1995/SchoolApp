@@ -87,6 +87,42 @@ const attendancePercentage = (counts: ReturnType<typeof blankStatusCounts>) => {
   return Math.round((attended / total) * 10000) / 100;
 };
 
+const dedupeScopeKey = (record: StudentDailyAttendance) =>
+  [
+    record.studentId,
+    record.date,
+    record.classId ?? '',
+    record.sectionId ?? '',
+  ].join(':');
+
+const sourcePrecedence = (source: StudentAttendanceReadSource) => {
+  if (source === 'period-attendance') return 2;
+  return 1;
+};
+
+const dedupeStudentAttendance = (records: StudentDailyAttendance[]) => {
+  const hasModernByScope = new Map<string, boolean>();
+  for (const record of records) {
+    const key = dedupeScopeKey(record);
+    hasModernByScope.set(key, (hasModernByScope.get(key) ?? false) || record.source === 'period-attendance');
+  }
+
+  return records
+    .filter((record) => {
+      if (record.source !== 'session-attendance') return true;
+      return !hasModernByScope.get(dedupeScopeKey(record));
+    })
+    .sort((a, b) => {
+      const dateCompare = a.date.localeCompare(b.date);
+      if (dateCompare) return dateCompare;
+      const studentCompare = a.studentId.localeCompare(b.studentId);
+      if (studentCompare) return studentCompare;
+      const sourceCompare = sourcePrecedence(b.source) - sourcePrecedence(a.source);
+      if (sourceCompare) return sourceCompare;
+      return (a.sessionId ?? '').localeCompare(b.sessionId ?? '');
+    });
+};
+
 const dayOfWeekFromDate = (date: Date | string) => {
   const value = toDateOnly(date).getUTCDay();
   return value === 0 ? 7 : value;
@@ -119,13 +155,17 @@ export class AttendanceReadService {
     const sources = await Promise.all(
       this.studentAdapters(params.source).map((adapter) => adapter.getStudentAttendance(params)),
     );
-    return sources.flat().sort((a, b) => {
-      const dateCompare = a.date.localeCompare(b.date);
-      if (dateCompare) return dateCompare;
-      const studentCompare = a.studentId.localeCompare(b.studentId);
-      if (studentCompare) return studentCompare;
-      return a.source.localeCompare(b.source);
-    });
+    const records = sources.flat();
+    if (params.source && params.source !== 'combined') {
+      return records.sort((a, b) => {
+        const dateCompare = a.date.localeCompare(b.date);
+        if (dateCompare) return dateCompare;
+        const studentCompare = a.studentId.localeCompare(b.studentId);
+        if (studentCompare) return studentCompare;
+        return a.source.localeCompare(b.source);
+      });
+    }
+    return dedupeStudentAttendance(records);
   }
 
   async getStudentMonthlyAttendance(params: {
@@ -315,6 +355,37 @@ export class AttendanceReadService {
       attendanceRate,
       records,
     };
+  }
+
+  async getAttendanceApprovalCounts(params: {
+    schoolId: string;
+    fromDate?: Date | string;
+    toDate?: Date | string;
+  }): Promise<Record<'PENDING' | 'APPROVED' | 'REJECTED', number>> {
+    const dateFilter =
+      params.fromDate || params.toDate
+        ? {
+            date: {
+              ...(params.fromDate ? { gte: toDateOnly(params.fromDate) } : {}),
+              ...(params.toDate ? { lte: toDateOnly(params.toDate) } : {}),
+            },
+          }
+        : {};
+    const rows = await this.db.attendanceSession.groupBy({
+      by: ['approvalStatus'],
+      where: {
+        schoolId: params.schoolId,
+        ...dateFilter,
+      },
+      _count: { _all: true },
+    });
+    return rows.reduce<Record<'PENDING' | 'APPROVED' | 'REJECTED', number>>(
+      (acc, row) => {
+        acc[row.approvalStatus] = row._count._all;
+        return acc;
+      },
+      { PENDING: 0, APPROVED: 0, REJECTED: 0 },
+    );
   }
 
   async getTimetable(

@@ -1,6 +1,8 @@
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 
+import '../utils/network_image_url.dart';
+
 class CachedStaffImage extends StatelessWidget {
   const CachedStaffImage({
     required this.imageUrl,
@@ -15,7 +17,7 @@ class CachedStaffImage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final url = imageUrl;
+    final url = normalizeNetworkImageUrl(imageUrl);
     if (url == null || url.isEmpty) return _fallback(context);
     return ClipOval(
       child: CachedNetworkImage(

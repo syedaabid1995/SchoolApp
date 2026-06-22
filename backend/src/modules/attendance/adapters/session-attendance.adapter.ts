@@ -54,13 +54,14 @@ export class SessionAttendanceReadAdapter implements StudentAttendanceAdapter {
         studentId: record.studentId,
         classId: session.classId,
         sectionId: session.sectionId ?? null,
-        academicSessionId: null,
+        academicSessionId: params.academicSessionId ?? null,
         date: toDateKey(session.date),
         status: record.status,
         note: record.remarks ?? null,
         sessionId: session.id,
         periodId: null,
         timetableEntryId: null,
+        unit: { mode: 'DAILY', unitType: 'DAY', slotId: null, periodId: null, timetableEntryId: null },
       })),
     );
   }
@@ -125,6 +126,7 @@ export class SessionAttendanceReadAdapter implements StudentAttendanceAdapter {
         sessionId: session.id,
         periodId: null,
         timetableEntryId: null,
+        unit: { mode: 'DAILY', unitType: 'DAY', slotId: null, periodId: null, timetableEntryId: null },
       })),
     }));
   }

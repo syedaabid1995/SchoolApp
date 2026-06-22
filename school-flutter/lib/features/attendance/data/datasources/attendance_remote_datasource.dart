@@ -86,4 +86,105 @@ class AttendanceRemoteDatasource {
       data: studentAttendanceSavePayload(request),
     );
   }
+
+  Future<AttendanceConfigurationModel> getResolvedAttendanceConfig(
+    AttendanceScopeQuery query,
+  ) async {
+    final response = await _dio.get<Map<String, dynamic>>(
+      ApiEndpoints.attendanceConfigResolve,
+      queryParameters: attendanceScopeQueryParams(query),
+    );
+    return AttendanceConfigurationModel.fromJson(
+      response.data ?? const <String, dynamic>{},
+    );
+  }
+
+  Future<List<AttendanceUnitModel>> getAttendanceUnits(
+    AttendanceScopeQuery query,
+  ) async {
+    final response = await _dio.get<Map<String, dynamic>>(
+      ApiEndpoints.attendanceUnits,
+      queryParameters: attendanceScopeQueryParams(query),
+    );
+    final units = response.data?['units'] is List
+        ? response.data!['units'] as List
+        : const [];
+    return [
+      for (final item in units)
+        if (item is Map)
+          AttendanceUnitModel.fromJson(item.cast<String, dynamic>()),
+    ];
+  }
+
+  Future<AttendanceSheetModel> getAttendanceSheet(
+    AttendanceSheetQuery query,
+  ) async {
+    final response = await _dio.get<Map<String, dynamic>>(
+      ApiEndpoints.attendanceSheet,
+      queryParameters: attendanceSheetQueryParams(query),
+    );
+    return AttendanceSheetModel.fromJson(
+      response.data ?? const <String, dynamic>{},
+    );
+  }
+
+  Future<AttendanceSheetModel> saveAttendanceSheet(
+    AttendanceSheetSaveRequest request,
+  ) async {
+    final response = await _dio.put<Map<String, dynamic>>(
+      ApiEndpoints.attendanceSheet,
+      data: attendanceSheetSavePayload(request),
+    );
+    return AttendanceSheetModel.fromJson(
+      response.data ?? const <String, dynamic>{},
+    );
+  }
+
+  Future<AttendanceSheetSessionModel> lockAttendanceSheet({
+    required String sessionId,
+    String? reason,
+  }) async {
+    final response = await _dio.post<Map<String, dynamic>>(
+      '${ApiEndpoints.attendanceSheet}/$sessionId/lock',
+      data: {if (reason != null && reason.trim().isNotEmpty) 'reason': reason},
+    );
+    return AttendanceSheetSessionModel.fromJson(
+      response.data ?? const <String, dynamic>{},
+    );
+  }
+
+  Future<AttendanceSheetSessionModel> reopenAttendanceSheet({
+    required String sessionId,
+    String? reason,
+  }) async {
+    final response = await _dio.post<Map<String, dynamic>>(
+      '${ApiEndpoints.attendanceSheet}/$sessionId/reopen',
+      data: {if (reason != null && reason.trim().isNotEmpty) 'reason': reason},
+    );
+    return AttendanceSheetSessionModel.fromJson(
+      response.data ?? const <String, dynamic>{},
+    );
+  }
+
+  Future<List<AttendanceConfigurationModel>> listAttendanceConfigurations({
+    String? academicYearId,
+    String? classId,
+    String? sectionId,
+    bool? active,
+  }) async {
+    final response = await _dio.get<List<dynamic>>(
+      ApiEndpoints.attendanceConfigurations,
+      queryParameters: {
+        if (academicYearId != null) 'academicYearId': academicYearId,
+        if (classId != null) 'classId': classId,
+        if (sectionId != null) 'sectionId': sectionId,
+        if (active != null) 'active': active.toString(),
+      },
+    );
+    return [
+      for (final item in response.data ?? const [])
+        if (item is Map)
+          AttendanceConfigurationModel.fromJson(item.cast<String, dynamic>()),
+    ];
+  }
 }

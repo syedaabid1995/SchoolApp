@@ -506,6 +506,39 @@ const attachEmployeeRolePermissions = async (schoolId: string) => {
   }
 };
 
+const ensureDefaultAttendanceConfiguration = async (schoolId: string) => {
+  const existing = await prisma.attendanceConfiguration.findFirst({
+    where: {
+      schoolId,
+      scope: 'SCHOOL',
+      academicYearId: null,
+      classId: null,
+      sectionId: null,
+      isActive: true,
+    },
+    select: { id: true },
+  });
+
+  if (existing) return existing;
+
+  return prisma.attendanceConfiguration.create({
+    data: {
+      schoolId,
+      scope: 'SCHOOL',
+      mode: 'DAILY',
+      effectiveFrom: new Date('2000-01-01T00:00:00.000Z'),
+      isActive: true,
+    },
+  });
+};
+
+const ensureDefaultAttendanceConfigurations = async () => {
+  const schools = await prisma.school.findMany({ select: { id: true } });
+  for (const school of schools) {
+    await ensureDefaultAttendanceConfiguration(school.id);
+  }
+};
+
 const upsertUser = async (params: {
   schoolId: string | null;
   email: string;
@@ -1190,6 +1223,7 @@ const seedDemoData = async () => {
   await seedSubscription(school.id);
   await attachEmployeeRolePermissions(school.id);
   await seedLoginBranding(school.id);
+  await ensureDefaultAttendanceConfigurations();
 
   await prisma.usageCounter.upsert({
     where: { schoolId: school.id },

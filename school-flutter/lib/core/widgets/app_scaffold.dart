@@ -7,6 +7,7 @@ import '../../app/theme/app_breakpoints.dart';
 import '../../app/theme/app_colors.dart';
 import '../../app/theme/app_spacing.dart';
 import '../../core/permissions/permission_registry.dart';
+import '../../core/utils/network_image_url.dart';
 import '../../features/auth/presentation/providers/auth_controller.dart';
 import '../../features/auth/presentation/providers/current_permission_provider.dart';
 
@@ -238,6 +239,7 @@ class _DrawerHeader extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final topPad = MediaQuery.of(context).padding.top;
+    final avatarUrl = normalizeNetworkImageUrl(photoUrl);
     final initials = displayName
         .trim()
         .split(' ')
@@ -269,8 +271,8 @@ class _DrawerHeader extends StatelessWidget {
           CircleAvatar(
             radius: 28,
             backgroundColor: Colors.white.withOpacity(0.25),
-            backgroundImage: photoUrl != null ? NetworkImage(photoUrl!) : null,
-            child: photoUrl == null
+            backgroundImage: avatarUrl != null ? NetworkImage(avatarUrl) : null,
+            child: avatarUrl == null
                 ? Text(
                     initials,
                     style: const TextStyle(

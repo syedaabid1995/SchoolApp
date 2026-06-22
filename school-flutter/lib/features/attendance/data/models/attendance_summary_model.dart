@@ -126,7 +126,9 @@ class StudentAttendanceOptionsModel extends StudentAttendanceOptions {
     final years = json['academicYears'] is List
         ? json['academicYears'] as List
         : const [];
-    final classes = json['classes'] is List ? json['classes'] as List : const [];
+    final classes = json['classes'] is List
+        ? json['classes'] as List
+        : const [];
     final sections = json['sections'] is List
         ? json['sections'] as List
         : const [];
@@ -157,6 +159,7 @@ class StudentAttendanceOptionModel extends StudentAttendanceOption {
     required super.name,
     super.academicYearId,
     super.classId,
+    super.classIds,
     super.isActive,
   });
 
@@ -170,7 +173,9 @@ class StudentAttendanceOptionModel extends StudentAttendanceOption {
     );
   }
 
-  factory StudentAttendanceOptionModel.fromClassJson(Map<String, dynamic> json) {
+  factory StudentAttendanceOptionModel.fromClassJson(
+    Map<String, dynamic> json,
+  ) {
     return StudentAttendanceOptionModel(
       id: json['id']?.toString() ?? '',
       name: json['name']?.toString() ?? '',
@@ -181,11 +186,13 @@ class StudentAttendanceOptionModel extends StudentAttendanceOption {
   factory StudentAttendanceOptionModel.fromSectionJson(
     Map<String, dynamic> json,
   ) {
+    final mappedClassIds = _classSectionIds(json);
     return StudentAttendanceOptionModel(
       id: json['id']?.toString() ?? '',
       name: json['name']?.toString() ?? '',
-      classId:
-          json['classId']?.toString() ?? _firstClassSectionId(json['classSections']),
+      classId: json['classId']?.toString() ??
+          (mappedClassIds.isEmpty ? null : mappedClassIds.first),
+      classIds: mappedClassIds,
     );
   }
 }
@@ -231,7 +238,10 @@ class StudentAttendanceRowModel extends StudentAttendanceRow {
   factory StudentAttendanceRowModel.fromJson(Map<String, dynamic> json) {
     final firstName = json['firstName']?.toString() ?? '';
     final lastName = json['lastName']?.toString() ?? '';
-    final fallbackName = [firstName, lastName].where((part) => part.isNotEmpty).join(' ');
+    final fallbackName = [
+      firstName,
+      lastName,
+    ].where((part) => part.isNotEmpty).join(' ');
     return StudentAttendanceRowModel(
       id: json['id']?.toString() ?? '',
       fullName: json['fullName']?.toString() ?? fallbackName,
@@ -255,6 +265,241 @@ class StudentAttendanceHolidayModel extends StudentAttendanceHoliday {
   }
 }
 
+class AttendanceConfigurationModel extends AttendanceConfiguration {
+  const AttendanceConfigurationModel({
+    required super.id,
+    required super.mode,
+    required super.source,
+    super.scope,
+    super.academicYearId,
+    super.classId,
+    super.sectionId,
+    super.effectiveFrom,
+    super.effectiveTo,
+    super.isActive,
+  });
+
+  factory AttendanceConfigurationModel.fromJson(Map<String, dynamic> json) {
+    final config = json['configuration'] is Map
+        ? _stringMap(json['configuration'] as Map)
+        : json;
+    return AttendanceConfigurationModel(
+      id: json['id']?.toString() ?? config['id']?.toString(),
+      mode: AttendanceMode.fromValue(
+        json['mode']?.toString() ?? config['mode']?.toString(),
+      ),
+      source:
+          json['source']?.toString() ??
+          config['scope']?.toString() ??
+          'DEFAULT',
+      scope: config['scope']?.toString(),
+      academicYearId: config['academicYearId']?.toString(),
+      classId: config['classId']?.toString(),
+      sectionId: config['sectionId']?.toString(),
+      effectiveFrom: _toNullableDate(config['effectiveFrom']),
+      effectiveTo: _toNullableDate(config['effectiveTo']),
+      isActive: config['isActive'] != false,
+    );
+  }
+
+  Map<String, dynamic> toJson() => {
+    'id': id,
+    'mode': mode.value,
+    'source': source,
+    'scope': scope,
+    'academicYearId': academicYearId,
+    'classId': classId,
+    'sectionId': sectionId,
+    'effectiveFrom': effectiveFrom?.toIso8601String(),
+    'effectiveTo': effectiveTo?.toIso8601String(),
+    'isActive': isActive,
+  };
+}
+
+class AttendanceUnitModel extends AttendanceUnit {
+  const AttendanceUnitModel({
+    required super.unitType,
+    required super.label,
+    required super.source,
+    super.slotId,
+    super.slotType,
+    super.periodId,
+    super.timetableEntryId,
+    super.subjectId,
+    super.subjectName,
+    super.teacherId,
+    super.teacherName,
+    super.startTime,
+    super.endTime,
+  });
+
+  factory AttendanceUnitModel.fromJson(Map<String, dynamic> json) {
+    return AttendanceUnitModel(
+      unitType: AttendanceUnitType.fromValue(json['unitType']?.toString()),
+      label: json['label']?.toString() ?? 'Day',
+      source: json['source']?.toString() ?? 'DAY',
+      slotId: json['slotId']?.toString(),
+      slotType: AttendanceSlotType.fromValue(json['slotType']?.toString()),
+      periodId: json['periodId']?.toString(),
+      timetableEntryId: json['timetableEntryId']?.toString(),
+      subjectId: json['subjectId']?.toString(),
+      subjectName:
+          json['subjectName']?.toString() ?? _extractName(json['subject']),
+      teacherId: json['teacherId']?.toString(),
+      teacherName:
+          json['teacherName']?.toString() ??
+          _extractTeacherName(json['teacher']),
+      startTime: json['startTime']?.toString(),
+      endTime: json['endTime']?.toString(),
+    );
+  }
+
+  Map<String, dynamic> toJson() => attendanceUnitPayload(this)
+    ..addAll({
+      'label': label,
+      'source': source,
+      'subjectId': subjectId,
+      'subjectName': subjectName,
+      'teacherId': teacherId,
+      'teacherName': teacherName,
+      'startTime': startTime,
+      'endTime': endTime,
+    });
+}
+
+class AttendanceSheetSessionModel extends AttendanceSheetSession {
+  const AttendanceSheetSessionModel({
+    required super.id,
+    required super.status,
+    required super.approvalStatus,
+    super.lockedAt,
+    super.lockReason,
+  });
+
+  factory AttendanceSheetSessionModel.fromJson(Map<String, dynamic> json) {
+    return AttendanceSheetSessionModel(
+      id: json['id']?.toString() ?? '',
+      status: json['status']?.toString() ?? 'OPEN',
+      approvalStatus: json['approvalStatus']?.toString() ?? 'PENDING',
+      lockedAt: _toNullableDate(json['lockedAt']),
+      lockReason: json['lockReason']?.toString(),
+    );
+  }
+}
+
+class AttendanceStudentRecordModel extends AttendanceStudentRecord {
+  const AttendanceStudentRecordModel({
+    required super.studentId,
+    required super.fullName,
+    required super.status,
+    super.recordId,
+    super.admissionNo,
+    super.rollNo,
+    super.manualOverrideReason,
+  });
+
+  factory AttendanceStudentRecordModel.fromJson(Map<String, dynamic> json) {
+    final student = json['student'] is Map
+        ? _stringMap(json['student'] as Map)
+        : json;
+    final firstName = student['firstName']?.toString() ?? '';
+    final lastName = student['lastName']?.toString() ?? '';
+    final fallbackName = [
+      firstName,
+      lastName,
+    ].where((part) => part.isNotEmpty).join(' ');
+    return AttendanceStudentRecordModel(
+      studentId:
+          student['id']?.toString() ?? json['studentId']?.toString() ?? '',
+      fullName: student['fullName']?.toString() ?? fallbackName,
+      admissionNo: student['admissionNo']?.toString(),
+      rollNo: student['rollNo']?.toString(),
+      recordId: json['recordId']?.toString(),
+      status: json['status']?.toString() ?? 'PRESENT',
+      manualOverrideReason: json['manualOverrideReason']?.toString(),
+    );
+  }
+
+  Map<String, dynamic> toJson() => {
+    'studentId': studentId,
+    'fullName': fullName,
+    'admissionNo': admissionNo,
+    'rollNo': rollNo,
+    'recordId': recordId,
+    'status': status,
+    'manualOverrideReason': manualOverrideReason,
+  };
+}
+
+class AttendanceSheetModel extends AttendanceSheet {
+  const AttendanceSheetModel({
+    required super.configuration,
+    required super.unit,
+    required super.rows,
+    super.session,
+  });
+
+  factory AttendanceSheetModel.fromJson(Map<String, dynamic> json) {
+    final rows = json['rows'] is List ? json['rows'] as List : const [];
+    return AttendanceSheetModel(
+      configuration: AttendanceConfigurationModel.fromJson(
+        json['configuration'] is Map
+            ? _stringMap(json['configuration'] as Map)
+            : const <String, dynamic>{},
+      ),
+      unit: AttendanceUnitModel.fromJson(
+        json['unit'] is Map
+            ? _stringMap(json['unit'] as Map)
+            : const <String, dynamic>{},
+      ),
+      session: json['session'] is Map
+          ? AttendanceSheetSessionModel.fromJson(
+              _stringMap(json['session'] as Map),
+            )
+          : null,
+      rows: [
+        for (final item in rows)
+          if (item is Map)
+            AttendanceStudentRecordModel.fromJson(_stringMap(item)),
+      ],
+    );
+  }
+
+  Map<String, dynamic> toJson() => {
+    'configuration': (configuration is AttendanceConfigurationModel)
+        ? (configuration as AttendanceConfigurationModel).toJson()
+        : {
+            'id': configuration.id,
+            'mode': configuration.mode.value,
+            'source': configuration.source,
+          },
+    'unit': (unit is AttendanceUnitModel)
+        ? (unit as AttendanceUnitModel).toJson()
+        : attendanceUnitPayload(unit),
+    'session': session == null
+        ? null
+        : {
+            'id': session!.id,
+            'status': session!.status,
+            'approvalStatus': session!.approvalStatus,
+            'lockedAt': session!.lockedAt?.toIso8601String(),
+            'lockReason': session!.lockReason,
+          },
+    'rows': [
+      for (final row in rows)
+        {
+          'studentId': row.studentId,
+          'fullName': row.fullName,
+          'admissionNo': row.admissionNo,
+          'rollNo': row.rollNo,
+          'recordId': row.recordId,
+          'status': row.status,
+          'manualOverrideReason': row.manualOverrideReason,
+        },
+    ],
+  };
+}
+
 Map<String, dynamic> studentAttendanceQueryParams(
   StudentAttendanceQuery query,
 ) => {
@@ -262,6 +507,44 @@ Map<String, dynamic> studentAttendanceQueryParams(
   'classId': query.classId,
   'sectionId': query.sectionId,
   'date': _dateOnly(query.date),
+};
+
+Map<String, dynamic> attendanceScopeQueryParams(AttendanceScopeQuery query) => {
+  'academicYearId': query.academicYearId,
+  'classId': query.classId,
+  if (query.sectionId != null && query.sectionId!.isNotEmpty)
+    'sectionId': query.sectionId,
+  'date': _dateOnly(query.date),
+};
+
+Map<String, dynamic> attendanceUnitPayload(AttendanceUnit unit) => {
+  'unitType': unit.unitType.value,
+  if (unit.slotId != null) 'slotId': unit.slotId,
+  if (unit.slotType != null) 'slotType': unit.slotType!.value,
+  if (unit.periodId != null) 'periodId': unit.periodId,
+  if (unit.timetableEntryId != null) 'timetableEntryId': unit.timetableEntryId,
+};
+
+Map<String, dynamic> attendanceSheetQueryParams(AttendanceSheetQuery query) => {
+  ...attendanceScopeQueryParams(query.scope),
+  ...attendanceUnitPayload(query.unit),
+};
+
+Map<String, dynamic> attendanceSheetSavePayload(
+  AttendanceSheetSaveRequest request,
+) => {
+  ...attendanceSheetQueryParams(request.query),
+  'deviceId': request.deviceId,
+  'records': [
+    for (final record in request.records)
+      {
+        'studentId': record.studentId,
+        'status': record.status,
+        if (record.manualOverrideReason != null &&
+            record.manualOverrideReason!.trim().isNotEmpty)
+          'manualOverrideReason': record.manualOverrideReason,
+      },
+  ],
 };
 
 Map<String, dynamic> studentAttendanceSavePayload(
@@ -299,12 +582,44 @@ DateTime? _toNullableDate(Object? value) {
 
 String _dateOnly(DateTime date) => date.toIso8601String().split('T').first;
 
-String? _firstClassSectionId(Object? value) {
-  if (value is! List || value.isEmpty) return null;
-  final first = value.first;
-  if (first is Map) return first['classId']?.toString();
-  return null;
+List<String> _classSectionIds(Map<String, dynamic> json) {
+  final ids = <String>{};
+  final directClassId = json['classId']?.toString();
+  if (directClassId != null && directClassId.isNotEmpty) ids.add(directClassId);
+
+  final classIds = json['classIds'];
+  if (classIds is List) {
+    for (final id in classIds) {
+      final value = id?.toString();
+      if (value != null && value.isNotEmpty) ids.add(value);
+    }
+  }
+
+  final classSections = json['classSections'];
+  if (classSections is List) {
+    for (final item in classSections) {
+      if (item is Map) {
+        final value = item['classId']?.toString();
+        if (value != null && value.isNotEmpty) ids.add(value);
+      }
+    }
+  }
+
+  return ids.toList(growable: false);
 }
 
 Map<String, dynamic> _stringMap(Map value) =>
     value.map((key, value) => MapEntry(key.toString(), value));
+
+String? _extractName(Object? value) {
+  if (value is Map) return value['name']?.toString();
+  return null;
+}
+
+String? _extractTeacherName(Object? value) {
+  if (value is! Map) return null;
+  final firstName = value['firstName']?.toString() ?? '';
+  final lastName = value['lastName']?.toString() ?? '';
+  final name = [firstName, lastName].where((part) => part.isNotEmpty).join(' ');
+  return name.isEmpty ? value['name']?.toString() : name;
+}

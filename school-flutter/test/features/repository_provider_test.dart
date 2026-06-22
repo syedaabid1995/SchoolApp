@@ -297,6 +297,92 @@ class _FakeAttendanceRepository implements AttendanceRepository {
       status: status,
     );
   }
+
+  @override
+  Future<StudentAttendanceOptions> getStudentAttendanceOptions() async =>
+      const StudentAttendanceOptions(
+        academicYears: [],
+        classes: [],
+        sections: [],
+      );
+
+  @override
+  Future<StudentAttendanceSheet> loadStudentAttendance(
+    StudentAttendanceQuery query,
+  ) async => StudentAttendanceSheet(date: query.date, students: const []);
+
+  @override
+  Future<void> saveStudentAttendance(
+    StudentAttendanceSaveRequest request,
+  ) async {}
+
+  @override
+  Future<AttendanceConfiguration> getResolvedAttendanceConfig(
+    AttendanceScopeQuery query,
+  ) async => const AttendanceConfiguration(
+    id: null,
+    mode: AttendanceMode.daily,
+    source: 'DEFAULT',
+  );
+
+  @override
+  Future<List<AttendanceUnit>> getAttendanceUnits(
+    AttendanceScopeQuery query,
+  ) async => const [
+    AttendanceUnit(
+      unitType: AttendanceUnitType.day,
+      label: 'Day',
+      source: 'DAY',
+    ),
+  ];
+
+  @override
+  Future<AttendanceSheet> getAttendanceSheet(
+    AttendanceSheetQuery query,
+  ) async => AttendanceSheet(
+    configuration: const AttendanceConfiguration(
+      id: null,
+      mode: AttendanceMode.daily,
+      source: 'DEFAULT',
+    ),
+    unit: query.unit,
+    rows: const [],
+  );
+
+  @override
+  Future<AttendanceSheet> saveAttendanceSheet(
+    AttendanceSheetSaveRequest request,
+  ) async => getAttendanceSheet(request.query);
+
+  @override
+  Future<AttendanceSheetSession> lockAttendanceSheet({
+    required String sessionId,
+    String? reason,
+  }) async => AttendanceSheetSession(
+    id: sessionId,
+    status: 'CLOSED',
+    approvalStatus: 'PENDING',
+    lockedAt: DateTime(2026),
+    lockReason: reason,
+  );
+
+  @override
+  Future<AttendanceSheetSession> reopenAttendanceSheet({
+    required String sessionId,
+    String? reason,
+  }) async => AttendanceSheetSession(
+    id: sessionId,
+    status: 'OPEN',
+    approvalStatus: 'PENDING',
+  );
+
+  @override
+  Future<List<AttendanceConfiguration>> listAttendanceConfigurations({
+    String? academicYearId,
+    String? classId,
+    String? sectionId,
+    bool? active,
+  }) async => const [];
 }
 
 class _FakeTimetableRepository implements TimetableRepository {

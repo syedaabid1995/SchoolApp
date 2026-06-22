@@ -37,14 +37,25 @@ class MutationQueueService {
   Future<QueuedMutation> enqueue({
     required String type,
     required Map<String, dynamic> payload,
+    String? dedupeKey,
   }) async {
     final mutation = QueuedMutation(
       id: '${DateTime.now().microsecondsSinceEpoch}-$type',
       type: type,
-      payload: payload,
+      payload: {...payload, if (dedupeKey != null) 'dedupeKey': dedupeKey},
       createdAt: DateTime.now(),
     );
-    await _write([...pending(), mutation]);
+    final rows = pending();
+    final next = dedupeKey == null
+        ? rows
+        : rows
+              .where(
+                (row) =>
+                    row.type != type ||
+                    row.payload['dedupeKey']?.toString() != dedupeKey,
+              )
+              .toList();
+    await _write([...next, mutation]);
     return mutation;
   }
 
@@ -88,6 +99,10 @@ class MutationQueueService {
         await _dio.patch('${ApiEndpoints.homework}/$id', data: payload);
       case 'marks.submit':
         await _dio.post(ApiEndpoints.uploadMarks, data: mutation.payload);
+      case 'attendance.sheet.save':
+        final payload = Map<String, dynamic>.from(mutation.payload)
+          ..remove('dedupeKey');
+        await _dio.put(ApiEndpoints.attendanceSheet, data: payload);
       default:
         throw StateError('Unknown queued mutation type: ${mutation.type}');
     }

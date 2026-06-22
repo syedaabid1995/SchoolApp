@@ -52,11 +52,6 @@ const assertAcademicScope = async (
       select: { id: true },
     });
     if (!section) throw new HttpError(404, 'Section not found');
-    const link = await prisma.classSection.findFirst({
-      where: { schoolId, classId: payload.classId, sectionId: payload.sectionId },
-      select: { id: true },
-    });
-    if (!link) throw new HttpError(400, 'Section is not assigned to the selected class');
   }
 };
 
@@ -260,7 +255,6 @@ export const loadStudentAttendance = async (req: Request, res: Response) => {
         classId: query.classId,
         sectionId: query.sectionId,
         date,
-        source: 'session-attendance',
     }),
     attendanceReadService.getStudentAttendanceHoliday({
       schoolId,
@@ -417,7 +411,6 @@ export const getStudentAttendanceReport = async (req: Request, res: Response) =>
         sectionId: query.sectionId,
         fromDate: start,
         toDate: new Date(end.getTime() - 1),
-        source: 'session-attendance',
     }),
     attendanceReadService.getStudentAttendanceHolidays({
       schoolId,

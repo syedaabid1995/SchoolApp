@@ -5,6 +5,14 @@ export type AttendanceSource =
 
 export type StudentAttendanceReadSource = Exclude<AttendanceSource, 'staff-attendance'>;
 
+export type CanonicalAttendanceUnit = {
+  mode: 'DAILY' | 'TWICE_DAILY' | 'PERIOD_WISE' | null;
+  unitType: 'DAY' | 'SLOT' | 'PERIOD' | 'TIMETABLE_ENTRY' | null;
+  slotId: string | null;
+  periodId: string | null;
+  timetableEntryId: string | null;
+};
+
 export type AttendanceStatus =
   | 'PRESENT'
   | 'ABSENT'
@@ -29,6 +37,7 @@ export type StudentDailyAttendance = {
   sessionId: string | null;
   periodId: string | null;
   timetableEntryId: string | null;
+  unit?: CanonicalAttendanceUnit;
 };
 
 export type StudentAttendanceSummary = {

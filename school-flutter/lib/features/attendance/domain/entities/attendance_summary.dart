@@ -105,6 +105,7 @@ class StudentAttendanceOption extends Equatable {
     required this.name,
     this.academicYearId,
     this.classId,
+    this.classIds = const [],
     this.isActive = false,
   });
 
@@ -112,10 +113,18 @@ class StudentAttendanceOption extends Equatable {
   final String name;
   final String? academicYearId;
   final String? classId;
+  final List<String> classIds;
   final bool isActive;
 
   @override
-  List<Object?> get props => [id, name, academicYearId, classId, isActive];
+  List<Object?> get props => [
+        id,
+        name,
+        academicYearId,
+        classId,
+        classIds,
+        isActive,
+      ];
 }
 
 class StudentAttendanceOptions extends Equatable {
@@ -131,7 +140,12 @@ class StudentAttendanceOptions extends Equatable {
 
   List<StudentAttendanceOption> sectionsForClass(String? classId) {
     if (classId == null || classId.isEmpty) return const [];
-    return sections.where((section) => section.classId == classId).toList();
+    return sections
+        .where(
+          (section) =>
+              section.classId == classId || section.classIds.contains(classId),
+        )
+        .toList();
   }
 
   @override
@@ -240,4 +254,284 @@ class StudentAttendanceSaveRequest extends Equatable {
 
   @override
   List<Object?> get props => [query, markHoliday, holidayReason, records];
+}
+
+enum AttendanceMode {
+  daily('DAILY'),
+  twiceDaily('TWICE_DAILY'),
+  periodWise('PERIOD_WISE');
+
+  const AttendanceMode(this.value);
+  final String value;
+
+  static AttendanceMode fromValue(String? value) {
+    return AttendanceMode.values.firstWhere(
+      (mode) => mode.value == value,
+      orElse: () => AttendanceMode.daily,
+    );
+  }
+}
+
+enum AttendanceUnitType {
+  day('DAY'),
+  slot('SLOT'),
+  period('PERIOD'),
+  timetableEntry('TIMETABLE_ENTRY');
+
+  const AttendanceUnitType(this.value);
+  final String value;
+
+  static AttendanceUnitType fromValue(String? value) {
+    return AttendanceUnitType.values.firstWhere(
+      (type) => type.value == value,
+      orElse: () => AttendanceUnitType.day,
+    );
+  }
+}
+
+enum AttendanceSlotType {
+  morning('MORNING'),
+  afternoon('AFTERNOON');
+
+  const AttendanceSlotType(this.value);
+  final String value;
+
+  static AttendanceSlotType? fromValue(String? value) {
+    return AttendanceSlotType.values
+        .where((type) => type.value == value)
+        .firstOrNull;
+  }
+}
+
+class AttendanceConfiguration extends Equatable {
+  const AttendanceConfiguration({
+    required this.id,
+    required this.mode,
+    required this.source,
+    this.scope,
+    this.academicYearId,
+    this.classId,
+    this.sectionId,
+    this.effectiveFrom,
+    this.effectiveTo,
+    this.isActive = true,
+  });
+
+  final String? id;
+  final AttendanceMode mode;
+  final String source;
+  final String? scope;
+  final String? academicYearId;
+  final String? classId;
+  final String? sectionId;
+  final DateTime? effectiveFrom;
+  final DateTime? effectiveTo;
+  final bool isActive;
+
+  @override
+  List<Object?> get props => [
+    id,
+    mode,
+    source,
+    scope,
+    academicYearId,
+    classId,
+    sectionId,
+    effectiveFrom,
+    effectiveTo,
+    isActive,
+  ];
+}
+
+class AttendanceUnit extends Equatable {
+  const AttendanceUnit({
+    required this.unitType,
+    required this.label,
+    required this.source,
+    this.slotId,
+    this.slotType,
+    this.periodId,
+    this.timetableEntryId,
+    this.subjectId,
+    this.subjectName,
+    this.teacherId,
+    this.teacherName,
+    this.startTime,
+    this.endTime,
+  });
+
+  final AttendanceUnitType unitType;
+  final String label;
+  final String source;
+  final String? slotId;
+  final AttendanceSlotType? slotType;
+  final String? periodId;
+  final String? timetableEntryId;
+  final String? subjectId;
+  final String? subjectName;
+  final String? teacherId;
+  final String? teacherName;
+  final String? startTime;
+  final String? endTime;
+
+  String get identityPart {
+    return switch (unitType) {
+      AttendanceUnitType.day => 'DAY',
+      AttendanceUnitType.slot =>
+        'SLOT:${slotType?.value ?? slotId ?? 'UNKNOWN'}',
+      AttendanceUnitType.period => 'PERIOD:${periodId ?? 'UNKNOWN'}',
+      AttendanceUnitType.timetableEntry =>
+        'TIMETABLE_ENTRY:${timetableEntryId ?? 'UNKNOWN'}',
+    };
+  }
+
+  @override
+  List<Object?> get props => [
+    unitType,
+    label,
+    source,
+    slotId,
+    slotType,
+    periodId,
+    timetableEntryId,
+    subjectId,
+    subjectName,
+    teacherId,
+    teacherName,
+    startTime,
+    endTime,
+  ];
+}
+
+class AttendanceScopeQuery extends Equatable {
+  const AttendanceScopeQuery({
+    required this.academicYearId,
+    required this.classId,
+    required this.sectionId,
+    required this.date,
+  });
+
+  final String academicYearId;
+  final String classId;
+  final String? sectionId;
+  final DateTime date;
+
+  String get dateKey => date.toIso8601String().split('T').first;
+
+  @override
+  List<Object?> get props => [academicYearId, classId, sectionId, date];
+}
+
+class AttendanceSheetQuery extends Equatable {
+  const AttendanceSheetQuery({required this.scope, required this.unit});
+
+  final AttendanceScopeQuery scope;
+  final AttendanceUnit unit;
+
+  String get offlineKey =>
+      'attendance:school:${scope.academicYearId}:${scope.classId}:${scope.sectionId ?? 'none'}:${scope.dateKey}:${unit.identityPart}';
+
+  @override
+  List<Object?> get props => [scope, unit];
+}
+
+class AttendanceSheetSession extends Equatable {
+  const AttendanceSheetSession({
+    required this.id,
+    required this.status,
+    required this.approvalStatus,
+    this.lockedAt,
+    this.lockReason,
+  });
+
+  final String id;
+  final String status;
+  final String approvalStatus;
+  final DateTime? lockedAt;
+  final String? lockReason;
+
+  bool get isLocked => status == 'CLOSED' || lockedAt != null;
+
+  @override
+  List<Object?> get props => [id, status, approvalStatus, lockedAt, lockReason];
+}
+
+class AttendanceStudentRecord extends Equatable {
+  const AttendanceStudentRecord({
+    required this.studentId,
+    required this.fullName,
+    required this.status,
+    this.recordId,
+    this.admissionNo,
+    this.rollNo,
+    this.manualOverrideReason,
+  });
+
+  final String studentId;
+  final String fullName;
+  final String status;
+  final String? recordId;
+  final String? admissionNo;
+  final String? rollNo;
+  final String? manualOverrideReason;
+
+  AttendanceStudentRecord copyWith({
+    String? status,
+    String? manualOverrideReason,
+  }) {
+    return AttendanceStudentRecord(
+      studentId: studentId,
+      fullName: fullName,
+      status: status ?? this.status,
+      recordId: recordId,
+      admissionNo: admissionNo,
+      rollNo: rollNo,
+      manualOverrideReason: manualOverrideReason ?? this.manualOverrideReason,
+    );
+  }
+
+  @override
+  List<Object?> get props => [
+    studentId,
+    fullName,
+    status,
+    recordId,
+    admissionNo,
+    rollNo,
+    manualOverrideReason,
+  ];
+}
+
+class AttendanceSheet extends Equatable {
+  const AttendanceSheet({
+    required this.configuration,
+    required this.unit,
+    required this.rows,
+    this.session,
+  });
+
+  final AttendanceConfiguration configuration;
+  final AttendanceUnit unit;
+  final AttendanceSheetSession? session;
+  final List<AttendanceStudentRecord> rows;
+
+  bool get isLocked => session?.isLocked ?? false;
+
+  @override
+  List<Object?> get props => [configuration, unit, session, rows];
+}
+
+class AttendanceSheetSaveRequest extends Equatable {
+  const AttendanceSheetSaveRequest({
+    required this.query,
+    required this.records,
+    this.deviceId = 'mobile',
+  });
+
+  final AttendanceSheetQuery query;
+  final List<AttendanceStudentRecord> records;
+  final String deviceId;
+
+  @override
+  List<Object?> get props => [query, records, deviceId];
 }

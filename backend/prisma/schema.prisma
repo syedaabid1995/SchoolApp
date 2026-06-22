@@ -76,6 +76,8 @@ model School {
   payrollPayments                PayrollPayment[]
   importJobs                     ImportJob[]
   faceProfiles                   FaceProfile[]
+  attendanceConfigurations       AttendanceConfiguration[]
+  attendanceSlots                AttendanceSlot[]
   attendancePeriods              AttendancePeriod[]
   attendanceSessions             AttendanceSession[]
   studentAttendanceSessions      StudentAttendanceSession[]
@@ -203,6 +205,7 @@ model User {
   faceProfilesCreated                    FaceProfile[]                   @relation("FaceProfileCreatedBy")
   faceProfilesApproved                   FaceProfile[]                   @relation("FaceProfileApprovedBy")
   attendanceSessions                     AttendanceSession[]
+  attendanceSessionsLocked               AttendanceSession[]             @relation("AttendanceSessionLockedBy")
   attendanceAudits                       AttendanceAudit[]               @relation("AttendanceAuditActor")
   markModerations                        MarkModeration[]
   markRevaluations                       MarkRevaluation[]
@@ -479,6 +482,8 @@ model AcademicYear {
   students                       Student[]
   studentEnrollments             StudentEnrollment[]
   attendanceHolidays             AttendanceHoliday[]
+  attendanceConfigurations       AttendanceConfiguration[]
+  attendanceSessions             AttendanceSession[]
   studentPromotionsFrom          StudentPromotion[]              @relation("PromotionFromSession")
   studentPromotionsTo            StudentPromotion[]              @relation("PromotionToSession")
   studentPromotionHistoriesFrom  StudentPromotionHistory[]       @relation("PromotionHistoryFromSession")
@@ -554,6 +559,8 @@ model Class {
   examPapers                     ExamPaper[]
   teacherAssignments             TeacherClassAssignment[]
   studentAttendanceSessions      StudentAttendanceSession[]
+  attendanceConfigurations       AttendanceConfiguration[]
+  attendanceSessions             AttendanceSession[]
   teacherAttendanceSubstitutions TeacherAttendanceSubstitution[]
   timetableEntries               TimetableEntry[]
   homeworks                      Homework[]
@@ -585,6 +592,8 @@ model Section {
   attendanceHolidays             AttendanceHoliday[]
   studentImportLogs              StudentImportLog[]
   exams                          Exam[]
+  attendanceConfigurations       AttendanceConfiguration[]
+  attendanceSessions             AttendanceSession[]
   studentAttendanceSessions      StudentAttendanceSession[]
   teacherAssignments             TeacherClassAssignment[]
   teacherAttendanceSubstitutions TeacherAttendanceSubstitution[]
@@ -1931,6 +1940,31 @@ enum AttendanceApprovalStatus {
   REJECTED
 }
 
+enum AttendanceMode {
+  DAILY
+  TWICE_DAILY
+  PERIOD_WISE
+}
+
+enum AttendanceConfigurationScope {
+  SCHOOL
+  ACADEMIC_YEAR
+  CLASS
+  SECTION
+}
+
+enum AttendanceUnitType {
+  DAY
+  SLOT
+  PERIOD
+  TIMETABLE_ENTRY
+}
+
+enum AttendanceSlotType {
+  MORNING
+  AFTERNOON
+}
+
 enum TimetableVersionStatus {
   DRAFT
   PUBLISHED
@@ -2363,6 +2397,62 @@ model TeacherAttendanceSubstitution {
   @@map("teacher_attendance_substitutions")
 }
 
+model AttendanceConfiguration {
+  id             String                       @id @default(uuid()) @db.Uuid
+  schoolId       String                       @map("school_id") @db.Uuid
+  academicYearId String?                      @map("academic_year_id") @db.Uuid
+  classId        String?                      @map("class_id") @db.Uuid
+  sectionId      String?                      @map("section_id") @db.Uuid
+  scope          AttendanceConfigurationScope
+  mode           AttendanceMode
+  effectiveFrom  DateTime                     @map("effective_from") @db.Date
+  effectiveTo    DateTime?                    @map("effective_to") @db.Date
+  isActive       Boolean                      @default(true) @map("is_active")
+  createdById    String?                      @map("created_by_id") @db.Uuid
+  updatedById    String?                      @map("updated_by_id") @db.Uuid
+  createdAt      DateTime                     @default(now()) @map("created_at")
+  updatedAt      DateTime                     @updatedAt @map("updated_at")
+
+  school       School              @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  academicYear AcademicYear?       @relation(fields: [academicYearId], references: [id], onDelete: Cascade)
+  class        Class?              @relation(fields: [classId], references: [id], onDelete: Cascade)
+  section      Section?            @relation(fields: [sectionId], references: [id], onDelete: Cascade)
+  slots        AttendanceSlot[]
+  sessions     AttendanceSession[]
+
+  @@index([schoolId, isActive])
+  @@index([schoolId, scope, isActive])
+  @@index([schoolId, academicYearId, classId, sectionId])
+  @@index([schoolId, effectiveFrom, effectiveTo])
+  @@index([schoolId, mode])
+  @@index([createdById])
+  @@index([updatedById])
+  @@map("attendance_configurations")
+}
+
+model AttendanceSlot {
+  id              String             @id @default(uuid()) @db.Uuid
+  schoolId        String             @map("school_id") @db.Uuid
+  configurationId String             @map("configuration_id") @db.Uuid
+  type            AttendanceSlotType
+  name            String
+  sequence        Int
+  startTime       String?            @map("start_time")
+  endTime         String?            @map("end_time")
+  isActive        Boolean            @default(true) @map("is_active")
+  createdAt       DateTime           @default(now()) @map("created_at")
+  updatedAt       DateTime           @updatedAt @map("updated_at")
+
+  school        School                  @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  configuration AttendanceConfiguration @relation(fields: [configurationId], references: [id], onDelete: Cascade)
+  sessions      AttendanceSession[]
+
+  @@unique([configurationId, type])
+  @@unique([configurationId, sequence])
+  @@index([schoolId, configurationId, isActive])
+  @@map("attendance_slots")
+}
+
 model AttendancePeriod {
   id                    String         @id @default(uuid()) @db.Uuid
   schoolId              String         @map("school_id") @db.Uuid
@@ -2388,30 +2478,53 @@ model AttendancePeriod {
 model AttendanceSession {
   id               String                   @id @default(uuid()) @db.Uuid
   schoolId         String                   @map("school_id") @db.Uuid
-  periodId         String                   @map("period_id") @db.Uuid
+  academicYearId   String?                  @map("academic_year_id") @db.Uuid
+  classId          String?                  @map("class_id") @db.Uuid
+  sectionId        String?                  @map("section_id") @db.Uuid
+  configurationId  String?                  @map("configuration_id") @db.Uuid
+  mode             AttendanceMode?
+  unitType         AttendanceUnitType?      @map("unit_type")
+  slotId           String?                  @map("slot_id") @db.Uuid
+  periodId         String?                  @map("period_id") @db.Uuid
   timetableEntryId String?                  @map("timetable_entry_id") @db.Uuid
   date             DateTime                 @map("date")
   status           AttendanceSessionStatus  @default(OPEN)
   approvalStatus   AttendanceApprovalStatus @default(PENDING) @map("approval_status")
   approvalReason   String?                  @map("approval_reason")
   startedById      String                   @map("started_by_id") @db.Uuid
+  lockedAt         DateTime?                @map("locked_at")
+  lockedById       String?                  @map("locked_by_id") @db.Uuid
+  lockReason       String?                  @map("lock_reason")
   deviceId         String                   @map("device_id")
   gpsLat           Float?                   @map("gps_lat")
   gpsLng           Float?                   @map("gps_lng")
   createdAt        DateTime                 @default(now()) @map("created_at")
   updatedAt        DateTime                 @updatedAt @map("updated_at")
 
-  school         School             @relation(fields: [schoolId], references: [id], onDelete: Cascade)
-  period         AttendancePeriod   @relation(fields: [periodId], references: [id], onDelete: Cascade)
-  timetableEntry TimetableEntry?    @relation(fields: [timetableEntryId], references: [id], onDelete: SetNull)
-  startedBy      User               @relation(fields: [startedById], references: [id], onDelete: Restrict)
+  school         School                   @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  academicYear   AcademicYear?            @relation(fields: [academicYearId], references: [id], onDelete: Cascade)
+  class          Class?                   @relation(fields: [classId], references: [id], onDelete: Cascade)
+  section        Section?                 @relation(fields: [sectionId], references: [id], onDelete: SetNull)
+  configuration  AttendanceConfiguration? @relation(fields: [configurationId], references: [id], onDelete: SetNull)
+  slot           AttendanceSlot?          @relation(fields: [slotId], references: [id], onDelete: SetNull)
+  period         AttendancePeriod?        @relation(fields: [periodId], references: [id], onDelete: SetNull)
+  timetableEntry TimetableEntry?          @relation(fields: [timetableEntryId], references: [id], onDelete: SetNull)
+  startedBy      User                     @relation(fields: [startedById], references: [id], onDelete: Restrict)
+  lockedBy       User?                    @relation("AttendanceSessionLockedBy", fields: [lockedById], references: [id], onDelete: SetNull)
   records        AttendanceRecord[]
 
-  @@unique([schoolId, periodId, date])
   @@index([schoolId])
-  @@index([periodId])
-  @@index([timetableEntryId])
+  @@index([schoolId, date])
+  @@index([schoolId, academicYearId, date])
+  @@index([schoolId, classId, sectionId, date])
+  @@index([schoolId, mode, date])
+  @@index([configurationId])
+  @@index([slotId, date])
+  @@index([periodId, date])
+  @@index([timetableEntryId, date])
+  @@index([approvalStatus, date])
   @@index([startedById])
+  @@index([lockedById])
   @@map("attendance_sessions")
 }
 
@@ -2493,6 +2606,8 @@ model AttendanceRecord {
   @@unique([sessionId, studentId])
   @@index([sessionId])
   @@index([studentId])
+  @@index([studentId, capturedAt])
+  @@index([sessionId, status])
   @@map("attendance_records")
 }
 

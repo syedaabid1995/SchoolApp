@@ -51,12 +51,11 @@ export const ensureTeacherAssignedToClassSection = async (params: {
     const section = await prisma.section.findFirst({
       where: {
         id: params.sectionId,
-        classId: params.classId,
-        class: { schoolId: params.schoolId },
+        schoolId: params.schoolId,
       },
       select: { id: true },
     });
-    if (!section) throw new HttpError(404, 'Section not found for class');
+    if (!section) throw new HttpError(404, 'Section not found');
   }
 
   if (params.date) {
@@ -122,12 +121,11 @@ export const createTeacherAttendanceSubstitution = async (params: {
     const section = await prisma.section.findFirst({
       where: {
         id: params.sectionId,
-        classId: params.classId,
-        class: { schoolId: params.schoolId },
+        schoolId: params.schoolId,
       },
       select: { id: true },
     });
-    if (!section) throw new HttpError(404, 'Section not found for class');
+    if (!section) throw new HttpError(404, 'Section not found');
   }
 
   const substitute = await prisma.teacherProfile.findFirst({

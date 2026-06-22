@@ -1,3 +1,4 @@
+import '../../../../core/utils/network_image_url.dart';
 import '../../domain/entities/staff_user.dart';
 
 class StaffUserModel extends StaffUser {
@@ -24,7 +25,8 @@ class StaffUserModel extends StaffUser {
     final school = nestedUser['school'] is Map<String, dynamic>
         ? nestedUser['school'] as Map<String, dynamic>
         : null;
-    final permissions = nestedUser['permissionCodes'] ?? nestedUser['permissions'];
+    final permissions =
+        nestedUser['permissionCodes'] ?? nestedUser['permissions'];
     final role = (nestedUser['role'] ?? nestedUser['roleName'])?.toString();
     final name = (nestedUser['displayName'] ?? nestedUser['name'])?.toString();
 
@@ -46,7 +48,9 @@ class StaffUserModel extends StaffUser {
       },
       schoolId: (nestedUser['schoolId'] ?? school?['id'])?.toString(),
       schoolName: school?['name']?.toString(),
-      photoUrl: teacherProfile?['photoUrl']?.toString(),
+      photoUrl: normalizeNetworkImageUrl(
+        teacherProfile?['photoUrl']?.toString(),
+      ),
     );
   }
 }
