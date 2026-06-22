@@ -11,7 +11,7 @@ class AppConfig {
 
   static const attendanceV2 = bool.fromEnvironment(
     'ATTENDANCE_V2',
-    defaultValue: false,
+    defaultValue: true,
   );
 
   static const connectTimeout = Duration(seconds: 20);

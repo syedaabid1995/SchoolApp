@@ -49,8 +49,14 @@ const resolveStaffAttendanceConfiguration = async (schoolId: string, roleName: R
       schoolId,
       isActive: true,
       effectiveFrom: { lte: date },
-      OR: [{ effectiveTo: null }, { effectiveTo: { gte: date } }],
-      roleName: { in: roleName ? [roleName, null] : [null] },
+      AND: [
+        { OR: [{ effectiveTo: null }, { effectiveTo: { gte: date } }] },
+        {
+          OR: roleName
+            ? [{ roleName }, { roleName: null }]
+            : [{ roleName: null }],
+        },
+      ],
     },
     orderBy: [{ roleName: 'desc' }, { effectiveFrom: 'desc' }, { updatedAt: 'desc' }],
   });
