@@ -72,6 +72,7 @@ model School {
   staffTimelines                 StaffTimeline[]
   staffAttendances               StaffAttendance[]
   staffAttendanceHolidays        StaffAttendanceHoliday[]
+  staffAttendanceConfigurations  StaffAttendanceConfiguration[]
   payrolls                       Payroll[]
   payrollPayments                PayrollPayment[]
   importJobs                     ImportJob[]
@@ -251,6 +252,8 @@ model User {
   staffTimelinesCreated                  StaffTimeline[]                 @relation("StaffTimelineCreatedBy")
   staffAttendancesMarked                 StaffAttendance[]               @relation("StaffAttendanceMarkedBy")
   staffAttendanceHolidaysCreated         StaffAttendanceHoliday[]        @relation("StaffAttendanceHolidayCreatedBy")
+  staffAttendanceConfigurationsCreated   StaffAttendanceConfiguration[]   @relation("StaffAttendanceConfigurationCreatedBy")
+  staffAttendanceConfigurationsUpdated   StaffAttendanceConfiguration[]   @relation("StaffAttendanceConfigurationUpdatedBy")
   schoolOnboardingChecklistCompletions   SchoolOnboardingChecklist[]     @relation("SchoolOnboardingChecklistCompletedBy")
   payrollsGenerated                      Payroll[]                       @relation("PayrollGeneratedBy")
   payrollPaymentsRecorded                PayrollPayment[]                @relation("PayrollPaymentRecordedBy")
@@ -1995,6 +1998,8 @@ enum StaffAttendanceStatus {
   HOLIDAY
   HALF_DAY
   LEAVE
+  LOP
+  CASUAL_LEAVE
 }
 
 enum PayrollStatus {
@@ -2247,20 +2252,52 @@ model StaffAttendance {
   schoolId       String                @map("school_id") @db.Uuid
   staffId        String                @map("staff_id") @db.Uuid
   attendanceDate DateTime              @map("attendance_date")
+  mode           AttendanceMode        @default(DAILY)
+  unitType       AttendanceUnitType    @default(DAY) @map("unit_type")
+  slotType       AttendanceSlotType?   @map("slot_type")
+  periodId       String?               @map("period_id") @db.Uuid
+  unitKey        String                @default("DAY") @map("unit_key")
   status         StaffAttendanceStatus
   note           String?
   markedById     String                @map("marked_by_id") @db.Uuid
   createdAt      DateTime              @default(now()) @map("created_at")
   updatedAt      DateTime              @updatedAt @map("updated_at")
 
-  school   School         @relation(fields: [schoolId], references: [id], onDelete: Cascade)
-  staff    TeacherProfile @relation(fields: [staffId], references: [id], onDelete: Cascade)
-  markedBy User           @relation("StaffAttendanceMarkedBy", fields: [markedById], references: [id], onDelete: Restrict)
+  school   School            @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  staff    TeacherProfile    @relation(fields: [staffId], references: [id], onDelete: Cascade)
+  period   AttendancePeriod? @relation(fields: [periodId], references: [id], onDelete: SetNull)
+  markedBy User              @relation("StaffAttendanceMarkedBy", fields: [markedById], references: [id], onDelete: Restrict)
 
-  @@unique([schoolId, staffId, attendanceDate])
+  @@unique([schoolId, staffId, attendanceDate, unitKey])
   @@index([schoolId, attendanceDate])
+  @@index([schoolId, attendanceDate, unitKey])
   @@index([staffId, attendanceDate])
+  @@index([periodId])
   @@map("staff_attendances")
+}
+
+model StaffAttendanceConfiguration {
+  id            String         @id @default(uuid()) @db.Uuid
+  schoolId      String         @map("school_id") @db.Uuid
+  roleName      RoleName?      @map("role_name")
+  mode          AttendanceMode
+  effectiveFrom DateTime       @map("effective_from") @db.Date
+  effectiveTo   DateTime?      @map("effective_to") @db.Date
+  isActive      Boolean        @default(true) @map("is_active")
+  createdById   String?        @map("created_by_id") @db.Uuid
+  updatedById   String?        @map("updated_by_id") @db.Uuid
+  createdAt     DateTime       @default(now()) @map("created_at")
+  updatedAt     DateTime       @updatedAt @map("updated_at")
+
+  school    School @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  createdBy User?  @relation("StaffAttendanceConfigurationCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  updatedBy User?  @relation("StaffAttendanceConfigurationUpdatedBy", fields: [updatedById], references: [id], onDelete: SetNull)
+
+  @@index([schoolId, roleName, isActive])
+  @@index([schoolId, effectiveFrom, effectiveTo])
+  @@index([createdById])
+  @@index([updatedById])
+  @@map("staff_attendance_configurations")
 }
 
 model StaffAttendanceHoliday {
@@ -2467,6 +2504,7 @@ model AttendancePeriod {
 
   school           School              @relation(fields: [schoolId], references: [id], onDelete: Cascade)
   sessions         AttendanceSession[]
+  staffAttendances StaffAttendance[]
   timetableEntries TimetableEntry[]
 
   @@unique([schoolId, type, name])

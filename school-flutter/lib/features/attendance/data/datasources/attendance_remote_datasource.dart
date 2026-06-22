@@ -44,15 +44,33 @@ class AttendanceRemoteDatasource {
   Future<TeacherAttendanceRecordModel> markSelfAttendance({
     required String status,
     DateTime? date,
+    AttendanceUnit? unit,
   }) async {
     final response = await _dio.post<Map<String, dynamic>>(
       ApiEndpoints.teacherSelfAttendance,
       data: {
         'status': status,
         if (date != null) 'date': DateFormat('yyyy-MM-dd').format(date),
+        if (unit != null) 'unitType': unit.unitType.value,
+        if (unit?.slotType != null) 'slotType': unit!.slotType!.value,
+        if (unit?.periodId != null) 'periodId': unit!.periodId,
       },
     );
     return TeacherAttendanceRecordModel.fromJson(
+      response.data ?? const <String, dynamic>{},
+    );
+  }
+
+  Future<SelfAttendanceOptionsModel> getSelfAttendanceOptions({
+    DateTime? date,
+  }) async {
+    final response = await _dio.get<Map<String, dynamic>>(
+      ApiEndpoints.teacherSelfAttendanceOptions,
+      queryParameters: {
+        if (date != null) 'fromDate': DateFormat('yyyy-MM-dd').format(date),
+      },
+    );
+    return SelfAttendanceOptionsModel.fromJson(
       response.data ?? const <String, dynamic>{},
     );
   }

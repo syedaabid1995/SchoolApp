@@ -426,6 +426,13 @@ class _V2AttendanceSheet extends ConsumerWidget {
                 'This sheet is locked${sheet.session?.lockReason == null ? '' : ': ${sheet.session!.lockReason}'}',
             icon: Icons.lock_outline,
           ),
+        if (!canSave && !isLocked)
+          const _InfoPanel(
+            message:
+                'You can view this attendance sheet, but your account does not have permission to edit attendance.',
+            icon: Icons.lock_outline,
+          ),
+        if (isLocked || !canSave) const SizedBox(height: AppSpacing.sm),
         _V2SummaryBar(rows: rows),
         const SizedBox(height: AppSpacing.sm),
         _MarkAllBar(

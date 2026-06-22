@@ -223,6 +223,8 @@ const DEFAULT_ROLE_PERMISSION_CODES: Record<RoleName, string[]> = {
     'leave.balance.view',
     'idcards.view',
     'attendance.view',
+    'attendance.create',
+    'attendance.edit',
     'support.view',
     'plans.view',
   ],

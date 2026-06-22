@@ -87,6 +87,12 @@ class TeacherAttendanceRecord extends Equatable {
     required this.status,
     this.teacherId,
     this.overrideReason,
+    this.mode = AttendanceMode.daily,
+    this.unitType = AttendanceUnitType.day,
+    this.slotType,
+    this.periodId,
+    this.periodName,
+    this.unitKey = 'DAY',
   });
 
   final String id;
@@ -94,9 +100,27 @@ class TeacherAttendanceRecord extends Equatable {
   final String status;
   final String? teacherId;
   final String? overrideReason;
+  final AttendanceMode mode;
+  final AttendanceUnitType unitType;
+  final AttendanceSlotType? slotType;
+  final String? periodId;
+  final String? periodName;
+  final String unitKey;
 
   @override
-  List<Object?> get props => [id, date, status, teacherId, overrideReason];
+  List<Object?> get props => [
+    id,
+    date,
+    status,
+    teacherId,
+    overrideReason,
+    mode,
+    unitType,
+    slotType,
+    periodId,
+    periodName,
+    unitKey,
+  ];
 }
 
 class StudentAttendanceOption extends Equatable {
@@ -118,13 +142,13 @@ class StudentAttendanceOption extends Equatable {
 
   @override
   List<Object?> get props => [
-        id,
-        name,
-        academicYearId,
-        classId,
-        classIds,
-        isActive,
-      ];
+    id,
+    name,
+    academicYearId,
+    classId,
+    classIds,
+    isActive,
+  ];
 }
 
 class StudentAttendanceOptions extends Equatable {
@@ -401,6 +425,19 @@ class AttendanceUnit extends Equatable {
     startTime,
     endTime,
   ];
+}
+
+class SelfAttendanceOptions extends Equatable {
+  const SelfAttendanceOptions({
+    required this.configuration,
+    required this.units,
+  });
+
+  final AttendanceConfiguration configuration;
+  final List<AttendanceUnit> units;
+
+  @override
+  List<Object?> get props => [configuration, units];
 }
 
 class AttendanceScopeQuery extends Equatable {

@@ -9,7 +9,9 @@ abstract class AttendanceRepository {
   Future<TeacherAttendanceRecord> markSelfAttendance({
     required String status,
     DateTime? date,
+    AttendanceUnit? unit,
   });
+  Future<SelfAttendanceOptions> getSelfAttendanceOptions({DateTime? date});
   Future<StudentAttendanceOptions> getStudentAttendanceOptions();
   Future<StudentAttendanceSheet> loadStudentAttendance(
     StudentAttendanceQuery query,

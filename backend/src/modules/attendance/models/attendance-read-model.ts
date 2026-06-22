@@ -21,6 +21,8 @@ export type AttendanceStatus =
   | 'EXCUSED'
   | 'HOLIDAY'
   | 'LEAVE'
+  | 'LOP'
+  | 'CASUAL_LEAVE'
   | 'UNMARKED';
 
 export type StudentDailyAttendance = {

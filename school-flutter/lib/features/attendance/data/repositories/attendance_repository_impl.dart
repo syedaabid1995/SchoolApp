@@ -77,9 +77,14 @@ class AttendanceRepositoryImpl implements AttendanceRepository {
   Future<TeacherAttendanceRecord> markSelfAttendance({
     required String status,
     DateTime? date,
+    AttendanceUnit? unit,
   }) async {
     try {
-      return await _remote.markSelfAttendance(status: status, date: date);
+      return await _remote.markSelfAttendance(
+        status: status,
+        date: date,
+        unit: unit,
+      );
     } catch (error) {
       final failure = ErrorHandler.toFailure(error);
       if (failure is NetworkFailure && _mutationQueue != null) {
@@ -88,17 +93,36 @@ class AttendanceRepositoryImpl implements AttendanceRepository {
           date: date ?? DateTime.now(),
           status: status,
           overrideReason: 'Queued for sync',
+          unitType: unit?.unitType ?? AttendanceUnitType.day,
+          slotType: unit?.slotType,
+          periodId: unit?.periodId,
+          periodName: unit?.label,
+          unitKey: unit?.identityPart ?? 'DAY',
         );
         await _mutationQueue.enqueue(
           type: 'attendance.self',
           payload: {
             'status': status,
             if (date != null) 'date': date.toIso8601String().split('T').first,
+            if (unit != null) 'unitType': unit.unitType.value,
+            if (unit?.slotType != null) 'slotType': unit!.slotType!.value,
+            if (unit?.periodId != null) 'periodId': unit!.periodId,
           },
         );
         return record;
       }
       throw failure;
+    }
+  }
+
+  @override
+  Future<SelfAttendanceOptions> getSelfAttendanceOptions({
+    DateTime? date,
+  }) async {
+    try {
+      return await _remote.getSelfAttendanceOptions(date: date);
+    } catch (error) {
+      throw ErrorHandler.toFailure(error);
     }
   }
 

@@ -12,12 +12,14 @@ import {
   loadStaffAttendance,
   saveStaffAttendance,
   type AttendanceStaffRow,
+  type StaffAttendanceUnit,
   type StaffAttendanceReportRow,
   type StaffAttendanceStatus,
 } from '../../../../services/staff.service';
 
 const roles = ['SCHOOL_ADMIN', 'TEACHER', 'ACCOUNTANT', 'LIBRARIAN', 'STAFF'];
-const statuses: StaffAttendanceStatus[] = ['PRESENT', 'LATE', 'ABSENT', 'HOLIDAY', 'HALF_DAY', 'LEAVE'];
+const statuses: StaffAttendanceStatus[] = ['PRESENT', 'LATE', 'ABSENT', 'HOLIDAY', 'HALF_DAY', 'LEAVE', 'LOP', 'CASUAL_LEAVE'];
+const futureStatuses: StaffAttendanceStatus[] = ['ABSENT', 'LOP', 'CASUAL_LEAVE', 'PRESENT'];
 
 const statusLabels: Record<string, string> = {
   PRESENT: 'Present',
@@ -26,6 +28,8 @@ const statusLabels: Record<string, string> = {
   HOLIDAY: 'Holiday',
   HALF_DAY: 'Half Day',
   LEAVE: 'Leave',
+  LOP: 'LOP',
+  CASUAL_LEAVE: 'Casual Leave',
   UNMARKED: 'Unmarked',
 };
 
@@ -36,10 +40,13 @@ const statusClass: Record<string, string> = {
   HOLIDAY: 'bg-violet-50 text-violet-700 border-violet-200',
   HALF_DAY: 'bg-sky-50 text-sky-700 border-sky-200',
   LEAVE: 'bg-indigo-50 text-indigo-700 border-indigo-200',
+  LOP: 'bg-orange-50 text-orange-700 border-orange-200',
+  CASUAL_LEAVE: 'bg-indigo-50 text-indigo-700 border-indigo-200',
   UNMARKED: 'bg-slate-50 text-slate-500 border-slate-200',
 };
 
 const today = () => new Date().toISOString().slice(0, 10);
+const isFuture = (date: string) => date > today();
 
 const staffName = (row: AttendanceStaffRow | StaffAttendanceReportRow['staff']) => row.fullName ?? `${row.firstName ?? ''} ${row.lastName ?? ''}`.trim();
 
@@ -101,6 +108,14 @@ export default function StaffAttendancePage() {
   const [holiday, setHoliday] = useState(false);
   const [holidayReason, setHolidayReason] = useState('');
   const [expanded, setExpanded] = useState<string | null>(null);
+  const [resolvedMode, setResolvedMode] = useState<string>('DAILY');
+  const [resolvedSource, setResolvedSource] = useState<string>('DEFAULT');
+  const [units, setUnits] = useState<StaffAttendanceUnit[]>([]);
+  const [selectedUnitKey, setSelectedUnitKey] = useState('');
+  const [calendarCell, setCalendarCell] = useState<{
+    staff: StaffAttendanceReportRow['staff'];
+    day: StaffAttendanceReportRow['daily'][number];
+  } | null>(null);
 
   const { data: session, isLoading: sessionLoading } = useQuery({ queryKey: ['session'], queryFn: getSession });
   const isSchoolAdmin = session?.role === 'SCHOOL_ADMIN';
@@ -112,8 +127,16 @@ export default function StaffAttendancePage() {
   const staffQuery = useQuery({ queryKey: ['staff-options', criteria.role], queryFn: () => listStaff({ limit: 100, role: criteria.role || undefined }), enabled: canViewAttendance });
 
   const attendanceQuery = useQuery({
-    queryKey: ['staff-attendance', criteria.role, criteria.staffId, criteria.date],
-    queryFn: () => loadStaffAttendance({ role: criteria.role || undefined, staffId: criteria.staffId || undefined, date: criteria.date }),
+    queryKey: ['staff-attendance', criteria.role, criteria.staffId, criteria.date, selectedUnitKey],
+    queryFn: () =>
+      loadStaffAttendance({
+        role: criteria.role || undefined,
+        staffId: criteria.staffId || undefined,
+        date: criteria.date,
+        unitType: selectedUnit?.unitType,
+        slotType: selectedUnit?.slotType,
+        periodId: selectedUnit?.periodId,
+      }),
     enabled: false,
   });
 
@@ -129,21 +152,33 @@ export default function StaffAttendancePage() {
     const data = await attendanceQuery.refetch();
     if (data.data) {
       setRows(data.data.staff);
+      setResolvedMode(data.data.configuration.mode);
+      setResolvedSource(data.data.configuration.source);
+      setUnits(data.data.units);
+      setSelectedUnitKey(data.data.selectedUnit.unitKey);
       setHoliday(Boolean(data.data.holiday));
       setHolidayReason((data.data.holiday as any)?.reason ?? '');
     }
   };
+
+  const selectedUnit = units.find((unit) => unit.unitKey === selectedUnitKey) ?? units[0];
 
   const saveMutation = useMutation({
     mutationFn: () =>
       saveStaffAttendance({
         role: criteria.role || null,
         date: criteria.date,
+        unitType: selectedUnit?.unitType,
+        slotType: selectedUnit?.slotType,
+        periodId: selectedUnit?.periodId,
         markHoliday: holiday,
         holidayReason,
         records: rows.map((row) => ({ staffId: row.id, status: row.status, note: row.note ?? '' })),
       }),
-    onSuccess: () => notify.success('Attendance saved', holiday ? 'Holiday was marked for the selected staff group.' : 'Staff attendance was saved.'),
+    onSuccess: () => {
+      notify.success('Attendance saved', holiday ? 'Holiday was marked for the selected staff group.' : 'Staff attendance was saved.');
+      reportQuery.refetch();
+    },
     onError: (error: any) => notify.error('Unable to save attendance', error?.response?.data?.error?.message ?? 'Please try again.'),
   });
 
@@ -215,12 +250,41 @@ export default function StaffAttendancePage() {
               <div>
                 <h2 className="text-lg font-bold text-slate-950">Mark Attendance</h2>
                 <p className="text-sm text-slate-500">{rows.length ? `${rows.length} staff loaded` : 'Load staff to mark attendance.'}</p>
+                <p className="mt-1 text-xs font-bold uppercase tracking-wide text-slate-500">Mode: {resolvedMode.replace('_', ' ')} · Source: {resolvedSource}</p>
               </div>
               <label className="flex items-center gap-2 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-sm font-bold text-amber-700">
                 <input type="checkbox" checked={holiday} onChange={(event) => setHoliday(event.target.checked)} disabled={!canMarkAttendance} />
                 Mark Holiday
               </label>
             </div>
+            {units.length ? (
+              <div className="mb-4 rounded-2xl border border-slate-200 bg-slate-50 p-3">
+                <label className="mb-2 block text-xs font-bold uppercase tracking-wide text-slate-500">Attendance Unit</label>
+                <select
+                  value={selectedUnitKey}
+                  onChange={async (event) => {
+                    setSelectedUnitKey(event.target.value);
+                    const unit = units.find((item) => item.unitKey === event.target.value);
+                    if (unit) {
+                      const data = await loadStaffAttendance({
+                        role: criteria.role || undefined,
+                        staffId: criteria.staffId || undefined,
+                        date: criteria.date,
+                        unitType: unit.unitType,
+                        slotType: unit.slotType,
+                        periodId: unit.periodId,
+                      });
+                      setRows(data.staff);
+                      setHoliday(Boolean(data.holiday));
+                      setHolidayReason((data.holiday as any)?.reason ?? '');
+                    }
+                  }}
+                  className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm"
+                >
+                  {units.map((unit) => <option key={unit.unitKey} value={unit.unitKey}>{unit.label}{unit.startTime && unit.endTime ? ` (${unit.startTime} - ${unit.endTime})` : ''}</option>)}
+                </select>
+              </div>
+            ) : null}
             {holiday ? (
               <input value={holidayReason} onChange={(event) => setHolidayReason(event.target.value)} placeholder="Holiday reason" className="mb-4 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm" />
             ) : null}
@@ -246,7 +310,7 @@ export default function StaffAttendancePage() {
                         <td className="px-4 py-3">{String(row.role ?? row.roleName ?? '').replace('_', ' ')}</td>
                         <td className="px-4 py-3">
                           <select disabled={holiday || !canMarkAttendance} value={row.status} onChange={(event) => setRows((current) => current.map((item) => item.id === row.id ? { ...item, status: event.target.value as StaffAttendanceStatus } : item))} className="rounded-xl border border-slate-200 px-3 py-2 text-sm disabled:bg-slate-50">
-                            {statuses.map((status) => <option key={status} value={status}>{statusLabels[status]}</option>)}
+                            {(isFuture(criteria.date) ? futureStatuses : statuses).map((status) => <option key={status} value={status} disabled={isFuture(criteria.date) && status === 'PRESENT'}>{statusLabels[status]}</option>)}
                           </select>
                         </td>
                         <td className="px-4 py-3">
@@ -307,9 +371,15 @@ export default function StaffAttendancePage() {
                             <td colSpan={9} className="bg-slate-50 px-4 py-4">
                               <div className="flex flex-wrap gap-2">
                                 {row.daily.map((day) => (
-                                  <span key={day.day} title={day.note ?? ''} className={`rounded-lg border px-2 py-1 text-xs font-bold ${statusClass[day.status] ?? statusClass.UNMARKED}`}>
-                                    {day.day}: {statusLabels[day.status] ?? day.status}
-                                  </span>
+                                  <button
+                                    type="button"
+                                    key={day.day}
+                                    title={day.holiday?.details ?? day.holiday?.title ?? day.note ?? ''}
+                                    onClick={() => setCalendarCell({ staff: row.staff, day })}
+                                    className={`rounded-lg border px-2 py-1 text-left text-xs font-bold ${statusClass[day.status] ?? statusClass.UNMARKED}`}
+                                  >
+                                    {day.day}: {day.holiday?.title ?? statusLabels[day.status] ?? day.status}
+                                  </button>
                                 ))}
                               </div>
                             </td>
@@ -325,6 +395,47 @@ export default function StaffAttendancePage() {
             </div>
           </section>
         )}
+        {calendarCell ? (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/40 p-4">
+            <div className="w-full max-w-md rounded-2xl bg-white p-5 shadow-2xl">
+              <div className="mb-4 flex items-start justify-between gap-3">
+                <div>
+                  <h3 className="text-lg font-black text-slate-950">{staffName(calendarCell.staff)}</h3>
+                  <p className="text-sm text-slate-500">Day {calendarCell.day.day} · {statusLabels[calendarCell.day.status] ?? calendarCell.day.status}</p>
+                </div>
+                <button type="button" onClick={() => setCalendarCell(null)} className="rounded-lg border border-slate-200 px-3 py-1 text-sm font-bold">Close</button>
+              </div>
+              {calendarCell.day.holiday ? (
+                <div className="mb-3 rounded-xl border border-violet-200 bg-violet-50 p-3 text-sm text-violet-800">
+                  <p className="font-black">{calendarCell.day.holiday.title}</p>
+                  {calendarCell.day.holiday.details ? <p>{calendarCell.day.holiday.details}</p> : null}
+                  {calendarCell.day.holiday.type ? <p className="text-xs font-bold uppercase">{calendarCell.day.holiday.type}</p> : null}
+                </div>
+              ) : null}
+              <div className="space-y-2">
+                {(calendarCell.day.units?.length ? calendarCell.day.units : [{ unitKey: 'DAY', label: 'Day', status: calendarCell.day.status, note: calendarCell.day.note }]).map((unit) => (
+                  <div key={unit.unitKey} className="flex items-center justify-between rounded-xl border border-slate-200 px-3 py-2 text-sm">
+                    <span className="font-bold text-slate-700">{unit.label}</span>
+                    <span className={`rounded-full border px-2 py-1 text-xs font-bold ${statusClass[unit.status] ?? statusClass.UNMARKED}`}>{statusLabels[unit.status] ?? unit.status}</span>
+                  </div>
+                ))}
+              </div>
+              <div className="mt-4 flex justify-end gap-2">
+                <ShellButton
+                  onClick={() => {
+                    const date = `${criteria.year}-${String(criteria.month).padStart(2, '0')}-${String(calendarCell.day.day).padStart(2, '0')}`;
+                    setCriteria({ ...criteria, staffId: calendarCell.staff.id, date });
+                    setActiveTab('mark');
+                    setRows([]);
+                    setCalendarCell(null);
+                  }}
+                >
+                  Open for Marking
+                </ShellButton>
+              </div>
+            </div>
+          </div>
+        ) : null}
       </div>
     </div>
   );

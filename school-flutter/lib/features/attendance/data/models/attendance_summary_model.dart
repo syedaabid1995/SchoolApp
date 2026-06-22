@@ -94,6 +94,12 @@ class TeacherAttendanceRecordModel extends TeacherAttendanceRecord {
     required super.status,
     super.teacherId,
     super.overrideReason,
+    super.mode,
+    super.unitType,
+    super.slotType,
+    super.periodId,
+    super.periodName,
+    super.unitKey,
   });
 
   factory TeacherAttendanceRecordModel.fromJson(Map<String, dynamic> json) {
@@ -103,6 +109,12 @@ class TeacherAttendanceRecordModel extends TeacherAttendanceRecord {
       status: json['status']?.toString() ?? 'PRESENT',
       teacherId: json['teacherId']?.toString(),
       overrideReason: json['overrideReason']?.toString(),
+      mode: AttendanceMode.fromValue(json['mode']?.toString()),
+      unitType: AttendanceUnitType.fromValue(json['unitType']?.toString()),
+      slotType: AttendanceSlotType.fromValue(json['slotType']?.toString()),
+      periodId: json['periodId']?.toString(),
+      periodName: json['periodName']?.toString(),
+      unitKey: json['unitKey']?.toString() ?? 'DAY',
     );
   }
 
@@ -112,6 +124,12 @@ class TeacherAttendanceRecordModel extends TeacherAttendanceRecord {
     'status': status,
     'teacherId': teacherId,
     'overrideReason': overrideReason,
+    'mode': mode.value,
+    'unitType': unitType.value,
+    'slotType': slotType?.value,
+    'periodId': periodId,
+    'periodName': periodName,
+    'unitKey': unitKey,
   };
 }
 
@@ -190,7 +208,8 @@ class StudentAttendanceOptionModel extends StudentAttendanceOption {
     return StudentAttendanceOptionModel(
       id: json['id']?.toString() ?? '',
       name: json['name']?.toString() ?? '',
-      classId: json['classId']?.toString() ??
+      classId:
+          json['classId']?.toString() ??
           (mappedClassIds.isEmpty ? null : mappedClassIds.first),
       classIds: mappedClassIds,
     );
@@ -365,6 +384,27 @@ class AttendanceUnitModel extends AttendanceUnit {
       'startTime': startTime,
       'endTime': endTime,
     });
+}
+
+class SelfAttendanceOptionsModel extends SelfAttendanceOptions {
+  const SelfAttendanceOptionsModel({
+    required super.configuration,
+    required super.units,
+  });
+
+  factory SelfAttendanceOptionsModel.fromJson(Map<String, dynamic> json) {
+    final configuration = json['configuration'] is Map
+        ? _stringMap(json['configuration'] as Map)
+        : const <String, dynamic>{};
+    final units = json['units'] is List ? json['units'] as List : const [];
+    return SelfAttendanceOptionsModel(
+      configuration: AttendanceConfigurationModel.fromJson(configuration),
+      units: [
+        for (final unit in units)
+          if (unit is Map) AttendanceUnitModel.fromJson(_stringMap(unit)),
+      ],
+    );
+  }
 }
 
 class AttendanceSheetSessionModel extends AttendanceSheetSession {

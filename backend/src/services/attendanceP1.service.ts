@@ -1,4 +1,4 @@
-import type { LeaveRequestStatus, RoleName, StudentAttendanceStatus, TeacherSelfAttendanceStatus, Prisma } from '@prisma/client';
+import type { AttendanceMode, AttendanceUnitType, LeaveRequestStatus, RoleName, StudentAttendanceStatus, TeacherSelfAttendanceStatus, Prisma } from '@prisma/client';
 import { prisma } from '../config/db';
 import { HttpError } from '../middlewares/error.middleware';
 import { attendanceReadService } from '../modules/attendance/services/attendance-read.service';
@@ -11,6 +11,77 @@ const normalizeDate = (value?: Date | string | null) => {
 
 const endOfDay = (value: Date) => {
   return new Date(Date.UTC(value.getUTCFullYear(), value.getUTCMonth(), value.getUTCDate(), 23, 59, 59, 999));
+};
+
+const staffAttendanceUnitKey = (unitType: AttendanceUnitType, slotType?: 'MORNING' | 'AFTERNOON' | null, periodId?: string | null) => {
+  if (unitType === 'SLOT') return `SLOT:${slotType ?? 'MORNING'}`;
+  if (unitType === 'PERIOD') return `PERIOD:${periodId ?? 'UNKNOWN'}`;
+  return 'DAY';
+};
+
+const defaultSelfAttendancePeriods = [
+  { name: '1ST PERIOD', startTime: '09:00', endTime: '09:45' },
+  { name: '2ND PERIOD', startTime: '09:45', endTime: '10:30' },
+  { name: '3RD PERIOD', startTime: '10:45', endTime: '11:30' },
+  { name: '4TH PERIOD', startTime: '11:30', endTime: '12:15' },
+  { name: '5TH PERIOD', startTime: '13:00', endTime: '13:45' },
+  { name: '6TH PERIOD', startTime: '13:45', endTime: '14:30' },
+  { name: '7TH PERIOD', startTime: '14:30', endTime: '15:15' },
+];
+
+const ensureSelfAttendancePeriods = async (schoolId: string) => {
+  for (const period of defaultSelfAttendancePeriods) {
+    await prisma.attendancePeriod.upsert({
+      where: { schoolId_type_name: { schoolId, type: 'CLASS_TIME', name: period.name } },
+      update: { startTime: period.startTime, endTime: period.endTime },
+      create: { schoolId, type: 'CLASS_TIME', name: period.name, startTime: period.startTime, endTime: period.endTime },
+    });
+  }
+  return prisma.attendancePeriod.findMany({
+    where: { schoolId, type: 'CLASS_TIME' },
+    orderBy: [{ startTime: 'asc' }],
+  });
+};
+
+const resolveStaffAttendanceConfiguration = async (schoolId: string, roleName: RoleName | null, date: Date) => {
+  const rows = await prisma.staffAttendanceConfiguration.findMany({
+    where: {
+      schoolId,
+      isActive: true,
+      effectiveFrom: { lte: date },
+      OR: [{ effectiveTo: null }, { effectiveTo: { gte: date } }],
+      roleName: { in: roleName ? [roleName, null] : [null] },
+    },
+    orderBy: [{ roleName: 'desc' }, { effectiveFrom: 'desc' }, { updatedAt: 'desc' }],
+  });
+  const selected = rows.find((row) => row.roleName === roleName) ?? rows.find((row) => row.roleName === null);
+  return {
+    id: selected?.id ?? null,
+    mode: selected?.mode ?? 'DAILY',
+    source: selected ? (selected.roleName ? 'ROLE' : 'SCHOOL') : 'DEFAULT',
+    configuration: selected ?? null,
+  };
+};
+
+const resolveStaffAttendanceUnits = async (schoolId: string, mode: AttendanceMode) => {
+  if (mode === 'TWICE_DAILY') {
+    return [
+      { unitType: 'SLOT', slotType: 'MORNING', label: 'Morning', unitKey: 'SLOT:MORNING' },
+      { unitType: 'SLOT', slotType: 'AFTERNOON', label: 'Afternoon', unitKey: 'SLOT:AFTERNOON' },
+    ];
+  }
+  if (mode === 'PERIOD_WISE') {
+    const periods = await ensureSelfAttendancePeriods(schoolId);
+    return periods.map((period) => ({
+      unitType: 'PERIOD',
+      periodId: period.id,
+      label: period.name,
+      startTime: period.startTime,
+      endTime: period.endTime,
+      unitKey: `PERIOD:${period.id}`,
+    }));
+  }
+  return [{ unitType: 'DAY', label: 'Day', unitKey: 'DAY' }];
 };
 
 export const isAdminRole = (role?: string | null) => role === 'SUPER_ADMIN' || role === 'SCHOOL_ADMIN';
@@ -32,7 +103,7 @@ const isSameRecordSet = (
 const getTeacherProfile = async (schoolId: string, userId: string) => {
   const profile = await prisma.teacherProfile.findFirst({
     where: { schoolId, userId, isActive: true },
-    select: { id: true, userId: true },
+    select: { id: true, userId: true, roleName: true },
   });
   if (!profile) throw new HttpError(403, 'Teacher profile not found or inactive');
   return profile;
@@ -595,6 +666,9 @@ export const markTeacherSelfAttendance = async (params: {
   actorRole: string;
   status: TeacherSelfAttendanceStatus;
   date?: Date | string;
+  unitType?: AttendanceUnitType;
+  slotType?: 'MORNING' | 'AFTERNOON' | null;
+  periodId?: string | null;
   teacherId?: string;
   overrideReason?: string;
   leaveRequestId?: string;
@@ -602,9 +676,9 @@ export const markTeacherSelfAttendance = async (params: {
   const date = normalizeDate(params.date);
   const isAdmin = isAdminRole(params.actorRole);
   const teacherProfile = params.teacherId
-    ? await prisma.teacherProfile.findFirst({
+      ? await prisma.teacherProfile.findFirst({
         where: { id: params.teacherId, schoolId: params.schoolId, isActive: true },
-        select: { id: true, userId: true },
+        select: { id: true, userId: true, roleName: true },
       })
     : await getTeacherProfile(params.schoolId, params.actorId);
 
@@ -614,39 +688,40 @@ export const markTeacherSelfAttendance = async (params: {
     throw new HttpError(400, 'Override reason is required');
   }
 
-  const existing = await prisma.teacherSelfAttendance.findUnique({
-    where: {
-      schoolId_teacherId_date: {
-        schoolId: params.schoolId,
-        teacherId: teacherProfile.id,
-        date,
-      },
-    },
+  const configuration = await resolveStaffAttendanceConfiguration(params.schoolId, teacherProfile.roleName, date);
+  const units = await resolveStaffAttendanceUnits(params.schoolId, configuration.mode);
+  const unitType = params.unitType ?? 'DAY';
+  const unitKey = staffAttendanceUnitKey(unitType, params.slotType, params.periodId);
+  const selectedUnit = units.find((unit) => unit.unitKey === unitKey);
+  if (!selectedUnit) throw new HttpError(400, 'Requested self attendance unit is not valid for your role and date');
+
+  const existing = await prisma.staffAttendance.findUnique({
+    where: { schoolId_staffId_attendanceDate_unitKey: { schoolId: params.schoolId, staffId: teacherProfile.id, attendanceDate: date, unitKey } },
   });
 
-  const attendance = await prisma.teacherSelfAttendance.upsert({
-    where: {
-      schoolId_teacherId_date: {
-        schoolId: params.schoolId,
-        teacherId: teacherProfile.id,
-        date,
-      },
-    },
+  const attendance = await prisma.staffAttendance.upsert({
+    where: { schoolId_staffId_attendanceDate_unitKey: { schoolId: params.schoolId, staffId: teacherProfile.id, attendanceDate: date, unitKey } },
     create: {
       schoolId: params.schoolId,
-      teacherId: teacherProfile.id,
-      date,
+      staffId: teacherProfile.id,
+      attendanceDate: date,
+      mode: configuration.mode,
+      unitType,
+      slotType: unitType === 'SLOT' ? params.slotType ?? null : null,
+      periodId: unitType === 'PERIOD' ? params.periodId ?? null : null,
+      unitKey,
       status: params.status,
-      leaveRequestId: params.leaveRequestId ?? null,
-      createdById: params.actorId,
-      overriddenById: isAdmin && teacherProfile.userId !== params.actorId ? params.actorId : null,
-      overrideReason: params.overrideReason ?? null,
+      note: params.overrideReason ?? null,
+      markedById: params.actorId,
     },
     update: {
+      mode: configuration.mode,
+      unitType,
+      slotType: unitType === 'SLOT' ? params.slotType ?? null : null,
+      periodId: unitType === 'PERIOD' ? params.periodId ?? null : null,
       status: params.status,
-      leaveRequestId: params.leaveRequestId ?? null,
-      overriddenById: isAdmin && teacherProfile.userId !== params.actorId ? params.actorId : null,
-      overrideReason: params.overrideReason ?? null,
+      note: params.overrideReason ?? null,
+      markedById: params.actorId,
     },
   });
 
@@ -657,11 +732,22 @@ export const markTeacherSelfAttendance = async (params: {
     entityType: 'TeacherSelfAttendance',
     entityId: attendance.id,
     action: existing ? 'UPDATE' : 'CREATE',
-    beforeState: existing ? { status: existing.status, overrideReason: existing.overrideReason } : null,
-    afterState: { status: attendance.status, date: attendance.date.toISOString(), overrideReason: attendance.overrideReason },
+    beforeState: existing ? { status: existing.status, note: existing.note, unitKey: existing.unitKey } : null,
+    afterState: { status: attendance.status, date: attendance.attendanceDate.toISOString(), note: attendance.note, unitKey: attendance.unitKey },
   });
 
-  return attendance;
+  return {
+    id: attendance.id,
+    teacherId: attendance.staffId,
+    date: attendance.attendanceDate,
+    status: attendance.status,
+    overrideReason: attendance.note,
+    unitType: attendance.unitType,
+    slotType: attendance.slotType,
+    periodId: attendance.periodId,
+    unitKey: attendance.unitKey,
+    mode: attendance.mode,
+  };
 };
 
 export const listTeacherSelfAttendance = async (params: {
@@ -684,21 +770,60 @@ export const listTeacherSelfAttendance = async (params: {
     throw new HttpError(403, 'Teachers can only view self attendance');
   }
 
-  return prisma.teacherSelfAttendance.findMany({
+  const rows = await prisma.staffAttendance.findMany({
     where: {
       schoolId: params.schoolId,
-      teacherId: teacherProfile.id,
+      staffId: teacherProfile.id,
       ...(params.fromDate || params.toDate
         ? {
-            date: {
+            attendanceDate: {
               ...(params.fromDate ? { gte: normalizeDate(params.fromDate) } : {}),
               ...(params.toDate ? { lte: endOfDay(normalizeDate(params.toDate)) } : {}),
             },
           }
         : {}),
     },
-    orderBy: { date: 'desc' },
+    include: { period: { select: { id: true, name: true, startTime: true, endTime: true } } },
+    orderBy: [{ attendanceDate: 'desc' }, { unitKey: 'asc' }],
   });
+
+  return rows.map((row) => ({
+    id: row.id,
+    teacherId: row.staffId,
+    date: row.attendanceDate,
+    status: row.status,
+    overrideReason: row.note,
+    unitType: row.unitType,
+    slotType: row.slotType,
+    periodId: row.periodId,
+    periodName: row.period?.name ?? null,
+    unitKey: row.unitKey,
+    mode: row.mode,
+  }));
+};
+
+export const resolveTeacherSelfAttendanceOptions = async (params: {
+  schoolId: string;
+  actorId: string;
+  actorRole: string;
+  date?: Date | string;
+  teacherId?: string;
+}) => {
+  const date = normalizeDate(params.date);
+  const isAdmin = isAdminRole(params.actorRole);
+  const teacherProfile = params.teacherId
+    ? await prisma.teacherProfile.findFirst({
+        where: { id: params.teacherId, schoolId: params.schoolId, isActive: true },
+        select: { id: true, userId: true, roleName: true },
+      })
+    : await getTeacherProfile(params.schoolId, params.actorId);
+
+  if (!teacherProfile) throw new HttpError(404, 'Teacher not found');
+  if (!isAdmin && teacherProfile.userId !== params.actorId) throw new HttpError(403, 'Teachers can only view self attendance options');
+
+  const configuration = await resolveStaffAttendanceConfiguration(params.schoolId, teacherProfile.roleName, date);
+  const units = await resolveStaffAttendanceUnits(params.schoolId, configuration.mode);
+  return { configuration, units };
 };
 
 export const createLeaveRequest = async (params: {

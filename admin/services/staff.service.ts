@@ -3,7 +3,9 @@ import { env } from '../lib/env';
 import { resolveUploadUrl as resolveUploadUrlWithBase, type SignedUploadAssetRef } from './upload-url';
 
 export type StaffRole = 'SCHOOL_ADMIN' | 'TEACHER' | 'ACCOUNTANT' | 'LIBRARIAN' | 'STAFF';
-export type StaffAttendanceStatus = 'PRESENT' | 'LATE' | 'ABSENT' | 'HOLIDAY' | 'HALF_DAY' | 'LEAVE';
+export type StaffAttendanceStatus = 'PRESENT' | 'LATE' | 'ABSENT' | 'HOLIDAY' | 'HALF_DAY' | 'LEAVE' | 'LOP' | 'CASUAL_LEAVE';
+export type StaffAttendanceMode = 'DAILY' | 'TWICE_DAILY' | 'PERIOD_WISE';
+export type StaffAttendanceUnitType = 'DAY' | 'SLOT' | 'PERIOD';
 export type PayrollStatus = 'GENERATED' | 'PAID' | 'CANCELLED' | 'NOT_GENERATED';
 
 export type Department = { id: string; name: string; schoolId: string };
@@ -121,6 +123,24 @@ export type StaffPayload = {
 };
 
 export type AttendanceStaffRow = Staff & { status: StaffAttendanceStatus; note?: string | null; attendanceId?: string | null };
+export type StaffAttendanceConfiguration = {
+  id: string;
+  schoolId: string;
+  roleName?: StaffRole | null;
+  mode: StaffAttendanceMode;
+  effectiveFrom: string;
+  effectiveTo?: string | null;
+  isActive: boolean;
+};
+export type StaffAttendanceUnit = {
+  unitType: StaffAttendanceUnitType;
+  slotType?: 'MORNING' | 'AFTERNOON' | null;
+  periodId?: string | null;
+  label: string;
+  startTime?: string | null;
+  endTime?: string | null;
+  unitKey: string;
+};
 export type StaffAttendanceReportRow = {
   staff: Staff;
   present: number;
@@ -130,7 +150,13 @@ export type StaffAttendanceReportRow = {
   halfDay: number;
   leave: number;
   percentage: number;
-  daily: Array<{ day: number; status: string; note?: string | null }>;
+  daily: Array<{
+    day: number;
+    status: string;
+    note?: string | null;
+    units?: Array<{ unitKey: string; label: string; status: string; note?: string | null }>;
+    holiday?: { title: string; details?: string | null; type?: string | null } | null;
+  }>;
 };
 
 export type Payroll = {
@@ -239,18 +265,45 @@ export const deleteStaffTimeline = async (staffId: string, timelineId: string) =
   await api.delete(`/staff/${staffId}/timeline/${timelineId}`);
 };
 
-export const loadStaffAttendance = async (params: { role?: string; staffId?: string; date: string }) => {
-  const { data } = await api.get<{ date: string; holiday?: unknown; staff: AttendanceStaffRow[] }>('/staff/attendance', { params });
+export const loadStaffAttendance = async (params: { role?: string; staffId?: string; date: string; unitType?: StaffAttendanceUnitType; slotType?: 'MORNING' | 'AFTERNOON' | null; periodId?: string | null }) => {
+  const { data } = await api.get<{
+    date: string;
+    configuration: { id: string | null; mode: StaffAttendanceMode; source: 'ROLE' | 'SCHOOL' | 'DEFAULT'; configuration: StaffAttendanceConfiguration | null };
+    units: StaffAttendanceUnit[];
+    selectedUnit: StaffAttendanceUnit;
+    holiday?: unknown;
+    staff: AttendanceStaffRow[];
+  }>('/staff/attendance', { params });
   return data;
 };
 
-export const saveStaffAttendance = async (payload: { role?: string | null; date: string; markHoliday?: boolean; holidayReason?: string | null; records: Array<{ staffId: string; status: StaffAttendanceStatus; note?: string | null }> }) => {
+export const saveStaffAttendance = async (payload: { role?: string | null; date: string; unitType?: StaffAttendanceUnitType; slotType?: 'MORNING' | 'AFTERNOON' | null; periodId?: string | null; markHoliday?: boolean; holidayReason?: string | null; records: Array<{ staffId: string; status: StaffAttendanceStatus; note?: string | null }> }) => {
   const { data } = await api.post('/staff/attendance', payload);
   return data;
 };
 
 export const getStaffAttendanceReport = async (params: { role?: string; staffId?: string; month: number; year: number }) => {
   const { data } = await api.get<{ daysInMonth: number; rows: StaffAttendanceReportRow[] }>('/staff/attendance/report', { params });
+  return data;
+};
+
+export const listStaffAttendanceConfigurations = async (params?: { roleName?: string; active?: boolean }) => {
+  const { data } = await api.get<StaffAttendanceConfiguration[]>('/staff/attendance/configurations', { params });
+  return data;
+};
+
+export const createStaffAttendanceConfiguration = async (payload: { roleName?: StaffRole | null; mode: StaffAttendanceMode; effectiveFrom: string; effectiveTo?: string | null; isActive?: boolean }) => {
+  const { data } = await api.post<StaffAttendanceConfiguration>('/staff/attendance/configurations', payload);
+  return data;
+};
+
+export const updateStaffAttendanceConfiguration = async (id: string, payload: Partial<{ roleName?: StaffRole | null; mode: StaffAttendanceMode; effectiveFrom: string; effectiveTo?: string | null; isActive: boolean }>) => {
+  const { data } = await api.patch<StaffAttendanceConfiguration>(`/staff/attendance/configurations/${id}`, payload);
+  return data;
+};
+
+export const deactivateStaffAttendanceConfiguration = async (id: string) => {
+  const { data } = await api.post<StaffAttendanceConfiguration>(`/staff/attendance/configurations/${id}/deactivate`);
   return data;
 };
 

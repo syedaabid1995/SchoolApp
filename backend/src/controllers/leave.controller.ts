@@ -263,8 +263,8 @@ const syncLeaveAttendance = async (application: { id: string; schoolId: string; 
   await prisma.$transaction(
     dates.map((attendanceDate) =>
       prisma.staffAttendance.upsert({
-        where: { schoolId_staffId_attendanceDate: { schoolId: application.schoolId, staffId: application.staffId, attendanceDate } },
-        create: { schoolId: application.schoolId, staffId: application.staffId, attendanceDate, status: 'LEAVE', note, markedById: actorId },
+        where: { schoolId_staffId_attendanceDate_unitKey: { schoolId: application.schoolId, staffId: application.staffId, attendanceDate, unitKey: 'DAY' } },
+        create: { schoolId: application.schoolId, staffId: application.staffId, attendanceDate, unitKey: 'DAY', unitType: 'DAY', mode: 'DAILY', status: 'LEAVE', note, markedById: actorId },
         update: { status: 'LEAVE', note, markedById: actorId },
       }),
     ),

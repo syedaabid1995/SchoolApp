@@ -5,9 +5,11 @@ import { HttpError } from '../middlewares/error.middleware';
 import {
   addStaffDocument,
   addStaffTimeline,
+  createStaffAttendanceConfiguration,
   createDepartment,
   createDesignation,
   createStaff,
+  deactivateStaffAttendanceConfiguration,
   deleteStaff,
   deleteStaffDocument,
   deleteStaffTimeline,
@@ -17,12 +19,14 @@ import {
   getStaffAttendanceReport,
   listDepartments,
   listDesignations,
+  listStaffAttendanceConfigurations,
   listPayroll,
   listStaff,
   loadStaffAttendance,
   payPayroll,
   saveStaffAttendance,
   seedStaffDefaults,
+  updateStaffAttendanceConfiguration,
   updateStaff,
   uploadStaffDocumentMiddleware,
 } from '../controllers/staff.controller';
@@ -44,6 +48,10 @@ staffRouter.post('/defaults', seedStaffDefaults);
 staffRouter.get('/attendance', loadStaffAttendance);
 staffRouter.post('/attendance', saveStaffAttendance);
 staffRouter.get('/attendance/report', getStaffAttendanceReport);
+staffRouter.get('/attendance/configurations', listStaffAttendanceConfigurations);
+staffRouter.post('/attendance/configurations', createStaffAttendanceConfiguration);
+staffRouter.patch('/attendance/configurations/:id', updateStaffAttendanceConfiguration);
+staffRouter.post('/attendance/configurations/:id/deactivate', deactivateStaffAttendanceConfiguration);
 
 staffRouter.get('/payroll', listPayroll);
 staffRouter.post('/payroll/generate', generatePayroll);

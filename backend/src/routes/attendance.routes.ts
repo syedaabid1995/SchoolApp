@@ -47,6 +47,7 @@ import {
 import {
   attendanceSummaryApi,
   createAttendanceSessionApi,
+  getTeacherSelfAttendanceOptionsApi,
   listTeacherSelfAttendanceApi,
   lockAttendanceSessionApi,
   markTeacherSelfAttendanceApi,
@@ -83,6 +84,7 @@ attendanceRouter.post('/sessions', blockSuperAdminSchoolOperations('Super Admin 
 attendanceRouter.patch('/sessions/:id', blockSuperAdminSchoolOperations('Super Admin cannot manage student attendance'), requirePermission(P.attendanceEdit), validateParams(uuidParamsSchema), validateBody(updateAttendanceSessionSchema), updateAttendanceSessionApi);
 attendanceRouter.post('/sessions/:id/lock', blockSuperAdminSchoolOperations('Super Admin cannot manage student attendance'), requirePermission(P.attendanceEdit), validateParams(uuidParamsSchema), validateBody(lockAttendanceSessionSchema), lockAttendanceSessionApi);
 attendanceRouter.get('/summary', requirePermission(P.attendanceView, P.attendanceReport, P.staffAttendanceView, P.staffAttendanceReport), validateQuery(attendanceSummaryQuerySchema), attendanceSummaryApi);
+attendanceRouter.get('/teacher/self/options', requirePermission(P.attendanceView, P.staffAttendanceView), validateQuery(teacherSelfAttendanceListQuerySchema), getTeacherSelfAttendanceOptionsApi);
 attendanceRouter.post('/teacher/self', blockSuperAdminSchoolOperations('Super Admin cannot manage student attendance'), requirePermission(P.attendanceCreate, P.staffAttendanceCreate), validateBody(teacherSelfAttendanceSchema), markTeacherSelfAttendanceApi);
 attendanceRouter.get('/teacher/self', requirePermission(P.attendanceView, P.staffAttendanceView), validateQuery(teacherSelfAttendanceListQuerySchema), listTeacherSelfAttendanceApi);
 attendanceRouter.post('/substitutions', blockSuperAdminSchoolOperations('Super Admin cannot manage student attendance'), requirePermission(P.attendanceSubstituteManage), createAttendanceSubstitutionApi);

@@ -18,11 +18,36 @@ import {
   type AttendanceConfigurationScope,
   type AttendanceMode,
 } from '../../../../services/attendanceV2.service';
+import {
+  createStaffAttendanceConfiguration,
+  deactivateStaffAttendanceConfiguration,
+  listStaffAttendanceConfigurations,
+  updateStaffAttendanceConfiguration,
+  type StaffAttendanceConfiguration,
+  type StaffAttendanceMode,
+  type StaffRole,
+} from '../../../../services/staff.service';
 
 type Draft = AttendanceConfigurationInput & { id?: string };
+type StaffDraft = {
+  id?: string;
+  roleName: StaffRole | '';
+  mode: StaffAttendanceMode;
+  effectiveFrom: string;
+  effectiveTo: string;
+  isActive: boolean;
+};
 type SectionOption = { id: string; name: string; classId?: string | null; classSections?: Array<{ classId: string }> };
 
 const modes: AttendanceMode[] = ['DAILY', 'TWICE_DAILY', 'PERIOD_WISE'];
+const staffRoles: Array<{ value: StaffRole | ''; label: string }> = [
+  { value: '', label: 'All Employees' },
+  { value: 'TEACHER', label: 'Teachers' },
+  { value: 'STAFF', label: 'Staff' },
+  { value: 'SCHOOL_ADMIN', label: 'School Admins' },
+  { value: 'ACCOUNTANT', label: 'Accountants' },
+  { value: 'LIBRARIAN', label: 'Librarians' },
+];
 const scopes: AttendanceConfigurationScope[] = ['SCHOOL', 'ACADEMIC_YEAR', 'CLASS', 'SECTION'];
 const hierarchy = ['Section', 'Class', 'Academic Year', 'School'];
 
@@ -32,6 +57,14 @@ const emptyDraft = (): Draft => ({
   academicYearId: '',
   classId: '',
   sectionId: '',
+  effectiveFrom: new Date().toISOString().slice(0, 10),
+  effectiveTo: '',
+  isActive: true,
+});
+
+const emptyStaffDraft = (): StaffDraft => ({
+  roleName: '',
+  mode: 'DAILY',
   effectiveFrom: new Date().toISOString().slice(0, 10),
   effectiveTo: '',
   isActive: true,
@@ -81,7 +114,10 @@ export default function AttendanceSettingsPage() {
   const notify = useNotify();
   const queryClient = useQueryClient();
   const [draft, setDraft] = useState<Draft>(emptyDraft());
+  const [activeAudience, setActiveAudience] = useState<'students' | 'employees'>('students');
+  const [staffDraft, setStaffDraft] = useState<StaffDraft>(emptyStaffDraft());
   const [editingId, setEditingId] = useState('');
+  const [editingStaffId, setEditingStaffId] = useState('');
   const [applyToAllMappedSections, setApplyToAllMappedSections] = useState(false);
   const [replaceExisting, setReplaceExisting] = useState(false);
 
@@ -97,6 +133,12 @@ export default function AttendanceSettingsPage() {
   const configsQuery = useQuery({
     queryKey: ['attendance-configurations', schoolId],
     queryFn: () => listAttendanceConfigurations({ schoolId }),
+    enabled: canView,
+    retry: false,
+  });
+  const staffConfigsQuery = useQuery({
+    queryKey: ['staff-attendance-configurations', schoolId],
+    queryFn: () => listStaffAttendanceConfigurations(),
     enabled: canView,
     retry: false,
   });
@@ -166,6 +208,38 @@ export default function AttendanceSettingsPage() {
     onError: (error: any) => notify.error('Unable to deactivate configuration', errorMessage(error, 'Please try again.')),
   });
 
+  const staffSaveMutation = useMutation({
+    mutationFn: () => {
+      if (!staffDraft.effectiveFrom) throw new Error('Effective From is required.');
+      if (staffDraft.effectiveTo && staffDraft.effectiveTo < staffDraft.effectiveFrom) throw new Error('Effective To cannot be earlier than Effective From.');
+      const payload = {
+        roleName: staffDraft.roleName || null,
+        mode: staffDraft.mode,
+        effectiveFrom: staffDraft.effectiveFrom,
+        effectiveTo: staffDraft.effectiveTo || null,
+        isActive: staffDraft.isActive,
+      };
+      if (editingStaffId) return updateStaffAttendanceConfiguration(editingStaffId, payload);
+      return createStaffAttendanceConfiguration(payload);
+    },
+    onSuccess: () => {
+      setStaffDraft(emptyStaffDraft());
+      setEditingStaffId('');
+      queryClient.invalidateQueries({ queryKey: ['staff-attendance-configurations'] });
+      notify.success('Employee configuration saved', 'Employee attendance configuration history was updated.');
+    },
+    onError: (error: any) => notify.error('Unable to save employee configuration', errorMessage(error, error?.message ?? 'Please try again.')),
+  });
+
+  const staffDeactivateMutation = useMutation({
+    mutationFn: (id: string) => deactivateStaffAttendanceConfiguration(id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['staff-attendance-configurations'] });
+      notify.success('Employee configuration deactivated', 'The configuration remains in history but is no longer active.');
+    },
+    onError: (error: any) => notify.error('Unable to deactivate employee configuration', errorMessage(error, 'Please try again.')),
+  });
+
   const startEdit = (config: AttendanceConfiguration) => {
     setEditingId(config.id);
     setApplyToAllMappedSections(false);
@@ -177,6 +251,18 @@ export default function AttendanceSettingsPage() {
       academicYearId: config.academicYearId ?? '',
       classId: config.classId ?? '',
       sectionId: config.sectionId ?? '',
+      effectiveFrom: config.effectiveFrom.slice(0, 10),
+      effectiveTo: config.effectiveTo?.slice(0, 10) ?? '',
+      isActive: config.isActive,
+    });
+  };
+
+  const startStaffEdit = (config: StaffAttendanceConfiguration) => {
+    setEditingStaffId(config.id);
+    setStaffDraft({
+      id: config.id,
+      roleName: config.roleName ?? '',
+      mode: config.mode,
       effectiveFrom: config.effectiveFrom.slice(0, 10),
       effectiveTo: config.effectiveTo?.slice(0, 10) ?? '',
       isActive: config.isActive,
@@ -197,9 +283,83 @@ export default function AttendanceSettingsPage() {
       <div className="mx-auto w-full max-w-[1500px] px-4 py-6 lg:px-8">
         <PageHeader
           title="Attendance Settings"
-          subtitle="Manage attendance configuration history by school, academic year, class, or section."
+          subtitle="Manage student and employee attendance configuration history."
           breadcrumbs={[{ label: 'Dashboard', href: '/dashboard' }, { label: 'Attendance', href: '/dashboard/attendance/overview' }, { label: 'Settings' }]}
         />
+
+        <div className="mb-5 flex flex-wrap gap-2">
+          <button
+            type="button"
+            onClick={() => setActiveAudience('students')}
+            className={`rounded-xl px-4 py-2 text-sm font-bold ${activeAudience === 'students' ? 'bg-slate-950 text-white' : 'border border-slate-200 bg-white text-slate-700'}`}
+          >
+            Students
+          </button>
+          <button
+            type="button"
+            onClick={() => setActiveAudience('employees')}
+            className={`rounded-xl px-4 py-2 text-sm font-bold ${activeAudience === 'employees' ? 'bg-slate-950 text-white' : 'border border-slate-200 bg-white text-slate-700'}`}
+          >
+            Employees
+          </button>
+        </div>
+
+        {activeAudience === 'employees' ? (
+          <div className="grid gap-5 lg:grid-cols-[420px_1fr]">
+            <section className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+              <div className="mb-4">
+                <h2 className="text-lg font-bold text-slate-950">{editingStaffId ? 'Edit Employee Configuration' : 'Create Employee Configuration'}</h2>
+                <p className="text-sm text-slate-500">Configure daily, twice-daily, or period-wise attendance by employee type.</p>
+              </div>
+              <div className="space-y-3">
+                <select disabled={!canManage} value={staffDraft.roleName} onChange={(event) => setStaffDraft({ ...staffDraft, roleName: event.target.value as StaffRole | '' })} className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm disabled:bg-slate-50">
+                  {staffRoles.map((role) => <option key={role.value || 'ALL'} value={role.value}>{role.label}</option>)}
+                </select>
+                <select disabled={!canManage} value={staffDraft.mode} onChange={(event) => setStaffDraft({ ...staffDraft, mode: event.target.value as StaffAttendanceMode })} className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm disabled:bg-slate-50">
+                  {modes.map((mode) => <option key={mode} value={mode}>{mode.replace('_', ' ')}</option>)}
+                </select>
+                <input disabled={!canManage} type="date" value={staffDraft.effectiveFrom} onChange={(event) => setStaffDraft({ ...staffDraft, effectiveFrom: event.target.value })} className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm disabled:bg-slate-50" />
+                <input disabled={!canManage} type="date" value={staffDraft.effectiveTo} onChange={(event) => setStaffDraft({ ...staffDraft, effectiveTo: event.target.value })} className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm disabled:bg-slate-50" />
+                <label className="flex items-center gap-2 text-sm font-semibold text-slate-700">
+                  <input disabled={!canManage} type="checkbox" checked={staffDraft.isActive} onChange={(event) => setStaffDraft({ ...staffDraft, isActive: event.target.checked })} />
+                  Active
+                </label>
+                <div className="flex gap-2">
+                  <Button disabled={!canManage || staffSaveMutation.isPending} onClick={() => staffSaveMutation.mutate()}>{editingStaffId ? 'Update' : 'Create'}</Button>
+                  {editingStaffId ? <button type="button" onClick={() => { setEditingStaffId(''); setStaffDraft(emptyStaffDraft()); }} className="rounded-xl border border-slate-200 px-4 py-2 text-sm font-bold text-slate-700">Cancel</button> : null}
+                </div>
+              </div>
+            </section>
+            <section className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+              <h2 className="mb-4 text-lg font-bold text-slate-950">Employee Configuration History</h2>
+              <div className="overflow-hidden rounded-xl border border-slate-200">
+                <table className="min-w-full divide-y divide-slate-100 text-sm">
+                  <thead className="bg-slate-50 text-left text-xs uppercase text-slate-500">
+                    <tr><th className="px-4 py-3">Employee Type</th><th className="px-4 py-3">Mode</th><th className="px-4 py-3">Effective</th><th className="px-4 py-3">Status</th><th className="px-4 py-3">Actions</th></tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {(staffConfigsQuery.data ?? []).map((config) => (
+                      <tr key={config.id}>
+                        <td className="px-4 py-3 font-bold">{staffRoles.find((role) => role.value === (config.roleName ?? ''))?.label ?? config.roleName ?? 'All Employees'}</td>
+                        <td className="px-4 py-3">{config.mode.replace('_', ' ')}</td>
+                        <td className="px-4 py-3">{config.effectiveFrom.slice(0, 10)} - {config.effectiveTo?.slice(0, 10) ?? 'Open'}</td>
+                        <td className="px-4 py-3"><span className={`rounded-full px-3 py-1 text-xs font-bold ${config.isActive ? 'bg-emerald-50 text-emerald-700' : 'bg-slate-100 text-slate-500'}`}>{config.isActive ? 'Active' : 'Inactive'}</span></td>
+                        <td className="px-4 py-3">
+                          <div className="flex gap-2">
+                            <button type="button" disabled={!canManage} onClick={() => startStaffEdit(config)} className="rounded-lg border border-slate-200 px-3 py-1 text-sm font-bold text-slate-600 disabled:opacity-50">Edit</button>
+                            {config.isActive ? <button type="button" disabled={!canManage} onClick={() => staffDeactivateMutation.mutate(config.id)} className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-1 text-sm font-bold text-rose-600 disabled:opacity-50">Deactivate</button> : null}
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                    {!staffConfigsQuery.data?.length ? <tr><td colSpan={5} className="px-4 py-8 text-center text-slate-500">No employee configurations found.</td></tr> : null}
+                  </tbody>
+                </table>
+              </div>
+            </section>
+          </div>
+        ) : (
+          <>
 
         <section className="mb-5 rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
           <h2 className="text-lg font-bold text-slate-950">Resolution Hierarchy</h2>
@@ -354,6 +514,8 @@ export default function AttendanceSettingsPage() {
             </div>
           </section>
         </div>
+          </>
+        )}
       </div>
     </div>
   );

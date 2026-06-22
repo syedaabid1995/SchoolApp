@@ -40,6 +40,13 @@ final teacherAttendanceHistoryProvider =
           );
     });
 
+final selfAttendanceOptionsProvider = FutureProvider.autoDispose
+    .family<SelfAttendanceOptions, DateTime>((ref, date) {
+      return ref
+          .watch(attendanceRepositoryProvider)
+          .getSelfAttendanceOptions(date: date);
+    });
+
 final studentAttendanceOptionsProvider =
     FutureProvider.autoDispose<StudentAttendanceOptions>((ref) {
       return ref
@@ -82,12 +89,16 @@ class MarkSelfAttendanceController
   @override
   Future<TeacherAttendanceRecord?> build() async => null;
 
-  Future<void> mark(String status) async {
+  Future<void> mark(
+    String status, {
+    AttendanceUnit? unit,
+    DateTime? date,
+  }) async {
     state = const AsyncLoading();
     state = await AsyncValue.guard(
       () => ref
           .read(attendanceRepositoryProvider)
-          .markSelfAttendance(status: status),
+          .markSelfAttendance(status: status, date: date, unit: unit),
     );
     ref.invalidate(attendanceSummaryProvider);
     ref.invalidate(teacherAttendanceHistoryProvider);

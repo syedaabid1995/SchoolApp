@@ -19,6 +19,7 @@ import {
   listTeacherSelfAttendance,
   lockStudentAttendanceSession,
   markTeacherSelfAttendance,
+  resolveTeacherSelfAttendanceOptions,
   updateStudentAttendanceSession,
 } from '../services/attendanceP1.service';
 
@@ -134,6 +135,9 @@ export const markTeacherSelfAttendanceApi = async (req: Request, res: Response) 
     actorRole: auth.role ?? 'UNKNOWN',
     status: payload.status,
     date: payload.date,
+    unitType: payload.unitType,
+    slotType: payload.slotType,
+    periodId: payload.periodId,
     teacherId: payload.teacherId,
     overrideReason: payload.overrideReason,
     leaveRequestId: payload.leaveRequestId,
@@ -160,4 +164,23 @@ export const listTeacherSelfAttendanceApi = async (req: Request, res: Response) 
   });
 
   res.status(200).json(records);
+};
+
+export const getTeacherSelfAttendanceOptionsApi = async (req: Request, res: Response) => {
+  if (!env.ATTENDANCE_ENABLED || !env.TEACHER_SELF_ATTENDANCE_ENABLED) {
+    throw new HttpError(503, 'Teacher self attendance is disabled');
+  }
+  const auth = requireAuth(req);
+  const payload = teacherSelfAttendanceListQuerySchema.parse(req.query);
+  const schoolId = resolveSchoolId(req, payload.schoolId);
+
+  const options = await resolveTeacherSelfAttendanceOptions({
+    schoolId,
+    actorId: auth.userId,
+    actorRole: auth.role ?? 'UNKNOWN',
+    teacherId: payload.teacherId,
+    date: payload.fromDate,
+  });
+
+  res.status(200).json(options);
 };

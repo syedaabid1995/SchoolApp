@@ -2,7 +2,7 @@ import crypto from 'crypto';
 import multer from 'multer';
 import path from 'path';
 import type { Request, Response } from 'express';
-import { Prisma, type RoleName, type StaffAttendanceStatus } from '@prisma/client';
+import { Prisma, type AttendanceMode, type AttendanceUnitType, type RoleName, type StaffAttendanceStatus } from '@prisma/client';
 import { z } from 'zod';
 import { prisma } from '../config/db';
 import { HttpError } from '../middlewares/error.middleware';
@@ -15,7 +15,9 @@ import { AuthorizationService } from '../services/authorization.service';
 import { PermissionCodes as P } from '../permissions/permission-manifest';
 
 const staffRoles = ['SCHOOL_ADMIN', 'TEACHER', 'ACCOUNTANT', 'LIBRARIAN', 'STAFF'] as const;
-const attendanceStatuses = ['PRESENT', 'LATE', 'ABSENT', 'HOLIDAY', 'HALF_DAY', 'LEAVE'] as const;
+const attendanceStatuses = ['PRESENT', 'LATE', 'ABSENT', 'HOLIDAY', 'HALF_DAY', 'LEAVE', 'LOP', 'CASUAL_LEAVE'] as const;
+const attendanceModes = ['DAILY', 'TWICE_DAILY', 'PERIOD_WISE'] as const;
+const staffAttendanceUnitTypes = ['DAY', 'SLOT', 'PERIOD'] as const;
 const defaultDepartments = ['Academics', 'Administration', 'Library', 'Accounts', 'Transport', 'Health & Safety', 'Operations', 'Support'];
 const defaultDesignations = [
   'Principal',
@@ -80,6 +82,101 @@ const normalizeText = (value?: string | null) => {
 };
 
 const normalizeNullable = (value?: string | null) => normalizeText(value) ?? null;
+
+const toDateKey = (value: Date) => value.toISOString().slice(0, 10);
+
+const staffAttendanceUnitKey = (unitType: AttendanceUnitType, slotType?: 'MORNING' | 'AFTERNOON' | null, periodId?: string | null) => {
+  if (unitType === 'SLOT') return `SLOT:${slotType ?? 'MORNING'}`;
+  if (unitType === 'PERIOD') return `PERIOD:${periodId ?? 'UNKNOWN'}`;
+  return 'DAY';
+};
+
+const isFutureDate = (date: Date) => date > dayStart(new Date());
+
+const defaultStaffPeriods = [
+  { name: '1ST PERIOD', startTime: '09:00', endTime: '09:45' },
+  { name: '2ND PERIOD', startTime: '09:45', endTime: '10:30' },
+  { name: '3RD PERIOD', startTime: '10:45', endTime: '11:30' },
+  { name: '4TH PERIOD', startTime: '11:30', endTime: '12:15' },
+  { name: '5TH PERIOD', startTime: '13:00', endTime: '13:45' },
+  { name: '6TH PERIOD', startTime: '13:45', endTime: '14:30' },
+  { name: '7TH PERIOD', startTime: '14:30', endTime: '15:15' },
+];
+
+const ensureStaffPeriods = async (schoolId: string) => {
+  for (const period of defaultStaffPeriods) {
+    await prisma.attendancePeriod.upsert({
+      where: { schoolId_type_name: { schoolId, type: 'CLASS_TIME', name: period.name } },
+      update: { startTime: period.startTime, endTime: period.endTime },
+      create: { schoolId, type: 'CLASS_TIME', name: period.name, startTime: period.startTime, endTime: period.endTime },
+    });
+  }
+  return prisma.attendancePeriod.findMany({ where: { schoolId, type: 'CLASS_TIME' }, orderBy: [{ startTime: 'asc' }] });
+};
+
+const resolveStaffAttendanceConfiguration = async (schoolId: string, roleName: RoleName | null, date: Date) => {
+  const rows = await prisma.staffAttendanceConfiguration.findMany({
+    where: {
+      schoolId,
+      isActive: true,
+      effectiveFrom: { lte: date },
+      OR: [{ effectiveTo: null }, { effectiveTo: { gte: date } }],
+      roleName: { in: roleName ? [roleName, null] : [null] },
+    },
+    orderBy: [{ roleName: 'desc' }, { effectiveFrom: 'desc' }, { updatedAt: 'desc' }],
+  });
+  const selected = rows.find((row) => row.roleName === roleName) ?? rows.find((row) => row.roleName === null);
+  return {
+    id: selected?.id ?? null,
+    mode: selected?.mode ?? 'DAILY',
+    source: selected ? (selected.roleName ? 'ROLE' : 'SCHOOL') : 'DEFAULT',
+    configuration: selected ?? null,
+  };
+};
+
+const resolveStaffAttendanceUnits = async (schoolId: string, mode: AttendanceMode) => {
+  if (mode === 'TWICE_DAILY') {
+    return [
+      { unitType: 'SLOT', slotType: 'MORNING', label: 'Morning', unitKey: 'SLOT:MORNING' },
+      { unitType: 'SLOT', slotType: 'AFTERNOON', label: 'Afternoon', unitKey: 'SLOT:AFTERNOON' },
+    ];
+  }
+  if (mode === 'PERIOD_WISE') {
+    const periods = await ensureStaffPeriods(schoolId);
+    return periods.map((period) => ({
+      unitType: 'PERIOD',
+      periodId: period.id,
+      label: period.name,
+      startTime: period.startTime,
+      endTime: period.endTime,
+      unitKey: `PERIOD:${period.id}`,
+    }));
+  }
+  return [{ unitType: 'DAY', label: 'Day', unitKey: 'DAY' }];
+};
+
+const parseSystemHolidays = (settings: { holidays: Prisma.JsonValue } | null, year: number, month?: number) => {
+  const raw = Array.isArray(settings?.holidays) ? settings.holidays : [];
+  const days: Array<{ day: number; title: string; details?: string | null; type?: string | null }> = [];
+  for (const item of raw) {
+    if (!item || typeof item !== 'object') continue;
+    const row = item as Record<string, unknown>;
+    const from = typeof row.fromDate === 'string' ? dayStart(row.fromDate) : null;
+    const to = typeof row.toDate === 'string' ? dayStart(row.toDate) : from;
+    if (!from || !to) continue;
+    for (let cursor = new Date(from); cursor <= to; cursor.setUTCDate(cursor.getUTCDate() + 1)) {
+      if (cursor.getUTCFullYear() !== year) continue;
+      if (month && cursor.getUTCMonth() + 1 !== month) continue;
+      days.push({
+        day: cursor.getUTCDate(),
+        title: String(row.title ?? 'Holiday'),
+        details: typeof row.details === 'string' ? row.details : null,
+        type: typeof row.type === 'string' ? row.type : null,
+      });
+    }
+  }
+  return days;
+};
 
 const optionalDate = z
   .string()
@@ -736,12 +833,135 @@ const staffAttendanceQuery = z.object({
   role: z.enum(staffRoles).optional(),
   staffId: z.string().uuid().optional(),
   date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+  unitType: z.enum(staffAttendanceUnitTypes).optional(),
+  slotType: z.enum(['MORNING', 'AFTERNOON']).optional(),
+  periodId: z.string().uuid().optional(),
 });
+
+const staffAttendanceConfigurationSchema = z.object({
+  roleName: z.enum(staffRoles).optional().nullable(),
+  mode: z.enum(attendanceModes),
+  effectiveFrom: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+  effectiveTo: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional().nullable(),
+  isActive: z.boolean().optional().default(true),
+});
+
+const staffAttendanceConfigurationListSchema = z.object({
+  roleName: z.enum(staffRoles).optional(),
+  active: z.coerce.boolean().optional(),
+});
+
+export const listStaffAttendanceConfigurations = async (req: Request, res: Response) => {
+  const { schoolId } = requireSchoolAdmin(req);
+  const query = staffAttendanceConfigurationListSchema.parse(req.query);
+  const rows = await prisma.staffAttendanceConfiguration.findMany({
+    where: {
+      schoolId,
+      ...(query.roleName ? { roleName: query.roleName } : {}),
+      ...(typeof query.active === 'boolean' ? { isActive: query.active } : {}),
+    },
+    orderBy: [{ roleName: 'asc' }, { effectiveFrom: 'desc' }, { updatedAt: 'desc' }],
+  });
+  res.status(200).json(rows);
+};
+
+const assertStaffConfigurationRange = (effectiveFrom: Date, effectiveTo?: Date | null) => {
+  if (effectiveTo && effectiveTo < effectiveFrom) throw new HttpError(400, 'effectiveTo cannot be earlier than effectiveFrom');
+};
+
+const assertNoStaffConfigurationOverlap = async (params: {
+  schoolId: string;
+  roleName?: RoleName | null;
+  effectiveFrom: Date;
+  effectiveTo?: Date | null;
+  excludeId?: string;
+}) => {
+  const existing = await prisma.staffAttendanceConfiguration.findFirst({
+    where: {
+      schoolId: params.schoolId,
+      roleName: params.roleName ?? null,
+      isActive: true,
+      ...(params.excludeId ? { id: { not: params.excludeId } } : {}),
+      effectiveFrom: { lte: params.effectiveTo ?? new Date('9999-12-31T00:00:00.000Z') },
+      OR: [{ effectiveTo: null }, { effectiveTo: { gte: params.effectiveFrom } }],
+    },
+    select: { id: true },
+  });
+  if (existing) throw new HttpError(409, 'Staff attendance configuration overlaps with an existing active configuration');
+};
+
+export const createStaffAttendanceConfiguration = async (req: Request, res: Response) => {
+  const { schoolId, userId } = requireSchoolAdmin(req);
+  const payload = staffAttendanceConfigurationSchema.parse(req.body);
+  const effectiveFrom = dayStart(payload.effectiveFrom);
+  const effectiveTo = payload.effectiveTo ? dayStart(payload.effectiveTo) : null;
+  assertStaffConfigurationRange(effectiveFrom, effectiveTo);
+  await assertNoStaffConfigurationOverlap({ schoolId, roleName: payload.roleName ?? null, effectiveFrom, effectiveTo });
+  const row = await prisma.staffAttendanceConfiguration.create({
+    data: {
+      schoolId,
+      roleName: payload.roleName ?? null,
+      mode: payload.mode,
+      effectiveFrom,
+      effectiveTo,
+      isActive: payload.isActive,
+      createdById: userId,
+      updatedById: userId,
+    },
+  });
+  res.status(201).json(row);
+};
+
+export const updateStaffAttendanceConfiguration = async (req: Request, res: Response) => {
+  const { schoolId, userId } = requireSchoolAdmin(req);
+  const payload = staffAttendanceConfigurationSchema.partial().parse(req.body);
+  const existing = await prisma.staffAttendanceConfiguration.findFirst({ where: { id: req.params.id, schoolId } });
+  if (!existing) throw new HttpError(404, 'Staff attendance configuration not found');
+  const effectiveFrom = payload.effectiveFrom ? dayStart(payload.effectiveFrom) : existing.effectiveFrom;
+  const effectiveTo = payload.effectiveTo === undefined ? existing.effectiveTo : payload.effectiveTo ? dayStart(payload.effectiveTo) : null;
+  const roleName = payload.roleName === undefined ? existing.roleName : payload.roleName ?? null;
+  assertStaffConfigurationRange(effectiveFrom, effectiveTo);
+  if (payload.isActive !== false) {
+    await assertNoStaffConfigurationOverlap({ schoolId, roleName, effectiveFrom, effectiveTo, excludeId: existing.id });
+  }
+  const row = await prisma.staffAttendanceConfiguration.update({
+    where: { id: existing.id },
+    data: {
+      roleName,
+      mode: payload.mode ?? existing.mode,
+      effectiveFrom,
+      effectiveTo,
+      isActive: payload.isActive ?? existing.isActive,
+      updatedById: userId,
+    },
+  });
+  res.status(200).json(row);
+};
+
+export const deactivateStaffAttendanceConfiguration = async (req: Request, res: Response) => {
+  const { schoolId, userId } = requireSchoolAdmin(req);
+  const existing = await prisma.staffAttendanceConfiguration.findFirst({ where: { id: req.params.id, schoolId } });
+  if (!existing) throw new HttpError(404, 'Staff attendance configuration not found');
+  const row = await prisma.staffAttendanceConfiguration.update({
+    where: { id: existing.id },
+    data: { isActive: false, updatedById: userId },
+  });
+  res.status(200).json(row);
+};
 
 export const loadStaffAttendance = async (req: Request, res: Response) => {
   const { schoolId } = requireSchoolAdmin(req);
   const query = staffAttendanceQuery.parse(req.query);
   const date = dayStart(query.date);
+  const configuration = await resolveStaffAttendanceConfiguration(schoolId, (query.role as RoleName | undefined) ?? null, date);
+  const units = await resolveStaffAttendanceUnits(schoolId, configuration.mode);
+  const requestedUnitKey = staffAttendanceUnitKey(
+    (query.unitType as AttendanceUnitType | undefined) ?? (units[0]?.unitType as AttendanceUnitType | undefined) ?? 'DAY',
+    query.slotType,
+    query.periodId,
+  );
+  const selectedUnit = units.find((unit) => unit.unitKey === requestedUnitKey) ?? units[0];
+  if (!selectedUnit) throw new HttpError(400, 'No staff attendance units are configured');
   const staffWhere: Prisma.TeacherProfileWhereInput = {
     schoolId,
     isActive: true,
@@ -750,16 +970,22 @@ export const loadStaffAttendance = async (req: Request, res: Response) => {
   };
   const [staff, attendance, holiday] = await Promise.all([
     prisma.teacherProfile.findMany({ where: staffWhere, include: staffInclude, orderBy: [{ firstName: 'asc' }, { lastName: 'asc' }] }),
-    attendanceReadService.getTeacherAttendance({ schoolId, fromDate: date, toDate: date }).then((summary) => summary.records),
+    prisma.staffAttendance.findMany({
+      where: { schoolId, attendanceDate: date, unitKey: selectedUnit.unitKey },
+      select: { id: true, staffId: true, status: true, note: true },
+    }),
     attendanceReadService.getStaffAttendanceHoliday({ schoolId, holidayDate: date, roleName: query.role ?? null }),
   ]);
-  const byStaff = new Map(attendance.map((item) => [item.teacherId, item]));
+  const byStaff = new Map(attendance.map((item) => [item.staffId, item]));
   res.status(200).json({
     date: query.date,
+    configuration,
+    units,
+    selectedUnit,
     holiday,
     staff: staff.map((item) => {
       const row = byStaff.get(item.id);
-      return { ...formatStaff(item), status: row?.status ?? 'PRESENT', note: row?.note ?? '', attendanceId: row?.sourceId ?? null };
+      return { ...formatStaff(item), status: row?.status ?? 'PRESENT', note: row?.note ?? '', attendanceId: row?.id ?? null };
     }),
   });
 };
@@ -769,11 +995,22 @@ export const saveStaffAttendance = async (req: Request, res: Response) => {
   const payload = z.object({
     role: z.enum(staffRoles).optional().nullable(),
     date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+    unitType: z.enum(staffAttendanceUnitTypes).optional().default('DAY'),
+    slotType: z.enum(['MORNING', 'AFTERNOON']).optional().nullable(),
+    periodId: z.string().uuid().optional().nullable(),
     markHoliday: z.boolean().optional().default(false),
     holidayReason: z.string().max(500).optional().nullable(),
     records: z.array(z.object({ staffId: z.string().uuid(), status: z.enum(attendanceStatuses), note: z.string().max(500).optional().nullable() })).default([]),
   }).parse(req.body);
   const date = dayStart(payload.date);
+  const configuration = await resolveStaffAttendanceConfiguration(schoolId, (payload.role as RoleName | undefined) ?? null, date);
+  const unitKey = staffAttendanceUnitKey(payload.unitType as AttendanceUnitType, payload.slotType, payload.periodId);
+  const allowedUnits = await resolveStaffAttendanceUnits(schoolId, configuration.mode);
+  const selectedUnit = allowedUnits.find((unit) => unit.unitKey === unitKey);
+  if (!selectedUnit) throw new HttpError(400, 'Requested staff attendance unit is not valid for this role and date');
+  if (isFutureDate(date) && payload.records.some((record) => record.status === 'PRESENT')) {
+    throw new HttpError(400, 'Present attendance cannot be marked for future dates');
+  }
   const staffIds = [...new Set(payload.records.map((item) => item.staffId))];
   if (staffIds.length) {
     const count = await prisma.teacherProfile.count({ where: { schoolId, id: { in: staffIds } } });
@@ -797,9 +1034,29 @@ export const saveStaffAttendance = async (req: Request, res: Response) => {
     await tx.staffAttendanceHoliday.deleteMany({ where: { schoolId, holidayDate: date, roleName: payload.role ?? null } });
     for (const record of payload.records) {
       await tx.staffAttendance.upsert({
-        where: { schoolId_staffId_attendanceDate: { schoolId, staffId: record.staffId, attendanceDate: date } },
-        update: { status: record.status, note: normalizeNullable(record.note), markedById: userId },
-        create: { schoolId, staffId: record.staffId, attendanceDate: date, status: record.status, note: normalizeNullable(record.note), markedById: userId },
+        where: { schoolId_staffId_attendanceDate_unitKey: { schoolId, staffId: record.staffId, attendanceDate: date, unitKey } },
+        update: {
+          mode: configuration.mode,
+          unitType: payload.unitType as AttendanceUnitType,
+          slotType: payload.unitType === 'SLOT' ? payload.slotType ?? null : null,
+          periodId: payload.unitType === 'PERIOD' ? payload.periodId ?? null : null,
+          status: record.status,
+          note: normalizeNullable(record.note),
+          markedById: userId,
+        },
+        create: {
+          schoolId,
+          staffId: record.staffId,
+          attendanceDate: date,
+          mode: configuration.mode,
+          unitType: payload.unitType as AttendanceUnitType,
+          slotType: payload.unitType === 'SLOT' ? payload.slotType ?? null : null,
+          periodId: payload.unitType === 'PERIOD' ? payload.periodId ?? null : null,
+          unitKey,
+          status: record.status,
+          note: normalizeNullable(record.note),
+          markedById: userId,
+        },
       });
     }
     return { holiday: null, saved: payload.records.length };
@@ -828,39 +1085,84 @@ const buildAttendanceSummary = async (schoolId: string, query: z.infer<typeof re
     include: staffInclude,
     orderBy: [{ firstName: 'asc' }, { lastName: 'asc' }],
   });
-  const [attendance, holidays] = await Promise.all([
-    attendanceReadService.getTeacherAttendance({ schoolId, fromDate: start, toDate: new Date(end.getTime() - 1) }).then((summary) => {
-      const staffIds = new Set(staff.map((item) => item.id));
-      return summary.records.filter((record) => staffIds.has(record.teacherId));
+  const [attendance, holidays, settings] = await Promise.all([
+    prisma.staffAttendance.findMany({
+      where: {
+        schoolId,
+        attendanceDate: { gte: start, lt: end },
+        staffId: { in: staff.map((item) => item.id) },
+      },
+      select: {
+        id: true,
+        staffId: true,
+        attendanceDate: true,
+        status: true,
+        note: true,
+        unitKey: true,
+        unitType: true,
+        slotType: true,
+        period: { select: { id: true, name: true } },
+      },
+      orderBy: [{ attendanceDate: 'asc' }, { unitKey: 'asc' }],
     }),
     attendanceReadService.getStaffAttendanceHolidays({ schoolId, fromDate: start, toDateExclusive: end, roleName: query.role ?? null }),
+    prisma.schoolSystemSetting.findUnique({ where: { schoolId }, select: { holidays: true } }),
   ]);
-  const holidayDays = new Set(holidays.map((holiday) => holiday.holidayDate.getUTCDate()));
+  const configuredHolidays = parseSystemHolidays(settings, query.year, query.month);
+  const holidayByDay = new Map<number, { title: string; details?: string | null; type?: string | null }>();
+  for (const holiday of configuredHolidays) {
+    holidayByDay.set(holiday.day, { title: holiday.title, details: holiday.details, type: holiday.type });
+  }
+  for (const holiday of holidays) {
+    holidayByDay.set(holiday.holidayDate.getUTCDate(), { title: holiday.reason ?? 'Staff Holiday', details: holiday.reason ?? null, type: 'Staff holiday' });
+  }
+  const holidayDays = new Set(holidayByDay.keys());
   const attendanceByStaff = new Map<string, typeof attendance>();
   for (const item of attendance) {
-    const rows = attendanceByStaff.get(item.teacherId) ?? [];
+    const rows = attendanceByStaff.get(item.staffId) ?? [];
     rows.push(item);
-    attendanceByStaff.set(item.teacherId, rows);
+    attendanceByStaff.set(item.staffId, rows);
   }
   const rows = staff.map((item) => {
     const counts = { present: 0, late: 0, absent: 0, holiday: holidayDays.size, halfDay: 0, leave: 0 };
-    const records = new Map((attendanceByStaff.get(item.id) ?? []).map((record) => [Number(record.date.slice(8, 10)), record]));
-    const daily: Array<{ day: number; status: string; note?: string | null }> = [];
+    const recordsByDay = new Map<number, Array<(typeof attendance)[number]>>();
+    for (const record of attendanceByStaff.get(item.id) ?? []) {
+      const day = record.attendanceDate.getUTCDate();
+      const bucket = recordsByDay.get(day) ?? [];
+      bucket.push(record);
+      recordsByDay.set(day, bucket);
+    }
+    const daily: Array<{ day: number; status: string; note?: string | null; units?: Array<{ unitKey: string; label: string; status: string; note?: string | null }>; holiday?: { title: string; details?: string | null; type?: string | null } | null }> = [];
     for (let day = 1; day <= daysInMonth; day += 1) {
       if (holidayDays.has(day)) {
-        daily.push({ day, status: 'HOLIDAY' });
+        daily.push({ day, status: 'HOLIDAY', holiday: holidayByDay.get(day) ?? null });
         continue;
       }
-      const status = records.get(day)?.status ?? 'UNMARKED';
-      if (status === 'PRESENT') counts.present += 1;
-      if (status === 'LATE') counts.late += 1;
-      if (status === 'ABSENT') counts.absent += 1;
-      if (status === 'HOLIDAY') counts.holiday += 1;
-      if (status === 'HALF_DAY') counts.halfDay += 1;
-      if (status === 'LEAVE') counts.leave += 1;
-      daily.push({ day, status, note: records.get(day)?.note ?? null });
+      const dayRecords = recordsByDay.get(day) ?? [];
+      const primary = dayRecords[0];
+      const status = primary?.status ?? 'UNMARKED';
+      for (const record of dayRecords) {
+        if (record.status === 'PRESENT') counts.present += 1;
+        if (record.status === 'LATE') counts.late += 1;
+        if (record.status === 'ABSENT') counts.absent += 1;
+        if (record.status === 'HOLIDAY') counts.holiday += 1;
+        if (record.status === 'HALF_DAY') counts.halfDay += 1;
+        if (record.status === 'LEAVE' || record.status === 'LOP' || record.status === 'CASUAL_LEAVE') counts.leave += 1;
+      }
+      daily.push({
+        day,
+        status,
+        note: primary?.note ?? null,
+        units: dayRecords.map((record) => ({
+          unitKey: record.unitKey,
+          label: record.period?.name ?? (record.slotType ? String(record.slotType).replace('_', ' ') : record.unitType),
+          status: record.status,
+          note: record.note,
+        })),
+      });
     }
-    const workingDays = Math.max(0, daysInMonth - holidayDays.size);
+    const unitDivisor = Math.max(1, Math.round((counts.present + counts.late + counts.absent + counts.halfDay + counts.leave) / Math.max(1, daysInMonth - holidayDays.size)));
+    const workingDays = Math.max(0, daysInMonth - holidayDays.size) * unitDivisor;
     const attended = counts.present + counts.late + counts.halfDay * 0.5;
     return { staff: formatStaff(item), ...counts, percentage: workingDays ? Math.round((attended / workingDays) * 10000) / 100 : 0, daily };
   });
