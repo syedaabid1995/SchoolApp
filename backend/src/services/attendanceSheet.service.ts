@@ -188,7 +188,21 @@ export const resolveAttendanceConfiguration = async (params: AttendanceScopePara
     })[0];
 
   if (!selected) {
-    return { id: null, mode: 'DAILY', source: 'DEFAULT', configuration: null };
+    const configuration = await prisma.attendanceConfiguration.create({
+      data: {
+        schoolId: params.schoolId,
+        scope: 'SCHOOL',
+        mode: 'TWICE_DAILY',
+        effectiveFrom: new Date('2000-01-01T00:00:00.000Z'),
+        isActive: true,
+      },
+    });
+    return {
+      id: configuration.id,
+      mode: configuration.mode,
+      source: 'DEFAULT',
+      configuration,
+    };
   }
 
   return {

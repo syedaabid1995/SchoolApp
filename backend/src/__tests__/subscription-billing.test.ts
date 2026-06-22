@@ -250,7 +250,17 @@ test('overdue subscription invoice suspends the school and marks subscription ov
 
 test('new school creation starts a proper trial subscription', async () => {
   let createdSubscription: any = null;
+  let studentAttendanceConfiguration: any = null;
+  let staffAttendanceConfiguration: any = null;
   patch(prisma.school as any, 'create', async ({ data }: any) => ({ id: SCHOOL_A_ID, ...data, createdAt: new Date(), updatedAt: new Date() }));
+  patch(prisma.attendanceConfiguration as any, 'create', async ({ data }: any) => {
+    studentAttendanceConfiguration = data;
+    return { id: 'student-attendance-config', ...data };
+  });
+  patch(prisma.staffAttendanceConfiguration as any, 'create', async ({ data }: any) => {
+    staffAttendanceConfiguration = data;
+    return { id: 'staff-attendance-config', ...data };
+  });
   patch(prisma.subscriptionPlanDef as any, 'findUnique', async () => ({ ...plan, trialDays: 10 }));
   patch(prisma.subscription as any, 'create', async ({ data }: any) => {
     createdSubscription = data;
@@ -261,6 +271,10 @@ test('new school creation starts a proper trial subscription', async () => {
   await createSchool({ name: 'School A', code: 'SCHA', subscriptionPlan: 'STANDARD' });
 
   assert.equal(createdSubscription.status, 'TRIAL');
+  assert.equal(studentAttendanceConfiguration.mode, 'TWICE_DAILY');
+  assert.equal(studentAttendanceConfiguration.scope, 'SCHOOL');
+  assert.equal(staffAttendanceConfiguration.mode, 'TWICE_DAILY');
+  assert.equal(staffAttendanceConfiguration.roleName, null);
   assert.equal(createdSubscription.endsAt.getTime(), createdSubscription.startsAt.getTime() + 10 * 24 * 60 * 60 * 1000);
   assert.equal(createdSubscription.nextDueAt.getTime(), createdSubscription.endsAt.getTime() + 15 * 24 * 60 * 60 * 1000);
 });

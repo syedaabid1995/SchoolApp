@@ -63,7 +63,7 @@ const resolveStaffAttendanceConfiguration = async (schoolId: string, roleName: R
   const selected = rows.find((row) => row.roleName === roleName) ?? rows.find((row) => row.roleName === null);
   return {
     id: selected?.id ?? null,
-    mode: selected?.mode ?? 'DAILY',
+    mode: selected?.mode ?? 'TWICE_DAILY',
     source: selected ? (selected.roleName ? 'ROLE' : 'SCHOOL') : 'DEFAULT',
     configuration: selected ?? null,
   };

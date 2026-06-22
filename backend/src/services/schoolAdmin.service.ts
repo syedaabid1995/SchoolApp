@@ -283,6 +283,26 @@ export const createSchool = async (payload: SchoolCreateInput) => {
         },
       });
 
+      const attendanceEffectiveFrom = new Date('2000-01-01T00:00:00.000Z');
+      await tx.attendanceConfiguration.create({
+        data: {
+          schoolId: school.id,
+          scope: 'SCHOOL',
+          mode: 'TWICE_DAILY',
+          effectiveFrom: attendanceEffectiveFrom,
+          isActive: true,
+        },
+      });
+      await tx.staffAttendanceConfiguration.create({
+        data: {
+          schoolId: school.id,
+          roleName: null,
+          mode: 'TWICE_DAILY',
+          effectiveFrom: attendanceEffectiveFrom,
+          isActive: true,
+        },
+      });
+
     const startsAt = new Date();
     const trialDays = planRow.trialDays ?? 0;
     const endsAt = trialDays > 0 ? addDays(startsAt, trialDays) : startsAt;

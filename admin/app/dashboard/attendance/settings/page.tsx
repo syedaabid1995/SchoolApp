@@ -53,7 +53,7 @@ const hierarchy = ['Section', 'Class', 'Academic Year', 'School'];
 
 const emptyDraft = (): Draft => ({
   scope: 'SCHOOL',
-  mode: 'DAILY',
+  mode: 'TWICE_DAILY',
   academicYearId: '',
   classId: '',
   sectionId: '',
@@ -64,7 +64,7 @@ const emptyDraft = (): Draft => ({
 
 const emptyStaffDraft = (): StaffDraft => ({
   roleName: '',
-  mode: 'DAILY',
+  mode: 'TWICE_DAILY',
   effectiveFrom: new Date().toISOString().slice(0, 10),
   effectiveTo: '',
   isActive: true,

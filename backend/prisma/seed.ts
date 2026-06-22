@@ -527,7 +527,30 @@ const ensureDefaultAttendanceConfiguration = async (schoolId: string) => {
     data: {
       schoolId,
       scope: 'SCHOOL',
-      mode: 'DAILY',
+      mode: 'TWICE_DAILY',
+      effectiveFrom: new Date('2000-01-01T00:00:00.000Z'),
+      isActive: true,
+    },
+  });
+};
+
+const ensureDefaultStaffAttendanceConfiguration = async (schoolId: string) => {
+  const existing = await prisma.staffAttendanceConfiguration.findFirst({
+    where: {
+      schoolId,
+      roleName: null,
+      isActive: true,
+    },
+    select: { id: true },
+  });
+
+  if (existing) return existing;
+
+  return prisma.staffAttendanceConfiguration.create({
+    data: {
+      schoolId,
+      roleName: null,
+      mode: 'TWICE_DAILY',
       effectiveFrom: new Date('2000-01-01T00:00:00.000Z'),
       isActive: true,
     },
@@ -538,6 +561,7 @@ const ensureDefaultAttendanceConfigurations = async () => {
   const schools = await prisma.school.findMany({ select: { id: true } });
   for (const school of schools) {
     await ensureDefaultAttendanceConfiguration(school.id);
+    await ensureDefaultStaffAttendanceConfiguration(school.id);
   }
 };
 
