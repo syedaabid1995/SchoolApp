@@ -1,8 +1,8 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:school_flutter/core/permissions/permission_checker.dart';
-import 'package:school_flutter/core/permissions/permission_codes.dart';
-import 'package:school_flutter/core/permissions/permission_registry.dart';
-import 'package:school_flutter/features/notices/domain/entities/notice.dart';
+import 'package:school_flutter/global_ui/core/permissions/permission_checker.dart';
+import 'package:school_flutter/global_ui/core/permissions/permission_codes.dart';
+import 'package:school_flutter/global_ui/core/permissions/permission_registry.dart';
+import 'package:school_flutter/global_ui/features/notices/domain/entities/notice.dart';
 
 void main() {
   group('NoticeBoardState communication filters', () {
@@ -142,7 +142,10 @@ void main() {
 
       final ids = checker.visibleModules().map((module) => module.id).toSet();
 
-      expect(ids, containsAll(['dashboard', 'attendance', 'timetable']));
+      expect(
+        ids,
+        containsAll(['dashboard', 'student-attendance', 'timetable']),
+      );
       expect(ids, containsAll(['homework', 'leave', 'exams', 'marks']));
       expect(ids, isNot(contains('fees')));
     });

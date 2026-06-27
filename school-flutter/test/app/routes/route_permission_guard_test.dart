@@ -1,7 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:school_flutter/app/routes/route_permission_guard.dart';
-import 'package:school_flutter/core/permissions/permission_checker.dart';
-import 'package:school_flutter/core/permissions/permission_codes.dart';
+import 'package:school_flutter/global_ui/app/routes/route_permission_guard.dart';
+import 'package:school_flutter/global_ui/core/permissions/permission_checker.dart';
+import 'package:school_flutter/global_ui/core/permissions/permission_codes.dart';
 
 void main() {
   test('route guard allows authenticated public staff routes', () {

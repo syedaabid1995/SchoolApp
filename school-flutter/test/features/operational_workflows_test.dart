@@ -1,24 +1,24 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:school_flutter/core/permissions/permission_checker.dart';
-import 'package:school_flutter/core/permissions/permission_codes.dart';
-import 'package:school_flutter/core/permissions/permission_registry.dart';
-import 'package:school_flutter/features/classes/data/models/class_assignment_models.dart';
-import 'package:school_flutter/features/classes/domain/entities/class_assignment.dart';
-import 'package:school_flutter/features/classes/domain/repositories/class_assignment_repository.dart';
-import 'package:school_flutter/features/classes/presentation/providers/class_assignment_providers.dart';
-import 'package:school_flutter/features/homework/data/models/homework_model.dart';
-import 'package:school_flutter/features/homework/domain/entities/homework.dart';
-import 'package:school_flutter/features/homework/domain/repositories/homework_repository.dart';
-import 'package:school_flutter/features/homework/presentation/providers/homework_providers.dart';
-import 'package:school_flutter/features/leave/data/models/leave_models.dart';
-import 'package:school_flutter/features/leave/domain/entities/leave_entities.dart';
-import 'package:school_flutter/features/leave/domain/repositories/leave_repository.dart';
-import 'package:school_flutter/features/leave/presentation/providers/leave_providers.dart';
-import 'package:school_flutter/features/notices/data/models/notice_model.dart';
-import 'package:school_flutter/features/notices/domain/entities/notice.dart';
-import 'package:school_flutter/features/notices/domain/repositories/notice_repository.dart';
-import 'package:school_flutter/features/notices/presentation/providers/notice_providers.dart';
+import 'package:school_flutter/global_ui/core/permissions/permission_checker.dart';
+import 'package:school_flutter/global_ui/core/permissions/permission_codes.dart';
+import 'package:school_flutter/global_ui/core/permissions/permission_registry.dart';
+import 'package:school_flutter/global_ui/features/classes/data/models/class_assignment_models.dart';
+import 'package:school_flutter/global_ui/features/classes/domain/entities/class_assignment.dart';
+import 'package:school_flutter/global_ui/features/classes/domain/repositories/class_assignment_repository.dart';
+import 'package:school_flutter/global_ui/features/classes/presentation/providers/class_assignment_providers.dart';
+import 'package:school_flutter/global_ui/features/homework/data/models/homework_model.dart';
+import 'package:school_flutter/global_ui/features/homework/domain/entities/homework.dart';
+import 'package:school_flutter/global_ui/features/homework/domain/repositories/homework_repository.dart';
+import 'package:school_flutter/global_ui/features/homework/presentation/providers/homework_providers.dart';
+import 'package:school_flutter/global_ui/features/leave/data/models/leave_models.dart';
+import 'package:school_flutter/global_ui/features/leave/domain/entities/leave_entities.dart';
+import 'package:school_flutter/global_ui/features/leave/domain/repositories/leave_repository.dart';
+import 'package:school_flutter/global_ui/features/leave/presentation/providers/leave_providers.dart';
+import 'package:school_flutter/global_ui/features/notices/data/models/notice_model.dart';
+import 'package:school_flutter/global_ui/features/notices/domain/entities/notice.dart';
+import 'package:school_flutter/global_ui/features/notices/domain/repositories/notice_repository.dart';
+import 'package:school_flutter/global_ui/features/notices/presentation/providers/notice_providers.dart';
 
 void main() {
   group('leave models', () {

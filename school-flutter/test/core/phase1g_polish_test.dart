@@ -3,20 +3,20 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hive/hive.dart';
-import 'package:school_flutter/app/routes/app_routes.dart';
-import 'package:school_flutter/app/theme/app_breakpoints.dart';
-import 'package:school_flutter/app/theme/app_icons.dart';
-import 'package:school_flutter/app/theme/app_theme.dart';
-import 'package:school_flutter/app/theme/app_typography.dart';
-import 'package:school_flutter/core/cache/cache_invalidation_service.dart';
-import 'package:school_flutter/core/localization/app_localizations.dart';
-import 'package:school_flutter/core/services/notification_service.dart';
-import 'package:school_flutter/core/storage/hive_cache_service.dart';
-import 'package:school_flutter/core/widgets/app_button.dart';
-import 'package:school_flutter/core/widgets/app_text_field.dart';
-import 'package:school_flutter/core/widgets/empty_state.dart';
-import 'package:school_flutter/core/widgets/status_panel.dart';
-import 'package:school_flutter/features/settings/domain/entities/settings_state.dart';
+import 'package:school_flutter/global_ui/app/routes/app_routes.dart';
+import 'package:school_flutter/global_ui/app/theme/app_breakpoints.dart';
+import 'package:school_flutter/global_ui/app/theme/app_icons.dart';
+import 'package:school_flutter/global_ui/app/theme/app_theme.dart';
+import 'package:school_flutter/global_ui/app/theme/app_typography.dart';
+import 'package:school_flutter/global_ui/core/cache/cache_invalidation_service.dart';
+import 'package:school_flutter/global_ui/core/localization/app_localizations.dart';
+import 'package:school_flutter/global_ui/core/services/notification_service.dart';
+import 'package:school_flutter/global_ui/core/storage/hive_cache_service.dart';
+import 'package:school_flutter/global_ui/core/widgets/app_button.dart';
+import 'package:school_flutter/global_ui/core/widgets/app_text_field.dart';
+import 'package:school_flutter/global_ui/core/widgets/empty_state.dart';
+import 'package:school_flutter/global_ui/core/widgets/status_panel.dart';
+import 'package:school_flutter/global_ui/features/settings/domain/entities/settings_state.dart';
 
 void main() {
   setUpAll(() {

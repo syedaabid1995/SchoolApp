@@ -1,7 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:school_flutter/core/permissions/permission_checker.dart';
-import 'package:school_flutter/core/permissions/permission_codes.dart';
-import 'package:school_flutter/core/permissions/permission_registry.dart';
+import 'package:school_flutter/global_ui/core/permissions/permission_checker.dart';
+import 'package:school_flutter/global_ui/core/permissions/permission_codes.dart';
+import 'package:school_flutter/global_ui/core/permissions/permission_registry.dart';
 
 void main() {
   test('module registry defines required staff app modules', () {
@@ -40,7 +40,10 @@ void main() {
     });
     final modules = checker.visibleModules().map((module) => module.id);
 
-    expect(modules, containsAll(['dashboard', 'attendance', 'timetable']));
+    expect(
+      modules,
+      containsAll(['dashboard', 'student-attendance', 'timetable']),
+    );
     expect(modules, isNot(contains('fees')));
   });
 
@@ -75,7 +78,8 @@ void main() {
     });
     final modules = checker.visibleModules().map((module) => module.id);
 
-    expect(modules, containsAll(['attendance', 'reports', 'hr', 'timetable']));
+    expect(modules, containsAll(['attendance', 'reports', 'hr']));
+    expect(modules, isNot(contains('timetable')));
   });
 
   test('profile settings and notifications are authenticated modules', () {

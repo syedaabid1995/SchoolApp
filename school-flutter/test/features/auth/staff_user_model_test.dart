@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:school_flutter/features/auth/data/models/staff_user_model.dart';
+import 'package:school_flutter/global_ui/features/auth/data/models/staff_user_model.dart';
 
 void main() {
   test('StaffUserModel parses backend login user shape', () {

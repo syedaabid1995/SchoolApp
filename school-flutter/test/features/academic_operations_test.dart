@@ -1,19 +1,19 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:school_flutter/core/permissions/permission_checker.dart';
-import 'package:school_flutter/core/permissions/permission_codes.dart';
-import 'package:school_flutter/core/permissions/permission_registry.dart';
-import 'package:school_flutter/features/academic/domain/entities/academic_overview.dart';
-import 'package:school_flutter/features/classes/domain/entities/class_assignment.dart';
-import 'package:school_flutter/features/exams/data/models/exam_models.dart';
-import 'package:school_flutter/features/exams/domain/entities/exam.dart';
-import 'package:school_flutter/features/exams/domain/repositories/exam_repository.dart';
-import 'package:school_flutter/features/exams/presentation/providers/exam_providers.dart';
-import 'package:school_flutter/features/homework/domain/entities/homework.dart';
-import 'package:school_flutter/features/marks/data/models/marks_models.dart';
-import 'package:school_flutter/features/marks/domain/entities/marks.dart';
-import 'package:school_flutter/features/marks/domain/repositories/marks_repository.dart';
-import 'package:school_flutter/features/marks/presentation/providers/marks_providers.dart';
+import 'package:school_flutter/global_ui/core/permissions/permission_checker.dart';
+import 'package:school_flutter/global_ui/core/permissions/permission_codes.dart';
+import 'package:school_flutter/global_ui/core/permissions/permission_registry.dart';
+import 'package:school_flutter/global_ui/features/academic/domain/entities/academic_overview.dart';
+import 'package:school_flutter/global_ui/features/classes/domain/entities/class_assignment.dart';
+import 'package:school_flutter/global_ui/features/exams/data/models/exam_models.dart';
+import 'package:school_flutter/global_ui/features/exams/domain/entities/exam.dart';
+import 'package:school_flutter/global_ui/features/exams/domain/repositories/exam_repository.dart';
+import 'package:school_flutter/global_ui/features/exams/presentation/providers/exam_providers.dart';
+import 'package:school_flutter/global_ui/features/homework/domain/entities/homework.dart';
+import 'package:school_flutter/global_ui/features/marks/data/models/marks_models.dart';
+import 'package:school_flutter/global_ui/features/marks/domain/entities/marks.dart';
+import 'package:school_flutter/global_ui/features/marks/domain/repositories/marks_repository.dart';
+import 'package:school_flutter/global_ui/features/marks/presentation/providers/marks_providers.dart';
 
 void main() {
   group('exam models', () {

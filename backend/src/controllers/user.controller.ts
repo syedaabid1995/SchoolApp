@@ -278,26 +278,85 @@ export const listMyAssignedClassesApi = async (req: Request, res: Response) => {
     return res.status(200).json({ academicYears: [], classes: [], sections: [], subjects: [] });
   }
 
-  const assignments = await prisma.assignSubject.findMany({
-    where: { schoolId, teacherId: teacher.id },
-    include: {
-      class: { select: { id: true, name: true, academicYearId: true } },
-      section: { select: { id: true, name: true } },
-      subject: { select: { id: true, name: true, code: true, type: true, classId: true } },
-      teacher: { select: { id: true, firstName: true, lastName: true, employeeNo: true } },
-    },
-    orderBy: [{ class: { name: 'asc' } }, { section: { name: 'asc' } }, { subject: { name: 'asc' } }],
-  });
+  const [subjectAssignments, classAssignments, classTeacherAssignments] = await Promise.all([
+    prisma.assignSubject.findMany({
+      where: { schoolId, teacherId: teacher.id },
+      include: {
+        class: { select: { id: true, name: true, academicYearId: true } },
+        section: { select: { id: true, name: true } },
+        subject: { select: { id: true, name: true, code: true, type: true, classId: true } },
+        teacher: { select: { id: true, firstName: true, lastName: true, employeeNo: true } },
+      },
+      orderBy: [{ class: { name: 'asc' } }, { section: { name: 'asc' } }, { subject: { name: 'asc' } }],
+    }),
+    prisma.teacherClassAssignment.findMany({
+      where: { teacherId: teacher.id, class: { schoolId } },
+      include: {
+        class: { select: { id: true, name: true, academicYearId: true } },
+        section: { select: { id: true, name: true } },
+      },
+      orderBy: [{ class: { name: 'asc' } }, { section: { name: 'asc' } }],
+    }),
+    prisma.classTeacher.findMany({
+      where: { schoolId, teacherId: teacher.id },
+      include: {
+        class: { select: { id: true, name: true, academicYearId: true } },
+        section: { select: { id: true, name: true } },
+      },
+      orderBy: [{ class: { name: 'asc' } }, { section: { name: 'asc' } }],
+    }),
+  ]);
 
-  if (assignments.length === 0) {
+  if (subjectAssignments.length === 0 && classAssignments.length === 0 && classTeacherAssignments.length === 0) {
     return res.status(200).json({ academicYears: [], classes: [], sections: [], subjects: [] });
   }
 
   const classMap = new Map<string, { id: string; name: string; academicYearId: string | null }>();
   const sectionMap = new Map<string, { id: string; name: string; classId: string }>();
-  for (const assignment of assignments) {
-    classMap.set(assignment.classId, assignment.class);
-    sectionMap.set(assignment.sectionId, { ...assignment.section, classId: assignment.classId });
+  const classWideClassIds = new Set<string>();
+  const addClass = (item: { id: string; name: string; academicYearId: string | null }) => {
+    classMap.set(item.id, item);
+  };
+  const addSection = (classId: string, section?: { id: string; name: string } | null) => {
+    if (section) sectionMap.set(`${classId}:${section.id}`, { ...section, classId });
+  };
+
+  for (const assignment of subjectAssignments) {
+    addClass(assignment.class);
+    addSection(assignment.classId, assignment.section);
+  }
+  for (const assignment of classAssignments) {
+    addClass(assignment.class);
+    if (assignment.section) addSection(assignment.classId, assignment.section);
+    else classWideClassIds.add(assignment.classId);
+  }
+  for (const assignment of classTeacherAssignments) {
+    addClass(assignment.class);
+    addSection(assignment.classId, assignment.section);
+  }
+
+  if (classWideClassIds.size > 0) {
+    const classIds = [...classWideClassIds];
+    const classWideSections = await prisma.section.findMany({
+      where: {
+        schoolId,
+        OR: [{ classId: { in: classIds } }, { classSections: { some: { classId: { in: classIds } } } }],
+      },
+      select: {
+        id: true,
+        name: true,
+        classId: true,
+        classSections: { where: { classId: { in: classIds } }, select: { classId: true } },
+      },
+      orderBy: { name: 'asc' },
+    });
+
+    for (const section of classWideSections) {
+      const linkedClassIds = new Set<string>();
+      if (section.classId && classWideClassIds.has(section.classId)) linkedClassIds.add(section.classId);
+      for (const link of section.classSections) linkedClassIds.add(link.classId);
+      for (const classId of linkedClassIds) addSection(classId, section);
+    }
   }
 
   const academicYearIds = [...new Set([...classMap.values()].map((c) => c.academicYearId).filter(Boolean))] as string[];
@@ -318,7 +377,7 @@ export const listMyAssignedClassesApi = async (req: Request, res: Response) => {
       classId: s.classId,
       classSections: [{ classId: s.classId }],
     })),
-    subjects: assignments,
+    subjects: subjectAssignments,
   });
 };
 

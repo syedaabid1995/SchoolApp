@@ -1,11 +1,11 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:school_flutter/core/network/api_exception.dart';
-import 'package:school_flutter/core/network/error_handler.dart';
-import 'package:school_flutter/core/network/failures.dart';
-import 'package:school_flutter/features/attendance/data/models/attendance_summary_model.dart';
-import 'package:school_flutter/features/notifications/data/models/staff_notification_model.dart';
-import 'package:school_flutter/features/settings/domain/entities/settings_state.dart';
-import 'package:school_flutter/features/timetable/data/models/timetable_model.dart';
+import 'package:school_flutter/global_ui/core/network/api_exception.dart';
+import 'package:school_flutter/global_ui/core/network/error_handler.dart';
+import 'package:school_flutter/global_ui/core/network/failures.dart';
+import 'package:school_flutter/global_ui/features/attendance/data/models/attendance_summary_model.dart';
+import 'package:school_flutter/global_ui/features/notifications/data/models/staff_notification_model.dart';
+import 'package:school_flutter/global_ui/features/settings/domain/entities/settings_state.dart';
+import 'package:school_flutter/global_ui/features/timetable/data/models/timetable_model.dart';
 
 void main() {
   group('canonical attendance models', () {

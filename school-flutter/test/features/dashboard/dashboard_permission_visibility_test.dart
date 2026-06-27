@@ -1,36 +1,36 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:school_flutter/core/permissions/permission_codes.dart';
-import 'package:school_flutter/features/attendance/domain/entities/attendance_summary.dart';
-import 'package:school_flutter/features/attendance/domain/repositories/attendance_repository.dart';
-import 'package:school_flutter/features/auth/domain/entities/auth_session.dart';
-import 'package:school_flutter/features/auth/domain/entities/staff_user.dart';
-import 'package:school_flutter/features/auth/domain/repositories/auth_repository.dart';
-import 'package:school_flutter/features/classes/domain/entities/class_assignment.dart';
-import 'package:school_flutter/features/classes/domain/repositories/class_assignment_repository.dart';
-import 'package:school_flutter/features/dashboard/data/datasources/dashboard_remote_datasource.dart';
-import 'package:school_flutter/features/dashboard/data/repositories/dashboard_repository_impl.dart';
-import 'package:school_flutter/features/exams/domain/entities/exam.dart';
-import 'package:school_flutter/features/exams/domain/repositories/exam_repository.dart';
-import 'package:school_flutter/features/homework/domain/entities/homework.dart';
-import 'package:school_flutter/features/homework/domain/repositories/homework_repository.dart';
-import 'package:school_flutter/features/leave/domain/entities/leave_entities.dart';
-import 'package:school_flutter/features/leave/domain/repositories/leave_repository.dart';
-import 'package:school_flutter/features/marks/domain/entities/marks.dart';
-import 'package:school_flutter/features/marks/domain/repositories/marks_repository.dart';
-import 'package:school_flutter/features/notices/domain/entities/notice.dart';
-import 'package:school_flutter/features/notices/domain/repositories/notice_repository.dart';
-import 'package:school_flutter/features/notifications/domain/entities/staff_notification.dart';
-import 'package:school_flutter/features/notifications/domain/repositories/notification_repository.dart';
-import 'package:school_flutter/features/timetable/domain/entities/timetable_entry.dart';
-import 'package:school_flutter/features/timetable/domain/repositories/timetable_repository.dart';
+import 'package:school_flutter/global_ui/core/permissions/permission_codes.dart';
+import 'package:school_flutter/global_ui/features/attendance/domain/entities/attendance_summary.dart';
+import 'package:school_flutter/global_ui/features/attendance/domain/repositories/attendance_repository.dart';
+import 'package:school_flutter/global_ui/features/auth/domain/entities/auth_session.dart';
+import 'package:school_flutter/global_ui/features/auth/domain/entities/staff_user.dart';
+import 'package:school_flutter/global_ui/features/auth/domain/repositories/auth_repository.dart';
+import 'package:school_flutter/global_ui/features/classes/domain/entities/class_assignment.dart';
+import 'package:school_flutter/global_ui/features/classes/domain/repositories/class_assignment_repository.dart';
+import 'package:school_flutter/global_ui/features/dashboard/data/datasources/dashboard_remote_datasource.dart';
+import 'package:school_flutter/global_ui/features/dashboard/data/repositories/dashboard_repository_impl.dart';
+import 'package:school_flutter/global_ui/features/exams/domain/entities/exam.dart';
+import 'package:school_flutter/global_ui/features/exams/domain/repositories/exam_repository.dart';
+import 'package:school_flutter/global_ui/features/homework/domain/entities/homework.dart';
+import 'package:school_flutter/global_ui/features/homework/domain/repositories/homework_repository.dart';
+import 'package:school_flutter/global_ui/features/leave/domain/entities/leave_entities.dart';
+import 'package:school_flutter/global_ui/features/leave/domain/repositories/leave_repository.dart';
+import 'package:school_flutter/global_ui/features/marks/domain/entities/marks.dart';
+import 'package:school_flutter/global_ui/features/marks/domain/repositories/marks_repository.dart';
+import 'package:school_flutter/global_ui/features/notices/domain/entities/notice.dart';
+import 'package:school_flutter/global_ui/features/notices/domain/repositories/notice_repository.dart';
+import 'package:school_flutter/global_ui/features/notifications/domain/entities/staff_notification.dart';
+import 'package:school_flutter/global_ui/features/notifications/domain/repositories/notification_repository.dart';
+import 'package:school_flutter/global_ui/features/timetable/domain/entities/timetable_entry.dart';
+import 'package:school_flutter/global_ui/features/timetable/domain/repositories/timetable_repository.dart';
 
 void main() {
   test(
     'dashboard loads attendance card only when attendance is visible',
     () async {
       final fixture = _DashboardFixture({
-        PermissionCodes.attendanceView,
-        PermissionCodes.attendanceCreate,
+        PermissionCodes.staffAttendanceView,
+        PermissionCodes.staffAttendanceCreate,
       });
 
       final snapshot = await fixture.repository.getDashboard();
@@ -212,10 +212,29 @@ class _CountingAttendanceRepository implements AttendanceRepository {
   Future<TeacherAttendanceRecord> markSelfAttendance({
     required String status,
     DateTime? date,
+    AttendanceUnit? unit,
   }) async => TeacherAttendanceRecord(
     id: 'record-1',
     date: DateTime(2026),
     status: status,
+  );
+
+  @override
+  Future<SelfAttendanceOptions> getSelfAttendanceOptions({
+    DateTime? date,
+  }) async => const SelfAttendanceOptions(
+    configuration: AttendanceConfiguration(
+      id: null,
+      mode: AttendanceMode.daily,
+      source: 'DEFAULT',
+    ),
+    units: [
+      AttendanceUnit(
+        unitType: AttendanceUnitType.day,
+        label: 'Day',
+        source: 'DAY',
+      ),
+    ],
   );
 
   @override

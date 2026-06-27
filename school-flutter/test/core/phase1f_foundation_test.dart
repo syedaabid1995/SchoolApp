@@ -3,14 +3,14 @@ import 'dart:io';
 import 'package:dio/dio.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hive/hive.dart';
-import 'package:school_flutter/core/analytics/analytics_service.dart';
-import 'package:school_flutter/core/cache/cache_invalidation_service.dart';
-import 'package:school_flutter/core/errors/app_error_mapper.dart';
-import 'package:school_flutter/core/network/failures.dart';
-import 'package:school_flutter/core/pagination/paginated_state.dart';
-import 'package:school_flutter/core/storage/hive_cache_service.dart';
-import 'package:school_flutter/core/sync/mutation_queue_service.dart';
-import 'package:school_flutter/core/sync/sync_models.dart';
+import 'package:school_flutter/global_ui/core/analytics/analytics_service.dart';
+import 'package:school_flutter/global_ui/core/cache/cache_invalidation_service.dart';
+import 'package:school_flutter/global_ui/core/errors/app_error_mapper.dart';
+import 'package:school_flutter/global_ui/core/network/failures.dart';
+import 'package:school_flutter/global_ui/core/pagination/paginated_state.dart';
+import 'package:school_flutter/global_ui/core/storage/hive_cache_service.dart';
+import 'package:school_flutter/global_ui/core/sync/mutation_queue_service.dart';
+import 'package:school_flutter/global_ui/core/sync/sync_models.dart';
 
 void main() {
   late Directory hiveDir;

@@ -1,7 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:school_flutter/core/permissions/permission_checker.dart';
-import 'package:school_flutter/core/permissions/permission_codes.dart';
-import 'package:school_flutter/core/permissions/permission_registry.dart';
+import 'package:school_flutter/global_ui/core/permissions/permission_checker.dart';
+import 'package:school_flutter/global_ui/core/permissions/permission_codes.dart';
+import 'package:school_flutter/global_ui/core/permissions/permission_registry.dart';
 
 void main() {
   test('PermissionChecker evaluates exact permission codes', () {
@@ -69,11 +69,11 @@ void main() {
     expect(checker.canAccessModule(dashboard), isTrue);
   });
 
-  test('attendance route requires attendance-related permissions', () {
+  test('student attendance route requires student attendance permissions', () {
     const checker = PermissionChecker({PermissionCodes.attendanceView});
 
-    expect(checker.canAccessRoute('/attendance'), isTrue);
-    expect(checker.canAccessRoute('/attendance/history'), isTrue);
+    expect(checker.canAccessRoute('/student-attendance'), isTrue);
+    expect(checker.canAccessRoute('/attendance'), isFalse);
   });
 
   test('fees route is hidden from users without fee permissions', () {

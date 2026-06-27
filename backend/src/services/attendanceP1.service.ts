@@ -13,10 +13,94 @@ const endOfDay = (value: Date) => {
   return new Date(Date.UTC(value.getUTCFullYear(), value.getUTCMonth(), value.getUTCDate(), 23, 59, 59, 999));
 };
 
+const nextDay = (value: Date) => {
+  const date = normalizeDate(value);
+  date.setUTCDate(date.getUTCDate() + 1);
+  return date;
+};
+
+const toDateKey = (value: Date) => normalizeDate(value).toISOString().slice(0, 10);
+
+const dayValueByKey = new Map([
+  ['saturday', 1],
+  ['sat', 1],
+  ['sunday', 2],
+  ['sun', 2],
+  ['monday', 3],
+  ['mon', 3],
+  ['tuesday', 4],
+  ['tue', 4],
+  ['wednesday', 5],
+  ['wed', 5],
+  ['thursday', 6],
+  ['thu', 6],
+  ['friday', 7],
+  ['fri', 7],
+]);
+
+const routineDayValue = (date: Date) => {
+  const day = normalizeDate(date).getUTCDay();
+  return day === 6 ? 1 : day + 2;
+};
+
 const staffAttendanceUnitKey = (unitType: AttendanceUnitType, slotType?: 'MORNING' | 'AFTERNOON' | null, periodId?: string | null) => {
   if (unitType === 'SLOT') return `SLOT:${slotType ?? 'MORNING'}`;
   if (unitType === 'PERIOD') return `PERIOD:${periodId ?? 'UNKNOWN'}`;
   return 'DAY';
+};
+
+const parseSystemHolidays = (settings: { holidays: Prisma.JsonValue } | null, fromDate: Date, toDate: Date) => {
+  const raw = Array.isArray(settings?.holidays) ? settings.holidays : [];
+  const holidays: Array<{ date: Date; title: string; details?: string | null; type?: string | null }> = [];
+  const start = normalizeDate(fromDate);
+  const end = normalizeDate(toDate);
+  for (const item of raw) {
+    if (!item || typeof item !== 'object') continue;
+    const row = item as Record<string, unknown>;
+    const from = typeof row.fromDate === 'string' ? normalizeDate(row.fromDate) : null;
+    const to = typeof row.toDate === 'string' ? normalizeDate(row.toDate) : from;
+    if (!from || !to) continue;
+    for (let cursor = new Date(from); cursor <= to; cursor.setUTCDate(cursor.getUTCDate() + 1)) {
+      const day = normalizeDate(cursor);
+      if (day < start || day > end) continue;
+      holidays.push({
+        date: day,
+        title: String(row.title ?? 'Holiday'),
+        details: typeof row.details === 'string' ? row.details : null,
+        type: typeof row.type === 'string' ? row.type : null,
+      });
+    }
+  }
+  return holidays;
+};
+
+const parseSystemWeekends = (settings: { weekends: Prisma.JsonValue } | null, fromDate: Date, toDate: Date) => {
+  const weekendValues = new Set<number>();
+  const raw = Array.isArray(settings?.weekends) ? settings.weekends : [];
+  if (!raw.length) weekendValues.add(7);
+  for (const item of raw) {
+    if (!item || typeof item !== 'object' || Array.isArray(item)) continue;
+    const row = item as Record<string, unknown>;
+    if (row.isWeekend !== true) continue;
+    const key = String(row.id ?? row.name ?? '').trim().toLowerCase();
+    const value = dayValueByKey.get(key);
+    if (value) weekendValues.add(value);
+  }
+
+  const weekends: Array<{ date: Date; title: string; details?: string | null; type?: string | null }> = [];
+  const start = normalizeDate(fromDate);
+  const end = normalizeDate(toDate);
+  for (let cursor = new Date(start); cursor <= end; cursor.setUTCDate(cursor.getUTCDate() + 1)) {
+    const day = normalizeDate(cursor);
+    if (!weekendValues.has(routineDayValue(day))) continue;
+    weekends.push({
+      date: day,
+      title: 'Weekend',
+      details: 'Configured school weekend',
+      type: 'Weekend',
+    });
+  }
+  return weekends;
 };
 
 const defaultSelfAttendancePeriods = [
@@ -171,6 +255,32 @@ export const ensureTeacherAssignedToClassSection = async (params: {
       select: { id: true },
     });
     if (legacy) assigned = legacy;
+  }
+
+  if (!assigned) {
+    const subjectAssignment = await prisma.assignSubject.findFirst({
+      where: {
+        schoolId: params.schoolId,
+        teacherId: teacher.id,
+        classId: params.classId,
+        ...(params.sectionId ? { sectionId: params.sectionId } : {}),
+      },
+      select: { id: true },
+    });
+    if (subjectAssignment) assigned = subjectAssignment;
+  }
+
+  if (!assigned) {
+    const classTeacher = await prisma.classTeacher.findFirst({
+      where: {
+        schoolId: params.schoolId,
+        teacherId: teacher.id,
+        classId: params.classId,
+        ...(params.sectionId ? { sectionId: params.sectionId } : {}),
+      },
+      select: { id: true },
+    });
+    if (classTeacher) assigned = classTeacher;
   }
 
   if (!assigned) throw new HttpError(403, 'Teacher is not assigned to this class');
@@ -767,7 +877,7 @@ export const listTeacherSelfAttendance = async (params: {
   const teacherProfile = params.teacherId
     ? await prisma.teacherProfile.findFirst({
         where: { id: params.teacherId, schoolId: params.schoolId, isActive: true },
-        select: { id: true, userId: true },
+        select: { id: true, userId: true, roleName: true },
       })
     : await getTeacherProfile(params.schoolId, params.actorId);
 
@@ -776,24 +886,38 @@ export const listTeacherSelfAttendance = async (params: {
     throw new HttpError(403, 'Teachers can only view self attendance');
   }
 
-  const rows = await prisma.staffAttendance.findMany({
-    where: {
-      schoolId: params.schoolId,
-      staffId: teacherProfile.id,
-      ...(params.fromDate || params.toDate
-        ? {
-            attendanceDate: {
-              ...(params.fromDate ? { gte: normalizeDate(params.fromDate) } : {}),
-              ...(params.toDate ? { lte: endOfDay(normalizeDate(params.toDate)) } : {}),
-            },
-          }
-        : {}),
-    },
-    include: { period: { select: { id: true, name: true, startTime: true, endTime: true } } },
-    orderBy: [{ attendanceDate: 'desc' }, { unitKey: 'asc' }],
-  });
+  const fromDate = params.fromDate ? normalizeDate(params.fromDate) : undefined;
+  const toDate = params.toDate ? normalizeDate(params.toDate) : undefined;
+  const [rows, settings, staffHolidays] = await Promise.all([
+    prisma.staffAttendance.findMany({
+      where: {
+        schoolId: params.schoolId,
+        staffId: teacherProfile.id,
+        ...(fromDate || toDate
+          ? {
+              attendanceDate: {
+                ...(fromDate ? { gte: fromDate } : {}),
+                ...(toDate ? { lte: endOfDay(toDate) } : {}),
+              },
+            }
+          : {}),
+      },
+      include: { period: { select: { id: true, name: true, startTime: true, endTime: true } } },
+      orderBy: [{ attendanceDate: 'desc' }, { unitKey: 'asc' }],
+    }),
+    fromDate && toDate ? prisma.schoolSystemSetting.findUnique({ where: { schoolId: params.schoolId }, select: { holidays: true, weekends: true } }) : Promise.resolve(null),
+    fromDate && toDate
+      ? prisma.staffAttendanceHoliday.findMany({
+          where: {
+            schoolId: params.schoolId,
+            holidayDate: { gte: fromDate, lt: nextDay(toDate) },
+            OR: [{ roleName: null }, { roleName: teacherProfile.roleName }],
+          },
+        })
+      : Promise.resolve([]),
+  ]);
 
-  return rows.map((row) => ({
+  const attendanceRecords = rows.map((row) => ({
     id: row.id,
     teacherId: row.staffId,
     date: row.attendanceDate,
@@ -806,6 +930,48 @@ export const listTeacherSelfAttendance = async (params: {
     unitKey: row.unitKey,
     mode: row.mode,
   }));
+
+  if (!fromDate || !toDate) return attendanceRecords;
+
+  const holidaysByDate = new Map<string, { date: Date; title: string; details?: string | null; type?: string | null }>();
+  for (const weekend of parseSystemWeekends(settings, fromDate, toDate)) {
+    holidaysByDate.set(toDateKey(weekend.date), weekend);
+  }
+  for (const holiday of parseSystemHolidays(settings, fromDate, toDate)) {
+    holidaysByDate.set(toDateKey(holiday.date), holiday);
+  }
+  for (const holiday of staffHolidays) {
+    const title = holiday.reason ?? 'Staff Holiday';
+    holidaysByDate.set(toDateKey(holiday.holidayDate), {
+      date: holiday.holidayDate,
+      title,
+      details: holiday.reason,
+      type: 'Staff holiday',
+    });
+  }
+  const holidayDateKeys = new Set(holidaysByDate.keys());
+  const visibleAttendanceRecords = attendanceRecords.filter((record) => !holidayDateKeys.has(toDateKey(record.date)));
+
+  const holidayRecords = [...holidaysByDate.entries()]
+    .map(([dateKey, holiday]) => ({
+      id: `holiday-${dateKey}`,
+      teacherId: teacherProfile.id,
+      date: holiday.date,
+      status: 'HOLIDAY' as const,
+      overrideReason: [holiday.title, holiday.details].filter(Boolean).join(' - ') || null,
+      unitType: 'DAY' as const,
+      slotType: null,
+      periodId: null,
+      periodName: holiday.type ?? 'Holiday',
+      unitKey: 'HOLIDAY',
+      mode: 'DAILY' as const,
+    }));
+
+  return [...visibleAttendanceRecords, ...holidayRecords].sort((a, b) => {
+    const dateCompare = b.date.getTime() - a.date.getTime();
+    if (dateCompare !== 0) return dateCompare;
+    return a.unitKey.localeCompare(b.unitKey);
+  });
 };
 
 export const resolveTeacherSelfAttendanceOptions = async (params: {

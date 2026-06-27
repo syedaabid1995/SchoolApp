@@ -80,13 +80,33 @@ const toDateOnly = (value: Date | string) => {
 
 const toDateKey = (value: Date | string) => toDateOnly(value).toISOString().slice(0, 10);
 
+const schoolTimeZone = process.env.SCHOOL_TIME_ZONE || 'Asia/Kolkata';
+
+const currentSchoolDateKey = () => {
+  try {
+    const parts = new Intl.DateTimeFormat('en-CA', {
+      timeZone: schoolTimeZone,
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+    }).formatToParts(new Date());
+    const year = parts.find((part) => part.type === 'year')?.value;
+    const month = parts.find((part) => part.type === 'month')?.value;
+    const day = parts.find((part) => part.type === 'day')?.value;
+    if (year && month && day) return `${year}-${month}-${day}`;
+  } catch {
+    // Fall back to UTC if an invalid timezone is configured.
+  }
+  return toDateKey(new Date());
+};
+
 const toDayOfWeek = (date: Date) => {
   const day = date.getUTCDay();
   return day === 6 ? 1 : day + 2;
 };
 
 const requirePastOrToday = (date: Date) => {
-  if (date > toDateOnly(new Date())) {
+  if (toDateKey(date) > currentSchoolDateKey()) {
     throw new HttpError(400, 'Cannot record attendance for a future date');
   }
 };

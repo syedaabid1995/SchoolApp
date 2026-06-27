@@ -4,32 +4,32 @@ import 'package:dio/dio.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:hive/hive.dart';
-import 'package:school_flutter/core/storage/hive_cache_service.dart';
-import 'package:school_flutter/features/attendance/data/datasources/attendance_remote_datasource.dart';
-import 'package:school_flutter/features/attendance/data/models/attendance_summary_model.dart';
-import 'package:school_flutter/features/attendance/data/repositories/attendance_repository_impl.dart';
-import 'package:school_flutter/features/attendance/domain/entities/attendance_summary.dart';
-import 'package:school_flutter/features/attendance/domain/repositories/attendance_repository.dart';
-import 'package:school_flutter/features/attendance/presentation/providers/attendance_providers.dart';
-import 'package:school_flutter/features/dashboard/domain/entities/dashboard_snapshot.dart';
-import 'package:school_flutter/features/dashboard/domain/repositories/dashboard_repository.dart';
-import 'package:school_flutter/features/dashboard/presentation/providers/dashboard_providers.dart';
-import 'package:school_flutter/features/exams/data/datasources/exam_remote_datasource.dart';
-import 'package:school_flutter/features/exams/data/models/exam_models.dart';
-import 'package:school_flutter/features/exams/data/repositories/exam_repository_impl.dart';
-import 'package:school_flutter/features/notifications/domain/entities/staff_notification.dart';
-import 'package:school_flutter/features/notifications/domain/repositories/notification_repository.dart';
-import 'package:school_flutter/features/notifications/presentation/providers/notification_providers.dart';
-import 'package:school_flutter/features/leave/data/datasources/leave_remote_datasource.dart';
-import 'package:school_flutter/features/leave/data/models/leave_models.dart';
-import 'package:school_flutter/features/leave/data/repositories/leave_repository_impl.dart';
-import 'package:school_flutter/features/timetable/data/datasources/timetable_remote_datasource.dart';
-import 'package:school_flutter/features/timetable/data/models/timetable_model.dart';
-import 'package:school_flutter/features/timetable/data/repositories/timetable_repository_impl.dart';
-import 'package:school_flutter/features/timetable/domain/entities/timetable_entry.dart';
-import 'package:school_flutter/features/timetable/domain/repositories/timetable_repository.dart';
-import 'package:school_flutter/features/timetable/presentation/providers/timetable_providers.dart';
-import 'package:school_flutter/features/auth/domain/entities/staff_user.dart';
+import 'package:school_flutter/global_ui/core/storage/hive_cache_service.dart';
+import 'package:school_flutter/global_ui/features/attendance/data/datasources/attendance_remote_datasource.dart';
+import 'package:school_flutter/global_ui/features/attendance/data/models/attendance_summary_model.dart';
+import 'package:school_flutter/global_ui/features/attendance/data/repositories/attendance_repository_impl.dart';
+import 'package:school_flutter/global_ui/features/attendance/domain/entities/attendance_summary.dart';
+import 'package:school_flutter/global_ui/features/attendance/domain/repositories/attendance_repository.dart';
+import 'package:school_flutter/global_ui/features/attendance/presentation/providers/attendance_providers.dart';
+import 'package:school_flutter/global_ui/features/dashboard/domain/entities/dashboard_snapshot.dart';
+import 'package:school_flutter/global_ui/features/dashboard/domain/repositories/dashboard_repository.dart';
+import 'package:school_flutter/global_ui/features/dashboard/presentation/providers/dashboard_providers.dart';
+import 'package:school_flutter/global_ui/features/exams/data/datasources/exam_remote_datasource.dart';
+import 'package:school_flutter/global_ui/features/exams/data/models/exam_models.dart';
+import 'package:school_flutter/global_ui/features/exams/data/repositories/exam_repository_impl.dart';
+import 'package:school_flutter/global_ui/features/notifications/domain/entities/staff_notification.dart';
+import 'package:school_flutter/global_ui/features/notifications/domain/repositories/notification_repository.dart';
+import 'package:school_flutter/global_ui/features/notifications/presentation/providers/notification_providers.dart';
+import 'package:school_flutter/global_ui/features/leave/data/datasources/leave_remote_datasource.dart';
+import 'package:school_flutter/global_ui/features/leave/data/models/leave_models.dart';
+import 'package:school_flutter/global_ui/features/leave/data/repositories/leave_repository_impl.dart';
+import 'package:school_flutter/global_ui/features/timetable/data/datasources/timetable_remote_datasource.dart';
+import 'package:school_flutter/global_ui/features/timetable/data/models/timetable_model.dart';
+import 'package:school_flutter/global_ui/features/timetable/data/repositories/timetable_repository_impl.dart';
+import 'package:school_flutter/global_ui/features/timetable/domain/entities/timetable_entry.dart';
+import 'package:school_flutter/global_ui/features/timetable/domain/repositories/timetable_repository.dart';
+import 'package:school_flutter/global_ui/features/timetable/presentation/providers/timetable_providers.dart';
+import 'package:school_flutter/global_ui/features/auth/domain/entities/staff_user.dart';
 
 void main() {
   late Directory hiveDir;
@@ -226,6 +226,7 @@ class _FakeAttendanceRemoteDatasource extends AttendanceRemoteDatasource {
   Future<TeacherAttendanceRecordModel> markSelfAttendance({
     required String status,
     DateTime? date,
+    AttendanceUnit? unit,
   }) async {
     return TeacherAttendanceRecordModel(
       id: 'teacher-record-1',
@@ -290,6 +291,7 @@ class _FakeAttendanceRepository implements AttendanceRepository {
   Future<TeacherAttendanceRecord> markSelfAttendance({
     required String status,
     DateTime? date,
+    AttendanceUnit? unit,
   }) async {
     return TeacherAttendanceRecord(
       id: 'record-1',
@@ -297,6 +299,24 @@ class _FakeAttendanceRepository implements AttendanceRepository {
       status: status,
     );
   }
+
+  @override
+  Future<SelfAttendanceOptions> getSelfAttendanceOptions({
+    DateTime? date,
+  }) async => const SelfAttendanceOptions(
+    configuration: AttendanceConfiguration(
+      id: null,
+      mode: AttendanceMode.daily,
+      source: 'DEFAULT',
+    ),
+    units: [
+      AttendanceUnit(
+        unitType: AttendanceUnitType.day,
+        label: 'Day',
+        source: 'DAY',
+      ),
+    ],
+  );
 
   @override
   Future<StudentAttendanceOptions> getStudentAttendanceOptions() async =>
