@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import {
   ArrowRight,
@@ -38,11 +38,8 @@ type DemoForm = {
   email: string;
   phone: string;
   schoolName: string;
-  role: string;
   studentCount: string;
   staffCount: string;
-  preferredDate: string;
-  selectedPlanId: string;
   message: string;
 };
 
@@ -84,11 +81,8 @@ const initialForm: DemoForm = {
   email: '',
   phone: '',
   schoolName: '',
-  role: '',
   studentCount: '',
   staffCount: '',
-  preferredDate: '',
-  selectedPlanId: '',
   message: '',
 };
 
@@ -300,7 +294,7 @@ function FeatureSection() {
 
 function WorkflowSection() {
   const steps = [
-    ['Submit details', 'A school shares contact, size, and preferred demo timing.'],
+    ['Submit details', 'A school shares contact details, student count, staff count, and notes.'],
     ['Admin review', 'The super admin reviews the request inside the admin panel.'],
     ['Approve request', 'Approval creates a 24-hour access token and sends the email.'],
     ['Run the demo', 'The school explores the platform with guidance from your team.'],
@@ -331,12 +325,10 @@ function PricingSection({
   plans,
   loading,
   error,
-  onSelectPlan,
 }: {
   plans: Plan[];
   loading: boolean;
   error: string | null;
-  onSelectPlan: (planId: string) => void;
 }) {
   return (
     <section className="section" id="pricing">
@@ -367,9 +359,9 @@ function PricingSection({
                   </li>
                 ))}
               </ul>
-              <button className="btn btn-outline" type="button" onClick={() => onSelectPlan(plan.id)}>
-                Request this plan
-              </button>
+              <a className="btn btn-outline" href="#demo">
+                Book demo
+              </a>
             </article>
           ))}
         </div>
@@ -378,22 +370,10 @@ function PricingSection({
   );
 }
 
-function DemoFormSection({ plans, selectedPlanId }: { plans: Plan[]; selectedPlanId: string }) {
-  const [form, setForm] = useState<DemoForm>({ ...initialForm, selectedPlanId });
+function DemoFormSection() {
+  const [form, setForm] = useState<DemoForm>(initialForm);
   const [status, setStatus] = useState<'idle' | 'submitting' | 'success' | 'error'>('idle');
   const [message, setMessage] = useState('');
-
-  useEffect(() => {
-    if (selectedPlanId) {
-      setForm((current) => ({ ...current, selectedPlanId }));
-      document.getElementById('demo')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-    }
-  }, [selectedPlanId]);
-
-  const selectedPlan = useMemo(
-    () => plans.find((plan) => plan.id === form.selectedPlanId),
-    [form.selectedPlanId, plans],
-  );
 
   const update = (field: keyof DemoForm, value: string) => {
     setForm((current) => ({ ...current, [field]: value }));
@@ -409,7 +389,6 @@ function DemoFormSection({ plans, selectedPlanId }: { plans: Plan[]; selectedPla
         ...form,
         studentCount: Number(form.studentCount),
         staffCount: Number(form.staffCount),
-        preferredDate: form.preferredDate ? new Date(form.preferredDate).toISOString() : '',
       };
       const response = await fetch(`${API_BASE}/public/website/demo-requests`, {
         method: 'POST',
@@ -470,17 +449,18 @@ function DemoFormSection({ plans, selectedPlanId }: { plans: Plan[]; selectedPla
               <input value={form.phone} onChange={(event) => update('phone', event.target.value)} />
             </label>
             <label>
-              Your role
-              <input value={form.role} onChange={(event) => update('role', event.target.value)} placeholder="Principal, admin, owner" />
+              School name
+              <input
+                value={form.schoolName}
+                onChange={(event) => update('schoolName', event.target.value)}
+                required
+                minLength={2}
+              />
             </label>
           </div>
-          <label>
-            School name
-            <input value={form.schoolName} onChange={(event) => update('schoolName', event.target.value)} required minLength={2} />
-          </label>
           <div className="form-row">
             <label>
-              Students
+              Number of students
               <input
                 type="number"
                 min="1"
@@ -490,7 +470,7 @@ function DemoFormSection({ plans, selectedPlanId }: { plans: Plan[]; selectedPla
               />
             </label>
             <label>
-              Staff
+              Number of staffs
               <input
                 type="number"
                 min="1"
@@ -500,28 +480,6 @@ function DemoFormSection({ plans, selectedPlanId }: { plans: Plan[]; selectedPla
               />
             </label>
           </div>
-          <div className="form-row">
-            <label>
-              Preferred date
-              <input
-                type="datetime-local"
-                value={form.preferredDate}
-                onChange={(event) => update('preferredDate', event.target.value)}
-              />
-            </label>
-            <label>
-              Plan
-              <select value={form.selectedPlanId} onChange={(event) => update('selectedPlanId', event.target.value)}>
-                <option value="">Not sure yet</option>
-                {plans.map((plan) => (
-                  <option key={plan.id} value={plan.id}>
-                    {normalizePlanName(plan.name)}
-                  </option>
-                ))}
-              </select>
-            </label>
-          </div>
-          {selectedPlan ? <p className="selected-plan">Selected: {normalizePlanName(selectedPlan.name)}</p> : null}
           <label>
             Notes
             <textarea value={form.message} onChange={(event) => update('message', event.target.value)} rows={4} />
@@ -556,7 +514,6 @@ function App() {
   const [plans, setPlans] = useState<Plan[]>(defaultPlans);
   const [plansLoading, setPlansLoading] = useState(true);
   const [plansError, setPlansError] = useState<string | null>(null);
-  const [selectedPlanId, setSelectedPlanId] = useState('');
 
   useEffect(() => {
     let mounted = true;
@@ -592,9 +549,8 @@ function App() {
           plans={plans}
           loading={plansLoading}
           error={plansError}
-          onSelectPlan={(planId) => setSelectedPlanId(planId)}
         />
-        <DemoFormSection plans={plans} selectedPlanId={selectedPlanId} />
+        <DemoFormSection />
       </main>
       <Footer />
     </>

@@ -8,20 +8,15 @@ export type DemoRequest = {
   email: string;
   phone: string | null;
   schoolName: string;
-  role: string | null;
   studentCount: number;
   staffCount: number;
-  preferredDate: string | null;
   message: string | null;
-  selectedPlanId: string | null;
-  selectedPlanName: string | null;
   status: DemoRequestStatus;
   approvalTokenExpiresAt: string | null;
   approvedAt: string | null;
   emailDeliveryStatus: string | null;
   createdAt: string;
   updatedAt: string;
-  selectedPlan?: { id: string; name: string } | null;
   approvedBy?: { id: string; email: string } | null;
 };
 

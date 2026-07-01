@@ -12,12 +12,9 @@ const publicDemoRequestSchema = z.object({
   email: z.string().trim().email().max(160),
   phone: z.string().trim().min(7).max(32).optional().or(z.literal('')),
   schoolName: z.string().trim().min(2).max(180),
-  role: z.string().trim().max(80).optional().or(z.literal('')),
   studentCount: z.coerce.number().int().min(1).max(200000),
   staffCount: z.coerce.number().int().min(1).max(20000),
-  preferredDate: z.string().datetime().optional().or(z.literal('')),
   message: z.string().trim().max(1000).optional().or(z.literal('')),
-  selectedPlanId: z.string().uuid().optional().or(z.literal('')),
 });
 
 const listQuerySchema = z.object({
@@ -45,16 +42,6 @@ export const listPublicPlansApi = async (_req: Request, res: Response) => {
 
 export const createPublicDemoRequestApi = async (req: Request, res: Response) => {
   const payload = publicDemoRequestSchema.parse(req.body);
-  const selectedPlan = payload.selectedPlanId
-    ? await prisma.subscriptionPlanDef.findFirst({
-        where: { id: payload.selectedPlanId, status: 'ACTIVE' },
-        select: { id: true, name: true },
-      })
-    : null;
-
-  if (payload.selectedPlanId && !selectedPlan) {
-    throw new HttpError(400, 'Selected plan is not available');
-  }
 
   const request = await prisma.demoRequest.create({
     data: {
@@ -62,13 +49,9 @@ export const createPublicDemoRequestApi = async (req: Request, res: Response) =>
       email: payload.email.toLowerCase(),
       phone: payload.phone || null,
       schoolName: payload.schoolName,
-      role: payload.role || null,
       studentCount: payload.studentCount,
       staffCount: payload.staffCount,
-      preferredDate: payload.preferredDate ? new Date(payload.preferredDate) : null,
       message: payload.message || null,
-      selectedPlanId: selectedPlan?.id ?? null,
-      selectedPlanName: selectedPlan?.name ?? null,
     },
   });
 
@@ -97,7 +80,6 @@ export const listDemoRequestsApi = async (req: Request, res: Response) => {
         : {}),
     },
     include: {
-      selectedPlan: { select: { id: true, name: true } },
       approvedBy: { select: { id: true, email: true } },
     },
     orderBy: { createdAt: 'desc' },
@@ -148,7 +130,6 @@ export const approveDemoRequestApi = async (req: Request, res: Response) => {
       emailDeliveryStatus: emailStatus,
     },
     include: {
-      selectedPlan: { select: { id: true, name: true } },
       approvedBy: { select: { id: true, email: true } },
     },
   });

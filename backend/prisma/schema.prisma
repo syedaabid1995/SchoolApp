@@ -4377,7 +4377,6 @@ model SubscriptionPlanDef {
   subscriptions Subscription[]
   permissions   SubscriptionPlanPermission[]
   invoices      SubscriptionInvoice[]
-  demoRequests  DemoRequest[]
 
   @@map("subscription_plans")
 }
@@ -4403,13 +4402,9 @@ model DemoRequest {
   email                  String
   phone                  String?
   schoolName             String    @map("school_name")
-  role                   String?
   studentCount           Int       @map("student_count")
   staffCount             Int       @map("staff_count")
-  preferredDate          DateTime? @map("preferred_date")
   message                String?
-  selectedPlanId         String?   @map("selected_plan_id") @db.Uuid
-  selectedPlanName       String?   @map("selected_plan_name")
   status                 String    @default("PENDING")
   approvalToken          String?   @unique @map("approval_token")
   approvalTokenExpiresAt DateTime? @map("approval_token_expires_at")
@@ -4419,13 +4414,11 @@ model DemoRequest {
   createdAt              DateTime  @default(now()) @map("created_at")
   updatedAt              DateTime  @updatedAt @map("updated_at")
 
-  selectedPlan SubscriptionPlanDef? @relation(fields: [selectedPlanId], references: [id], onDelete: SetNull)
-  approvedBy   User?                @relation("DemoRequestApprovedBy", fields: [approvedById], references: [id], onDelete: SetNull)
+  approvedBy User? @relation("DemoRequestApprovedBy", fields: [approvedById], references: [id], onDelete: SetNull)
 
   @@index([status])
   @@index([email])
   @@index([createdAt])
-  @@index([selectedPlanId])
   @@index([approvedById])
   @@map("demo_requests")
 }

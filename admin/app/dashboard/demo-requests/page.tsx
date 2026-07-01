@@ -60,11 +60,6 @@ function RequestCard({
             <span className={`rounded-full px-2.5 py-1 text-xs font-semibold ring-1 ${statusClass(request.status)}`}>
               {request.status}
             </span>
-            {request.selectedPlanName ? (
-              <span className="rounded-full bg-blue-50 px-2.5 py-1 text-xs font-semibold text-blue-700 ring-1 ring-blue-200">
-                {request.selectedPlanName}
-              </span>
-            ) : null}
           </div>
           <p className="mt-1 text-sm text-[var(--shell-muted)]">
             {request.name} · {request.email}
@@ -81,7 +76,7 @@ function RequestCard({
         </button>
       </div>
 
-      <div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="mt-5 grid gap-3 sm:grid-cols-3">
         <div className="rounded-lg bg-[var(--shell-subtle)] p-3">
           <p className="text-xs font-semibold uppercase tracking-[0.12em] text-[var(--shell-muted)]">Students</p>
           <p className="mt-1 font-bold text-[var(--shell-text)]">{formatNumber(request.studentCount)}</p>
@@ -89,10 +84,6 @@ function RequestCard({
         <div className="rounded-lg bg-[var(--shell-subtle)] p-3">
           <p className="text-xs font-semibold uppercase tracking-[0.12em] text-[var(--shell-muted)]">Staff</p>
           <p className="mt-1 font-bold text-[var(--shell-text)]">{formatNumber(request.staffCount)}</p>
-        </div>
-        <div className="rounded-lg bg-[var(--shell-subtle)] p-3">
-          <p className="text-xs font-semibold uppercase tracking-[0.12em] text-[var(--shell-muted)]">Preferred</p>
-          <p className="mt-1 font-bold text-[var(--shell-text)]">{formatDateTime(request.preferredDate)}</p>
         </div>
         <div className="rounded-lg bg-[var(--shell-subtle)] p-3">
           <p className="text-xs font-semibold uppercase tracking-[0.12em] text-[var(--shell-muted)]">Submitted</p>
