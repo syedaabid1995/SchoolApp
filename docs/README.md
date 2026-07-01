@@ -1,8 +1,14 @@
 # Academify Operations Docs
 
+Architecture:
+
+- [Hostinger KVM-2 architecture](architecture-hostinger-kvm2.md)
+- [Architecture diagrams](architecture-diagrams.md)
+
 Phase readiness:
 
 - [Phase 1 production-lite](phase-1-production-lite.md)
+- [Phase 2A runtime storage](phase-2a-storage.md)
 - [Phase 2B storage validation](phase-2b-storage-validation.md)
 - [Phase 2C worker and scheduler split](phase-2c-worker-scheduler-split.md)
 - [Phase 2D scalability](phase-2d-scalability.md)

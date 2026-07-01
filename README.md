@@ -190,6 +190,12 @@ The repository includes Dockerfiles for backend and admin under `docker/`, and a
 
 See [Deployment.md](./Deployment.md) for the full deployment process.
 
+## Architecture Docs
+
+- [Hostinger KVM-2 architecture](./docs/architecture-hostinger-kvm2.md) for the pitch/pilot deployment shape using PM2, Nginx, Lightsail PostgreSQL, S3, Redis, Cloudflare, backups, and monitoring.
+- [Architecture diagrams](./docs/architecture-diagrams.md) for Mermaid diagrams covering request flow, processes, deployment, monitoring, and upgrade path.
+- [Staging deployment runbook](./docs/staging-deployment.md), [first-school launch checklist](./docs/first-school-launch-checklist.md), [backup and restore drill](./docs/backup-restore-drill.md), and [monitoring and alerting](./docs/monitoring-alerting.md) for launch operations.
+
 ## Security Features
 
 - JWT authentication with refresh sessions.
