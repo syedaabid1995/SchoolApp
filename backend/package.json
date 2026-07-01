@@ -18,6 +18,7 @@
     "test:auth": "npm run build && NODE_ENV=test node --test --test-force-exit dist/controllers/__tests__/auth.security.test.js",
     "test:security": "npm run build && NODE_ENV=test node --test --test-concurrency=1 --test-force-exit dist/__tests__/*.test.js",
     "security:secrets": "tsx scripts/scan-secrets.ts",
+    "scalability:audit": "tsx scripts/scalability-audit.ts",
     "storage:validate": "tsx scripts/validate-runtime-storage.ts",
     "storage:audit-legacy": "tsx scripts/audit-legacy-file-references.ts",
     "storage:migrate-legacy": "tsx scripts/migrate-legacy-uploads-to-storage.ts",

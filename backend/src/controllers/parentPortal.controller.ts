@@ -4,6 +4,7 @@ import { HttpError } from '../middlewares/error.middleware';
 import { requireAuth } from '../middlewares/rbac.middleware';
 import { attendanceReadService } from '../modules/attendance/services/attendance-read.service';
 import { evaluateFailCriteria, getExamGradingSettings } from '../services/grade.service';
+import { parseLimit } from '../utils/pagination';
 
 const resolveParentProfiles = async (userId: string) => {
   return prisma.parentProfile.findMany({
@@ -116,6 +117,8 @@ export const getParentDashboard = async (req: Request, res: Response) => {
   const marks = await prisma.mark.findMany({
     where: { studentId: child.id },
     include: { examPaper: { include: { exam: true } } },
+    orderBy: { createdAt: 'desc' },
+    take: 300,
   });
   const gradingSettings = await getExamGradingSettings(child.schoolId);
   let latestResult: { examName: string; total: string; status: string } | null = null;
@@ -179,6 +182,7 @@ export const listParentExams = async (req: Request, res: Response) => {
   const { childId, academicYearId } = req.query;
   const { child } = await requireChildAccess(auth.userId, typeof childId === 'string' ? childId : undefined);
   const yearId = typeof academicYearId === 'string' && academicYearId.trim() ? academicYearId.trim() : null;
+  const limit = parseLimit(req.query.limit, { defaultLimit: 50, maxLimit: 100 });
 
   const exams = await prisma.exam.findMany({
     where: {
@@ -201,11 +205,14 @@ export const listParentExams = async (req: Request, res: Response) => {
       ],
     },
     orderBy: { createdAt: 'desc' },
+    take: limit,
   });
 
   const marks = await prisma.mark.findMany({
     where: { studentId: child.id, status: 'LOCKED' },
     include: { examPaper: { select: { examId: true } } },
+    orderBy: { createdAt: 'desc' },
+    take: 500,
   });
   const marksByExam = new Set(marks.map((mark) => mark.examPaper.examId));
 
@@ -248,6 +255,7 @@ export const getParentResults = async (req: Request, res: Response) => {
   const auth = requireAuth(req);
   const { childId } = req.query;
   const { child } = await requireChildAccess(auth.userId, typeof childId === 'string' ? childId : undefined);
+  const limit = parseLimit(req.query.limit, { defaultLimit: 200, maxLimit: 500 });
 
   const examTypeRows = await prisma.examTypeConfig.findMany({
     where: { schoolId: child.schoolId },
@@ -266,7 +274,10 @@ export const getParentResults = async (req: Request, res: Response) => {
       },
     },
     orderBy: { createdAt: 'desc' },
+    take: limit + 1,
   });
+  const hasNextPage = marks.length > limit;
+  const resultMarks = marks.slice(0, limit);
 
   const grouped = new Map<string, {
     examId: string;
@@ -292,7 +303,7 @@ export const getParentResults = async (req: Request, res: Response) => {
     totalMaxMarks: number;
   }>();
 
-  marks.forEach((mark) => {
+  resultMarks.forEach((mark) => {
     const exam = mark.examPaper.exam;
     if (!exam) return;
     const existing = grouped.get(exam.id);
@@ -352,6 +363,11 @@ export const getParentResults = async (req: Request, res: Response) => {
   res.status(200).json({
     child,
     items: itemsWithStatus,
+    pageInfo: {
+      limit,
+      hasNextPage,
+      nextCursor: null,
+    },
   });
 };
 
@@ -423,6 +439,7 @@ export const listParentFees = async (req: Request, res: Response) => {
   const auth = requireAuth(req);
   const { childId } = req.query;
   const { child } = await requireChildAccess(auth.userId, typeof childId === 'string' ? childId : undefined);
+  const limit = parseLimit(req.query.limit, { defaultLimit: 100, maxLimit: 100 });
 
   const invoices = await prisma.feeInvoice.findMany({
     where: {
@@ -437,7 +454,7 @@ export const listParentFees = async (req: Request, res: Response) => {
       receipts: { orderBy: { receiptDate: 'desc' } },
     },
     orderBy: { issueDate: 'desc' },
-    take: 100,
+    take: limit,
   });
 
   const items = invoices.map((invoice) => ({

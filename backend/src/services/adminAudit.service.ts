@@ -3,6 +3,7 @@ import { prisma } from '../config/db';
 import { HttpError } from '../middlewares/error.middleware';
 import { createAuditLog } from './auditLog.service';
 import { buildRuntimeObjectKey, getSignedDownloadUrl, putRuntimeObject } from './runtimeStorage.service';
+import { MAX_EXPORT_ROW_LIMIT } from '../utils/pagination';
 
 type AuditSortBy = 'createdAt' | 'event' | 'actorRole' | 'schoolName' | 'severity';
 type AuditSortOrder = 'asc' | 'desc';
@@ -505,7 +506,7 @@ export const requestAuditExport = async (params: {
   });
 
   try {
-    const items = applyCalculatedFilters(await fetchAuditLogs({ ...filters, limit: 50_000 }), filters);
+    const items = applyCalculatedFilters(await fetchAuditLogs({ ...filters, limit: MAX_EXPORT_ROW_LIMIT }), filters);
     const fileName = `${exportRow.id}.${params.format}`;
     const fileKey = buildRuntimeObjectKey({
       schoolId: filters.schoolId ?? null,

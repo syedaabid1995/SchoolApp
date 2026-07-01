@@ -867,6 +867,7 @@ model Student {
   @@unique([schoolId, admissionNo])
   @@index([academicSessionId])
   @@index([schoolId])
+  @@index([schoolId, status, createdAt])
   @@index([classId])
   @@index([sectionId])
   @@index([studentGroupId])
@@ -1072,6 +1073,8 @@ model Homework {
   evaluations HomeworkEvaluation[]
 
   @@index([schoolId])
+  @@index([schoolId, homeworkDate])
+  @@index([schoolId, createdAt])
   @@index([classId])
   @@index([sectionId])
   @@index([subjectId])
@@ -1596,6 +1599,7 @@ model TeacherProfile {
   @@unique([schoolId, employeeNo])
   @@index([schoolId])
   @@index([schoolId, roleName])
+  @@index([schoolId, isActive, createdAt])
   @@index([departmentId])
   @@index([designationId])
   @@map("employee_profiles")
@@ -1812,6 +1816,7 @@ model StudentParent {
 
   @@id([studentId, parentId])
   @@index([parentId])
+  @@index([parentId, createdAt])
   @@map("student_parents")
 }
 
@@ -1864,6 +1869,8 @@ model ImportJob {
   errors    ImportRowError[]
 
   @@index([schoolId])
+  @@index([schoolId, createdAt])
+  @@index([schoolId, status, createdAt])
   @@index([createdById])
   @@map("import_jobs")
 }
@@ -1880,6 +1887,7 @@ model ImportRowError {
   importJob ImportJob @relation(fields: [importJobId], references: [id], onDelete: Cascade)
 
   @@index([importJobId])
+  @@index([importJobId, rowNumber])
   @@map("import_row_errors")
 }
 
@@ -2920,6 +2928,7 @@ model Mark {
   @@unique([examPaperId, studentId])
   @@index([examPaperId])
   @@index([studentId])
+  @@index([studentId, status, createdAt])
   @@map("marks")
 }
 
@@ -3459,6 +3468,8 @@ model FeeInvoice {
   @@unique([schoolId, invoiceNumber])
   @@unique([schoolId, academicSessionId, studentId, feeStructureId, feeTypeId, feeMonth], name: "unique_student_fee_invoice_period")
   @@index([schoolId, academicSessionId])
+  @@index([schoolId, studentId, status, issueDate])
+  @@index([schoolId, academicSessionId, status, issueDate])
   @@index([studentId])
   @@index([classId])
   @@index([sectionId])
@@ -3526,6 +3537,8 @@ model FeePayment {
   @@unique([schoolId, paymentNumber])
   @@unique([schoolId, idempotencyKey], name: "unique_school_fee_payment_idempotency")
   @@index([schoolId, academicSessionId])
+  @@index([schoolId, studentId, paidAt])
+  @@index([schoolId, academicSessionId, status, paidAt])
   @@index([studentId])
   @@index([invoiceId])
   @@index([status])
@@ -4085,7 +4098,10 @@ model NotificationLog {
   user     User?                 @relation(fields: [userId], references: [id], onDelete: SetNull)
 
   @@index([schoolId])
+  @@index([schoolId, createdAt])
+  @@index([schoolId, status, createdAt])
   @@index([userId])
+  @@index([userId, createdAt])
   @@index([templateId])
   @@map("notification_logs")
 }
@@ -4218,7 +4234,10 @@ model AuditLog {
   actor User @relation(fields: [actorId], references: [id], onDelete: Restrict)
 
   @@index([schoolId])
+  @@index([schoolId, createdAt])
+  @@index([schoolId, entityType, createdAt])
   @@index([actorId])
+  @@index([actorId, createdAt])
   @@index([entityType])
   @@index([entityId])
   @@map("audit_logs")

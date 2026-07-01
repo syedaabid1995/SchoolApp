@@ -8,6 +8,13 @@ import { importRequestSchema } from '../validations/import.validation';
 import { importQueue } from '../queues';
 import { enforceLimits } from '../services/subscription.service';
 import { buildRuntimeObjectKey, putRuntimeObject, sanitizeFilename } from '../services/runtimeStorage.service';
+import {
+  DEFAULT_NESTED_LIST_LIMIT,
+  cursorPrismaArgs,
+  parseCursorPagination,
+  setCursorPaginationHeaders,
+  toCursorPage,
+} from '../utils/pagination';
 
 const requireSchoolAdmin = (req: Request) => {
   if (!req.auth?.userId) throw new HttpError(401, 'Unauthorized');
@@ -103,11 +110,15 @@ export const createImport = async (req: Request, res: Response) => {
 export const listImports = async (req: Request, res: Response) => {
   requireSchoolAdmin(req);
   const schoolId = resolveSchoolId(req, req.query.schoolId as string | undefined);
+  const pagination = parseCursorPagination(req.query, { defaultLimit: 50, maxLimit: 100 });
 
-  const imports = await prisma.importJob.findMany({
+  const rows = await prisma.importJob.findMany({
     where: { schoolId },
-    orderBy: { createdAt: 'desc' },
+    orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+    ...cursorPrismaArgs(pagination),
   });
+  const { data: imports, pageInfo } = toCursorPage(rows, pagination.limit);
+  setCursorPaginationHeaders(res, pageInfo);
 
   res.status(200).json(imports.map(safeImportJob));
 };
@@ -119,14 +130,26 @@ export const getImport = async (req: Request, res: Response) => {
 
   const importJob = await prisma.importJob.findFirst({
     where: { id, schoolId },
-    include: { errors: true },
+    include: {
+      errors: { orderBy: [{ rowNumber: 'asc' }, { id: 'asc' }], take: DEFAULT_NESTED_LIST_LIMIT },
+      _count: { select: { errors: true } },
+    },
   });
 
   if (!importJob) {
     throw new HttpError(404, 'Import job not found');
   }
 
-  res.status(200).json(safeImportJob(importJob));
+  const response = safeImportJob(importJob) as Omit<typeof importJob, 'filePath'> & {
+    errorPageInfo?: { limit: number; hasNextPage: boolean; nextCursor: null };
+  };
+  response.errorPageInfo = {
+    limit: DEFAULT_NESTED_LIST_LIMIT,
+    hasNextPage: importJob._count.errors > importJob.errors.length,
+    nextCursor: null,
+  };
+
+  res.status(200).json(response);
 };
 
 export const listImportErrors = async (req: Request, res: Response) => {
@@ -143,10 +166,14 @@ export const listImportErrors = async (req: Request, res: Response) => {
     throw new HttpError(404, 'Import job not found');
   }
 
-  const errors = await prisma.importRowError.findMany({
+  const pagination = parseCursorPagination(req.query, { defaultLimit: 50, maxLimit: 200 });
+  const rows = await prisma.importRowError.findMany({
     where: { importJobId: id },
-    orderBy: { rowNumber: 'asc' },
+    orderBy: [{ rowNumber: 'asc' }, { id: 'asc' }],
+    ...cursorPrismaArgs(pagination),
   });
+  const { data: errors, pageInfo } = toCursorPage(rows, pagination.limit);
+  setCursorPaginationHeaders(res, pageInfo);
 
   res.status(200).json(errors);
 };

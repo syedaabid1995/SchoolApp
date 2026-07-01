@@ -8,6 +8,12 @@ import { buildQueryFingerprint, cacheKeys } from '../services/cache/cache.keys';
 import { rememberCache, setCacheHeader } from '../services/cache/cache.service';
 import { cacheTTL } from '../services/cache/cache.ttl';
 import { invalidateNotificationCache } from '../services/cache/cache.invalidation';
+import {
+  cursorPrismaArgs,
+  parseCursorPagination,
+  setCursorPaginationHeaders,
+  toCursorPage,
+} from '../utils/pagination';
 
 const templateSchema = z.object({
   key: z.string().min(1),
@@ -72,21 +78,25 @@ export const sendNotificationApi = async (req: Request, res: Response) => {
 
 export const listNotificationLogs = async (req: Request, res: Response) => {
   const schoolId = resolveSchoolId(req, req.query.schoolId as string | undefined);
+  const pagination = parseCursorPagination(req.query, { defaultLimit: 50, maxLimit: 100 });
   const queryFingerprint = buildQueryFingerprint({
     schoolId,
-    page: req.query.page ?? null,
-    limit: req.query.limit ?? null,
+    limit: pagination.limit,
+    cursor: pagination.cursor ?? null,
   });
-  const { value: logs, status } = await rememberCache(
+  const { value: rows, status } = await rememberCache(
     cacheKeys.notificationLogs(queryFingerprint),
     cacheTTL.NOTIFICATIONS,
     () =>
       prisma.notificationLog.findMany({
         where: { schoolId },
-        orderBy: { createdAt: 'desc' },
+        orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+        ...cursorPrismaArgs(pagination),
       }),
   );
+  const { data: logs, pageInfo } = toCursorPage(rows, pagination.limit);
   setCacheHeader(res, status);
+  setCursorPaginationHeaders(res, pageInfo);
 
   res.status(200).json(logs);
 };

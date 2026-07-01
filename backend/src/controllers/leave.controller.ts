@@ -8,6 +8,11 @@ import { prisma } from '../config/db';
 import { HttpError } from '../middlewares/error.middleware';
 import { uploadBuffer } from '../services/s3.service';
 import { logAudit } from '../utils/audit';
+import {
+  parseOffsetPagination,
+  setOffsetPaginationHeaders,
+  toOffsetPageInfo,
+} from '../utils/pagination';
 
 const staffRoles = ['SCHOOL_ADMIN', 'TEACHER', 'ACCOUNTANT', 'LIBRARIAN', 'STAFF'] as const;
 const leaveStatuses = ['PENDING', 'APPROVED', 'REJECTED', 'CANCELLED'] as const;
@@ -383,6 +388,7 @@ export const listMyLeaveBalances = async (req: Request, res: Response) => {
 export const listLeaveApplications = async (req: Request, res: Response) => {
   const auth = assertRequestedSchool(req, z.string().uuid().optional().parse(req.query.schoolId));
   const query = listQuerySchema.parse(req.query);
+  const pagination = parseOffsetPagination(req.query, { defaultLimit: 50, maxLimit: 100 });
   const isAdmin = !query.mine;
   const where: Prisma.LeaveApplicationWhereInput = {
     schoolId: auth.schoolId,
@@ -404,7 +410,17 @@ export const listLeaveApplications = async (req: Request, res: Response) => {
     const staff = await getOwnStaffProfile(auth.schoolId, auth.userId);
     where.staffId = staff.id;
   }
-  const items = await prisma.leaveApplication.findMany({ where, include: appInclude, orderBy: { appliedAt: 'desc' } });
+  const [items, total] = await Promise.all([
+    prisma.leaveApplication.findMany({
+      where,
+      include: appInclude,
+      orderBy: [{ appliedAt: 'desc' }, { id: 'desc' }],
+      skip: pagination.skip,
+      take: pagination.limit,
+    }),
+    prisma.leaveApplication.count({ where }),
+  ]);
+  setOffsetPaginationHeaders(res, toOffsetPageInfo(pagination, total));
   res.status(200).json(items.map(formatApplication));
 };
 

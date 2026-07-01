@@ -11,6 +11,11 @@ import { rememberCache, setCacheHeader } from '../services/cache/cache.service';
 import { cacheTTL } from '../services/cache/cache.ttl';
 import { attendanceReadService } from '../modules/attendance/services/attendance-read.service';
 import {
+  parseOffsetPagination,
+  setOffsetPaginationHeaders,
+  toOffsetPageInfo,
+} from '../utils/pagination';
+import {
   listLegacyAttendanceSessionsQuerySchema,
   markLegacyAttendanceSchema,
   overrideLegacyAttendanceSchema,
@@ -288,35 +293,51 @@ export const listSessionRecords = async (req: Request, res: Response) => {
 export const listSessions = async (req: Request, res: Response) => {
   const payload = listLegacyAttendanceSessionsQuerySchema.parse(req.query);
   const schoolId = resolveSchoolId(req, payload.schoolId);
+  const pagination = parseOffsetPagination(req.query, { defaultLimit: 100, maxLimit: 200 });
 
   const to = payload.dateTo ?? new Date();
   const from = payload.dateFrom ?? new Date(to.getTime() - 6 * 24 * 60 * 60 * 1000);
+  const maxRangeMs = 45 * 24 * 60 * 60 * 1000;
+  if (to.getTime() - from.getTime() > maxRangeMs) {
+    throw new HttpError(400, 'Attendance session browsing is limited to a 45 day date range');
+  }
 
   const queryFingerprint = buildQueryFingerprint({
     schoolId,
     dateFrom: from.toISOString(),
     dateTo: to.toISOString(),
     approvalStatus: payload.approvalStatus ?? null,
+    page: pagination.page,
+    limit: pagination.limit,
   });
-  const { value: sessions, status } = await rememberCache(
+  const where = {
+    schoolId,
+    date: { gte: from, lte: to },
+    ...(payload.approvalStatus ? { approvalStatus: payload.approvalStatus } : {}),
+  };
+  const { value, status } = await rememberCache(
     cacheKeys.attendanceSummary(schoolId, queryFingerprint),
     cacheTTL.ATTENDANCE,
-    () =>
-      prisma.attendanceSession.findMany({
-        where: {
-          schoolId,
-          date: { gte: from, lte: to },
-          ...(payload.approvalStatus ? { approvalStatus: payload.approvalStatus } : {}),
-        },
-        include: {
-          period: true,
-          startedBy: { select: { id: true, email: true } },
-          _count: { select: { records: true } },
-        },
-        orderBy: { date: 'desc' },
-      }),
+    async () => {
+      const [sessions, total] = await Promise.all([
+        prisma.attendanceSession.findMany({
+          where,
+          include: {
+            period: true,
+            startedBy: { select: { id: true, email: true } },
+            _count: { select: { records: true } },
+          },
+          orderBy: [{ date: 'desc' }, { id: 'desc' }],
+          skip: pagination.skip,
+          take: pagination.limit,
+        }),
+        prisma.attendanceSession.count({ where }),
+      ]);
+      return { sessions, total };
+    },
   );
   setCacheHeader(res, status);
+  setOffsetPaginationHeaders(res, toOffsetPageInfo(pagination, value.total));
 
-  res.status(200).json(sessions);
+  res.status(200).json(value.sessions);
 };

@@ -2,6 +2,7 @@ import { prisma } from '../config/db';
 import { HttpError } from '../middlewares/error.middleware';
 import { createAuditLog } from './auditLog.service';
 import { buildRuntimeObjectKey, getSignedDownloadUrlForStoredRef, putRuntimeObject } from './runtimeStorage.service';
+import { DEFAULT_EXPORT_ROW_LIMIT } from '../utils/pagination';
 
 export const exportTenantData = async (params: {
   schoolId: string;
@@ -11,6 +12,28 @@ export const exportTenantData = async (params: {
   const job = await prisma.dataExportJob.create({
     data: { schoolId: params.schoolId, requestedById: params.requestedById, status: 'RUNNING', startedAt: new Date() },
   });
+
+  const [studentCount, parentCount, teacherCount, attendanceSessionCount, attendanceRecordCount] = await Promise.all([
+    prisma.student.count({ where: { schoolId: params.schoolId } }),
+    prisma.parentProfile.count({ where: { links: { some: { student: { schoolId: params.schoolId } } } } }),
+    prisma.teacherProfile.count({ where: { schoolId: params.schoolId } }),
+    prisma.attendanceSession.count({ where: { schoolId: params.schoolId } }),
+    prisma.attendanceRecord.count({ where: { session: { schoolId: params.schoolId } } }),
+  ]);
+  const overLimit = [
+    studentCount,
+    parentCount,
+    teacherCount,
+    attendanceSessionCount,
+    attendanceRecordCount,
+  ].find((count) => count > DEFAULT_EXPORT_ROW_LIMIT);
+  if (overLimit) {
+    await prisma.dataExportJob.update({
+      where: { id: job.id },
+      data: { status: 'FAILED', finishedAt: new Date() },
+    });
+    throw new HttpError(413, `Tenant data export exceeds ${DEFAULT_EXPORT_ROW_LIMIT} rows in at least one dataset. Use a background export worker before exporting this school.`);
+  }
 
   const exportData = {
     schools: await prisma.school.findMany({ where: { id: params.schoolId } }),

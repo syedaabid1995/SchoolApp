@@ -17,6 +17,12 @@ import { buildQueryFingerprint, cacheKeys } from '../../../../services/cache/cac
 import { rememberCache, setCacheHeader } from '../../../../services/cache/cache.service';
 import { cacheTTL } from '../../../../services/cache/cache.ttl';
 import { invalidateStudentCache, invalidateAttendanceCache } from '../../../../services/cache/cache.invalidation';
+import {
+  cursorPrismaArgs,
+  parseCursorPagination,
+  setCursorPaginationHeaders,
+  toCursorPage,
+} from '../../../../utils/pagination';
 
 const requireSchoolAdmin = (req: Request) => {
   if (!req.auth?.userId) throw new HttpError(401, 'Unauthorized');
@@ -356,8 +362,17 @@ export const listStudents = async (req: Request, res: Response) => {
   const classId = typeof req.query.classId === 'string' ? req.query.classId : undefined;
   const sectionId = typeof req.query.sectionId === 'string' ? req.query.sectionId : undefined;
   const academicSessionId = typeof req.query.academicSessionId === 'string' ? req.query.academicSessionId : undefined;
-  const queryFingerprint = buildQueryFingerprint({ status: status ?? null, search, classId, sectionId, academicSessionId });
-  const { value: students, status: cacheStatus } = await rememberCache(
+  const pagination = parseCursorPagination(req.query, { defaultLimit: 50, maxLimit: 100 });
+  const queryFingerprint = buildQueryFingerprint({
+    status: status ?? null,
+    search,
+    classId,
+    sectionId,
+    academicSessionId,
+    limit: pagination.limit,
+    cursor: pagination.cursor ?? null,
+  });
+  const { value: rows, status: cacheStatus } = await rememberCache(
     cacheKeys.studentsList(schoolId, queryFingerprint),
     cacheTTL.STUDENTS,
     () =>
@@ -380,11 +395,14 @@ export const listStudents = async (req: Request, res: Response) => {
               }
             : {}),
         },
-        orderBy: { createdAt: 'desc' },
+        orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+        ...cursorPrismaArgs(pagination),
         include: StudentRepository.listInclude(),
       }),
   );
+  const { data: students, pageInfo } = toCursorPage(rows, pagination.limit);
   setCacheHeader(res, cacheStatus);
+  setCursorPaginationHeaders(res, pageInfo);
   res.status(200).json(students);
 };
 

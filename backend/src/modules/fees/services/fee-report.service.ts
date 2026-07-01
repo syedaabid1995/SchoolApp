@@ -2,6 +2,7 @@ import { Prisma } from '@prisma/client';
 import { z } from 'zod';
 import { FeeReportingRepository } from '../repositories/reporting.repository';
 import { HttpError } from '../../../middlewares/error.middleware';
+import { DEFAULT_EXPORT_ROW_LIMIT } from '../../../utils/pagination';
 
 const uuidSchema = z.string().uuid();
 const feeInvoiceStatuses = ['DRAFT', 'ISSUED', 'PARTIALLY_PAID', 'PAID', 'OVERDUE', 'CANCELLED'] as const;
@@ -101,6 +102,9 @@ export const buildFeeReport = async (scope: FeeReportScope, query: FeeReportQuer
   const dateFrom = query.dateFrom ?? query.from;
   const dateTo = query.dateTo ?? query.to;
   if (dateFrom && dateTo && dateTo < dateFrom) throw new HttpError(400, 'dateTo cannot be before dateFrom');
+  if (dateFrom && dateTo && dateTo.getTime() - dateFrom.getTime() > 370 * 24 * 60 * 60 * 1000) {
+    throw new HttpError(400, 'Fee reports are limited to a 370 day date range');
+  }
 
   const dateFilter = reportDateRange(dateFrom, dateTo);
   const invoiceStatus = feeInvoiceStatuses.includes(query.status as any) ? query.status : undefined;
@@ -159,6 +163,24 @@ export const buildFeeReport = async (scope: FeeReportScope, query: FeeReportQuer
     ...(dateFilter ? { entryDate: dateFilter } : {}),
     ...(Object.keys(invoiceRelationFilter).length ? { invoice: invoiceRelationFilter } : {}),
   };
+  const fineLedgerWhere: Prisma.FeeLedgerWhereInput = { ...ledgerWhere, OR: [{ type: 'FINE_DEBIT' }, { fineId: { not: null } }] };
+  const fineWhere: Prisma.FeeFineWhereInput = { ...tenantScopeOnly(scope), deletedAt: null, ...(query.status ? { status: query.status as any } : {}) };
+  const sourceCounts = await Promise.all([
+    FeeReportingRepository.feePayment.count({ where: paymentWhere }),
+    FeeReportingRepository.feeInvoice.count({ where: invoiceWhere }),
+    FeeReportingRepository.feeDiscount.count({ where: discountWhere }),
+    FeeReportingRepository.feeFine.count({ where: fineWhere }),
+    FeeReportingRepository.feeLedger.count({ where: fineLedgerWhere }),
+    FeeReportingRepository.feeReceipt.count({ where: receiptWhere }),
+    FeeReportingRepository.feeLedger.count({ where: ledgerWhere }),
+  ]);
+  const overLimit = sourceCounts.find((count) => count > DEFAULT_EXPORT_ROW_LIMIT);
+  if (overLimit) {
+    throw new HttpError(
+      413,
+      `Fee report source rows exceed ${DEFAULT_EXPORT_ROW_LIMIT}. Add date, class, section, student, or status filters before exporting.`,
+    );
+  }
 
   const [payments, invoices, discounts, fines, fineLedgers, receipts, ledgers] = await Promise.all([
     FeeReportingRepository.feePayment.findMany({
@@ -195,9 +217,9 @@ export const buildFeeReport = async (scope: FeeReportScope, query: FeeReportQuer
       },
       orderBy: { createdAt: 'desc' },
     }),
-    FeeReportingRepository.feeFine.findMany({ where: { ...tenantScopeOnly(scope), deletedAt: null, ...(query.status ? { status: query.status as any } : {}) }, orderBy: { createdAt: 'desc' } }),
+    FeeReportingRepository.feeFine.findMany({ where: fineWhere, orderBy: { createdAt: 'desc' } }),
     FeeReportingRepository.feeLedger.findMany({
-      where: { ...ledgerWhere, OR: [{ type: 'FINE_DEBIT' }, { fineId: { not: null } }] },
+      where: fineLedgerWhere,
       include: {
         student: { select: { fullName: true, admissionNo: true, class: { select: { name: true } }, section: { select: { name: true } } } },
         invoice: { select: { invoiceNumber: true } },

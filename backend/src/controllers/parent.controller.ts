@@ -7,6 +7,11 @@ import { hashPassword } from '../utils/password';
 import { logAudit } from '../utils/audit';
 import { invalidateStudentCache } from '../services/cache/cache.invalidation';
 import { sendAccountCreatedWhatsapp } from '../services/accountOnboardingWhatsapp.service';
+import {
+  parseOffsetPagination,
+  setOffsetPaginationHeaders,
+  toOffsetPageInfo,
+} from '../utils/pagination';
 
 const createSchema = z.object({
   firstName: z.string().min(1),
@@ -182,11 +187,34 @@ export const createParent = async (req: Request, res: Response) => {
 
 export const listParents = async (req: Request, res: Response) => {
   const schoolId = resolveSchoolId(req, req.query.schoolId as string | undefined);
+  const pagination = parseOffsetPagination(req.query, { defaultLimit: 50, maxLimit: 100 });
+  const query = typeof req.query.query === 'string' ? req.query.query.trim() : '';
+  const where = {
+    links: { some: { student: { schoolId } } },
+    ...(query
+      ? {
+          OR: [
+            { firstName: { contains: query, mode: 'insensitive' as const } },
+            { lastName: { contains: query, mode: 'insensitive' as const } },
+            { phone: { contains: query, mode: 'insensitive' as const } },
+            { email: { contains: query, mode: 'insensitive' as const } },
+            { links: { some: { student: { admissionNo: { contains: query, mode: 'insensitive' as const } } } } },
+            { links: { some: { student: { fullName: { contains: query, mode: 'insensitive' as const } } } } },
+          ],
+        }
+      : {}),
+  };
 
-  const parents = await prisma.parentProfile.findMany({
-    where: { links: { some: { student: { schoolId } } } },
-    orderBy: { createdAt: 'desc' },
-  });
+  const [parents, total] = await Promise.all([
+    prisma.parentProfile.findMany({
+      where,
+      orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+      skip: pagination.skip,
+      take: pagination.limit,
+    }),
+    prisma.parentProfile.count({ where }),
+  ]);
+  setOffsetPaginationHeaders(res, toOffsetPageInfo(pagination, total));
 
   res.status(200).json(parents);
 };
