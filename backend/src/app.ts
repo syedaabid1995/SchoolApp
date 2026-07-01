@@ -59,6 +59,7 @@ import { schoolSystemSettingsRouter } from './routes/schoolSystemSettings.routes
 import { publicBrandingRouter } from './routes/publicBranding.routes';
 import { publicAssetRouter } from './routes/publicAsset.routes';
 import { schoolDomainRouter } from './routes/schoolDomain.routes';
+import { adminDemoRequestRouter, publicWebsiteRouter } from './routes/demoRequest.routes';
 import { dormitoryRouter } from './routes/dormitory.routes';
 import { transportRouter } from './routes/transport.routes';
 import { homeworkRouter } from './routes/homework.routes';
@@ -137,6 +138,7 @@ export const createApp = () => {
   app.use('/api/v1/public/branding', publicBrandingRouter);
   app.use('/api/v1/public/assets', publicAssetRouter);
   app.use('/api/v1/public/school-domain', schoolDomainRouter);
+  app.use('/api/v1/public/website', publicWebsiteRouter);
 
   const isWriteMethod = (method: string) => ['POST', 'PUT', 'PATCH', 'DELETE'].includes(method);
   const skipWriteGuard = (pathName: string) =>
@@ -205,6 +207,7 @@ export const createApp = () => {
   app.use('/api/v1/admin/dashboard', adminDashboardRouter);
   app.use('/api/v1/admin/users', adminUserRouter);
   app.use('/api/v1/admin/support', adminSupportRouter);
+  app.use('/api/v1/admin/demo-requests', adminDemoRequestRouter);
   app.use('/api/v1/admin/compliance', adminDataComplianceRouter);
   app.use('/api/v1/admin', adminSystemRouter);
   app.use('/api/v1/users', userRouter);

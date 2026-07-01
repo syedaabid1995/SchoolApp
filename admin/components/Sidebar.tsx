@@ -223,6 +223,7 @@ const platformSections: NavSection[] = [
     id: 'platform-operations',
     label: 'Operations',
     items: [
+      { href: '/dashboard/demo-requests', label: 'Demo Requests', icon: 'DR' },
       { href: '/dashboard/support', label: 'Support Tickets', icon: 'SP' },
       { href: '/dashboard/logs', label: 'Audit Logs', icon: 'LG' },
       { href: '/dashboard/system-health', label: 'System Health', icon: 'SH' },

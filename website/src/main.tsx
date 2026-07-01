@@ -1,0 +1,608 @@
+import React, { useEffect, useMemo, useState } from 'react';
+import { createRoot } from 'react-dom/client';
+import {
+  ArrowRight,
+  BarChart3,
+  Bell,
+  BookOpenCheck,
+  CalendarClock,
+  Check,
+  GraduationCap,
+  Landmark,
+  LayoutDashboard,
+  Loader2,
+  LogIn,
+  Mail,
+  Menu,
+  MessageSquareText,
+  Phone,
+  ShieldCheck,
+  Sparkles,
+  Users,
+  X,
+} from 'lucide-react';
+import './styles.css';
+
+type Plan = {
+  id: string;
+  name: string;
+  priceCents: number;
+  features: string[];
+  studentLimit: number;
+  teacherLimit: number;
+  trialDays: number;
+};
+
+type DemoForm = {
+  name: string;
+  email: string;
+  phone: string;
+  schoolName: string;
+  role: string;
+  studentCount: string;
+  staffCount: string;
+  preferredDate: string;
+  selectedPlanId: string;
+  message: string;
+};
+
+const API_BASE = (import.meta.env.VITE_API_BASE_URL || 'http://localhost:4000/api/v1').replace(/\/$/, '');
+const LOGIN_URL = 'https://app.akacemify.com/';
+
+const defaultPlans: Plan[] = [
+  {
+    id: 'starter-local',
+    name: 'Starter',
+    priceCents: 299900,
+    features: ['Attendance and timetable', 'Student records', 'Basic fee tracking', 'Email support'],
+    studentLimit: 500,
+    teacherLimit: 40,
+    trialDays: 0,
+  },
+  {
+    id: 'standard-local',
+    name: 'Standard',
+    priceCents: 599900,
+    features: ['Everything in Starter', 'Exams and marks', 'Parent portal', 'Reports and analytics'],
+    studentLimit: 1500,
+    teacherLimit: 120,
+    trialDays: 0,
+  },
+  {
+    id: 'premium-local',
+    name: 'Premium',
+    priceCents: 999900,
+    features: ['Everything in Standard', 'Advanced permissions', 'Multi-branch readiness', 'Priority onboarding'],
+    studentLimit: 5000,
+    teacherLimit: 400,
+    trialDays: 0,
+  },
+];
+
+const initialForm: DemoForm = {
+  name: '',
+  email: '',
+  phone: '',
+  schoolName: '',
+  role: '',
+  studentCount: '',
+  staffCount: '',
+  preferredDate: '',
+  selectedPlanId: '',
+  message: '',
+};
+
+const formatCurrency = (priceCents: number) =>
+  new Intl.NumberFormat('en-IN', {
+    style: 'currency',
+    currency: 'INR',
+    maximumFractionDigits: 0,
+  }).format(Math.round(priceCents / 100));
+
+const normalizePlanName = (name: string) =>
+  name
+    .toLowerCase()
+    .split(/[\s_-]+/)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(' ');
+
+function BrandMark() {
+  return (
+    <span className="brand-mark" aria-hidden="true">
+      <GraduationCap size={22} />
+    </span>
+  );
+}
+
+function Header() {
+  const [open, setOpen] = useState(false);
+  const nav = [
+    ['Features', '#features'],
+    ['Workflow', '#workflow'],
+    ['Pricing', '#pricing'],
+    ['Demo', '#demo'],
+  ];
+
+  return (
+    <header className="site-header">
+      <a className="skip-link" href="#main">Skip to content</a>
+      <nav className="nav" aria-label="Main navigation">
+        <a className="brand" href="#top" aria-label="Akademify home">
+          <BrandMark />
+          <span>Akademify</span>
+        </a>
+        <div className="nav-links">
+          {nav.map(([label, href]) => (
+            <a key={href} href={href}>
+              {label}
+            </a>
+          ))}
+        </div>
+        <div className="nav-actions">
+          <a className="login-link" href={LOGIN_URL}>
+            <LogIn size={17} />
+            Login
+          </a>
+          <a className="btn btn-primary" href="#demo">
+            Book demo
+          </a>
+          <button
+            className="nav-toggle"
+            type="button"
+            aria-label="Toggle menu"
+            aria-expanded={open}
+            onClick={() => setOpen((value) => !value)}
+          >
+            {open ? <X /> : <Menu />}
+          </button>
+        </div>
+      </nav>
+      <div className={`mobile-menu ${open ? 'is-open' : ''}`}>
+        {nav.map(([label, href]) => (
+          <a key={href} href={href} onClick={() => setOpen(false)}>
+            {label}
+          </a>
+        ))}
+        <a href={LOGIN_URL} onClick={() => setOpen(false)}>
+          Login
+        </a>
+        <a className="btn btn-primary" href="#demo" onClick={() => setOpen(false)}>
+          Book demo
+        </a>
+      </div>
+    </header>
+  );
+}
+
+function Hero() {
+  return (
+    <section className="hero" id="top">
+      <div className="container hero-grid">
+        <div className="hero-copy">
+          <div className="eyebrow">
+            <Sparkles size={16} />
+            School ERP for growing institutions
+          </div>
+          <h1>Run admissions, academics, fees, and communication from one calm workspace.</h1>
+          <p>
+            Akademify gives school leaders a reliable operating system for daily administration, staff coordination,
+            parent updates, and student records.
+          </p>
+          <div className="hero-actions">
+            <a className="btn btn-primary" href="#demo">
+              Book a demo
+              <ArrowRight size={18} />
+            </a>
+            <a className="btn btn-outline on-dark" href="#pricing">
+              View plans
+            </a>
+          </div>
+          <div className="hero-proof">
+            <span>24-hour approved demo access</span>
+            <span>Super-admin review</span>
+            <span>Live plan pricing</span>
+          </div>
+        </div>
+        <div className="dashboard-visual" aria-label="Akademify dashboard preview">
+          <div className="visual-top">
+            <span />
+            <span />
+            <span />
+          </div>
+          <div className="visual-grid">
+            <div className="metric large">
+              <LayoutDashboard size={22} />
+              <strong>94%</strong>
+              <span>Attendance today</span>
+            </div>
+            <div className="metric">
+              <Users size={20} />
+              <strong>1,248</strong>
+              <span>Students</span>
+            </div>
+            <div className="metric">
+              <Landmark size={20} />
+              <strong>₹8.4L</strong>
+              <span>Fees collected</span>
+            </div>
+            <div className="chart-panel">
+              <div className="bar h1" />
+              <div className="bar h2" />
+              <div className="bar h3" />
+              <div className="bar h4" />
+              <div className="bar h5" />
+            </div>
+            <div className="notice-panel">
+              <Bell size={18} />
+              <span>Parent notice scheduled for Class X</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function FeatureSection() {
+  const features = [
+    {
+      icon: <BookOpenCheck />,
+      title: 'Academic records',
+      body: 'Classes, sections, subjects, exams, marks, homework, and reports stay connected.',
+    },
+    {
+      icon: <CalendarClock />,
+      title: 'Attendance workflows',
+      body: 'Student and staff attendance tools support daily operations and audit-friendly tracking.',
+    },
+    {
+      icon: <Landmark />,
+      title: 'Fee operations',
+      body: 'Manage fee groups, invoices, collection, discounts, receipts, and ledgers.',
+    },
+    {
+      icon: <MessageSquareText />,
+      title: 'Parent communication',
+      body: 'Keep parents informed through notices, portal access, and communication settings.',
+    },
+    {
+      icon: <ShieldCheck />,
+      title: 'Role-based access',
+      body: 'Super admins and school admins can control module access with plan-aware permissions.',
+    },
+    {
+      icon: <BarChart3 />,
+      title: 'Operational visibility',
+      body: 'Dashboards, analytics, support, audit logs, and reports help leadership act quickly.',
+    },
+  ];
+
+  return (
+    <section className="section" id="features">
+      <div className="container">
+        <div className="section-head">
+          <span className="kicker">What it covers</span>
+          <h2>Built for the work schools repeat every day.</h2>
+        </div>
+        <div className="feature-grid">
+          {features.map((feature) => (
+            <article className="feature-card" key={feature.title}>
+              <div className="icon-badge">{feature.icon}</div>
+              <h3>{feature.title}</h3>
+              <p>{feature.body}</p>
+            </article>
+          ))}
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function WorkflowSection() {
+  const steps = [
+    ['Submit details', 'A school shares contact, size, and preferred demo timing.'],
+    ['Admin review', 'The super admin reviews the request inside the admin panel.'],
+    ['Approve request', 'Approval creates a 24-hour access token and sends the email.'],
+    ['Run the demo', 'The school explores the platform with guidance from your team.'],
+  ];
+
+  return (
+    <section className="section section-muted" id="workflow">
+      <div className="container">
+        <div className="section-head centered">
+          <span className="kicker">Demo workflow</span>
+          <h2>Every request has a clear approval path.</h2>
+        </div>
+        <div className="workflow-grid">
+          {steps.map(([title, body], index) => (
+            <article className="workflow-step" key={title}>
+              <span>{String(index + 1).padStart(2, '0')}</span>
+              <h3>{title}</h3>
+              <p>{body}</p>
+            </article>
+          ))}
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function PricingSection({
+  plans,
+  loading,
+  error,
+  onSelectPlan,
+}: {
+  plans: Plan[];
+  loading: boolean;
+  error: string | null;
+  onSelectPlan: (planId: string) => void;
+}) {
+  return (
+    <section className="section" id="pricing">
+      <div className="container">
+        <div className="section-head centered">
+          <span className="kicker">Pricing</span>
+          <h2>Plans loaded from your backend.</h2>
+          <p>{error ? error : loading ? 'Loading current plans...' : 'Choose a plan and request a guided demo.'}</p>
+        </div>
+        <div className="pricing-grid">
+          {plans.map((plan, index) => (
+            <article className={`price-card ${index === 1 ? 'highlight' : ''}`} key={plan.id}>
+              {index === 1 ? <span className="popular">Popular</span> : null}
+              <h3>{normalizePlanName(plan.name)}</h3>
+              <div className="price">
+                <strong>{formatCurrency(plan.priceCents)}</strong>
+                <span>/ month</span>
+              </div>
+              <p>
+                Up to {plan.studentLimit.toLocaleString('en-IN')} students and{' '}
+                {plan.teacherLimit.toLocaleString('en-IN')} staff.
+              </p>
+              <ul>
+                {plan.features.slice(0, 5).map((feature) => (
+                  <li key={feature}>
+                    <Check size={17} />
+                    {feature}
+                  </li>
+                ))}
+              </ul>
+              <button className="btn btn-outline" type="button" onClick={() => onSelectPlan(plan.id)}>
+                Request this plan
+              </button>
+            </article>
+          ))}
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function DemoFormSection({ plans, selectedPlanId }: { plans: Plan[]; selectedPlanId: string }) {
+  const [form, setForm] = useState<DemoForm>({ ...initialForm, selectedPlanId });
+  const [status, setStatus] = useState<'idle' | 'submitting' | 'success' | 'error'>('idle');
+  const [message, setMessage] = useState('');
+
+  useEffect(() => {
+    if (selectedPlanId) {
+      setForm((current) => ({ ...current, selectedPlanId }));
+      document.getElementById('demo')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+  }, [selectedPlanId]);
+
+  const selectedPlan = useMemo(
+    () => plans.find((plan) => plan.id === form.selectedPlanId),
+    [form.selectedPlanId, plans],
+  );
+
+  const update = (field: keyof DemoForm, value: string) => {
+    setForm((current) => ({ ...current, [field]: value }));
+  };
+
+  const submit = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    setStatus('submitting');
+    setMessage('');
+
+    try {
+      const payload = {
+        ...form,
+        studentCount: Number(form.studentCount),
+        staffCount: Number(form.staffCount),
+        preferredDate: form.preferredDate ? new Date(form.preferredDate).toISOString() : '',
+      };
+      const response = await fetch(`${API_BASE}/public/website/demo-requests`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+
+      if (!response.ok) {
+        const data = await response.json().catch(() => ({}));
+        throw new Error(data?.message ?? 'Unable to submit demo request');
+      }
+
+      setStatus('success');
+      setMessage('Your demo request has been submitted. Our admin team will review it and email the approved access link.');
+      setForm(initialForm);
+    } catch (error) {
+      setStatus('error');
+      setMessage(error instanceof Error ? error.message : 'Unable to submit demo request');
+    }
+  };
+
+  return (
+    <section className="section demo-section" id="demo">
+      <div className="container demo-grid">
+        <div>
+          <span className="kicker">Book a demo</span>
+          <h2>Tell us about your school.</h2>
+          <p>
+            After submission, the request appears in the super-admin panel. Once approved, Akademify sends the contact
+            a demo access link that is valid for 24 hours.
+          </p>
+          <div className="contact-panel">
+            <div>
+              <Mail size={18} />
+              <span>Approval email is sent from your configured platform email provider.</span>
+            </div>
+            <div>
+              <Phone size={18} />
+              <span>Phone number helps your team schedule the walkthrough.</span>
+            </div>
+          </div>
+        </div>
+
+        <form className="demo-form" onSubmit={submit}>
+          <div className="form-row">
+            <label>
+              Name
+              <input value={form.name} onChange={(event) => update('name', event.target.value)} required minLength={2} />
+            </label>
+            <label>
+              Email
+              <input type="email" value={form.email} onChange={(event) => update('email', event.target.value)} required />
+            </label>
+          </div>
+          <div className="form-row">
+            <label>
+              Phone
+              <input value={form.phone} onChange={(event) => update('phone', event.target.value)} />
+            </label>
+            <label>
+              Your role
+              <input value={form.role} onChange={(event) => update('role', event.target.value)} placeholder="Principal, admin, owner" />
+            </label>
+          </div>
+          <label>
+            School name
+            <input value={form.schoolName} onChange={(event) => update('schoolName', event.target.value)} required minLength={2} />
+          </label>
+          <div className="form-row">
+            <label>
+              Students
+              <input
+                type="number"
+                min="1"
+                value={form.studentCount}
+                onChange={(event) => update('studentCount', event.target.value)}
+                required
+              />
+            </label>
+            <label>
+              Staff
+              <input
+                type="number"
+                min="1"
+                value={form.staffCount}
+                onChange={(event) => update('staffCount', event.target.value)}
+                required
+              />
+            </label>
+          </div>
+          <div className="form-row">
+            <label>
+              Preferred date
+              <input
+                type="datetime-local"
+                value={form.preferredDate}
+                onChange={(event) => update('preferredDate', event.target.value)}
+              />
+            </label>
+            <label>
+              Plan
+              <select value={form.selectedPlanId} onChange={(event) => update('selectedPlanId', event.target.value)}>
+                <option value="">Not sure yet</option>
+                {plans.map((plan) => (
+                  <option key={plan.id} value={plan.id}>
+                    {normalizePlanName(plan.name)}
+                  </option>
+                ))}
+              </select>
+            </label>
+          </div>
+          {selectedPlan ? <p className="selected-plan">Selected: {normalizePlanName(selectedPlan.name)}</p> : null}
+          <label>
+            Notes
+            <textarea value={form.message} onChange={(event) => update('message', event.target.value)} rows={4} />
+          </label>
+          <button className="btn btn-primary btn-wide" type="submit" disabled={status === 'submitting'}>
+            {status === 'submitting' ? <Loader2 className="spin" size={18} /> : null}
+            Submit demo request
+          </button>
+          {message ? <p className={`form-message ${status}`}>{message}</p> : null}
+        </form>
+      </div>
+    </section>
+  );
+}
+
+function Footer() {
+  return (
+    <footer className="footer">
+      <div className="container footer-inner">
+        <a className="brand" href="#top">
+          <BrandMark />
+          <span>Akademify</span>
+        </a>
+        <p>School management software for structured, visible, and accountable operations.</p>
+        <a href={LOGIN_URL}>Login to app</a>
+      </div>
+    </footer>
+  );
+}
+
+function App() {
+  const [plans, setPlans] = useState<Plan[]>(defaultPlans);
+  const [plansLoading, setPlansLoading] = useState(true);
+  const [plansError, setPlansError] = useState<string | null>(null);
+  const [selectedPlanId, setSelectedPlanId] = useState('');
+
+  useEffect(() => {
+    let mounted = true;
+    fetch(`${API_BASE}/public/website/plans`)
+      .then(async (response) => {
+        if (!response.ok) throw new Error('Using fallback prices because the plans API is unavailable.');
+        return response.json();
+      })
+      .then((data: { items?: Plan[] }) => {
+        if (!mounted) return;
+        if (data.items?.length) setPlans(data.items);
+      })
+      .catch((error) => {
+        if (!mounted) return;
+        setPlansError(error instanceof Error ? error.message : 'Unable to load current plans.');
+      })
+      .finally(() => {
+        if (mounted) setPlansLoading(false);
+      });
+    return () => {
+      mounted = false;
+    };
+  }, []);
+
+  return (
+    <>
+      <Header />
+      <main id="main">
+        <Hero />
+        <FeatureSection />
+        <WorkflowSection />
+        <PricingSection
+          plans={plans}
+          loading={plansLoading}
+          error={plansError}
+          onSelectPlan={(planId) => setSelectedPlanId(planId)}
+        />
+        <DemoFormSection plans={plans} selectedPlanId={selectedPlanId} />
+      </main>
+      <Footer />
+    </>
+  );
+}
+
+createRoot(document.getElementById('root')!).render(
+  <React.StrictMode>
+    <App />
+  </React.StrictMode>,
+);
