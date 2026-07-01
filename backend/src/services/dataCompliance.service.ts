@@ -142,7 +142,7 @@ const mapExportJob = (job: Prisma.DataExportJobGetPayload<{
   reviewNote: job.reviewNote,
   completedAt: job.finishedAt,
   expiresAt: null,
-  downloadAvailable: false,
+  downloadAvailable: job.status === 'COMPLETED' && Boolean(job.filePath),
 });
 
 const mapDeletionJob = (job: Prisma.DataDeletionJobGetPayload<{

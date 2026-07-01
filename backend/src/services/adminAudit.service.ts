@@ -1,9 +1,8 @@
-import fs from 'fs/promises';
-import path from 'path';
 import type { Prisma } from '@prisma/client';
 import { prisma } from '../config/db';
 import { HttpError } from '../middlewares/error.middleware';
 import { createAuditLog } from './auditLog.service';
+import { buildRuntimeObjectKey, getSignedDownloadUrl, putRuntimeObject } from './runtimeStorage.service';
 
 type AuditSortBy = 'createdAt' | 'event' | 'actorRole' | 'schoolName' | 'severity';
 type AuditSortOrder = 'asc' | 'desc';
@@ -426,8 +425,6 @@ const ensureExportDateRange = (filters: AuditExportFilters) => {
   return { ...filters, dateFrom, dateTo };
 };
 
-const exportBaseDir = () => path.join(process.cwd(), 'exports', 'audit');
-
 const csvEscape = (value: unknown) => {
   const text = value === null || value === undefined ? '' : String(value);
   return `"${text.replace(/"/g, '""')}"`;
@@ -509,10 +506,13 @@ export const requestAuditExport = async (params: {
 
   try {
     const items = applyCalculatedFilters(await fetchAuditLogs({ ...filters, limit: 50_000 }), filters);
-    await fs.mkdir(exportBaseDir(), { recursive: true });
     const fileName = `${exportRow.id}.${params.format}`;
-    const fileKey = path.join('audit', fileName);
-    const filePath = path.join(exportBaseDir(), fileName);
+    const fileKey = buildRuntimeObjectKey({
+      schoolId: filters.schoolId ?? null,
+      category: 'audit-exports',
+      filename: fileName,
+      id: exportRow.id,
+    });
     const content =
       params.format === 'json'
         ? JSON.stringify(
@@ -521,7 +521,15 @@ export const requestAuditExport = async (params: {
             2,
           )
         : toCsv(items);
-    await fs.writeFile(filePath, content, 'utf8');
+    await putRuntimeObject({
+      key: fileKey,
+      body: content,
+      contentType: params.format === 'json' ? 'application/json' : 'text/csv',
+      metadata: {
+        auditExportId: exportRow.id,
+        format: params.format,
+      },
+    });
     const updated = await prisma.auditExport.update({
       where: { id: exportRow.id },
       data: {
@@ -640,13 +648,6 @@ export const getAuditExportDownload = async (id: string, actor: AuditActor) => {
   if (entry.status !== 'COMPLETED' || !entry.fileKey) {
     throw new HttpError(400, 'Audit export is not ready for download');
   }
-  const fileName = path.basename(entry.fileKey);
-  const filePath = path.join(exportBaseDir(), fileName);
-  try {
-    await fs.access(filePath);
-  } catch {
-    throw new HttpError(404, 'Audit export file is missing');
-  }
   await createAuditLog({
     schoolId: entry.schoolId ?? null,
     actorId: actor.userId,
@@ -657,8 +658,8 @@ export const getAuditExportDownload = async (id: string, actor: AuditActor) => {
     afterState: { format: entry.format, rowCount: entry.rowCount },
   });
   return {
-    filePath,
-    fileName,
+    downloadUrl: await getSignedDownloadUrl({ key: entry.fileKey }),
+    fileName: `${entry.id}.${entry.format}`,
     contentType: entry.format === 'json' ? 'application/json' : 'text/csv',
   };
 };

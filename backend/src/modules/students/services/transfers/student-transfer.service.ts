@@ -17,6 +17,11 @@ import { buildQueryFingerprint, cacheKeys } from '../../../../services/cache/cac
 import { rememberCache, setCacheHeader } from '../../../../services/cache/cache.service';
 import { cacheTTL } from '../../../../services/cache/cache.ttl';
 import { invalidateStudentCache, invalidateAttendanceCache } from '../../../../services/cache/cache.invalidation';
+import {
+  getStorageDriver,
+  moveStoredObjectSchoolScope,
+  rewriteStorageRefSchoolScope,
+} from '../../../../services/runtimeStorage.service';
 
 const requireSchoolAdmin = (req: Request) => {
   if (!req.auth?.userId) throw new HttpError(401, 'Unauthorized');
@@ -457,18 +462,16 @@ export const acceptTransferRequest = async (req: Request, res: Response) => {
     throw new HttpError(404, 'Transfer request not found');
   }
 
-  const uploadsRoot = path.resolve(process.cwd(), 'uploads');
   const fromSchoolId = request.fromSchoolId;
   const toSchoolId = request.toSchoolId;
   const studentId = request.studentId;
 
-  const oldBase = `/uploads/schools/${fromSchoolId}`;
-  const newBase = `/uploads/schools/${toSchoolId}`;
-
   const rewriteUrl = (value: string | null) => {
-    if (!value) return value;
-    if (!value.startsWith(oldBase)) return value;
-    return value.replace(oldBase, newBase);
+    if (value?.startsWith('/uploads/') && getStorageDriver() !== 'local') {
+      return value;
+    }
+    const rewritten = rewriteStorageRefSchoolScope(value, fromSchoolId, toSchoolId);
+    return rewritten ?? value;
   };
 
   const moveDir = async (fromDir: string, toDir: string) => {
@@ -490,26 +493,45 @@ export const acceptTransferRequest = async (req: Request, res: Response) => {
     }
   };
 
-  await moveDir(
-    path.join(uploadsRoot, 'schools', fromSchoolId, 'students', studentId),
-    path.join(uploadsRoot, 'schools', toSchoolId, 'students', studentId),
-  );
-  await moveDir(
-    path.join(uploadsRoot, 'schools', fromSchoolId, 'documents', studentId),
-    path.join(uploadsRoot, 'schools', toSchoolId, 'documents', studentId),
-  );
-
-  const result = await StudentTransferRepository.$transaction(async (tx) => {
-    const student = await tx.student.findFirst({
+  const [studentAssets, photos] = await Promise.all([
+    StudentTransferRepository.student.findFirst({
       where: { id: studentId },
       select: { photoUrl: true, docBirthCert: true, docTransferCert: true, docAadhaar: true, docReportCard: true },
-    });
-
-    const photos = await tx.studentPhoto.findMany({
+    }),
+    StudentTransferRepository.studentPhoto.findMany({
       where: { studentId },
       select: { id: true, url: true },
-    });
+    }),
+  ]);
 
+  if (getStorageDriver() === 'local') {
+    const uploadsRoot = path.resolve(process.cwd(), 'uploads');
+    await moveDir(
+      path.join(uploadsRoot, 'schools', fromSchoolId, 'students', studentId),
+      path.join(uploadsRoot, 'schools', toSchoolId, 'students', studentId),
+    );
+    await moveDir(
+      path.join(uploadsRoot, 'schools', fromSchoolId, 'documents', studentId),
+      path.join(uploadsRoot, 'schools', toSchoolId, 'documents', studentId),
+    );
+  }
+
+  const objectRefs = [
+    studentAssets?.photoUrl,
+    studentAssets?.docBirthCert,
+    studentAssets?.docTransferCert,
+    studentAssets?.docAadhaar,
+    studentAssets?.docReportCard,
+    ...photos.map((photo) => photo.url),
+  ]
+    .filter((value): value is string => Boolean(value))
+    .filter((value) => value.startsWith('s3://') || value.startsWith('local://'));
+
+  for (const storageRef of new Set(objectRefs)) {
+    await moveStoredObjectSchoolScope({ storageRef, fromSchoolId, toSchoolId });
+  }
+
+  const result = await StudentTransferRepository.$transaction(async (tx) => {
     await tx.student.update({
       where: { id: studentId },
       data: {
@@ -517,11 +539,11 @@ export const acceptTransferRequest = async (req: Request, res: Response) => {
         classId: null,
         sectionId: null,
         status: 'ENROLLED',
-        photoUrl: student?.photoUrl ? rewriteUrl(student.photoUrl) : null,
-        docBirthCert: student?.docBirthCert ? rewriteUrl(student.docBirthCert) : null,
-        docTransferCert: student?.docTransferCert ? rewriteUrl(student.docTransferCert) : null,
-        docAadhaar: student?.docAadhaar ? rewriteUrl(student.docAadhaar) : null,
-        docReportCard: student?.docReportCard ? rewriteUrl(student.docReportCard) : null,
+        photoUrl: studentAssets?.photoUrl ? rewriteUrl(studentAssets.photoUrl) : null,
+        docBirthCert: studentAssets?.docBirthCert ? rewriteUrl(studentAssets.docBirthCert) : null,
+        docTransferCert: studentAssets?.docTransferCert ? rewriteUrl(studentAssets.docTransferCert) : null,
+        docAadhaar: studentAssets?.docAadhaar ? rewriteUrl(studentAssets.docAadhaar) : null,
+        docReportCard: studentAssets?.docReportCard ? rewriteUrl(studentAssets.docReportCard) : null,
       },
     });
 

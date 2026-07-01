@@ -21,6 +21,9 @@ const migratedPermissionSources = [
   'backend/src/services/aiEntityRegistry.service.ts',
   'admin/config/employee-permissions.ts',
   'admin/config/plan-module-permissions.ts',
+];
+
+const optionalMigratedPermissionSources = [
   'school-flutter/lib/core/permissions/mobile_module.dart',
 ];
 
@@ -43,15 +46,22 @@ describe('permission manifest drift', () => {
     assert.deepEqual(parseTsPermissionCodes(read(adminManifestPath)), parseTsPermissionCodes(read(rootManifestPath)));
   });
 
-  it('keeps generated Flutter permission constants synchronized with the root shared manifest', () => {
+  it(
+    'keeps generated Flutter permission constants synchronized with the root shared manifest',
+    { skip: fs.existsSync(flutterConstantsPath) ? false : 'school-flutter is not present in this checkout' },
+    () => {
     assert.deepEqual(parseDartPermissionCodes(read(flutterConstantsPath)), parseTsPermissionCodes(read(rootManifestPath)));
-  });
+    },
+  );
 
   it('does not reintroduce raw permission string literals in migrated sources', () => {
     const violations: string[] = [];
     const permissionLiteralPattern = /['"`]([a-z][a-z0-9]*(?:\.[a-z0-9_-]+)+)['"`]/g;
 
-    for (const sourcePath of migratedPermissionSources) {
+    for (const sourcePath of [
+      ...migratedPermissionSources,
+      ...optionalMigratedPermissionSources.filter((sourcePath) => fs.existsSync(path.join(repoRoot, sourcePath))),
+    ]) {
       const absolutePath = path.join(repoRoot, sourcePath);
       const source = read(absolutePath);
       for (const match of source.matchAll(permissionLiteralPattern)) {

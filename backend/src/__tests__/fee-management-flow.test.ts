@@ -7,6 +7,8 @@ import { prisma } from '../config/db';
 import { resolvePermissionForPath } from '../middlewares/auth.middleware';
 import { HttpError } from '../middlewares/error.middleware';
 import { getDefaultPermissionCodes } from '../utils/employeePermissions';
+import { closeRedis } from '../config/redis';
+import { closeQueues } from '../queues';
 import { getNextNumber, type NumberSequenceClient } from '../services/numberSequence.service';
 import { createLedgerEntry } from '../services/feeLedger.service';
 import {
@@ -77,6 +79,8 @@ test.after(async () => {
   restoreAuditLogCreate?.();
   restoreFeeParticularFindMany = null;
   restoreAuditLogCreate = null;
+  await closeQueues();
+  await closeRedis();
   await prisma.$disconnect();
 });
 
@@ -204,15 +208,26 @@ test('fee API routes resolve to granular fee permissions', () => {
   assert.equal(resolvePermissionForPath('/api/v1/fees/reports/export.csv', 'GET'), 'fees.reports.export');
 });
 
-test('accountant default fee permissions are restricted to collection, ledger, reports, and invoice view', () => {
+test('accountant default fee permissions are restricted to fee operations without setup mutation or discount approval', () => {
   const permissions = getDefaultPermissionCodes('ACCOUNTANT');
   const allowedFeePermissions = [
     'fees.overview.view',
+    'fees.particulars.view',
+    'fees.groups.view',
+    'fees.types.view',
+    'fees.masters.view',
+    'fees.structures.view',
+    'fees.assignments.view',
     'fees.invoices.view',
+    'fees.invoice-generate.view',
+    'fees.invoice-generate.create',
+    'fees.invoices.cancel',
     'fees.collection.view',
     'fees.collection.create',
     'fees.receipts.print',
     'fees.ledger.view',
+    'fees.ledger.export',
+    'fees.discounts.view',
     'fees.reports.view',
     'fees.reports.export',
   ];
@@ -223,15 +238,14 @@ test('accountant default fee permissions are restricted to collection, ledger, r
 
   for (const permission of [
     'fees.particulars.create',
+    'fees.groups.create',
+    'fees.masters.update',
     'fees.types.update',
     'fees.structures.delete',
     'fees.assignments.create',
-    'fees.invoice-generate.create',
-    'fees.invoices.cancel',
     'fees.discounts.approve',
     'fees.discounts.delete',
     'fees.fines.create',
-    'fees.ledger.export',
   ]) {
     assert.equal(permissions.includes(permission), false, `${permission} should not be allowed`);
   }

@@ -91,7 +91,7 @@ test('audit export rejects too-large date ranges', async () => {
   assert.equal(response.status, 400);
 });
 
-test('audit export output is sanitized and completed exports can be downloaded', async () => {
+test('audit export output is sanitized and completed exports return signed downloads', async () => {
   const exportResponse = await server.request('POST', '/api/v1/admin/audit-logs/export', {
     user: getUser('SUPER_ADMIN'),
     body: {
@@ -108,7 +108,8 @@ test('audit export output is sanitized and completed exports can be downloaded',
     user: getUser('SUPER_ADMIN'),
   });
 
-  expectSuccess(download);
-  assert.match(download.text, /\[REDACTED\]/);
-  assert.doesNotMatch(download.text, /must-redact/);
+  assert.equal(download.status, 302);
+  const location = download.headers.get('location') ?? '';
+  assert.ok(location, 'Expected a signed download redirect');
+  assert.doesNotMatch(location, /\/exports\/|\/storage\/|\/tmp\//);
 });

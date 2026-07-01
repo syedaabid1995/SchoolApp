@@ -1012,14 +1012,20 @@ export const restoreSecurityTestDependencies = () => {
 
 export const closeBackgroundHandles = async () => {
   try {
-    const { queues } = await import('../queues');
-    await Promise.all(Object.values(queues).map((queue: any) => queue.close().catch(() => undefined)));
+    const queuesPath = require.resolve('../queues');
+    if (require.cache[queuesPath]) {
+      const { queues } = await import('../queues');
+      await Promise.all(Object.values(queues).map((queue: any) => queue.close().catch(() => undefined)));
+    }
   } catch {
     // Queue cleanup should not hide test assertions.
   }
   try {
-    const { __closeJobQueueEventsForTests } = await import('../controllers/job.controller');
-    await __closeJobQueueEventsForTests();
+    const jobControllerPath = require.resolve('../controllers/job.controller');
+    if (require.cache[jobControllerPath]) {
+      const { __closeJobQueueEventsForTests } = await import('../controllers/job.controller');
+      await __closeJobQueueEventsForTests();
+    }
   } catch {
     // QueueEvents may already be closed.
   }

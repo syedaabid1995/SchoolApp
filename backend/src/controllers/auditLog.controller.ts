@@ -220,6 +220,5 @@ export const getAdminAuditExportApi = async (req: Request, res: Response) => {
 export const downloadAdminAuditExportApi = async (req: Request, res: Response) => {
   const { id } = idParamsSchema.parse(req.params);
   const result = await getAuditExportDownload(id, actorFromRequest(req));
-  res.setHeader('Content-Type', result.contentType);
-  res.download(result.filePath, result.fileName);
+  res.redirect(302, result.downloadUrl);
 };

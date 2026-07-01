@@ -8,6 +8,7 @@ import YAML from 'yamljs';
 import path from 'path';
 import { logger } from './config/logger';
 import { env } from './config/env';
+import { createCorsOriginChecker } from './config/cors';
 import { errorMiddleware, notFoundMiddleware } from './middlewares/error.middleware';
 import { authMiddleware } from './middlewares/auth.middleware';
 import { schoolDomainMiddleware } from './middlewares/schoolDomain.middleware';
@@ -75,10 +76,7 @@ export const createApp = () => {
   const app = express();
   const openapiPath = path.resolve(process.cwd(), 'openapi.yaml');
   const openapiSpec = YAML.load(openapiPath);
-  const allowedOrigins = env.CORS_ORIGINS.split(',')
-    .map((origin) => origin.trim())
-    .filter(Boolean);
-  const allowAllOrigins = env.NODE_ENV !== 'production' || allowedOrigins.includes('*');
+  const corsPolicy = createCorsOriginChecker({ nodeEnv: env.NODE_ENV, corsOrigins: env.CORS_ORIGINS });
 
   app.disable('x-powered-by');
   app.set('trust proxy', 1);
@@ -105,8 +103,7 @@ export const createApp = () => {
   app.use(
     cors({
       origin: (origin: string | undefined, callback: (err: Error | null, allow?: boolean) => void) => {
-        if (!origin || allowAllOrigins) return callback(null, true);
-        if (allowedOrigins.includes(origin)) return callback(null, true);
+        if (corsPolicy.isOriginAllowed(origin)) return callback(null, true);
         return callback(new Error('Origin not allowed by CORS'));
       },
       credentials: true,
@@ -216,7 +213,6 @@ export const createApp = () => {
   app.use('/api/v1/admin/messaging-services', messagingAdminRouter);
   app.use('/api/v1/messaging-services', messagingSettingsRouter);
   app.use('/api/v1/system-settings', schoolSystemSettingsRouter);
-  app.use('/uploads', express.static(path.join(process.cwd(), 'uploads')));
 
   app.use(notFoundMiddleware);
   app.use(errorMiddleware);

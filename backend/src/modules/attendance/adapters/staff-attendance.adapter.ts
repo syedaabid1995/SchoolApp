@@ -63,6 +63,7 @@ export class StaffAttendanceReadAdapter implements TeacherAttendanceAdapter {
         ...(params.teacherId ? { staffId: params.teacherId } : {}),
         ...(attendanceDate ? { attendanceDate } : {}),
       },
+      include: { period: { select: { id: true, name: true } } },
       orderBy: [{ attendanceDate: 'asc' }, { staffId: 'asc' }],
     });
 
@@ -74,6 +75,11 @@ export class StaffAttendanceReadAdapter implements TeacherAttendanceAdapter {
       date: toDateKey(row.attendanceDate),
       status: row.status,
       note: row.note ?? null,
+      unitKey: row.unitKey,
+      unitType: row.unitType,
+      slotType: row.slotType ?? null,
+      periodId: row.periodId ?? null,
+      periodName: row.period?.name ?? null,
     }));
   }
 }

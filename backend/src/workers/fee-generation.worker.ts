@@ -256,3 +256,9 @@ export const startFeeGenerationWorker = () => {
 
   return worker;
 };
+
+export const stopFeeGenerationWorker = async () => {
+  if (!worker) return;
+  await worker.close();
+  worker = undefined;
+};

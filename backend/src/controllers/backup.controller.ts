@@ -3,7 +3,7 @@ import { z } from 'zod';
 import { prisma } from '../config/db';
 import { resolveSchoolId } from '../utils/tenant';
 import { HttpError } from '../middlewares/error.middleware';
-import { createBackup, getBackupFilePath, restoreBackup } from '../services/backup.service';
+import { createBackup, getBackupDownloadUrl, restoreBackup } from '../services/backup.service';
 import { createAuditLog } from '../services/auditLog.service';
 
 const backupSchema = z.object({
@@ -285,8 +285,8 @@ export const runBackup = async (req: Request, res: Response) => {
 
 export const downloadBackup = async (req: Request, res: Response) => {
   const { id } = idSchema.parse(req.params);
-  const backupFile = await getBackupFilePath(id);
-  res.download(backupFile, `${id}.dump`);
+  const downloadUrl = await getBackupDownloadUrl(id);
+  res.redirect(302, downloadUrl);
 };
 
 export const runRestore = async (req: Request, res: Response) => {

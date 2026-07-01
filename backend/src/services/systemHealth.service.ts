@@ -10,9 +10,13 @@ type ServiceHealth = {
   status: HealthStatus;
   latencyMs?: number;
   provider?: string;
+  configured?: boolean;
+  endpointHost?: string | null;
+  legacyLocalUploadsReadEnabled?: boolean;
   uptimeSeconds?: number;
   version?: string;
   environment?: string;
+  processRole?: string;
   description?: string;
 };
 
@@ -104,13 +108,30 @@ const getQueueHealth = async () => {
 };
 
 const getStorageHealth = (): ServiceHealth => {
-  const isConfigured = Boolean(env.AWS_ACCESS_KEY_ID && env.AWS_SECRET_ACCESS_KEY && env.AWS_REGION && env.AWS_S3_BUCKET);
+  const isConfigured =
+    env.STORAGE_DRIVER === 'local' ||
+    Boolean(env.S3_ACCESS_KEY_ID && env.S3_SECRET_ACCESS_KEY && env.S3_REGION && env.S3_BUCKET);
+  const endpointHost = (() => {
+    if (!env.S3_ENDPOINT) return null;
+    try {
+      const parsed = new URL(env.S3_ENDPOINT);
+      return parsed.host;
+    } catch {
+      return 'invalid-endpoint';
+    }
+  })();
+
   return {
-    status: isConfigured ? 'unknown' : 'warning',
-    provider: 's3',
+    status: env.STORAGE_DRIVER === 'local' ? 'warning' : isConfigured ? 'unknown' : 'warning',
+    provider: env.STORAGE_DRIVER,
+    configured: isConfigured,
+    endpointHost,
+    legacyLocalUploadsReadEnabled: env.STORAGE_DRIVER === 'local' ? env.STORAGE_LEGACY_LOCAL_UPLOADS_READ_ENABLED : false,
     description: isConfigured
-      ? 'S3 is configured. Active object-store probing is not performed by this endpoint.'
-      : 'S3 configuration is incomplete.',
+      ? env.STORAGE_DRIVER === 'local'
+        ? 'Local runtime storage is configured. Use only for development/test or explicit maintenance. Legacy local uploads are readable only through signed URLs when enabled.'
+        : 'Object storage is configured. Active object-store probing is not performed by this endpoint.'
+      : 'Object storage configuration is incomplete.',
   };
 };
 
@@ -246,6 +267,7 @@ export const getSystemHealth = async () => {
     uptimeSeconds: Math.floor(process.uptime()),
     version: process.env.npm_package_version ?? '0.1.0',
     environment: env.NODE_ENV,
+    processRole: env.ACADEMIFY_PROCESS_ROLE,
   };
 
   const overallStatus = calculateOverallStatus({

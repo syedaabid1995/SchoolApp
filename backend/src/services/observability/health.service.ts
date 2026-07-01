@@ -1,5 +1,6 @@
 import { prisma } from '../../config/db';
 import { redis } from '../../config/redis';
+import { env } from '../../config/env';
 import { QueueMetricsService } from './queue-metrics.service';
 
 type DependencyStatus = 'up' | 'down';
@@ -9,6 +10,7 @@ export type HealthStatus = {
   database: DependencyStatus;
   redis: DependencyStatus;
   queues: DependencyStatus;
+  processRole: string;
 };
 
 const withTimeout = async <T>(operation: Promise<T>, timeoutMs: number): Promise<T> => {
@@ -62,6 +64,7 @@ export const getHealthStatus = async (): Promise<HealthStatus> => {
 
   return {
     status,
+    processRole: env.ACADEMIFY_PROCESS_ROLE,
     database,
     redis: redisStatus,
     queues,

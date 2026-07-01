@@ -1,13 +1,9 @@
 import type { Request, Response } from 'express';
-import { QueueEvents } from 'bullmq';
-import { redis } from '../config/redis';
 import { queues } from '../queues';
 import { HttpError } from '../middlewares/error.middleware';
 
-const queueEvents = new QueueEvents('import-jobs', { connection: redis });
-
 export const __closeJobQueueEventsForTests = async () => {
-  await queueEvents.close();
+  // QueueEvents is no longer created at import time; this hook remains for old tests.
 };
 
 export const getJobStatus = async (req: Request, res: Response) => {
@@ -42,7 +38,3 @@ export const getJobStatus = async (req: Request, res: Response) => {
     failedReason: job.failedReason ?? null,
   });
 };
-
-queueEvents.on('error', () => {
-  // no-op: handled via logger in worker files
-});

@@ -5,6 +5,21 @@ const prisma = new PrismaClient();
 
 const SCHOOL_CODE = process.env.SEED_SCHOOL_CODE || 'DKS_00002';
 const DEFAULT_PASSWORD = process.env.SEED_EMPLOYEE_PASSWORD || 'School@12345';
+const USING_DEFAULT_EMPLOYEE_PASSWORD = !process.env.SEED_EMPLOYEE_PASSWORD;
+
+const assertSafeSeedEnvironment = () => {
+  if (process.env.NODE_ENV === 'production' && process.env.ALLOW_PRODUCTION_SEED !== 'true') {
+    throw new Error('Refusing to run employee seed in production. Set ALLOW_PRODUCTION_SEED=true only for a reviewed maintenance window.');
+  }
+
+  if (process.env.NODE_ENV === 'production') {
+    console.warn('WARNING: production seed override enabled. Verify this is not a live tenant database.');
+  }
+
+  if (USING_DEFAULT_EMPLOYEE_PASSWORD) {
+    console.warn('WARNING: using the built-in employee demo password. Run this seed only for disposable local or QA data.');
+  }
+};
 
 const staffRoles = ['SCHOOL_ADMIN', 'TEACHER', 'ACCOUNTANT', 'LIBRARIAN', 'STAFF'];
 const employeeNoPrefix = {
@@ -441,7 +456,7 @@ const main = async () => {
 
   console.log(JSON.stringify({
     school: school.code,
-    defaultPassword: DEFAULT_PASSWORD,
+    credential: 'employee demo password configured by seed',
     teachersBackfilled: teacherResult.updated,
     nonTeachingCreated: created,
     nonTeachingUpdated: updated,
@@ -451,6 +466,8 @@ const main = async () => {
     staffByRole,
   }, null, 2));
 };
+
+assertSafeSeedEnvironment();
 
 main()
   .catch((error) => {

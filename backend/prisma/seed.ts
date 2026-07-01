@@ -5,8 +5,23 @@ import { hashPassword } from '../src/utils/password';
 const prisma = new PrismaClient();
 
 const DEMO_SCHOOL_CODE = 'DEMO001';
-const DEMO_PASSWORD = 'Password@123';
+const DEMO_PASSWORD = process.env.SEED_DEMO_PASSWORD || 'Password@123';
 const LOGIN_EXPERIENCE_KEY = 'login.experience';
+const USING_DEFAULT_DEMO_PASSWORD = !process.env.SEED_DEMO_PASSWORD;
+
+const assertSafeSeedEnvironment = () => {
+  if (process.env.NODE_ENV === 'production' && process.env.ALLOW_PRODUCTION_SEED !== 'true') {
+    throw new Error('Refusing to run demo seed in production. Set ALLOW_PRODUCTION_SEED=true only for a reviewed maintenance window.');
+  }
+
+  if (process.env.NODE_ENV === 'production') {
+    console.warn('WARNING: production seed override enabled. Verify this is not a live tenant database.');
+  }
+
+  if (USING_DEFAULT_DEMO_PASSWORD) {
+    console.warn('WARNING: using the built-in demo password. Run this seed only for disposable local or QA data.');
+  }
+};
 
 const ROLE_NAMES: RoleName[] = [
   'SUPER_ADMIN',
@@ -1288,19 +1303,21 @@ const seedDemoData = async () => {
   };
 };
 
+assertSafeSeedEnvironment();
+
 seedDemoData()
   .then((result) => {
     console.log('Seed completed.');
     console.table([
-      { type: 'School', code: result.school.code, email: '', password: '' },
-      { type: 'Super Admin', code: '', email: 'techstageit@admin.com', password: DEMO_PASSWORD },
-      { type: 'School Admin', code: DEMO_SCHOOL_CODE, email: 'school.admin@demo.school', password: DEMO_PASSWORD },
-      { type: 'Teacher', code: DEMO_SCHOOL_CODE, email: 'teacher@demo.school', password: DEMO_PASSWORD },
-      { type: 'Accountant', code: DEMO_SCHOOL_CODE, email: 'accountant@demo.school', password: DEMO_PASSWORD },
-      { type: 'Librarian', code: DEMO_SCHOOL_CODE, email: 'librarian@demo.school', password: DEMO_PASSWORD },
-      { type: 'Staff', code: DEMO_SCHOOL_CODE, email: 'staff@demo.school', password: DEMO_PASSWORD },
-      { type: 'Parent', code: DEMO_SCHOOL_CODE, email: 'parent@demo.school', password: DEMO_PASSWORD },
-      { type: 'Student Record', code: DEMO_SCHOOL_CODE, email: 'parent@demo.school', password: 'Use parent portal' },
+      { type: 'School', code: result.school.code, email: '', credential: '' },
+      { type: 'Super Admin', code: '', email: 'techstageit@admin.com', credential: 'demo password configured by seed' },
+      { type: 'School Admin', code: DEMO_SCHOOL_CODE, email: 'school.admin@demo.school', credential: 'demo password configured by seed' },
+      { type: 'Teacher', code: DEMO_SCHOOL_CODE, email: 'teacher@demo.school', credential: 'demo password configured by seed' },
+      { type: 'Accountant', code: DEMO_SCHOOL_CODE, email: 'accountant@demo.school', credential: 'demo password configured by seed' },
+      { type: 'Librarian', code: DEMO_SCHOOL_CODE, email: 'librarian@demo.school', credential: 'demo password configured by seed' },
+      { type: 'Staff', code: DEMO_SCHOOL_CODE, email: 'staff@demo.school', credential: 'demo password configured by seed' },
+      { type: 'Parent', code: DEMO_SCHOOL_CODE, email: 'parent@demo.school', credential: 'demo password configured by seed' },
+      { type: 'Student Record', code: DEMO_SCHOOL_CODE, email: 'parent@demo.school', credential: 'Use parent portal' },
     ]);
     console.log('Student login is seeded as a student record only because the current schema has no STUDENT role.');
   })

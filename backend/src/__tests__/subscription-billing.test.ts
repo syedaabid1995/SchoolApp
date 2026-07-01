@@ -282,6 +282,8 @@ test('new school creation starts a proper trial subscription', async () => {
 test('bulk student import limit enforcement checks current count plus incoming row count', async () => {
   patch(prisma.subscription as any, 'findUnique', async ({ include }: any = {}) => ({
     ...subscription,
+    endsAt: new Date('2099-12-31T00:00:00.000Z'),
+    nextDueAt: new Date('2099-12-31T00:00:00.000Z'),
     studentLimit: 5,
     ...(include?.school ? { school: subscription.school } : {}),
   }));

@@ -101,6 +101,11 @@ export type TeacherDailyAttendance = {
   date: string;
   status: AttendanceStatus;
   note: string | null;
+  unitKey?: string | null;
+  unitType?: 'DAY' | 'SLOT' | 'PERIOD' | 'TIMETABLE_ENTRY' | null;
+  slotType?: string | null;
+  periodId?: string | null;
+  periodName?: string | null;
 };
 
 export type TeacherAttendanceSummary = {

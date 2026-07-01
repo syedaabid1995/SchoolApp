@@ -2,12 +2,13 @@ import { Router, type NextFunction, type Request, type Response } from 'express'
 import multer from 'multer';
 import path from 'path';
 import crypto from 'crypto';
+import { Readable } from 'stream';
 import { z } from 'zod';
 import { authMiddleware } from '../middlewares/auth.middleware';
 import { blockSuperAdminSchoolOperations, requirePermission, requireSchoolAdminOrSuperAdmin } from '../middlewares/rbac.middleware';
 import { PermissionCodes as P } from '../permissions/permission-manifest';
 import { resolveSchoolId } from '../utils/tenant';
-import { getSignedUrlForStoredUrl, uploadBuffer } from '../services/s3.service';
+import { getObjectForKey, getSignedUrlForStoredUrl, uploadBuffer, verifyLocalSignedStorageUrl } from '../services/s3.service';
 import { prisma } from '../config/db';
 import { AuthorizationService } from '../services/authorization.service';
 import { HttpError } from '../middlewares/error.middleware';
@@ -67,6 +68,49 @@ const brandingUpload = multer({
 const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 export const uploadRouter = Router();
+
+const requireValidLocalSignedStorageUrl = (req: Request, res: Response, next: NextFunction) => {
+  const key = typeof req.query.key === 'string' ? req.query.key : '';
+  const expires = typeof req.query.expires === 'string' ? req.query.expires : '';
+  const signature = typeof req.query.signature === 'string' ? req.query.signature : '';
+
+  if (!key || !expires || !signature || !verifyLocalSignedStorageUrl({ key, expires, signature })) {
+    res.status(403).json({ error: { message: 'Invalid or expired signed URL', details: null } });
+    return;
+  }
+
+  res.locals.localSignedStorageKey = key;
+  next();
+};
+
+uploadRouter.get('/local-signed', requireValidLocalSignedStorageUrl, async (_req, res) => {
+  const key = typeof res.locals.localSignedStorageKey === 'string' ? res.locals.localSignedStorageKey : '';
+
+  try {
+    const object = await getObjectForKey({ key });
+    res.setHeader('Content-Type', object.contentType ?? 'application/octet-stream');
+    res.setHeader('Cache-Control', 'private, max-age=300');
+    if (object.contentLength) {
+      res.setHeader('Content-Length', String(object.contentLength));
+    }
+
+    const body = object.body;
+    if (body instanceof Readable) {
+      body.pipe(res);
+      return;
+    }
+
+    if (typeof (body as { transformToByteArray?: () => Promise<Uint8Array> }).transformToByteArray === 'function') {
+      const bytes = await (body as { transformToByteArray: () => Promise<Uint8Array> }).transformToByteArray();
+      res.send(Buffer.from(bytes));
+      return;
+    }
+
+    res.status(404).json({ error: { message: 'Asset not found', details: null } });
+  } catch {
+    res.status(404).json({ error: { message: 'Asset not found', details: null } });
+  }
+});
 
 uploadRouter.use(authMiddleware);
 
@@ -145,7 +189,7 @@ const resolveSignedAsset = async (req: Request) => {
   return evidence.imageUrl;
 };
 
-uploadRouter.get('/signed', async (req, res) => {
+uploadRouter.get('/signed', requirePermission(P.studentDocumentView, P.staffDocumentView, P.attendanceView), async (req, res) => {
   const storedUrl = await resolveSignedAsset(req);
   try {
     const signed = await getSignedUrlForStoredUrl({ url: storedUrl });

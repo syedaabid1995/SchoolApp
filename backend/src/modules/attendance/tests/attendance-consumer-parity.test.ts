@@ -458,9 +458,9 @@ test('staff attendance report preserves holiday totals and daily rows through At
     assert.equal(body.rows[0].absent, 1);
     assert.equal(body.rows[0].holiday, 1);
     assert.deepEqual(body.rows[0].daily.slice(0, 3), [
-      { day: 1, status: 'PRESENT', note: null },
-      { day: 2, status: 'HOLIDAY' },
-      { day: 3, status: 'ABSENT', note: 'Sick' },
+      { day: 1, status: 'PRESENT', note: null, units: [{ unitKey: 'DAY', label: 'DAY', status: 'PRESENT', note: null }] },
+      { day: 2, status: 'HOLIDAY', holiday: { title: 'Training', details: 'Training', type: 'Staff holiday' } },
+      { day: 3, status: 'ABSENT', note: 'Sick', units: [{ unitKey: 'DAY', label: 'DAY', status: 'ABSENT', note: 'Sick' }] },
     ]);
   } finally {
     restoreStaff();

@@ -22,7 +22,7 @@ const guardedRouteFiles = [
 ];
 
 const routeCallPattern = /\b[A-Za-z0-9_]+Router\.(get|post|put|patch|delete)\(/;
-const explicitGuardPattern = /requirePermission\(|requireRole\(|requireSchoolAdminOrSuperAdmin|requireSuperAdmin|superAdminGuard/;
+const explicitGuardPattern = /requirePermission\(|requireRole\(|requireSchoolAdminOrSuperAdmin|requireSuperAdmin|superAdminGuard|requireValidLocalSignedStorageUrl/;
 
 describe('route authorization hardening', () => {
   it('keeps sensitive route handlers behind explicit route-level authorization guards', () => {

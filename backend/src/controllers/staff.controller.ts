@@ -974,15 +974,18 @@ export const loadStaffAttendance = async (req: Request, res: Response) => {
     ...(query.staffId ? { id: query.staffId } : {}),
     ...(query.role ? { user: { roles: { some: { role: { name: query.role } } } } } : {}),
   };
-  const [staff, attendance, holiday] = await Promise.all([
+  const [staff, attendanceSummary, holiday] = await Promise.all([
     prisma.teacherProfile.findMany({ where: staffWhere, include: staffInclude, orderBy: [{ firstName: 'asc' }, { lastName: 'asc' }] }),
-    prisma.staffAttendance.findMany({
-      where: { schoolId, attendanceDate: date, unitKey: selectedUnit.unitKey },
-      select: { id: true, staffId: true, status: true, note: true },
+    attendanceReadService.getTeacherAttendance({
+      schoolId,
+      teacherId: query.staffId,
+      fromDate: date,
+      toDate: date,
     }),
     attendanceReadService.getStaffAttendanceHoliday({ schoolId, holidayDate: date, roleName: query.role ?? null }),
   ]);
-  const byStaff = new Map(attendance.map((item) => [item.staffId, item]));
+  const attendance = attendanceSummary.records.filter((item) => !item.unitKey || item.unitKey === selectedUnit.unitKey);
+  const byStaff = new Map(attendance.map((item) => [item.teacherId, item]));
   res.status(200).json({
     date: query.date,
     configuration,
@@ -991,7 +994,7 @@ export const loadStaffAttendance = async (req: Request, res: Response) => {
     holiday,
     staff: staff.map((item) => {
       const row = byStaff.get(item.id);
-      return { ...formatStaff(item), status: row?.status ?? 'PRESENT', note: row?.note ?? '', attendanceId: row?.id ?? null };
+      return { ...formatStaff(item), status: row?.status ?? 'PRESENT', note: row?.note ?? '', attendanceId: row?.sourceId ?? null };
     }),
   });
 };
@@ -1091,29 +1094,27 @@ const buildAttendanceSummary = async (schoolId: string, query: z.infer<typeof re
     include: staffInclude,
     orderBy: [{ firstName: 'asc' }, { lastName: 'asc' }],
   });
-  const [attendance, holidays, settings] = await Promise.all([
-    prisma.staffAttendance.findMany({
-      where: {
-        schoolId,
-        attendanceDate: { gte: start, lt: end },
-        staffId: { in: staff.map((item) => item.id) },
-      },
-      select: {
-        id: true,
-        staffId: true,
-        attendanceDate: true,
-        status: true,
-        note: true,
-        unitKey: true,
-        unitType: true,
-        slotType: true,
-        period: { select: { id: true, name: true } },
-      },
-      orderBy: [{ attendanceDate: 'asc' }, { unitKey: 'asc' }],
+  const [attendanceSummary, holidays, settings] = await Promise.all([
+    attendanceReadService.getTeacherAttendance({
+      schoolId,
+      teacherId: query.staffId,
+      fromDate: start,
+      toDate: new Date(Date.UTC(query.year, query.month, 0)),
     }),
     attendanceReadService.getStaffAttendanceHolidays({ schoolId, fromDate: start, toDateExclusive: end, roleName: query.role ?? null }),
     prisma.schoolSystemSetting.findUnique({ where: { schoolId }, select: { holidays: true } }),
   ]);
+  const attendance = attendanceSummary.records.map((record) => ({
+    id: record.sourceId,
+    staffId: record.teacherId,
+    attendanceDate: dayStart(record.date),
+    status: record.status,
+    note: record.note,
+    unitKey: record.unitKey ?? 'DAY',
+    unitType: record.unitType ?? 'DAY',
+    slotType: record.slotType ?? null,
+    period: record.periodName ? { name: record.periodName } : null,
+  }));
   const configuredHolidays = parseSystemHolidays(settings, query.year, query.month);
   const holidayByDay = new Map<number, { title: string; details?: string | null; type?: string | null }>();
   for (const holiday of configuredHolidays) {

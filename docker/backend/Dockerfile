@@ -1,30 +1,49 @@
-# Runtime image (uses tsx directly because current project isn't tsc-clean in CI)
-# Use Debian slim to avoid Alpine OpenSSL/Prisma engine incompatibilities.
-FROM public.ecr.aws/docker/library/node:20-bookworm-slim AS runner
+# syntax=docker/dockerfile:1
+
+FROM public.ecr.aws/docker/library/node:20-bookworm-slim AS builder
 WORKDIR /app
 
-ENV PORT=3000
-
 RUN apt-get update -y \
-  && apt-get install -y --no-install-recommends openssl ca-certificates redis-server postgresql-client \
+  && apt-get install -y --no-install-recommends openssl ca-certificates \
   && rm -rf /var/lib/apt/lists/*
 
 COPY package.json package-lock.json* ./
-RUN npm ci --include=dev
+RUN npm ci
 
-COPY . .
-RUN npx prisma generate
+COPY prisma ./prisma
+COPY src ./src
+COPY tsconfig.json openapi.yaml ./
+
+RUN npx prisma generate \
+  && npm run build \
+  && npm prune --omit=dev
+
+FROM public.ecr.aws/docker/library/node:20-bookworm-slim AS runner
+WORKDIR /app
 
 ENV NODE_ENV=production
+ENV PORT=4000
 
-RUN groupadd -g 1001 nodejs \
-  && useradd -m -u 1001 -g nodejs nodejs
+RUN apt-get update -y \
+  && apt-get install -y --no-install-recommends openssl ca-certificates postgresql-client \
+  && rm -rf /var/lib/apt/lists/* \
+  && groupadd -g 1001 nodejs \
+  && useradd -m -u 1001 -g nodejs nodejs \
+  && mkdir -p /app/uploads /app/exports /app/logs /app/tmp /app/storage \
+  && chown -R nodejs:nodejs /app
+
+COPY --from=builder --chown=nodejs:nodejs /app/package.json ./package.json
+COPY --from=builder --chown=nodejs:nodejs /app/package-lock.json ./package-lock.json
+COPY --from=builder --chown=nodejs:nodejs /app/node_modules ./node_modules
+COPY --from=builder --chown=nodejs:nodejs /app/dist ./dist
+COPY --from=builder --chown=nodejs:nodejs /app/prisma ./prisma
+COPY --from=builder --chown=nodejs:nodejs /app/openapi.yaml ./openapi.yaml
 
 USER nodejs
 
-EXPOSE 3000
+EXPOSE 4000
 
-HEALTHCHECK --interval=30s --timeout=3s --start-period=10s --retries=3 \
-  CMD node -e "require('http').get('http://127.0.0.1:3000/health', (res) => process.exit(res.statusCode === 200 ? 0 : 1)).on('error', () => process.exit(1))"
+HEALTHCHECK --interval=30s --timeout=3s --start-period=20s --retries=3 \
+  CMD node -e "require('http').get('http://127.0.0.1:' + (process.env.PORT || 4000) + '/health', (res) => process.exit(res.statusCode === 200 ? 0 : 1)).on('error', () => process.exit(1))"
 
-CMD ["sh", "-c", "redis-server --daemonize yes && npx tsx src/server.ts"]
+CMD ["node", "dist/server.js"]

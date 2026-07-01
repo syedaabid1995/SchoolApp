@@ -1,6 +1,13 @@
 import { prisma } from '../config/db';
 import { logger } from '../config/logger';
+import { runWithDistributedLock, type DistributedLockClient } from '../services/distributedLock.service';
 import { markOverdueSubscriptionInvoices } from '../services/subscription.service';
+
+let subscriptionInterval: NodeJS.Timeout | undefined;
+let activeSubscriptionRun: Promise<unknown> | undefined;
+const subscriptionJobName = 'subscriptions.expiry-check';
+const subscriptionLockKey = 'academify:scheduler:subscriptions:expiry-check';
+const subscriptionLockTtlMs = 55 * 60 * 1000;
 
 export const processExpiredSubscriptions = async () => {
   try {
@@ -59,8 +66,37 @@ export const processExpiredSubscriptions = async () => {
   }
 };
 
-// Run every hour
-export const startSubscriptionWorker = () => {
-  setInterval(processExpiredSubscriptions, 60 * 60 * 1000);
-  processExpiredSubscriptions(); // Run immediately on start
+export const runSubscriptionSchedulerOnce = async (params?: { lockClient?: DistributedLockClient }) =>
+  runWithDistributedLock({
+    key: subscriptionLockKey,
+    ttlMs: subscriptionLockTtlMs,
+    jobName: subscriptionJobName,
+    client: params?.lockClient,
+    run: processExpiredSubscriptions,
+  });
+
+const triggerSubscriptionSchedulerRun = () => {
+  activeSubscriptionRun = runSubscriptionSchedulerOnce().finally(() => {
+    activeSubscriptionRun = undefined;
+  });
+  return activeSubscriptionRun;
 };
+
+// Run every hour.
+export const startSubscriptionScheduler = () => {
+  if (subscriptionInterval) return;
+  subscriptionInterval = setInterval(() => {
+    void triggerSubscriptionSchedulerRun();
+  }, 60 * 60 * 1000);
+  void triggerSubscriptionSchedulerRun(); // Run immediately on start.
+};
+
+export const stopSubscriptionScheduler = async () => {
+  const activeRun = activeSubscriptionRun;
+  clearInterval(subscriptionInterval);
+  subscriptionInterval = undefined;
+  if (activeRun) await activeRun;
+};
+
+export const startSubscriptionWorker = startSubscriptionScheduler;
+export const stopSubscriptionWorker = stopSubscriptionScheduler;

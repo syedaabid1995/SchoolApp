@@ -3,11 +3,11 @@ import { Prisma } from '@prisma/client';
 import multer from 'multer';
 import path from 'path';
 import crypto from 'crypto';
-import { mkdir, writeFile } from 'fs/promises';
 import { z } from 'zod';
 import { prisma } from '../config/db';
 import { HttpError } from '../middlewares/error.middleware';
 import { logAudit } from '../utils/audit';
+import { uploadBuffer } from '../services/s3.service';
 
 const uuidSchema = z.string().uuid();
 
@@ -394,16 +394,11 @@ export const uploadHomeworkAttachment = async (req: Request, res: Response) => {
 
   const ext = path.extname(req.file.originalname).toLowerCase();
   const filename = `${crypto.randomUUID()}${ext || ''}`;
-  const relativePath = path.join('schools', schoolId, 'homework', filename);
-  const absolutePath = path.resolve(process.cwd(), 'uploads', relativePath);
-  await mkdir(path.dirname(absolutePath), { recursive: true });
-  await writeFile(absolutePath, req.file.buffer);
-
-  const publicPath = `/uploads/${relativePath.replace(/\\/g, '/')}`;
-  const origin = `${req.protocol}://${req.get('host')}`;
+  const key = `schools/${schoolId}/homework/${filename}`;
+  const uploaded = await uploadBuffer({ key, body: req.file.buffer, contentType: req.file.mimetype });
 
   res.status(201).json({
-    url: `${origin}${publicPath}`,
+    url: uploaded.url,
     filename: req.file.originalname,
     storedFilename: filename,
     contentType: req.file.mimetype,

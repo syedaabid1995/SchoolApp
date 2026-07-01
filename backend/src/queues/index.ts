@@ -14,3 +14,11 @@ export const queues = {
   importQueue,
   feeGenerationQueue,
 };
+
+export const closeQueues = async () => {
+  const results = await Promise.allSettled(Object.values(queues).map((queue) => queue.close()));
+  const failed = results.find((result): result is PromiseRejectedResult => result.status === 'rejected');
+  if (failed) {
+    throw failed.reason;
+  }
+};

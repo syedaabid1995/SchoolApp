@@ -7,6 +7,7 @@ import ExcelJS from 'exceljs';
 import { prisma } from '../config/db';
 import { hashPassword } from '../utils/password';
 import { incrementUsage, enforceLimits } from './subscription.service';
+import { withTemporaryStoredObjectFile } from './runtimeStorage.service';
 
 export type ImportRowError = {
   rowNumber: number;
@@ -44,8 +45,8 @@ const normalizeRow = (row: Record<string, unknown>) => {
   return normalized;
 };
 
-const loadFileRows = async (filePath: string) => {
-  const ext = path.extname(filePath).toLowerCase();
+const loadLocalFileRows = async (filePath: string, originalName: string) => {
+  const ext = path.extname(originalName || filePath).toLowerCase();
   if (ext === '.csv') {
     const content = fs.readFileSync(filePath, 'utf8');
     const rows = parse(content, {
@@ -86,6 +87,13 @@ const loadFileRows = async (filePath: string) => {
 
   throw new Error('Unsupported file type');
 };
+
+const loadFileRows = async (storageRef: string, originalName: string) =>
+  withTemporaryStoredObjectFile({
+    storageRef,
+    extension: path.extname(originalName),
+    handler: (filePath) => loadLocalFileRows(filePath, originalName),
+  });
 
 const validateStudentRows = async (schoolId: string, rows: Record<string, unknown>[]) => {
   const errors: ImportRowError[] = [];
@@ -253,7 +261,7 @@ export const processImportJob = async (importJobId: string) => {
   });
 
   try {
-    const rows = await loadFileRows(importJob.filePath);
+    const rows = await loadFileRows(importJob.filePath, importJob.originalName);
     const totalRows = rows.length;
 
     let validRows: StudentRow[] | TeacherRow[] = [];

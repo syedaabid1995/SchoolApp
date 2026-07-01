@@ -22,3 +22,16 @@ redis.on('error', (error) => {
   didLogRedisError = true;
   logger.warn({ err: error }, 'redis unavailable; continuing with degraded mode');
 });
+
+export const closeRedis = async () => {
+  if (redis.status === 'end') return;
+  if (redis.status === 'wait' || redis.status === 'close') {
+    redis.disconnect();
+    return;
+  }
+  try {
+    await redis.quit();
+  } catch {
+    redis.disconnect();
+  }
+};

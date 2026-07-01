@@ -1,0 +1,219 @@
+name: ${COMPOSE_PROJECT_NAME:-academify}
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-academify}
+      POSTGRES_USER: ${POSTGRES_USER:-academify}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-change_me_postgres_password}
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes"]
+    ports:
+      - "${REDIS_PORT:-6379}:6379"
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  backend-api:
+    build:
+      context: ./backend
+      dockerfile: ../docker/backend/Dockerfile
+    restart: unless-stopped
+    env_file:
+      - path: ./.env
+        required: false
+    environment:
+      NODE_ENV: production
+      PORT: 4000
+      DATABASE_URL: ${DATABASE_URL:-postgresql://academify:change_me_postgres_password@postgres:5432/academify}
+      REDIS_URL: ${REDIS_URL:-redis://redis:6379}
+      CORS_ORIGINS: ${CORS_ORIGINS:-https://admin.example.com}
+      FRONTEND_URL: ${FRONTEND_URL:-https://admin.example.com}
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+      ACADEMIFY_PROCESS_ROLE: api
+      RUN_API: "true"
+      RUN_WORKERS: "false"
+      RUN_SCHEDULERS: "false"
+      STORAGE_DRIVER: ${STORAGE_DRIVER:-s3}
+      STORAGE_LOCAL_ROOT: ${STORAGE_LOCAL_ROOT:-storage/runtime}
+      STORAGE_LEGACY_LOCAL_UPLOADS_READ_ENABLED: ${STORAGE_LEGACY_LOCAL_UPLOADS_READ_ENABLED:-false}
+      ALLOW_LOCAL_STORAGE_IN_PRODUCTION: ${ALLOW_LOCAL_STORAGE_IN_PRODUCTION:-false}
+      SIGNED_URL_EXPIRES_SECONDS: ${SIGNED_URL_EXPIRES_SECONDS:-900}
+      S3_ENDPOINT: ${S3_ENDPOINT:-}
+      S3_REGION: ${S3_REGION:-us-east-1}
+      S3_BUCKET: ${S3_BUCKET:-change_me_bucket_name}
+      S3_ACCESS_KEY_ID: ${S3_ACCESS_KEY_ID:-change_me_s3_access_key_id}
+      S3_SECRET_ACCESS_KEY: ${S3_SECRET_ACCESS_KEY:-change_me_s3_secret_access_key}
+      S3_FORCE_PATH_STYLE: ${S3_FORCE_PATH_STYLE:-false}
+    command: ["node", "dist/server.js"]
+    ports:
+      - "${BACKEND_PORT:-4000}:4000"
+    volumes:
+      - backend-logs:/app/logs
+      - backend-tmp:/app/tmp
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "node", "-e", "require('http').get('http://127.0.0.1:4000/health', (res) => process.exit(res.statusCode === 200 ? 0 : 1)).on('error', () => process.exit(1))"]
+      interval: 30s
+      timeout: 5s
+      start_period: 30s
+      retries: 5
+
+  admin:
+    build:
+      context: ./admin
+      dockerfile: ../docker/admin/Dockerfile
+      args:
+        API_BASE_URL: ${API_BASE_URL:-http://backend-api:4000/api/v1}
+        NEXT_PUBLIC_API_BASE_URL: ${NEXT_PUBLIC_API_BASE_URL:-http://localhost:4000/api/v1}
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      API_BASE_URL: ${API_BASE_URL:-http://backend-api:4000/api/v1}
+      NEXT_PUBLIC_API_BASE_URL: ${NEXT_PUBLIC_API_BASE_URL:-http://localhost:4000/api/v1}
+    ports:
+      - "${ADMIN_PORT:-3001}:3000"
+    depends_on:
+      backend-api:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "node", "-e", "require('http').get('http://127.0.0.1:3000', (res) => process.exit(res.statusCode < 500 ? 0 : 1)).on('error', () => process.exit(1))"]
+      interval: 30s
+      timeout: 5s
+      start_period: 30s
+      retries: 5
+
+  backend-worker:
+    build:
+      context: ./backend
+      dockerfile: ../docker/backend/Dockerfile
+    restart: unless-stopped
+    env_file:
+      - path: ./.env
+        required: false
+    environment:
+      NODE_ENV: production
+      DATABASE_URL: ${DATABASE_URL:-postgresql://academify:change_me_postgres_password@postgres:5432/academify}
+      REDIS_URL: ${REDIS_URL:-redis://redis:6379}
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+      ACADEMIFY_PROCESS_ROLE: worker
+      RUN_API: "false"
+      RUN_WORKERS: "true"
+      RUN_SCHEDULERS: "false"
+      STORAGE_DRIVER: ${STORAGE_DRIVER:-s3}
+      STORAGE_LOCAL_ROOT: ${STORAGE_LOCAL_ROOT:-storage/runtime}
+      STORAGE_LEGACY_LOCAL_UPLOADS_READ_ENABLED: ${STORAGE_LEGACY_LOCAL_UPLOADS_READ_ENABLED:-false}
+      ALLOW_LOCAL_STORAGE_IN_PRODUCTION: ${ALLOW_LOCAL_STORAGE_IN_PRODUCTION:-false}
+      SIGNED_URL_EXPIRES_SECONDS: ${SIGNED_URL_EXPIRES_SECONDS:-900}
+      S3_ENDPOINT: ${S3_ENDPOINT:-}
+      S3_REGION: ${S3_REGION:-us-east-1}
+      S3_BUCKET: ${S3_BUCKET:-change_me_bucket_name}
+      S3_ACCESS_KEY_ID: ${S3_ACCESS_KEY_ID:-change_me_s3_access_key_id}
+      S3_SECRET_ACCESS_KEY: ${S3_SECRET_ACCESS_KEY:-change_me_s3_secret_access_key}
+      S3_FORCE_PATH_STYLE: ${S3_FORCE_PATH_STYLE:-false}
+    command: ["node", "dist/worker.js"]
+    volumes:
+      - backend-logs:/app/logs
+      - backend-tmp:/app/tmp
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  backend-scheduler:
+    build:
+      context: ./backend
+      dockerfile: ../docker/backend/Dockerfile
+    restart: unless-stopped
+    env_file:
+      - path: ./.env
+        required: false
+    environment:
+      NODE_ENV: production
+      DATABASE_URL: ${DATABASE_URL:-postgresql://academify:change_me_postgres_password@postgres:5432/academify}
+      REDIS_URL: ${REDIS_URL:-redis://redis:6379}
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+      ACADEMIFY_PROCESS_ROLE: scheduler
+      RUN_API: "false"
+      RUN_WORKERS: "false"
+      RUN_SCHEDULERS: "true"
+      STORAGE_DRIVER: ${STORAGE_DRIVER:-s3}
+      STORAGE_LOCAL_ROOT: ${STORAGE_LOCAL_ROOT:-storage/runtime}
+      STORAGE_LEGACY_LOCAL_UPLOADS_READ_ENABLED: ${STORAGE_LEGACY_LOCAL_UPLOADS_READ_ENABLED:-false}
+      ALLOW_LOCAL_STORAGE_IN_PRODUCTION: ${ALLOW_LOCAL_STORAGE_IN_PRODUCTION:-false}
+      SIGNED_URL_EXPIRES_SECONDS: ${SIGNED_URL_EXPIRES_SECONDS:-900}
+      S3_ENDPOINT: ${S3_ENDPOINT:-}
+      S3_REGION: ${S3_REGION:-us-east-1}
+      S3_BUCKET: ${S3_BUCKET:-change_me_bucket_name}
+      S3_ACCESS_KEY_ID: ${S3_ACCESS_KEY_ID:-change_me_s3_access_key_id}
+      S3_SECRET_ACCESS_KEY: ${S3_SECRET_ACCESS_KEY:-change_me_s3_secret_access_key}
+      S3_FORCE_PATH_STYLE: ${S3_FORCE_PATH_STYLE:-false}
+    command: ["node", "dist/scheduler.js"]
+    volumes:
+      - backend-logs:/app/logs
+      - backend-tmp:/app/tmp
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  minio:
+    profiles: ["storage"]
+    image: minio/minio:latest
+    restart: unless-stopped
+    command: ["server", "/data", "--console-address", ":9001"]
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-change_me_minio_user}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-change_me_minio_password}
+    ports:
+      - "${MINIO_API_PORT:-9000}:9000"
+      - "${MINIO_CONSOLE_PORT:-9001}:9001"
+    volumes:
+      - minio-data:/data
+
+  minio-init:
+    profiles: ["storage"]
+    image: minio/mc:latest
+    depends_on:
+      minio:
+        condition: service_started
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-change_me_minio_user}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-change_me_minio_password}
+      S3_BUCKET: ${S3_BUCKET:-academify-local}
+    entrypoint: ["/bin/sh", "-c"]
+    command: >
+      until mc alias set local http://minio:9000 "$${MINIO_ROOT_USER}" "$${MINIO_ROOT_PASSWORD}"; do sleep 2; done &&
+      mc mb --ignore-existing "local/$${S3_BUCKET}" &&
+      mc anonymous set none "local/$${S3_BUCKET}"
+
+volumes:
+  postgres-data:
+  redis-data:
+  backend-logs:
+  backend-tmp:
+  minio-data:
