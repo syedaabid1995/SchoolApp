@@ -1,11 +1,9 @@
 name: Deploy Full Stack to Lightsail
 
 on:
-  push:
-    branches: [ main ]
-    paths:
-      - 'backend/**'
-      - 'admin/**'
+  # Phase 2E: production deployment is manual until the staging runbook,
+  # separated API/worker/scheduler runtime, backup drill, and monitoring gates
+  # have been verified for the target environment.
   workflow_dispatch:
 
 jobs:

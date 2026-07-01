@@ -4,12 +4,14 @@ Phase 2D reviewed Prisma indexes for the highest-volume Academify paths.
 
 No Prisma migration was created in Phase 2D. The Prisma schema now declares the recommended indexes so new migrations can be generated deliberately, but existing production databases should add these indexes concurrently and out of band.
 
+Phase 2E adds the reviewed manual rollout file at `docs/sql/production-index-rollout.sql`. Do not apply that file through Prisma migrate.
+
 ## Existing Useful Indexes
 
 Already present before Phase 2D:
 
 - `students(school_id)` and `students(school_id, admission_no)` unique.
-- `teacher_profiles(school_id)` and `teacher_profiles(school_id, role_name)`.
+- `employee_profiles(school_id)` and `employee_profiles(school_id, role_name)`.
 - `attendance_sessions(school_id, date)` and several attendance identity indexes.
 - `staff_attendances(school_id, attendance_date)`.
 - `teacher_leave_requests(school_id, status, created_at)`.
@@ -25,7 +27,7 @@ Already present before Phase 2D:
 | Model | Index | Why |
 | --- | --- | --- |
 | `Student` | `[schoolId, status, createdAt]` | Student list default filter/order |
-| `TeacherProfile` | `[schoolId, isActive, createdAt]` | Staff/teacher active lists |
+| `TeacherProfile` | `[schoolId, isActive, createdAt]` on `employee_profiles` | Staff/teacher active lists |
 | `StudentParent` | `[parentId, createdAt]` | Parent portal child resolution and parent-linked lists |
 | `ImportJob` | `[schoolId, createdAt]`, `[schoolId, status, createdAt]` | Import history browsing |
 | `ImportRowError` | `[importJobId, rowNumber]` | Paginated import error rows |
@@ -38,14 +40,14 @@ Already present before Phase 2D:
 
 ## Existing Production SQL
 
-For an existing PostgreSQL production database, use concurrent indexes outside Prisma migrations:
+For an existing PostgreSQL production database, use concurrent indexes outside Prisma migrations. The canonical Phase 2E file is `docs/sql/production-index-rollout.sql`; the statements below are kept here for review context.
 
 ```sql
 CREATE INDEX CONCURRENTLY IF NOT EXISTS "students_school_id_status_created_at_idx"
   ON "students"("school_id", "status", "created_at");
 
-CREATE INDEX CONCURRENTLY IF NOT EXISTS "teacher_profiles_school_id_is_active_created_at_idx"
-  ON "teacher_profiles"("school_id", "is_active", "created_at");
+CREATE INDEX CONCURRENTLY IF NOT EXISTS "employee_profiles_school_id_is_active_created_at_idx"
+  ON "employee_profiles"("school_id", "is_active", "created_at");
 
 CREATE INDEX CONCURRENTLY IF NOT EXISTS "student_parents_parent_id_created_at_idx"
   ON "student_parents"("parent_id", "created_at");

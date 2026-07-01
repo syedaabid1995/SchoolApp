@@ -12,7 +12,7 @@ STORAGE_DRIVER=local npm --prefix backend run storage:validate
 
 The command uploads a small object under `system/storage-validation/`, generates a signed download URL, reads the object back, and deletes it. It does not print credentials or full signed URLs.
 
-S3, R2, or MinIO validation:
+S3-compatible validation pattern:
 
 ```sh
 STORAGE_DRIVER=s3 \
@@ -25,6 +25,13 @@ S3_FORCE_PATH_STYLE=true \
 npm --prefix backend run storage:validate
 ```
 
+Provider notes:
+
+- AWS S3: leave `S3_ENDPOINT` empty, set the AWS region, bucket, access key, and secret key.
+- Cloudflare R2: set `S3_ENDPOINT=https://<account-id>.r2.cloudflarestorage.com`, use `S3_REGION=auto`, and usually set `S3_FORCE_PATH_STYLE=true`.
+- DigitalOcean Spaces: set `S3_ENDPOINT=https://<region>.digitaloceanspaces.com`, set `S3_REGION=<region>`, and usually set `S3_FORCE_PATH_STYLE=false`.
+- MinIO: set `S3_ENDPOINT` to the MinIO API URL and `S3_FORCE_PATH_STYLE=true`.
+
 For `NODE_ENV=production`, the validation command refuses to run unless `--allow-production` is passed intentionally:
 
 ```sh
@@ -32,6 +39,8 @@ NODE_ENV=production npm --prefix backend run storage:validate -- --allow-product
 ```
 
 That command writes and deletes only the validation object. Do not point it at production credentials unless that is the object store you intend to validate.
+
+The command reports only a signed URL summary. Do not copy full signed URLs, S3 access keys, secret keys, or provider tokens into tickets, logs, or docs.
 
 ## MinIO Local Validation
 
@@ -139,6 +148,15 @@ Do not:
 - Re-enable broad public `/uploads` static serving.
 - Print or share full signed URLs.
 - Delete old local files until every DB reference has been verified.
+
+If validation fails:
+
+1. Confirm `STORAGE_DRIVER=s3` and the provider endpoint/region/path-style combination.
+2. Confirm the bucket exists and is private.
+3. Confirm credentials can `PutObject`, `GetObject`, and `DeleteObject` only for the expected bucket or prefix.
+4. Check server clock skew if signed URL generation succeeds but reads fail.
+5. Re-run in staging before trying production credentials again.
+6. Do not enable public bucket reads as a workaround.
 
 ## Disabling Legacy Local Reads
 
