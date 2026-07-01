@@ -26,6 +26,7 @@
     "prod-lite:verify": "tsx scripts/verify-prod-lite.ts",
     "remediate:default-super-admin": "tsx scripts/remediate-default-super-admin.ts",
     "maintenance:default-super-admin": "tsx scripts/remediate-default-super-admin.ts",
+    "pilot:reset": "tsx scripts/pilot-reset.ts",
     "reset:qa": "tsx scripts/reset-qa-data.ts",
     "prisma": "prisma",
     "seed": "prisma db seed"
