@@ -15,11 +15,18 @@ const argValue = (name: string) => {
 
 const hasFlag = (name: string) => args.includes(name);
 
+const maskEmail = (email: string) => {
+  const [localPart, domain] = email.split('@');
+  if (!localPart || !domain) return '<masked-email>';
+  const visiblePrefix = localPart.slice(0, 2);
+  return `${visiblePrefix}${'*'.repeat(Math.max(localPart.length - visiblePrefix.length, 3))}@${domain}`;
+};
+
 const printUsage = () => {
   console.log([
-    'Usage: npm run maintenance:default-super-admin -- [--apply] [--email=techstageit@admin.com] [--mode=disable|force-reset]',
+    'Usage: npm run remediate:default-super-admin -- [--dry-run] [--apply] [--email=techstageit@admin.com] [--mode=disable|force-reset]',
     '',
-    'Defaults to dry-run mode. No password or password hash is printed.',
+    'Defaults to dry-run mode. No full email, password, or password hash is printed.',
     '',
     'Modes:',
     '  disable      Set status=INACTIVE and mustChangePassword=true.',
@@ -70,8 +77,10 @@ const main = async () => {
     },
   });
 
+  const maskedEmail = maskEmail(email);
+
   if (!user) {
-    console.log(JSON.stringify({ found: false, email, applied: false, mode }, null, 2));
+    console.log(JSON.stringify({ found: false, email: maskedEmail, applied: false, mode }, null, 2));
     return;
   }
 
@@ -86,7 +95,7 @@ const main = async () => {
     mode,
     user: {
       id: user.id,
-      email: user.email,
+      email: maskEmail(user.email),
       status: user.status,
       mustChangePassword: user.mustChangePassword,
       mfaEnabled: user.mfaEnabled,
@@ -114,7 +123,15 @@ const main = async () => {
     },
   });
 
-  console.log(JSON.stringify({ ...summary, dryRun: false, updated: { ...updated, updatedAt: updated.updatedAt.toISOString() } }, null, 2));
+  console.log(JSON.stringify({
+    ...summary,
+    dryRun: false,
+    updated: {
+      ...updated,
+      email: maskEmail(updated.email),
+      updatedAt: updated.updatedAt.toISOString(),
+    },
+  }, null, 2));
 };
 
 main()

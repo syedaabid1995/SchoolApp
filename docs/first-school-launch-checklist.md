@@ -89,9 +89,15 @@ Use this checklist before onboarding the first 1-3 real schools. Every item shou
 ## Rollback
 
 - [ ] Previous image tags or release artifacts available.
+- [ ] Previous known-good commit SHA recorded.
 - [ ] Last known-good deployment config recorded.
-- [ ] Database rollback strategy documented.
-- [ ] Object storage rollback/recovery path documented.
+- [ ] Environment rollback process tested without printing secret values.
+- [ ] Stop-service and restart-previous-version commands documented.
+- [ ] Database migration review completed before release.
+- [ ] Database rollback strategy documents backup restore only after human review.
+- [ ] Restore drill completed against a disposable database before any production restore is considered.
+- [ ] Object storage rollback/recovery path documented, including bucket versioning or provider recovery.
+- [ ] Post-rollback verification checklist covers API health, admin reachability, API/worker/scheduler logs, DB, Redis, and storage.
 - [ ] Operator authorized to execute rollback identified.
 
 ## Signoff

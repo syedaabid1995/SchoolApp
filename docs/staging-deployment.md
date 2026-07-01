@@ -122,7 +122,7 @@ Apply a legacy migration only after a scoped staging dry-run has been reviewed.
 Dry-run first:
 
 ```sh
-NODE_ENV=production npm --prefix backend run maintenance:default-super-admin
+NODE_ENV=production npm --prefix backend run remediate:default-super-admin -- --dry-run
 ```
 
 If the default account exists, rotate or disable it using the documented maintenance process. Do not seed production defaults.
@@ -155,12 +155,66 @@ Run only limited staging load tests. Do not run load tests against production:
 # See docs/load-testing.md and keep concurrency low for staging.
 ```
 
-## 10. Monitoring And Rollback
+## 10. Monitoring
 
 - Configure alerts from `docs/monitoring-alerting.md`.
 - Verify API, worker, scheduler, DB, Redis, storage, and backup alerts.
 - Record the release commit, image tags, migration version, and operator.
-- Rollback plan: keep the previous image tags, keep the last known-good `.env` inventory, stop new services, redeploy previous images, and restore data only from a reviewed backup when the rollback requires data restoration.
+
+## 11. Rollback Runbook
+
+Rollback is an operations decision, not an automatic script. Prefer rolling back application images/config first. Restore a database backup only after human review confirms the schema/data state requires it.
+
+Before deploy:
+
+- Record the current commit SHA and image tags for `backend-api`, `backend-worker`, `backend-scheduler`, and `admin`.
+- Save a last known-good environment inventory without secret values.
+- Record the current Prisma migration status.
+- Confirm the latest PostgreSQL backup and object storage recovery/versioning evidence.
+
+Stop the current stack:
+
+```sh
+docker compose -f docker-compose.prod-lite.yml --env-file .env down
+```
+
+Restart the previous release from the previous commit or image tags:
+
+```sh
+git checkout <previous-known-good-commit>
+docker compose -f docker-compose.prod-lite.yml --env-file .env up -d --build
+docker compose -f docker-compose.prod-lite.yml --env-file .env ps
+```
+
+If the rollback is config-only, restore the previous reviewed `.env` values and restart:
+
+```sh
+docker compose -f docker-compose.prod-lite.yml --env-file .env up -d --force-recreate
+```
+
+Database rollback policy:
+
+- Review migrations before rollback; do not run `prisma migrate reset` or `prisma db push`.
+- Do not restore a backup over staging or production until an operator confirms the target and impact.
+- Restore only to a disposable drill database first when possible, then compare schema and row-count evidence.
+
+Object storage rollback policy:
+
+- Do not delete bucket objects during application rollback.
+- Use bucket versioning/provider recovery for accidental overwrite/delete cases.
+- Revalidate signed upload/download flows after any storage credential, endpoint, or bucket rollback.
+
+Post-rollback verification:
+
+```sh
+curl -fsS https://staging-api.example.com/health
+curl -fsS https://staging-admin.example.com/
+docker compose -f docker-compose.prod-lite.yml --env-file .env logs --tail=100 backend-api
+docker compose -f docker-compose.prod-lite.yml --env-file .env logs --tail=100 backend-worker
+docker compose -f docker-compose.prod-lite.yml --env-file .env logs --tail=100 backend-scheduler
+```
+
+Run the production-safe smoke subset from `docs/smoke-test-plan.md` and record the rollback operator, start/end time, reason, and result.
 
 ## Signoff
 

@@ -24,6 +24,7 @@
     "storage:migrate-legacy": "tsx scripts/migrate-legacy-uploads-to-storage.ts",
     "runtime:check-entrypoints": "tsx scripts/check-runtime-entrypoints.ts",
     "prod-lite:verify": "tsx scripts/verify-prod-lite.ts",
+    "remediate:default-super-admin": "tsx scripts/remediate-default-super-admin.ts",
     "maintenance:default-super-admin": "tsx scripts/remediate-default-super-admin.ts",
     "reset:qa": "tsx scripts/reset-qa-data.ts",
     "prisma": "prisma",

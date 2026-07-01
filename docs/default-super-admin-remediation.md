@@ -9,7 +9,7 @@ Do not edit, delete, squash, or rewrite the existing migration. Some databases m
 Use the maintenance script in dry-run mode first:
 
 ```sh
-npm --prefix backend run maintenance:default-super-admin -- --email=techstageit@admin.com
+npm --prefix backend run remediate:default-super-admin -- --dry-run --email=techstageit@admin.com
 ```
 
 The script identifies only a global user with the requested email and the `SUPER_ADMIN` role. It does not print passwords or password hashes.
@@ -17,13 +17,13 @@ The script identifies only a global user with the requested email and the `SUPER
 To disable the default account in a reviewed local, QA, or maintenance environment:
 
 ```sh
-npm --prefix backend run maintenance:default-super-admin -- --apply --mode=disable --email=techstageit@admin.com
+npm --prefix backend run remediate:default-super-admin -- --apply --mode=disable --email=techstageit@admin.com
 ```
 
 `--mode=disable` sets `status=INACTIVE` and `mustChangePassword=true`. If operations need to keep the account active briefly while forcing credential rotation, use:
 
 ```sh
-npm --prefix backend run maintenance:default-super-admin -- --apply --mode=force-reset --email=techstageit@admin.com
+npm --prefix backend run remediate:default-super-admin -- --apply --mode=force-reset --email=techstageit@admin.com
 ```
 
 Do not run mutation mode against production casually. If it must be run during a production maintenance window, require an operator review and set `ALLOW_PRODUCTION_SUPER_ADMIN_REMEDIATION=true` only for that command.
