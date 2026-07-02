@@ -7,7 +7,7 @@ import {
   processRoleStartsSchedulers,
   processRoleStartsWorkers,
 } from '../runtime/processRole';
-import { createSchedulerRuntime } from '../runtime/schedulerRuntime';
+import { createSchedulerRuntime, defaultSchedulerLifecycles } from '../runtime/schedulerRuntime';
 import { createWorkerRuntime } from '../runtime/workerRuntime';
 
 test('process role parser defaults to api in production and all outside production', () => {
@@ -68,4 +68,8 @@ test('scheduler runtime starts once and clears scheduler lifecycles on stop', as
   await runtime.stop();
   assert.deepEqual(runtime.getStartedSchedulerNames(), []);
   assert.deepEqual(events, ['start:hourly', 'stop:hourly']);
+});
+
+test('default scheduler runtime includes scheduled notification dispatch', () => {
+  assert.ok(defaultSchedulerLifecycles.some((scheduler) => scheduler.name === 'notifications.scheduled-dispatch'));
 });

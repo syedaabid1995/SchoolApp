@@ -1,4 +1,5 @@
 import { logger } from '../config/logger';
+import { startScheduledNotificationScheduler, stopScheduledNotificationScheduler } from '../workers/scheduled-notification.worker';
 import { startSubscriptionScheduler, stopSubscriptionScheduler } from '../workers/subscription.worker';
 
 export type SchedulerLifecycle = {
@@ -8,6 +9,7 @@ export type SchedulerLifecycle = {
 };
 
 export const defaultSchedulerLifecycles: SchedulerLifecycle[] = [
+  { name: 'notifications.scheduled-dispatch', start: startScheduledNotificationScheduler, stop: stopScheduledNotificationScheduler },
   { name: 'subscriptions.expiry-check', start: startSubscriptionScheduler, stop: stopSubscriptionScheduler },
 ];
 
