@@ -5,9 +5,9 @@
 
 :root {
   color-scheme: light;
-  --theme-navbar-bg: #0f172a;
-  --theme-header-bg: #111827;
-  --theme-footer-bg: #0f172a;
+  --theme-navbar-bg: #ffffff;
+  --theme-header-bg: #ffffff;
+  --theme-footer-bg: #ffffff;
   --theme-button-bg: #2563eb;
   --theme-button-text: #ffffff;
 }

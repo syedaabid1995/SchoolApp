@@ -23,7 +23,7 @@ export default function DashboardClientLayout({
   email: string | null;
 }) {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
-  const [themeMode, setThemeMode] = useState<DashboardThemeMode>('system');
+  const [themeMode, setThemeMode] = useState<DashboardThemeMode>('light');
   const [systemThemeMode, setSystemThemeMode] = useState<DashboardResolvedThemeMode>('light');
   const { data: session } = useQuery({
     queryKey: ['session'],
@@ -41,7 +41,6 @@ export default function DashboardClientLayout({
   const isSuperAdmin = effectiveRole === 'SUPER_ADMIN';
   const superAdminAllowedPaths = [
     '/dashboard',
-    '/dashboard/analytics',
     '/dashboard/reports',
     '/dashboard/schools',
     '/dashboard/schools/',
@@ -54,25 +53,18 @@ export default function DashboardClientLayout({
     '/dashboard/system-health',
     '/dashboard/backups',
     '/dashboard/compliance',
-    '/dashboard/institution-setup',
     '/dashboard/payment-methods',
-    '/dashboard/fee-challan-details',
-    '/dashboard/role-permissions',
-    '/dashboard/base-setup',
-    '/dashboard/sessions',
     '/dashboard/holidays',
     '/dashboard/sms-settings',
     '/dashboard/settings',
   ];
   const schoolSetupAllowedPaths = [
     '/dashboard/onboarding',
-    '/dashboard/institution-setup',
     '/dashboard/settings/branding',
     '/dashboard/payment-methods',
     '/dashboard/fee-challan-details',
     '/dashboard/role-permissions',
     '/dashboard/base-setup',
-    '/dashboard/sessions',
     '/dashboard/holidays',
     '/dashboard/sms-settings',
   ];
@@ -98,7 +90,7 @@ export default function DashboardClientLayout({
     platformName: shellBranding?.appName || defaultLoginBranding.appName,
     consoleName: shellBranding?.schoolName || defaultLoginBranding.schoolName || 'School Management Console',
     footerText: shellBranding?.footerText || defaultLoginBranding.footerText,
-    defaultThemeMode: 'system' as DashboardThemeMode,
+    defaultThemeMode: 'light' as DashboardThemeMode,
   };
   const canAccessRoute =
     hasAnyRole &&
@@ -196,7 +188,7 @@ export default function DashboardClientLayout({
 
   useEffect(() => {
     if (isSuperAdmin && !canAccessSuperAdminRoute) {
-      router.replace('/dashboard/analytics');
+      router.replace('/dashboard');
     }
   }, [isSuperAdmin, canAccessSuperAdminRoute, router]);
 

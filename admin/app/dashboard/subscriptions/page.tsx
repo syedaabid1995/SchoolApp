@@ -93,6 +93,18 @@ const daysUntil = (value?: string | null) => {
   return Math.ceil((date.getTime() - Date.now()) / (1000 * 60 * 60 * 24));
 };
 
+const getPageItems = (currentPage: number, totalPages: number) => {
+  const pages = new Set<number>([1, totalPages, currentPage - 1, currentPage, currentPage + 1]);
+  return Array.from(pages)
+    .filter((page) => page >= 1 && page <= totalPages)
+    .sort((left, right) => left - right)
+    .reduce<Array<number | string>>((result, page, index, list) => {
+      if (index > 0 && page - list[index - 1] > 1) result.push(`ellipsis-${page}`);
+      result.push(page);
+      return result;
+    }, []);
+};
+
 const statusBadgeClass = (status?: string | null) => {
   if (status === 'ACTIVE') return 'bg-emerald-50 text-emerald-700 ring-emerald-200';
   if (status === 'TRIAL') return 'bg-blue-50 text-blue-700 ring-blue-200';
@@ -386,6 +398,10 @@ export default function SubscriptionsPage() {
   const rows = subscriptions?.items ?? [];
   const pagination = subscriptions?.pagination;
   const totalPages = pagination?.totalPages ?? 1;
+  const totalRows = pagination?.total ?? rows.length;
+  const pageStart = totalRows === 0 ? 0 : (filters.page - 1) * filters.limit + 1;
+  const pageEnd = totalRows === 0 ? 0 : Math.min(filters.page * filters.limit, totalRows);
+  const pageItems = useMemo(() => getPageItems(filters.page, totalPages), [filters.page, totalPages]);
   const busy = isSessionLoading || isSubscriptionsLoading || lifecycleMutation.isPending;
   const activeFilterKeys: Array<keyof typeof filters> = ['search', 'status', 'planId', 'trial', 'overdue'];
   const activeFiltersCount = activeFilterKeys.filter((key) => String(filters[key] ?? '').trim()).length;
@@ -478,20 +494,27 @@ export default function SubscriptionsPage() {
       </section>
 
       <section className="overflow-hidden rounded-lg border border-[var(--shell-border)] bg-[var(--shell-card)] shadow-sm">
-        <div className="flex flex-col gap-3 border-b border-[var(--shell-border)] px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex flex-col gap-3 border-b border-[var(--shell-border)] px-4 py-3 lg:flex-row lg:items-center lg:justify-between">
           <div>
-            <h2 className="text-lg font-bold text-[var(--shell-text)]">School Subscriptions</h2>
-            <p className="text-sm text-[var(--shell-muted)]">
-              {pagination ? `${pagination.total} schools found` : 'Manage every tenant subscription'}
+            <h2 className="text-base font-bold text-[var(--shell-text)]">School Subscriptions</h2>
+            <p className="mt-0.5 text-sm text-[var(--shell-muted)]">
+              Showing {formatNumber(pageStart)} to {formatNumber(pageEnd)} of {formatNumber(totalRows)} subscriptions
             </p>
           </div>
-          <div className="flex items-end gap-3">
-            <Badge className="bg-[var(--shell-subtle)] text-[var(--shell-muted)] ring-[var(--shell-border)]">Page {filters.page} of {totalPages}</Badge>
+          <div className="flex flex-wrap items-end gap-2">
             <FilterSelect label="Rows" value={String(filters.limit)} onChange={(value) => setFilter('limit', Number(value))}>
               {[10, 20, 50, 100].map((size) => (
                 <option key={size} value={size}>{size}</option>
               ))}
             </FilterSelect>
+            <button
+              type="button"
+              onClick={() => refetch()}
+              className="inline-flex h-9 items-center gap-2 rounded-md border border-[var(--shell-border)] bg-white px-3 text-sm font-semibold text-[var(--shell-text)] hover:bg-[var(--shell-hover)]"
+            >
+              <Icon path={<><path d="M21 12a9 9 0 0 1-9 9 8.6 8.6 0 0 1-6-2.4" /><path d="M3 12a9 9 0 0 1 15-6.7" /><path d="M21 3v6h-6" /></>} />
+              Refresh
+            </button>
           </div>
         </div>
 
@@ -506,15 +529,16 @@ export default function SubscriptionsPage() {
           <div className="p-10 text-center text-sm text-[var(--shell-muted)]">No school subscriptions found.</div>
         ) : (
           <div className="overflow-x-auto">
-            <table className="min-w-full border-y border-[var(--shell-border)] text-sm">
-              <thead className="bg-[var(--shell-subtle)] text-left text-sm font-semibold text-[var(--shell-text)]">
-                <tr>
-                  <th className="px-4 py-3">School</th>
-                  <th className="px-4 py-3">Subscription Plan</th>
-                  <th className="px-4 py-3">Status</th>
-                  <th className="px-4 py-3">Period</th>
-                  <th className="px-4 py-3">Usage</th>
-                  <th className="px-4 py-3 text-right">Action</th>
+            <table className="min-w-full divide-y divide-[var(--shell-border)] text-sm">
+              <thead className="bg-[var(--shell-subtle)]">
+                <tr className="text-left text-xs font-bold uppercase text-[var(--shell-muted)]">
+                  <th className="whitespace-nowrap px-4 py-3">School</th>
+                  <th className="whitespace-nowrap px-4 py-3">Plan</th>
+                  <th className="whitespace-nowrap px-4 py-3">Billing</th>
+                  <th className="whitespace-nowrap px-4 py-3">Current Period</th>
+                  <th className="whitespace-nowrap px-4 py-3">Status</th>
+                  <th className="whitespace-nowrap px-4 py-3">Updated</th>
+                  <th className="whitespace-nowrap px-4 py-3 text-right">Action</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-[var(--shell-border)]">
@@ -542,32 +566,29 @@ export default function SubscriptionsPage() {
                         <div className="font-semibold text-[var(--shell-text)]">{item.planName ?? 'No plan assigned'}</div>
                         <div className="mt-1 text-xs text-[var(--shell-muted)]">{item.subscriptionId ? 'Assigned' : 'Not assigned'}</div>
                       </td>
-                      <td className="px-4 py-3">
-                        <Badge className={statusBadgeClass(item.status)}>{formatLabel(item.status)}</Badge>
+                      <td className="min-w-[10rem] px-4 py-3">
+                        <div className="font-semibold text-[var(--shell-text)]">{item.price == null ? 'N/A' : formatCurrency(item.price, item.currency ?? 'INR')}</div>
+                        <div className="mt-1 text-xs text-[var(--shell-muted)]">{formatLabel(item.billingCycle)}</div>
                       </td>
                       <td className="min-w-[13rem] px-4 py-3">
-                        <div className="font-semibold text-[var(--shell-text)]">Ends {formatDate(item.currentPeriodEnd)}</div>
+                        <div className="font-semibold text-[var(--shell-text)]">{formatDate(item.currentPeriodStart)} to {formatDate(item.currentPeriodEnd)}</div>
                         <div className={`mt-1 text-xs font-semibold ${periodTone}`}>
                           {daysRemaining === null ? 'No period date' : daysRemaining >= 0 ? `${daysRemaining} days remaining` : `${Math.abs(daysRemaining)} days past end`}
                         </div>
                         {item.trialEndsAt ? <div className="mt-1 text-xs text-[var(--shell-muted)]">Trial ends {formatDate(item.trialEndsAt)}</div> : null}
                       </td>
-                      <td className="min-w-[13rem] px-4 py-3">
-                        <UsageBar label="Students" used={item.usage?.students} limit={item.studentLimit} />
-                        <div className="mt-3">
-                          <UsageBar label="Teachers" used={item.usage?.teachers} limit={item.teacherLimit} />
-                        </div>
+                      <td className="whitespace-nowrap px-4 py-3">
+                        <Badge className={statusBadgeClass(item.status)}>{formatLabel(item.status)}</Badge>
                       </td>
-                      <td className="min-w-[17rem] px-4 py-3">
-                        <div className="flex flex-wrap justify-end gap-2">
-                          <ActionButton icon={<Icon path={<path d="M2 12s3.5-6 10-6 10 6 10 6-3.5 6-10 6-10-6-10-6z" />} />} onClick={() => setSelectedSchoolId(item.schoolId)}>View</ActionButton>
-                          <ActionButton icon={<Icon path={<><path d="M4 7h16" /><path d="M4 12h16" /><path d="M4 17h10" /></>} />} onClick={() => openAction(item, item.subscriptionId ? 'upgrade' : 'assign')}>{item.subscriptionId ? 'Plan' : 'Assign'}</ActionButton>
-                          {item.status === 'TRIAL' ? <ActionButton onClick={() => openAction(item, 'extend-trial')}>Extend</ActionButton> : <ActionButton onClick={() => openAction(item, 'start-trial')}>Trial</ActionButton>}
-                          {item.status === 'PAUSED' ? <ActionButton onClick={() => openAction(item, 'resume')}>Resume</ActionButton> : <ActionButton onClick={() => openAction(item, 'pause')}>Pause</ActionButton>}
-                          <ActionButton onClick={() => openAction(item, 'renew')}>Renew</ActionButton>
-                          <ActionButton onClick={() => openAction(item, 'limits')}>Limits</ActionButton>
-                          {item.status !== 'CANCELLED' ? <ActionButton danger onClick={() => openAction(item, 'cancel')}>Cancel</ActionButton> : null}
-                        </div>
+                      <td className="whitespace-nowrap px-4 py-3 text-[var(--shell-muted)]">{formatDateTime(item.updatedAt)}</td>
+                      <td className="whitespace-nowrap px-4 py-3 text-right">
+                        <button
+                          type="button"
+                          onClick={() => setSelectedSchoolId(item.schoolId)}
+                          className="inline-flex rounded-md bg-[var(--shell-primary)] px-3 py-2 text-xs font-bold text-white shadow-sm hover:opacity-90"
+                        >
+                          View
+                        </button>
                       </td>
                     </tr>
                   );
@@ -579,22 +600,38 @@ export default function SubscriptionsPage() {
 
         <div className="flex flex-col gap-3 border-t border-[var(--shell-border)] px-4 py-3 text-sm text-[var(--shell-muted)] sm:flex-row sm:items-center sm:justify-between">
           <span>
-            Showing {rows.length} of {pagination?.total ?? rows.length} schools
+            Showing {formatNumber(pageStart)} to {formatNumber(pageEnd)} of {formatNumber(totalRows)} entries
           </span>
-          <div className="flex gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <button
               type="button"
               disabled={filters.page <= 1}
               onClick={() => setFilter('page', Math.max(1, filters.page - 1))}
-              className="rounded-lg border border-[var(--shell-border)] px-3 py-1.5 font-semibold disabled:opacity-40"
+              className="rounded-md border border-[var(--shell-border)] bg-white px-3 py-1.5 font-semibold text-[var(--shell-text)] disabled:cursor-not-allowed disabled:opacity-40"
             >
               Previous
             </button>
+            {pageItems.map((item) =>
+              typeof item === 'number' ? (
+                <button
+                  key={item}
+                  type="button"
+                  onClick={() => setFilter('page', item)}
+                  className={`h-8 min-w-8 rounded-md px-2 font-semibold ${
+                    item === filters.page ? 'bg-[var(--shell-primary)] text-white' : 'border border-[var(--shell-border)] bg-white text-[var(--shell-text)]'
+                  }`}
+                >
+                  {item}
+                </button>
+              ) : (
+                <span key={item} className="px-1">...</span>
+              ),
+            )}
             <button
               type="button"
               disabled={filters.page >= totalPages}
               onClick={() => setFilter('page', filters.page + 1)}
-              className="rounded-lg border border-[var(--shell-border)] px-3 py-1.5 font-semibold disabled:opacity-40"
+              className="rounded-md border border-[var(--shell-border)] bg-white px-3 py-1.5 font-semibold text-[var(--shell-text)] disabled:cursor-not-allowed disabled:opacity-40"
             >
               Next
             </button>

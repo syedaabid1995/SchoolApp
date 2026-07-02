@@ -123,13 +123,6 @@ const superAdminSearchItems: GlobalSearchItem[] = [
     keywords: ['dashboard', 'home', 'overview', 'kpi', 'summary'],
   },
   {
-    title: 'Analytics',
-    description: 'View platform analytics',
-    href: '/dashboard/analytics',
-    group: 'Overview',
-    keywords: ['analytics', 'chart', 'metrics', 'growth'],
-  },
-  {
     title: 'Reports',
     description: 'Open role-aware reports',
     href: '/dashboard/reports',
@@ -187,10 +180,10 @@ const superAdminSearchItems: GlobalSearchItem[] = [
   },
   {
     title: 'Branding & Theme',
-    description: 'Manage identity, login branding, colors, publishing, and rollback',
-    href: '/dashboard/settings/branding',
+    description: 'Manage identity, login branding, colors, and school theme settings',
+    href: '/dashboard/settings?tab=brand',
     group: 'Settings',
-    keywords: ['theme', 'themes', 'color', 'publish', 'rollback', 'branding', 'login branding', 'logo', 'login page', 'general'],
+    keywords: ['theme', 'themes', 'color', 'branding', 'login branding', 'logo', 'login page', 'general'],
   },
   {
     title: 'System Health',
@@ -201,8 +194,8 @@ const superAdminSearchItems: GlobalSearchItem[] = [
   },
   {
     title: 'Backups',
-    description: 'Open backup and restore settings',
-    href: '/dashboard/settings?tab=backups',
+    description: 'Open backup and restore operations',
+    href: '/dashboard/backups',
     group: 'Settings',
     keywords: ['backup', 'restore', 'database backup'],
   },
@@ -214,11 +207,11 @@ const superAdminSearchItems: GlobalSearchItem[] = [
     keywords: ['compliance', 'data export', 'deletion', 'consent', 'privacy'],
   },
   {
-    title: 'Settings',
-    description: 'Open platform settings',
-    href: '/dashboard/settings',
+    title: 'Feature Flags',
+    description: 'Manage platform flags and advanced configuration entries',
+    href: '/dashboard/settings?tab=features',
     group: 'Settings',
-    keywords: ['settings', 'configuration', 'setup'],
+    keywords: ['feature', 'flags', 'configuration', 'settings'],
   },
   {
     title: 'Security Settings',
@@ -235,11 +228,11 @@ const superAdminSearchItems: GlobalSearchItem[] = [
     keywords: ['sms', 'whatsapp', 'wati', 'twilio', 'msg91', 'email', 'message', 'provider', 'notification'],
   },
   {
-    title: 'Fee Challan Details',
-    description: 'Manage fee challan bank logo, account number, address, and instructions',
-    href: '/dashboard/fee-challan-details',
+    title: 'Modules',
+    description: 'Manage module flags for platform features',
+    href: '/dashboard/settings?tab=modules',
     group: 'Settings',
-    keywords: ['fee challan', 'challan bank', 'bank logo', 'bank account', 'fee bank'],
+    keywords: ['modules', 'attendance', 'exams', 'fees', 'messaging', 'reports'],
   },
   {
     title: 'Access Control',
@@ -247,6 +240,13 @@ const superAdminSearchItems: GlobalSearchItem[] = [
     href: '/dashboard/settings?tab=access',
     group: 'Settings',
     keywords: ['access', 'permission', 'roles', 'rbac'],
+  },
+  {
+    title: 'Advanced Settings',
+    description: 'Manage raw JSON configs for rollout and developer settings',
+    href: '/dashboard/settings?tab=advanced',
+    group: 'Settings',
+    keywords: ['advanced', 'json', 'developer', 'rollout', 'configuration'],
   },
 ];
 

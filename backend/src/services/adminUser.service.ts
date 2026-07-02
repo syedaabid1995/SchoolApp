@@ -1,7 +1,9 @@
 import type { Prisma, RoleName, UserStatus } from '@prisma/client';
+import crypto from 'crypto';
 import { prisma } from '../config/db';
 import { HttpError } from '../middlewares/error.middleware';
 import { createAuditLog } from './auditLog.service';
+import { hashPassword } from '../utils/password';
 
 type SortBy = 'name' | 'email' | 'role' | 'schoolName' | 'status' | 'lastLoginAt' | 'createdAt';
 type SortOrder = 'asc' | 'desc';
@@ -395,9 +397,11 @@ export const unlockAdminUser = async (params: AdminUserActionPayload) => {
 
 export const forceAdminPasswordReset = async (params: AdminUserActionPayload) => {
   const target = await getSafeTarget(params.id);
+  const tempPassword = crypto.randomBytes(9).toString('base64url');
+  const passwordHash = await hashPassword(tempPassword);
   const updated = await prisma.user.update({
     where: { id: params.id },
-    data: { mustChangePassword: true },
+    data: { passwordHash, mustChangePassword: true },
     select: safeUserSelect,
   });
   const result = await prisma.refreshSession.updateMany({
@@ -414,11 +418,16 @@ export const forceAdminPasswordReset = async (params: AdminUserActionPayload) =>
       targetUserRole: pickRole(target),
       targetSchoolId: target.schoolId,
       revokedSessions: result.count,
+      tempPasswordIssued: true,
       reason: params.reason ?? null,
     },
   });
 
-  return mapAdminUser(updated);
+  return {
+    user: mapAdminUser(updated),
+    tempPassword,
+    revokedSessions: result.count,
+  };
 };
 
 export const disableAdminUserMfa = async (params: AdminUserActionPayload) => {

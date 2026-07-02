@@ -5,7 +5,6 @@ import { useQuery } from '@tanstack/react-query';
 import Link from 'next/link';
 import {
   getAdminDashboardMetrics,
-  getWeeklyAnalytics,
   getPerformanceMetrics,
 } from '../../services/adminDashboard.service';
 import { listAuditLogs } from '../../services/audit.service';
@@ -19,14 +18,10 @@ import {
   DashboardHero,
   EmptyPanel,
   MetricCard,
-  MiniBarChart,
   QuickActionTile,
   RingMetric,
   SectionPanel,
 } from '../../components/dashboard/ModernDashboardPrimitives';
-
-const defaultSeries = [0, 0, 0, 0, 0, 0, 0];
-const defaultDays = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 
 const formatNumber = (value: unknown) => {
   const numberValue = Number(value ?? 0);
@@ -51,14 +46,6 @@ export default function DashboardPage() {
     enabled: canViewDashboard && !isSuperAdmin,
     refetchOnWindowFocus: false,
     staleTime: 30_000,
-  });
-
-  const weeklyQuery = useQuery({
-    queryKey: ['weekly-analytics'],
-    queryFn: getWeeklyAnalytics,
-    enabled: canViewDashboard && !isSuperAdmin && loadHeavy,
-    refetchOnWindowFocus: false,
-    staleTime: 60_000,
   });
 
   const performanceQuery = useQuery({
@@ -102,20 +89,6 @@ export default function DashboardPage() {
     const timeout = window.setTimeout(() => setLoadHeavy(true), 600);
     return () => window.clearTimeout(timeout);
   }, []);
-
-  const weeklyData = weeklyQuery.data;
-  const weeklyDays = Array.isArray(weeklyData)
-    ? weeklyData.map((item) => new Date(item.date).toLocaleDateString('en-US', { weekday: 'short' }))
-    : weeklyData?.days ?? defaultDays;
-  const attendanceSeries = Array.isArray(weeklyData)
-    ? weeklyData.map((item) => item.attendanceRate ?? 0)
-    : weeklyData?.attendance ?? defaultSeries;
-  const performanceSeries = Array.isArray(weeklyData)
-    ? weeklyData.map((item) => item.performance ?? 0)
-    : weeklyData?.performance ?? defaultSeries;
-  const enrollmentSeries = Array.isArray(weeklyData)
-    ? weeklyData.map((item) => item.enrollment ?? 0)
-    : weeklyData?.enrollment ?? defaultSeries;
 
   const stats = useMemo(
     () => [
@@ -269,27 +242,7 @@ export default function DashboardPage() {
         </SectionPanel>
       ) : null}
 
-      <section className="grid gap-6 xl:grid-cols-[1fr_360px]">
-        <div className="space-y-6">
-          <SectionPanel title="Weekly Analytics" subtitle="Attendance and performance trends across the current week.">
-            <div className="grid gap-6 lg:grid-cols-2">
-              <div>
-                <p className="mb-3 text-sm font-bold text-[var(--shell-text)]">Attendance Rate</p>
-                <MiniBarChart values={attendanceSeries} labels={weeklyDays} tone="blue" />
-              </div>
-              <div>
-                <p className="mb-3 text-sm font-bold text-[var(--shell-text)]">Performance Score</p>
-                <MiniBarChart values={performanceSeries} labels={weeklyDays} tone="emerald" />
-              </div>
-            </div>
-          </SectionPanel>
-
-          <SectionPanel title="Enrollment Trend" subtitle="Student movement captured from weekly analytics.">
-            <MiniBarChart values={enrollmentSeries} labels={weeklyDays} tone="violet" />
-          </SectionPanel>
-        </div>
-
-        <div className="space-y-6">
+      <section className="grid gap-6 xl:grid-cols-[1fr_1fr]">
           <SectionPanel title="Performance Metrics" subtitle="Operational health indicators.">
             <div className="space-y-3">
               <RingMetric value={performanceQuery.data?.overallScore ?? 0} label="Overall Score" tone="blue" />
@@ -319,7 +272,6 @@ export default function DashboardPage() {
             )}
           </SectionPanel>
           ) : null}
-        </div>
       </section>
     </div>
   );

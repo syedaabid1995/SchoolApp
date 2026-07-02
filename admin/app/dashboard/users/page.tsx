@@ -19,6 +19,7 @@ import {
   unlockAdminUser,
   updateAdminUserStatus,
   type AdminUser,
+  type ForcePasswordResetResult,
 } from '../../../services/admin-user.service';
 
 const roleOptions = ['SUPER_ADMIN', 'SCHOOL_ADMIN', 'TEACHER', 'ACCOUNTANT', 'LIBRARIAN', 'STAFF', 'PARENT', 'STUDENT'];
@@ -74,6 +75,15 @@ function SkeletonRows() {
   );
 }
 
+const isForcePasswordResetResult = (value: unknown): value is ForcePasswordResetResult =>
+  Boolean(
+    value &&
+      typeof value === 'object' &&
+      'user' in value &&
+      'tempPassword' in value &&
+      'revokedSessions' in value,
+  );
+
 type UserAction =
   | 'activate'
   | 'deactivate'
@@ -123,6 +133,7 @@ export default function GlobalUsersPage() {
   const notify = useNotify();
   const queryClient = useQueryClient();
   const [selectedUserId, setSelectedUserId] = useState<string | null>(null);
+  const [resetPasswordResult, setResetPasswordResult] = useState<ForcePasswordResetResult | null>(null);
   const [filters, setFilters] = useState({
     page: 1,
     limit: 20,
@@ -157,6 +168,10 @@ export default function GlobalUsersPage() {
       router.replace('/dashboard');
     }
   }, [isSessionLoading, isSuperAdmin, router, session?.role]);
+
+  useEffect(() => {
+    setResetPasswordResult(null);
+  }, [selectedUserId]);
 
   const usersQueryParams = useMemo(() => {
     const mfaEnabled = filters.mfaEnabled === '' ? undefined : filters.mfaEnabled === 'true';
@@ -239,11 +254,16 @@ export default function GlobalUsersPage() {
       }
       return disableUserMfa(payload.user.id, { reason: payload.reason ?? null });
     },
-    onSuccess: (_result, variables) => {
+    onSuccess: (result, variables) => {
       queryClient.invalidateQueries({ queryKey: ['admin-users'] });
       queryClient.invalidateQueries({ queryKey: ['admin-user-detail', variables.user.id] });
       queryClient.invalidateQueries({ queryKey: ['admin-user-activity', variables.user.id] });
       queryClient.invalidateQueries({ queryKey: ['admin-user-sessions', variables.user.id] });
+      if (variables.action === 'force-password-reset' && isForcePasswordResetResult(result)) {
+        setResetPasswordResult(result);
+        notify.success('Password reset', 'Share the new temporary password securely.');
+        return;
+      }
       notify.success('User updated', 'The security action was applied successfully.');
     },
     onError: (error: any) => {
@@ -314,6 +334,7 @@ export default function GlobalUsersPage() {
       if (!window.confirm(`Force password reset for ${name}? Active sessions will be revoked.`)) return;
       const reason = requestReason('Reason for password reset:');
       if (!reason) return;
+      setResetPasswordResult(null);
       actionMutation.mutate({ user, action, reason });
       return;
     }
@@ -775,6 +796,32 @@ export default function GlobalUsersPage() {
                       <ActionButton danger onClick={() => runAction(selectedUser, 'disable-mfa')}>Disable MFA</ActionButton>
                     ) : null}
                   </div>
+                  {resetPasswordResult && resetPasswordResult.user.id === selectedUser.id ? (
+                    <div className="mt-4 rounded-xl border border-amber-200 bg-amber-50 p-4 text-amber-950">
+                      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                        <div>
+                          <p className="text-sm font-bold">New temporary password</p>
+                          <p className="mt-1 text-xs font-semibold text-amber-800">
+                            Share this once with {selectedUser.email}. {resetPasswordResult.revokedSessions} active session
+                            {resetPasswordResult.revokedSessions === 1 ? '' : 's'} revoked.
+                          </p>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            void navigator.clipboard?.writeText(resetPasswordResult.tempPassword);
+                            notify.success('Copied', 'Temporary password copied to clipboard.');
+                          }}
+                          className="rounded-lg border border-amber-300 bg-white px-3 py-2 text-xs font-bold text-amber-800 hover:bg-amber-100"
+                        >
+                          Copy
+                        </button>
+                      </div>
+                      <p className="mt-3 rounded-lg border border-amber-200 bg-white px-3 py-2 font-mono text-sm font-bold text-slate-950">
+                        {resetPasswordResult.tempPassword}
+                      </p>
+                    </div>
+                  ) : null}
                 </section>
 
                 <section className="rounded-2xl border border-[var(--shell-border)] p-4">

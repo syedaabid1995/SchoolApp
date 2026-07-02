@@ -23,18 +23,6 @@ export type AdminDashboardMetrics = {
   activeClasses: number;
 };
 
-export type WeeklyAnalytics = {
-  attendance: number[];
-  enrollment: number[];
-  performance: number[];
-  days: string[];
-} | Array<{
-  date: string;
-  attendanceRate: number;
-  enrollment: number;
-  performance: number;
-}>;
-
 export type PerformanceMetrics = {
   overallScore: number;
   attendanceRate: number;
@@ -223,11 +211,6 @@ export type PlatformSystemStatus = {
 
 export const getAdminDashboardMetrics = async () => {
   const { data } = await api.get<AdminDashboardMetrics>('/dashboard');
-  return data;
-};
-
-export const getWeeklyAnalytics = async () => {
-  const { data } = await api.get<WeeklyAnalytics>('/dashboard/analytics/weekly');
   return data;
 };
 

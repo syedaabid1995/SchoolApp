@@ -22,7 +22,6 @@ type NavSection = {
 
 type IconName =
   | 'activity'
-  | 'analytics'
   | 'backup'
   | 'book'
   | 'brand'
@@ -64,8 +63,6 @@ const Icon = ({ name, className = 'h-4 w-4' }: { name: IconName; className?: str
   switch (name) {
     case 'activity':
       return <svg {...common}><path d="M4 13h4l2-7 4 12 2-5h4" /></svg>;
-    case 'analytics':
-      return <svg {...common}><path d="M4 19V5" /><path d="M4 19h16" /><path d="M8 16v-5" /><path d="M12 16V8" /><path d="M16 16v-3" /></svg>;
     case 'backup':
       return <svg {...common}><path d="M7 19h10a4 4 0 0 0 .6-7.95A6 6 0 0 0 6 9.5 4.5 4.5 0 0 0 7 19Z" /><path d="M12 13v4" /><path d="m9.5 15.5 2.5 2.5 2.5-2.5" /></svg>;
     case 'book':
@@ -153,7 +150,6 @@ const iconForItem = (item: NavItem): IconName => {
   if (key.includes('admission') || key.includes('visitor') || key.includes('postal') || key.includes('phone call')) return 'clipboard';
   if (key.includes('complaint')) return 'support';
   if (key.includes('certificate')) return 'file';
-  if (key.includes('analytics')) return 'analytics';
   if (key.includes('report')) return 'file';
   if (key.includes('school')) return 'building';
   if (key.includes('user') || key.includes('teacher') || key.includes('parent') || key.includes('student')) return 'users';
@@ -202,7 +198,6 @@ const platformSections: NavSection[] = [
     label: 'Overview',
     items: [
       { href: '/dashboard', label: 'Dashboard', icon: 'DB' },
-      { href: '/dashboard/analytics', label: 'Analytics', icon: 'AN' },
       { href: '/dashboard/reports', label: 'Reports', icon: 'RP' },
     ],
   },
@@ -237,17 +232,15 @@ const platformSections: NavSection[] = [
     id: 'platform-settings',
     label: 'System Setup',
     items: [
-      { href: '/dashboard/institution-setup', label: 'General', icon: 'IS' },
-      { href: '/dashboard/settings/branding', label: 'Branding', icon: 'BR' },
-      { href: '/dashboard/payment-methods', label: 'Payment Methods', icon: 'PM' },
-      { href: '/dashboard/fee-challan-details', label: 'Fee Challan', icon: 'FC' },
-      { href: '/dashboard/role-permissions', label: 'Role Permissions', icon: 'RP' },
-      { href: '/dashboard/base-setup', label: 'Base Setup', icon: 'BS' },
-      { href: '/dashboard/sessions', label: 'Sessions', icon: 'SN' },
-      { href: '/dashboard/sms-settings', label: 'SMS Settings', icon: 'SM' },
-      { href: '/dashboard/settings', label: 'Settings', icon: 'ST' },
-      { href: '/dashboard/settings?tab=backups', label: 'Backups', icon: 'BK' },
+      { href: '/dashboard/settings?tab=brand', label: 'Branding & Theme', icon: 'BR' },
+      { href: '/dashboard/settings?tab=security', label: 'Security', icon: 'SE' },
+      { href: '/dashboard/settings?tab=messaging', label: 'Messaging', icon: 'MS' },
+      // { href: '/dashboard/settings?tab=features', label: 'Feature Flags', icon: 'FF' },
+      // { href: '/dashboard/settings?tab=modules', label: 'Modules', icon: 'MD' },
+      { href: '/dashboard/settings?tab=access', label: 'Access', icon: 'AC' },
       { href: '/dashboard/settings?tab=compliance', label: 'Compliance', icon: 'CP' },
+      { href: '/dashboard/backups', label: 'Backups', icon: 'BK' },
+      // { href: '/dashboard/settings?tab=advanced', label: 'Advanced', icon: 'AD' },
       { href: '/change-password', label: 'Change Password', icon: 'PW' },
     ],
   },
@@ -323,6 +316,7 @@ export const Sidebar = ({
         label: 'Dashboard',
         items: [
           { href: '/dashboard', label: 'Dashboard', icon: 'DB' },
+          { href: '/dashboard/onboarding', label: 'Onboarding Readiness', icon: 'OR' },
           { href: '/dashboard/assistant', label: 'AI Assistant', icon: 'AI' },
         ],
       },
@@ -332,6 +326,7 @@ export const Sidebar = ({
         items: [
           { href: '/dashboard/academics', label: 'Setup', icon: 'AC' },
           { href: '/dashboard/timetable', label: 'Timetable', icon: 'TT' },
+          { href: '/dashboard/attendance/settings', label: 'Attendance Settings', icon: 'AS' },
         ],
       },
       {
@@ -340,12 +335,12 @@ export const Sidebar = ({
         items: [
           { href: '/dashboard/students', label: 'Student List', icon: 'SL' },
           { href: '/dashboard/students/add', label: 'Add Student', icon: 'AD' },
-          { href: '/dashboard/students/groups', label: 'Groups & Categories', icon: 'GR' },
+          // { href: '/dashboard/students/groups', label: 'Groups & Categories', icon: 'GR' },
           { href: '/dashboard/students/promotion', label: 'Promotion', icon: 'PR' },
-          { href: '/dashboard/students/disabled', label: 'Disabled Students', icon: 'DS' },
-          { href: '/dashboard/students/transfers', label: 'Transfer Requests', icon: 'TR' },
+          // { href: '/dashboard/students/disabled', label: 'Disabled Students', icon: 'DS' },
+          // { href: '/dashboard/students/transfers', label: 'Transfer Requests', icon: 'TR' },
           { href: '/dashboard/id-cards', label: 'ID Cards', icon: 'ID' },
-          { href: '/dashboard/id-cards/editor', label: 'Generate ID Card', icon: 'GI' },
+          // { href: '/dashboard/id-cards/editor', label: 'Generate ID Card', icon: 'GI' },
         ],
       },
       {
@@ -361,7 +356,6 @@ export const Sidebar = ({
         id: 'attendance',
         label: 'Attendance',
         items: [
-          { href: '/dashboard/attendance/settings', label: 'Attendance Settings', icon: 'AS' },
           { href: '/dashboard/attendance/students/mark', label: 'Mark Attendance', icon: 'MA' },
           { href: '/dashboard/students/attendance', label: 'Student Attendance', icon: 'SA' },
           { href: '/dashboard/staff/attendance', label: 'Staff Attendance', icon: 'EA' },
@@ -400,7 +394,7 @@ export const Sidebar = ({
         id: 'communication',
         label: 'Communication',
         items: [
-          { href: '/dashboard/settings?tab=messaging', label: 'Messaging Settings', icon: 'SM' },
+          // { href: '/dashboard/settings?tab=messaging', label: 'Messaging Settings', icon: 'SM' },
           { href: '/dashboard/support', label: 'Complaint / Support', icon: 'CP' },
           { href: '/parent/login', label: 'Parent Portal', icon: 'PP' },
         ],
@@ -463,12 +457,9 @@ export const Sidebar = ({
         id: 'settings',
         label: 'Settings',
         items: [
-          { href: '/dashboard/onboarding', label: 'Onboarding Readiness', icon: 'OR' },
-          { href: '/dashboard/institution-setup', label: 'General', icon: 'IS' },
           { href: '/dashboard/settings/branding', label: 'Branding', icon: 'BR' },
+          { href: '/dashboard/settings?tab=messaging', label: 'Messaging Providers', icon: 'MP' },
           { href: '/dashboard/base-setup', label: 'Base Setup', icon: 'BS' },
-          { href: '/dashboard/sessions', label: 'Sessions', icon: 'SN' },
-          { href: '/dashboard/settings', label: 'System Setting', icon: 'SS' },
           { href: '/change-password', label: 'Change Password', icon: 'PW' },
         ],
       },

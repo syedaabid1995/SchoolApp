@@ -83,6 +83,12 @@ export type AdminUserSession = {
   expiresAt: string;
 };
 
+export type ForcePasswordResetResult = {
+  user: AdminUser;
+  tempPassword: string;
+  revokedSessions: number;
+};
+
 export type AdminUserListParams = {
   page?: number;
   limit?: number;
@@ -147,7 +153,7 @@ export const unlockAdminUser = async (id: string, payload: { reason?: string | n
 };
 
 export const forcePasswordReset = async (id: string, payload: { reason?: string | null }) => {
-  const { data } = await api.post<ApiEnvelope<AdminUser>>(`/admin/users/${id}/force-password-reset`, payload);
+  const { data } = await api.post<ApiEnvelope<ForcePasswordResetResult>>(`/admin/users/${id}/force-password-reset`, payload);
   return unwrapData(data);
 };
 

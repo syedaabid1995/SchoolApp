@@ -233,18 +233,25 @@ const findLoginBrandingTheme = (schoolId: string, status?: 'DRAFT' | 'PUBLISHED'
     orderBy: { updatedAt: 'desc' },
   });
 
-const findEditableLoginBrandingTheme = async (schoolId: string) =>
-  (await findLoginBrandingTheme(schoolId, 'DRAFT')) ??
+const findCurrentLoginBrandingTheme = async (schoolId: string) =>
   (await findLoginBrandingTheme(schoolId, 'PUBLISHED')) ??
+  (await findLoginBrandingTheme(schoolId, 'DRAFT')) ??
   (await findLoginBrandingTheme(schoolId));
 
-const saveLoginBrandingDraft = async (schoolId: string, branding: LoginBranding) => {
+const saveLoginBrandingPublished = async (schoolId: string, branding: LoginBranding) => {
   const tokens = brandingToThemeTokens(branding);
-  const existingDraft = await findLoginBrandingTheme(schoolId, 'DRAFT');
-  if (existingDraft) {
+  const existingTheme =
+    (await findLoginBrandingTheme(schoolId, 'PUBLISHED')) ??
+    (await findLoginBrandingTheme(schoolId, 'DRAFT')) ??
+    (await findLoginBrandingTheme(schoolId));
+
+  if (existingTheme) {
     return prisma.theme.update({
-      where: { id: existingDraft.id },
-      data: { tokens: tokens as Prisma.InputJsonValue },
+      where: { id: existingTheme.id },
+      data: {
+        tokens: tokens as Prisma.InputJsonValue,
+        status: 'PUBLISHED',
+      },
     });
   }
 
@@ -258,7 +265,7 @@ const saveLoginBrandingDraft = async (schoolId: string, branding: LoginBranding)
       schoolId,
       name: LOGIN_BRANDING_THEME_NAME,
       version: (latest?.version ?? 0) + 1,
-      status: 'DRAFT',
+      status: 'PUBLISHED',
       tokens: tokens as Prisma.InputJsonValue,
     },
   });
@@ -267,7 +274,7 @@ const saveLoginBrandingDraft = async (schoolId: string, branding: LoginBranding)
 const getSchoolLoginBranding = async (schoolId: string) => {
   const [school, theme] = await Promise.all([
     prisma.school.findUnique({ where: { id: schoolId }, select: { id: true, name: true } }),
-    findEditableLoginBrandingTheme(schoolId),
+    findCurrentLoginBrandingTheme(schoolId),
   ]);
 
   if (!school) throw new HttpError(404, 'School not found');
@@ -460,7 +467,7 @@ export const updateLoginBrandingSettings = async (req: Request, res: Response) =
     return res.status(200).json(normalizeLoginBranding(entry.value));
   }
 
-  await saveLoginBrandingDraft(schoolId, branding);
+  await saveLoginBrandingPublished(schoolId, branding);
 
   await invalidateThemeCache(schoolId);
   await auditLoginBranding(req, 'LOGIN_BRANDING_UPDATED', schoolId, Object.keys(req.body ?? {}));
@@ -551,7 +558,7 @@ export const resetLoginBranding = async (req: Request, res: Response) => {
     return res.status(200).json(normalizeLoginBranding(entry.value));
   }
 
-  await saveLoginBrandingDraft(schoolId, branding);
+  await saveLoginBrandingPublished(schoolId, branding);
 
   await invalidateThemeCache(schoolId);
   await auditLoginBranding(req, 'LOGIN_BRANDING_RESET', schoolId, Object.keys(branding));

@@ -2,7 +2,7 @@
 
 ## Admin Portal Overview
 
-The admin portal is a Next.js App Router application for school and platform administration. It includes school admin dashboards, parent portal pages, super-admin areas, role/permission management, academic setup, timetable, attendance, student/staff management, fees, payroll, reports, analytics, support, compliance, backups, themes, and subscription management.
+The admin portal is a Next.js App Router application for school and platform administration. It includes school admin dashboards, parent portal pages, super-admin areas, role/permission management, academic setup, timetable, attendance, student/staff management, fees, payroll, reports, support, compliance, backups, themes, and subscription management.
 
 ## Technology Stack
 
@@ -66,7 +66,6 @@ The following App Router module directories were discovered under `admin/app/das
 | Exams | `/dashboard/academics/exams` |
 | Marks | `/dashboard/academics/marks` |
 | Modern timetable | `/dashboard/academics/timetable` |
-| Analytics | `/dashboard/analytics` |
 | AI assistant | `/dashboard/assistant` |
 | Attendance | `/dashboard/attendance` |
 | Audit | `/dashboard/audit` |
@@ -108,7 +107,7 @@ The codebase uses TanStack Query through `admin/components/QueryProvider.tsx` an
 
 ## API Integration
 
-Service clients exist for academic setup, academics, admin users, dashboard, AI assistant, analytics, attendance, audit, auth, backup, branding, compliance, dormitory, fees, homework, leave, library, messaging, parent portal, reports, schools, sessions, staff, students, subscriptions, support, system health, teachers, themes, transport, uploads, and users.
+Service clients exist for academic setup, academics, admin users, dashboard, AI assistant, attendance, audit, auth, backup, branding, compliance, dormitory, fees, homework, leave, library, messaging, parent portal, reports, schools, sessions, staff, students, subscriptions, support, system health, teachers, themes, transport, uploads, and users.
 
 ## Environment Variables
 

@@ -4,7 +4,6 @@ import type { ChangeEvent } from 'react';
 import { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import PageHeader from '../../../../components/PageHeader';
 import Button from '../../../../components/Button';
 import FullPageLoader from '../../../../components/FullPageLoader';
 import { getSession } from '../../../../services/auth.service';
@@ -12,9 +11,6 @@ import { listSchools } from '../../../../services/school.service';
 import {
   defaultLoginBranding,
   getLoginBrandingSettings,
-  publishLoginBranding,
-  resetLoginBranding,
-  rollbackLoginBranding,
   updateLoginBranding,
   uploadBrandingAsset,
   type BrandingAssetType,
@@ -45,8 +41,18 @@ const colorFields: Array<{ key: keyof LoginBranding; label: string }> = [
   { key: 'successColor', label: 'Success' },
 ];
 
+type BrandingSectionId = 'identity' | 'loginText' | 'features' | 'colors' | 'design';
+
+const brandingSections: Array<{ id: BrandingSectionId; label: string; helper: string }> = [
+  { id: 'identity', label: 'Basic Identity', helper: 'Name, school name, logo, favicon' },
+  { id: 'loginText', label: 'Login Text', helper: 'Headings, footer, support text' },
+  { id: 'features', label: 'Feature Highlights', helper: 'Login page bullet points' },
+  { id: 'colors', label: 'Colors', helper: 'Brand and login colors' },
+  { id: 'design', label: 'Background & Design', helper: 'Background, radius, shadow, panels' },
+];
+
 const fieldClass =
-  'w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100';
+  'w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100';
 
 const acceptedImageTypes = ['image/png', 'image/jpeg', 'image/webp'];
 const acceptedExtensions = ['png', 'jpg', 'jpeg', 'webp'];
@@ -252,6 +258,7 @@ export default function LoginBrandingSettingsPage({ embedded = false }: { embedd
   const router = useRouter();
   const queryClient = useQueryClient();
   const [selectedSchoolId, setSelectedSchoolId] = useState('');
+  const [activeSection, setActiveSection] = useState<BrandingSectionId>('identity');
   const [form, setForm] = useState<LoginBranding>(defaultLoginBranding);
   const [error, setError] = useState('');
   const [message, setMessage] = useState('');
@@ -297,47 +304,14 @@ export default function LoginBrandingSettingsPage({ embedded = false }: { embedd
     mutationFn: () => updateLoginBranding(normalizeBranding(form), params),
     onSuccess: (next) => {
       setForm(normalizeBranding(next));
-      setMessage('Login branding saved.');
+      setMessage('Branding saved and applied immediately.');
       setError('');
       queryClient.invalidateQueries({ queryKey: ['login-branding-settings'] });
     },
     onError: (err: any) => setError(err?.response?.data?.error?.message || err?.response?.data?.message || 'Unable to save branding.'),
   });
 
-  const publishMutation = useMutation({
-    mutationFn: () => publishLoginBranding(params),
-    onSuccess: (next) => {
-      setForm(normalizeBranding(next));
-      setMessage('Login branding published.');
-      setError('');
-      queryClient.invalidateQueries({ queryKey: ['login-branding-settings'] });
-    },
-    onError: (err: any) => setError(err?.response?.data?.error?.message || err?.response?.data?.message || 'Unable to publish branding.'),
-  });
-
-  const rollbackMutation = useMutation({
-    mutationFn: () => rollbackLoginBranding(params),
-    onSuccess: (next) => {
-      setForm(normalizeBranding(next));
-      setMessage('Login branding rolled back.');
-      setError('');
-      queryClient.invalidateQueries({ queryKey: ['login-branding-settings'] });
-    },
-    onError: (err: any) => setError(err?.response?.data?.error?.message || err?.response?.data?.message || 'No branding history is available.'),
-  });
-
-  const resetMutation = useMutation({
-    mutationFn: () => resetLoginBranding(params),
-    onSuccess: (next) => {
-      setForm(normalizeBranding(next));
-      setMessage('Login branding reset to default values.');
-      setError('');
-      queryClient.invalidateQueries({ queryKey: ['login-branding-settings'] });
-    },
-    onError: (err: any) => setError(err?.response?.data?.error?.message || err?.response?.data?.message || 'Unable to reset branding.'),
-  });
-
-  const isBusy = brandingQuery.isLoading || saveMutation.isPending || publishMutation.isPending || rollbackMutation.isPending || resetMutation.isPending;
+  const isBusy = brandingQuery.isLoading || saveMutation.isPending;
 
   const updateField = <K extends keyof LoginBranding>(key: K, value: LoginBranding[K]) => {
     setForm((current) => ({ ...current, [key]: value }));
@@ -375,55 +349,14 @@ export default function LoginBrandingSettingsPage({ embedded = false }: { embedd
     saveMutation.mutate();
   };
 
-  if (sessionQuery.isLoading) return <FullPageLoader label="Loading branding settings..." />;
-  if (!isAllowed) return null;
+  const activeSectionMeta = brandingSections.find((section) => section.id === activeSection) ?? brandingSections[0];
 
-  return (
-    <div className="space-y-6">
-      {isBusy ? <FullPageLoader label="Updating branding..." /> : null}
-      {!embedded ? <PageHeader title="Branding & Theme" subtitle="Customize platform identity, login branding, colors, and published theme values." /> : null}
-
-      <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-        <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
-          <div>
-            <h2 className="text-lg font-bold text-slate-950">Branding Scope</h2>
-            <p className="mt-1 text-sm text-slate-500">
-              {role === 'SUPER_ADMIN' ? 'Edit platform default branding or a selected school.' : 'Edit branding for your school.'}
-            </p>
-          </div>
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
-            {role === 'SUPER_ADMIN' ? (
-              <select className={fieldClass} value={selectedSchoolId} onChange={(event) => setSelectedSchoolId(event.target.value)}>
-                <option value="">Platform default branding</option>
-                {schoolsQuery.data?.items.map((school) => (
-                  <option key={school.id} value={school.id}>
-                    {school.name} ({school.code})
-                  </option>
-                ))}
-              </select>
-            ) : null}
-            <Button onClick={save} disabled={Boolean(validationError)} loading={saveMutation.isPending}>
-              Save Draft
-            </Button>
-            <Button variant="secondary" onClick={() => window.confirm('Publish login branding now?') && publishMutation.mutate()} loading={publishMutation.isPending}>
-              Publish
-            </Button>
-            <Button variant="outline" onClick={() => window.confirm('Rollback login branding to the latest saved history?') && rollbackMutation.mutate()} loading={rollbackMutation.isPending}>
-              Rollback
-            </Button>
-            <Button variant="danger" onClick={() => window.confirm('Reset login branding to default values? This cannot be undone unless theme history is available.') && resetMutation.mutate()} loading={resetMutation.isPending}>
-              Reset
-            </Button>
-          </div>
-        </div>
-        {message ? <p className="mt-4 rounded-xl bg-emerald-50 px-4 py-3 text-sm font-semibold text-emerald-700">{message}</p> : null}
-        {(error || validationError) ? <p className="mt-4 rounded-xl bg-rose-50 px-4 py-3 text-sm font-semibold text-rose-700">{error || validationError}</p> : null}
-      </section>
-
-      <div className="space-y-6">
-          <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-            <h2 className="text-lg font-bold text-slate-950">Basic Identity</h2>
-            <div className="mt-5 grid gap-4 md:grid-cols-2">
+  const renderSection = () => {
+    switch (activeSection) {
+      case 'identity':
+        return (
+          <>
+            <div className="grid gap-4 md:grid-cols-2">
               <TextField label="App name" value={form.appName} onChange={(value) => updateField('appName', value)} />
               <TextField label="School name" value={form.schoolName ?? ''} onChange={(value) => updateField('schoolName', value)} />
               <AssetUploadField
@@ -458,26 +391,26 @@ export default function LoginBrandingSettingsPage({ embedded = false }: { embedd
             <p className="mt-3 text-xs text-slate-500">
               External logo links and SVG uploads are blocked. Uploaded files are renamed before storage.
             </p>
-          </section>
-
-          <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-            <h2 className="text-lg font-bold text-slate-950">Login Text</h2>
-            <div className="mt-5 grid gap-4 md:grid-cols-2">
-              <TextField label="Login heading" value={form.loginHeading} onChange={(value) => updateField('loginHeading', value)} />
-              <TextField label="Login subtitle" value={form.loginSubtitle} onChange={(value) => updateField('loginSubtitle', value)} />
-              <TextField label="Left panel title" value={form.leftPanelTitle} onChange={(value) => updateField('leftPanelTitle', value)} />
-              <TextField label="Left panel description" value={form.leftPanelDescription} onChange={(value) => updateField('leftPanelDescription', value)} multiline />
-              <TextField label="Security note" value={form.securityNote} onChange={(value) => updateField('securityNote', value)} />
-              <TextField label="Support text" value={form.supportText} onChange={(value) => updateField('supportText', value)} />
-              <TextField label="Footer text" value={form.footerText} onChange={(value) => updateField('footerText', value)} />
-              <TextField label="Forgot password text" value={form.forgotPasswordText} onChange={(value) => updateField('forgotPasswordText', value)} />
-              <TextField label="Login button text" value={form.loginButtonText} onChange={(value) => updateField('loginButtonText', value)} />
-            </div>
-          </section>
-
-          <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-            <div className="flex items-center justify-between gap-3">
-              <h2 className="text-lg font-bold text-slate-950">Feature Highlights</h2>
+          </>
+        );
+      case 'loginText':
+        return (
+          <div className="grid gap-4 md:grid-cols-2">
+            <TextField label="Login heading" value={form.loginHeading} onChange={(value) => updateField('loginHeading', value)} />
+            <TextField label="Login subtitle" value={form.loginSubtitle} onChange={(value) => updateField('loginSubtitle', value)} />
+            <TextField label="Left panel title" value={form.leftPanelTitle} onChange={(value) => updateField('leftPanelTitle', value)} />
+            <TextField label="Left panel description" value={form.leftPanelDescription} onChange={(value) => updateField('leftPanelDescription', value)} multiline />
+            <TextField label="Security note" value={form.securityNote} onChange={(value) => updateField('securityNote', value)} />
+            <TextField label="Support text" value={form.supportText} onChange={(value) => updateField('supportText', value)} />
+            <TextField label="Footer text" value={form.footerText} onChange={(value) => updateField('footerText', value)} />
+            <TextField label="Forgot password text" value={form.forgotPasswordText} onChange={(value) => updateField('forgotPasswordText', value)} />
+            <TextField label="Login button text" value={form.loginButtonText} onChange={(value) => updateField('loginButtonText', value)} />
+          </div>
+        );
+      case 'features':
+        return (
+          <>
+            <div className="mb-4 flex items-center justify-end">
               <Button
                 size="sm"
                 variant="outline"
@@ -487,7 +420,7 @@ export default function LoginBrandingSettingsPage({ embedded = false }: { embedd
                 Add Feature
               </Button>
             </div>
-            <div className="mt-5 space-y-3">
+            <div className="space-y-3">
               {form.features.map((feature, index) => (
                 <div key={`${feature}-${index}`} className="grid gap-2 sm:grid-cols-[1fr_auto_auto_auto]">
                   <input
@@ -507,64 +440,147 @@ export default function LoginBrandingSettingsPage({ embedded = false }: { embedd
                 </div>
               ))}
             </div>
-          </section>
+          </>
+        );
+      case 'colors':
+        return (
+          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+            {colorFields.map((field) => (
+              <ColorField
+                key={String(field.key)}
+                label={field.label}
+                value={String(form[field.key] ?? '')}
+                onChange={(value) => updateField(field.key, value as never)}
+              />
+            ))}
+          </div>
+        );
+      case 'design':
+        return (
+          <div className="grid gap-4 md:grid-cols-2">
+            <label className="space-y-2">
+              <span className="text-sm font-semibold text-slate-700">Background type</span>
+              <select className={fieldClass} value={form.backgroundType ?? 'gradient'} onChange={(event) => updateField('backgroundType', event.target.value as LoginBranding['backgroundType'])}>
+                <option value="solid">Solid</option>
+                <option value="gradient">Gradient</option>
+                <option value="image">Image</option>
+                <option value="pattern">Pattern</option>
+              </select>
+            </label>
+            <label className="space-y-2">
+              <span className="text-sm font-semibold text-slate-700">Logo size</span>
+              <select className={fieldClass} value={form.logoSize ?? '56px'} onChange={(event) => updateField('logoSize', event.target.value)}>
+                {logoSizeOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+              </select>
+            </label>
+            <ColorField label="Gradient from" value={form.gradientFrom ?? '#eff6ff'} onChange={(value) => updateField('gradientFrom', value)} />
+            <ColorField label="Gradient to" value={form.gradientTo ?? '#ffffff'} onChange={(value) => updateField('gradientTo', value)} />
+            <AssetUploadField
+              label="Background image"
+              value={form.backgroundImageUrl}
+              assetType="background"
+              onUpload={(file) => uploadAsset('backgroundImageUrl', 'background', file)}
+              onClear={() => updateField('backgroundImageUrl', '')}
+            />
+            <AssetUploadField
+              label="Illustration image"
+              value={form.illustrationUrl}
+              assetType="illustration"
+              onUpload={(file) => uploadAsset('illustrationUrl', 'illustration', file)}
+              onClear={() => updateField('illustrationUrl', '')}
+            />
+            <TextField label="Border radius" value={form.borderRadius ?? '24px'} onChange={(value) => updateField('borderRadius', value)} />
+            <TextField label="Card shadow" value={form.cardShadow ?? ''} onChange={(value) => updateField('cardShadow', value)} />
+            <label className="flex items-center gap-3 rounded-lg border border-slate-200 px-4 py-3 text-sm font-semibold text-slate-700">
+              <input type="checkbox" checked={form.leftPanelEnabled !== false} onChange={(event) => updateField('leftPanelEnabled', event.target.checked)} />
+              Left panel enabled
+            </label>
+          </div>
+        );
+      default:
+        return null;
+    }
+  };
 
-          <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-            <h2 className="text-lg font-bold text-slate-950">Colors</h2>
-            <div className="mt-5 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-              {colorFields.map((field) => (
-                <ColorField
-                  key={String(field.key)}
-                  label={field.label}
-                  value={String(form[field.key] ?? '')}
-                  onChange={(value) => updateField(field.key, value as never)}
-                />
-              ))}
+  if (sessionQuery.isLoading) return <FullPageLoader label="Loading branding settings..." />;
+  if (!isAllowed) return null;
+
+  return (
+    <div className="space-y-4">
+      {isBusy ? <FullPageLoader label="Updating branding..." /> : null}
+      {!embedded ? (
+        <section className="rounded-xl border border-slate-200 bg-white px-5 py-4 shadow-sm">
+          <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+            <div>
+              <h1 className="text-2xl font-black text-slate-950">Branding & Theme</h1>
+              <p className="mt-1 text-sm text-slate-500">Change the selected school branding and apply it immediately.</p>
             </div>
-          </section>
+            <div className="text-sm font-semibold text-slate-500">Dashboard / Branding</div>
+          </div>
+        </section>
+      ) : null}
 
-          <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-            <h2 className="text-lg font-bold text-slate-950">Background & Design</h2>
-            <div className="mt-5 grid gap-4 md:grid-cols-2">
-              <label className="space-y-2">
-                <span className="text-sm font-semibold text-slate-700">Background type</span>
-                <select className={fieldClass} value={form.backgroundType ?? 'gradient'} onChange={(event) => updateField('backgroundType', event.target.value as LoginBranding['backgroundType'])}>
-                  <option value="solid">Solid</option>
-                  <option value="gradient">Gradient</option>
-                  <option value="image">Image</option>
-                  <option value="pattern">Pattern</option>
+      <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+        <div className="grid gap-3 lg:grid-cols-[1fr_auto] lg:items-end">
+          <div className="grid gap-3 lg:grid-cols-[220px_minmax(260px,420px)] lg:items-end">
+            <div>
+              <h2 className="text-lg font-bold text-slate-950">Select Criteria</h2>
+              <p className="mt-1 text-xs text-slate-500">
+                {role === 'SUPER_ADMIN' ? 'Choose a school, then save to apply changes.' : 'Changes apply to your school after saving.'}
+              </p>
+            </div>
+            {role === 'SUPER_ADMIN' ? (
+              <label className="space-y-1.5">
+                <span className="text-sm font-semibold text-slate-700">School</span>
+                <select className={fieldClass} value={selectedSchoolId} onChange={(event) => setSelectedSchoolId(event.target.value)}>
+                  <option value="">Platform default branding</option>
+                  {schoolsQuery.data?.items.map((school) => (
+                    <option key={school.id} value={school.id}>
+                      {school.name} ({school.code})
+                    </option>
+                  ))}
                 </select>
               </label>
-              <label className="space-y-2">
-                <span className="text-sm font-semibold text-slate-700">Logo size</span>
-                <select className={fieldClass} value={form.logoSize ?? '56px'} onChange={(event) => updateField('logoSize', event.target.value)}>
-                  {logoSizeOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
-                </select>
-              </label>
-              <ColorField label="Gradient from" value={form.gradientFrom ?? '#eff6ff'} onChange={(value) => updateField('gradientFrom', value)} />
-              <ColorField label="Gradient to" value={form.gradientTo ?? '#ffffff'} onChange={(value) => updateField('gradientTo', value)} />
-              <AssetUploadField
-                label="Background image"
-                value={form.backgroundImageUrl}
-                assetType="background"
-                onUpload={(file) => uploadAsset('backgroundImageUrl', 'background', file)}
-                onClear={() => updateField('backgroundImageUrl', '')}
-              />
-              <AssetUploadField
-                label="Illustration image"
-                value={form.illustrationUrl}
-                assetType="illustration"
-                onUpload={(file) => uploadAsset('illustrationUrl', 'illustration', file)}
-                onClear={() => updateField('illustrationUrl', '')}
-              />
-              <TextField label="Border radius" value={form.borderRadius ?? '24px'} onChange={(value) => updateField('borderRadius', value)} />
-              <TextField label="Card shadow" value={form.cardShadow ?? ''} onChange={(value) => updateField('cardShadow', value)} />
-              <label className="flex items-center gap-3 rounded-xl border border-slate-200 px-4 py-3 text-sm font-semibold text-slate-700">
-                <input type="checkbox" checked={form.leftPanelEnabled !== false} onChange={(event) => updateField('leftPanelEnabled', event.target.checked)} />
-                Left panel enabled
-              </label>
-            </div>
-          </section>
+            ) : null}
+          </div>
+          <Button onClick={save} disabled={Boolean(validationError)} loading={saveMutation.isPending}>
+            Save Changes
+          </Button>
+        </div>
+        {message ? <p className="mt-3 rounded-lg bg-emerald-50 px-3 py-2 text-sm font-semibold text-emerald-700">{message}</p> : null}
+        {(error || validationError) ? <p className="mt-3 rounded-lg bg-rose-50 px-3 py-2 text-sm font-semibold text-rose-700">{error || validationError}</p> : null}
+      </section>
+
+      <div className="grid gap-4 xl:grid-cols-[280px_1fr]">
+        <aside className="rounded-xl border border-slate-200 bg-white p-3 shadow-sm xl:sticky xl:top-4 xl:self-start">
+          <div className="mb-2 px-2 text-xs font-bold uppercase tracking-wide text-slate-400">Sections</div>
+          <div className="space-y-1">
+            {brandingSections.map((section) => {
+              const isActive = section.id === activeSection;
+              return (
+                <button
+                  key={section.id}
+                  type="button"
+                  onClick={() => setActiveSection(section.id)}
+                  className={`w-full rounded-lg px-3 py-2 text-left transition ${
+                    isActive ? 'bg-blue-50 text-blue-700 ring-1 ring-blue-200' : 'text-slate-600 hover:bg-slate-50'
+                  }`}
+                >
+                  <span className="block text-sm font-bold">{section.label}</span>
+                  <span className="mt-0.5 block text-xs text-current opacity-75">{section.helper}</span>
+                </button>
+              );
+            })}
+          </div>
+        </aside>
+
+        <section className="rounded-xl border border-slate-200 bg-white shadow-sm">
+          <div className="border-b border-slate-200 px-5 py-4">
+            <h2 className="text-lg font-bold text-slate-950">{activeSectionMeta.label}</h2>
+            <p className="mt-1 text-sm text-slate-500">{activeSectionMeta.helper}</p>
+          </div>
+          <div className="p-5">{renderSection()}</div>
+        </section>
       </div>
     </div>
   );

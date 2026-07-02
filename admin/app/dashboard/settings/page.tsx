@@ -74,7 +74,7 @@ const settingsTabs: SettingsTab[] = [
   {
     id: 'brand',
     label: 'Branding & Theme',
-    description: 'Platform identity, login branding, colors, publish, rollback, and preview.',
+    description: 'Platform identity, login branding, colors, and preview.',
     roles: ['SUPER_ADMIN', 'SCHOOL_ADMIN'],
   },
   {
@@ -1015,14 +1015,6 @@ export default function SettingsPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const requestedTabParam = searchParams.get('tab') || 'brand';
-  const setupRedirectPath = setupTabRedirects[requestedTabParam];
-  const requestedTab = (
-    ['branding', 'login', 'theme'].includes(requestedTabParam)
-      ? 'brand'
-      : setupRedirectPath
-        ? 'brand'
-        : requestedTabParam
-  ) as SettingsTabId;
 
   const { data: session, isLoading } = useQuery({
     queryKey: ['session'],
@@ -1032,6 +1024,14 @@ export default function SettingsPage() {
   });
 
   const role = session?.role ?? null;
+  const setupRedirectPath = role === 'SUPER_ADMIN' ? undefined : setupTabRedirects[requestedTabParam];
+  const requestedTab = (
+    ['branding', 'login', 'theme'].includes(requestedTabParam)
+      ? 'brand'
+      : setupRedirectPath
+        ? 'brand'
+        : requestedTabParam
+  ) as SettingsTabId;
   const availableTabs = useMemo(
     () => settingsTabs.filter((tab) => (role ? tab.roles.includes(role) : false)),
     [role],
@@ -1105,31 +1105,6 @@ export default function SettingsPage() {
           ...(activeTabMeta ? [{ label: activeTabMeta.label }] : []),
         ]}
       />
-
-      <section className="rounded-2xl border border-[var(--shell-border)] bg-[var(--shell-card)] p-3 shadow-sm">
-        <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-6">
-          {availableTabs.map((tab) => {
-            const active = tab.id === activeTab;
-            return (
-              <button
-                key={tab.id}
-                type="button"
-                onClick={() => router.push(`/dashboard/settings?tab=${tab.id}`)}
-                className={`rounded-xl border px-3 py-3 text-left transition-colors ${
-                  active
-                    ? 'border-blue-500 bg-blue-50 text-blue-800'
-                    : 'border-[var(--shell-border)] bg-[var(--shell-subtle)] text-[var(--shell-text)] hover:bg-[var(--shell-hover)]'
-                }`}
-              >
-                <span className="block text-sm font-bold">{tab.label}</span>
-                <span className={`mt-1 block text-xs leading-4 ${active ? 'text-blue-700' : 'text-[var(--shell-muted)]'}`}>
-                  {tab.description}
-                </span>
-              </button>
-            );
-          })}
-        </div>
-      </section>
 
       {renderActiveTab()}
     </div>

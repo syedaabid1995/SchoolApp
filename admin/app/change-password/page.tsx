@@ -2,15 +2,14 @@
 
 import type { FormEvent } from 'react';
 import { useMemo, useState } from 'react';
-import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import FullPageLoader from '../../components/FullPageLoader';
-import PageHeader from '../../components/PageHeader';
 import { changePassword } from '../../services/auth.service';
 
 type FieldErrors = Partial<Record<'currentPassword' | 'newPassword' | 'confirmPassword' | 'form', string>>;
 
 const baseInputClassName =
-  'w-full rounded-xl border border-[var(--shell-border)] bg-[var(--shell-card)] px-4 py-3 text-sm font-semibold text-[var(--shell-text)] outline-none transition-colors placeholder:text-[var(--shell-muted)] focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10';
+  'w-full rounded-lg border border-[var(--shell-border)] bg-[var(--shell-card)] px-3 py-2.5 text-sm font-semibold text-[var(--shell-text)] outline-none transition-colors placeholder:text-[var(--shell-muted)] focus:border-blue-500 focus:ring-2 focus:ring-blue-500/10';
 
 const passwordChecks = [
   { id: 'length', label: 'Minimum 8 characters', test: (value: string) => value.length >= 8 },
@@ -47,16 +46,8 @@ function PasswordToggleIcon({ hidden }: { hidden: boolean }) {
   );
 }
 
-function SecurityIcon() {
-  return (
-    <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 3.5 5.5 6v5.5c0 4.1 2.6 7.5 6.5 9 3.9-1.5 6.5-4.9 6.5-9V6L12 3.5Z" />
-      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="m9 12 2 2 4-5" />
-    </svg>
-  );
-}
-
 export default function ChangePasswordPage() {
+  const router = useRouter();
   const [currentPassword, setCurrentPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
@@ -64,17 +55,12 @@ export default function ChangePasswordPage() {
   const [showNewPassword, setShowNewPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [errors, setErrors] = useState<FieldErrors>({});
-  const [successMessage, setSuccessMessage] = useState('');
   const [loading, setLoading] = useState(false);
 
   const completedChecks = useMemo(
     () => passwordChecks.filter((item) => item.test(newPassword)).length,
     [newPassword],
   );
-  const strengthPercent = (completedChecks / passwordChecks.length) * 100;
-  const strengthLabel = completedChecks === passwordChecks.length ? 'Strong' : completedChecks >= 3 ? 'Medium' : 'Needs work';
-  const strengthColor =
-    completedChecks === passwordChecks.length ? 'bg-emerald-500' : completedChecks >= 3 ? 'bg-amber-500' : 'bg-rose-500';
 
   const validateForm = () => {
     const nextErrors: FieldErrors = {};
@@ -100,24 +86,18 @@ export default function ChangePasswordPage() {
     event.preventDefault();
     const nextErrors = validateForm();
     setErrors(nextErrors);
-    setSuccessMessage('');
     if (Object.keys(nextErrors).length) return;
 
     setLoading(true);
     try {
-      const result = await changePassword({
+      await changePassword({
         currentPassword,
         newPassword,
         confirmPassword,
       });
-      setCurrentPassword('');
-      setNewPassword('');
-      setConfirmPassword('');
-      setErrors({});
-      setSuccessMessage(result.message || 'Password changed successfully.');
+      router.replace('/dashboard');
     } catch (err) {
       setErrors({ form: (err as Error)?.message || 'Unable to change password.' });
-    } finally {
       setLoading(false);
     }
   };
@@ -166,44 +146,16 @@ export default function ChangePasswordPage() {
     <>
       {loading ? <FullPageLoader label="Saving password..." /> : null}
 
-      <PageHeader
-        title="Change Password"
-        subtitle="Update your account password without leaving the dashboard workspace."
-        breadcrumbs={[
-          { label: 'Dashboard', href: '/dashboard' },
-          { label: 'Change Password' },
-        ]}
-        actions={
-          <Link
-            href="/dashboard"
-            className="rounded-lg border border-[var(--shell-border)] px-3 py-2 text-xs font-bold text-[var(--shell-text)] transition-colors hover:bg-[var(--shell-hover)]"
-          >
-            Back to Dashboard
-          </Link>
-        }
-      />
-
-      <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_22rem]">
-        <section className="rounded-2xl border border-[var(--shell-border)] bg-[var(--shell-card)] p-5 shadow-sm sm:p-6">
-          <div className="mb-6 flex flex-col gap-4 rounded-2xl border border-blue-500/15 bg-blue-500/5 p-5 sm:flex-row sm:items-center sm:justify-between">
-            <div className="flex min-w-0 items-start gap-3">
-              <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-blue-600 text-white shadow-lg shadow-blue-600/20">
-                <SecurityIcon />
-              </div>
-              <div className="min-w-0">
-                <p className="text-sm font-bold uppercase tracking-[0.14em] text-blue-600">Account Security</p>
-                <h2 className="mt-1 text-2xl font-bold tracking-tight text-[var(--shell-text)]">Save a new password</h2>
-                <p className="mt-1 text-sm leading-6 text-[var(--shell-muted)]">
-                  Other active sessions are revoked after a successful password change.
-                </p>
-              </div>
-            </div>
-            <div className="rounded-xl border border-[var(--shell-border)] bg-[var(--shell-card)] px-4 py-3 text-sm font-bold text-[var(--shell-text)]">
-              Status: Protected
-            </div>
+      <div className="mx-auto max-w-2xl space-y-4 pb-10">
+        <section className="rounded-xl border border-[var(--shell-border)] bg-[var(--shell-card)] px-5 py-4 shadow-sm">
+          <div>
+            <h1 className="text-2xl font-black text-[var(--shell-text)]">Change Password</h1>
+            <p className="mt-1 text-sm text-[var(--shell-muted)]">Update your password and return to the dashboard.</p>
           </div>
+        </section>
 
-          <form onSubmit={handleSubmit} className="grid gap-5 xl:grid-cols-2">
+        <section className="rounded-xl border border-[var(--shell-border)] bg-[var(--shell-card)] p-5 shadow-sm">
+          <form onSubmit={handleSubmit} className="space-y-4">
             {passwordField({
               id: 'currentPassword',
               label: 'Current password',
@@ -222,27 +174,20 @@ export default function ChangePasswordPage() {
               onChange: setNewPassword,
             })}
 
-            <div className="xl:col-span-2">
-              <div className="rounded-2xl border border-[var(--shell-border)] bg-[var(--shell-subtle)] p-4">
-                <div className="flex items-center justify-between gap-3">
-                  <p className="text-sm font-bold text-[var(--shell-text)]">Password strength</p>
-                  <p className="text-xs font-bold text-[var(--shell-muted)]">
-                    {strengthLabel} {completedChecks}/{passwordChecks.length}
-                  </p>
-                </div>
-                <div className="mt-3 h-2 overflow-hidden rounded-full bg-[var(--shell-border)]">
-                  <div className={`h-full rounded-full ${strengthColor}`} style={{ width: `${strengthPercent}%` }} />
-                </div>
-                <div className="mt-4 grid gap-2 text-xs font-bold text-[var(--shell-muted)] sm:grid-cols-2 lg:grid-cols-3">
-                  {passwordChecks.map((item) => {
-                    const passed = item.test(newPassword);
-                    return (
-                      <p key={item.id} className={passed ? 'text-emerald-600' : undefined}>
-                        <span aria-hidden="true">{passed ? 'OK' : '--'}</span> {item.label}
-                      </p>
-                    );
-                  })}
-                </div>
+            <div className="rounded-lg border border-[var(--shell-border)] bg-[var(--shell-subtle)] p-3">
+              <div className="mb-2 flex items-center justify-between gap-3">
+                <p className="text-sm font-bold text-[var(--shell-text)]">Password requirements</p>
+                <p className="text-xs font-bold text-[var(--shell-muted)]">{completedChecks}/{passwordChecks.length}</p>
+              </div>
+              <div className="grid gap-2 text-xs font-semibold text-[var(--shell-muted)] sm:grid-cols-2">
+                {passwordChecks.map((item) => {
+                  const passed = item.test(newPassword);
+                  return (
+                    <p key={item.id} className={passed ? 'text-emerald-600' : undefined}>
+                      <span aria-hidden="true">{passed ? 'OK' : '--'}</span> {item.label}
+                    </p>
+                  );
+                })}
               </div>
             </div>
 
@@ -255,59 +200,30 @@ export default function ChangePasswordPage() {
               onChange: setConfirmPassword,
             })}
 
-            <div className="flex items-end">
-              <button
-                type="submit"
-                disabled={loading}
-                className="flex min-h-[46px] w-full items-center justify-center rounded-xl bg-blue-600 px-4 py-3 text-sm font-bold text-white shadow-lg shadow-blue-600/20 transition-colors hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60"
-              >
-                {loading ? 'Saving...' : 'Save Password'}
-              </button>
-            </div>
-
-            {successMessage ? (
-              <p className="rounded-xl border border-emerald-500/20 bg-emerald-500/10 px-4 py-3 text-sm font-bold text-emerald-700 xl:col-span-2">
-                {successMessage}
-              </p>
-            ) : null}
-
             {errors.form ? (
-              <p className="rounded-xl border border-rose-500/20 bg-rose-500/10 px-4 py-3 text-sm font-bold text-rose-700 xl:col-span-2">
+              <p className="rounded-lg border border-rose-500/20 bg-rose-500/10 px-3 py-2 text-sm font-bold text-rose-700">
                 {errors.form}
               </p>
             ) : null}
+
+            <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+              <button
+                type="button"
+                onClick={() => router.push('/dashboard')}
+                className="rounded-lg border border-[var(--shell-border)] px-4 py-2.5 text-sm font-bold text-[var(--shell-text)] hover:bg-[var(--shell-hover)]"
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                disabled={loading}
+                className="rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-bold text-white shadow-sm shadow-blue-600/20 transition-colors hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                {loading ? 'Saving...' : 'Change Password'}
+              </button>
+            </div>
           </form>
         </section>
-
-        <aside className="space-y-5">
-          <section className="rounded-2xl border border-[var(--shell-border)] bg-[var(--shell-card)] p-5 shadow-sm">
-            <p className="text-sm font-bold uppercase tracking-[0.14em] text-[var(--shell-muted)]">Password Rules</p>
-            <div className="mt-4 space-y-3">
-              {passwordChecks.map((item) => {
-                const passed = item.test(newPassword);
-                return (
-                  <div
-                    key={item.id}
-                    className="flex items-center gap-3 rounded-xl border border-[var(--shell-border)] bg-[var(--shell-subtle)] px-3 py-2"
-                  >
-                    <span className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-xs font-black ${passed ? 'bg-emerald-500 text-white' : 'bg-[var(--shell-card)] text-[var(--shell-muted)]'}`}>
-                      {passed ? 'OK' : '--'}
-                    </span>
-                    <span className="text-sm font-semibold text-[var(--shell-text)]">{item.label}</span>
-                  </div>
-                );
-              })}
-            </div>
-          </section>
-
-          <section className="rounded-2xl border border-[var(--shell-border)] bg-[var(--shell-card)] p-5 shadow-sm">
-            <p className="text-sm font-bold uppercase tracking-[0.14em] text-[var(--shell-muted)]">Security Notes</p>
-            <div className="mt-4 space-y-3 text-sm font-semibold text-[var(--shell-muted)]">
-              <p className="rounded-xl bg-[var(--shell-subtle)] px-4 py-3">Current password confirmation protects account changes.</p>
-              <p className="rounded-xl bg-[var(--shell-subtle)] px-4 py-3">New passwords must pass every strength rule before saving.</p>
-            </div>
-          </section>
-        </aside>
       </div>
     </>
   );

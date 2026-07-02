@@ -6,9 +6,9 @@ import { getSession } from '../services/auth.service';
 import { fetchActiveTheme, getStoredTheme, getStoredThemeLast } from '../services/theme.service';
 
 const defaultTokens = {
-  navbarBg: '#0f172a',
-  headerBg: '#111827',
-  footerBg: '#0f172a',
+  navbarBg: '#ffffff',
+  headerBg: '#ffffff',
+  footerBg: '#ffffff',
   buttonBg: '#2563eb',
   buttonText: '#ffffff',
   logoUrl: '',

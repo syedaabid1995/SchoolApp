@@ -25,14 +25,25 @@ const parseGradient = (value: string): { from: string; to: string } | null => {
 
 const makeGradient = (from: string, to: string) => `linear-gradient(135deg, ${from}, ${to})`;
 
+const readableTextColor = (background: string) => {
+  const sample = parseGradient(background)?.from ?? background;
+  if (!isHexColor(sample)) return '#ffffff';
+  const hex = sample.replace('#', '');
+  const red = parseInt(hex.slice(0, 2), 16);
+  const green = parseInt(hex.slice(2, 4), 16);
+  const blue = parseInt(hex.slice(4, 6), 16);
+  const brightness = (red * 299 + green * 587 + blue * 114) / 1000;
+  return brightness > 150 ? '#0f172a' : '#ffffff';
+};
+
 export default function ThemesPage() {
   const queryClient = useQueryClient();
   const [name, setName] = useState('');
   const [schoolId, setSchoolId] = useState('');
   const [palette, setPalette] = useState({
-    navbarBg: '#0f172a',
-    headerBg: '#111827',
-    footerBg: '#0f172a',
+    navbarBg: '#ffffff',
+    headerBg: '#ffffff',
+    footerBg: '#ffffff',
     buttonBg: '#2563eb',
     buttonText: '#ffffff',
     logoUrl: '',
@@ -86,9 +97,9 @@ export default function ThemesPage() {
     onSuccess: () => {
       setName('');
       setPalette({
-        navbarBg: '#0f172a',
-        headerBg: '#111827',
-        footerBg: '#0f172a',
+        navbarBg: '#ffffff',
+        headerBg: '#ffffff',
+        footerBg: '#ffffff',
         buttonBg: '#2563eb',
         buttonText: '#ffffff',
         logoUrl: '',
@@ -189,9 +200,9 @@ export default function ThemesPage() {
                         setName(theme.name);
                         setEditingThemeId(theme.id);
                         setPalette({
-                          navbarBg: theme.tokens?.navbarBg ?? '#0f172a',
-                          headerBg: theme.tokens?.headerBg ?? '#111827',
-                          footerBg: theme.tokens?.footerBg ?? '#0f172a',
+                          navbarBg: theme.tokens?.navbarBg ?? '#ffffff',
+                          headerBg: theme.tokens?.headerBg ?? '#ffffff',
+                          footerBg: theme.tokens?.footerBg ?? '#ffffff',
                           buttonBg: theme.tokens?.buttonBg ?? '#2563eb',
                           buttonText: theme.tokens?.buttonText ?? '#ffffff',
                           logoUrl: theme.tokens?.logoUrl ?? '',
@@ -328,7 +339,7 @@ export default function ThemesPage() {
                 </div>
                 <div className="rounded-xl border-2 border-gray-200 p-4">
                   <p className="text-xs font-semibold uppercase tracking-wide text-gray-600 mb-3">Preview</p>
-                  <div className="overflow-hidden rounded-lg border border-gray-200"><div className="px-4 py-3 text-sm text-white flex items-center gap-3" style={{ background: tokens.navbarBg }}>{tokens.logoUrl && <img src={tokens.logoUrl} alt="Logo" className="h-6 w-6 rounded object-cover" />}<span>Navbar</span></div><div className="px-4 py-3 text-sm text-white" style={{ background: tokens.headerBg }}>Header</div><div className="px-4 py-4 bg-white"><button className="rounded-lg px-5 py-2.5 text-sm font-semibold" style={{ background: tokens.buttonBg, color: tokens.buttonText }}>Button</button></div><div className="px-4 py-3 text-sm text-white" style={{ background: tokens.footerBg }}>Footer</div></div>
+                  <div className="overflow-hidden rounded-lg border border-gray-200"><div className="flex items-center gap-3 px-4 py-3 text-sm" style={{ background: tokens.navbarBg, color: readableTextColor(tokens.navbarBg) }}>{tokens.logoUrl && <img src={tokens.logoUrl} alt="Logo" className="h-6 w-6 rounded object-cover" />}<span>Navbar</span></div><div className="px-4 py-3 text-sm" style={{ background: tokens.headerBg, color: readableTextColor(tokens.headerBg) }}>Header</div><div className="px-4 py-4 bg-white"><button className="rounded-lg px-5 py-2.5 text-sm font-semibold" style={{ background: tokens.buttonBg, color: tokens.buttonText }}>Button</button></div><div className="px-4 py-3 text-sm" style={{ background: tokens.footerBg, color: readableTextColor(tokens.footerBg) }}>Footer</div></div>
                 </div>
               </div>
               <div className="mt-6 flex justify-end gap-3">

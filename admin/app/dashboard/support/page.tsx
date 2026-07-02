@@ -4,7 +4,7 @@ import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import { useEffect, useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import PageHeader from '../../../components/PageHeader';
+import DashboardPageContainer from '../../../components/DashboardPageContainer';
 import Button from '../../../components/Button';
 import FullPageLoader from '../../../components/FullPageLoader';
 import { getSession } from '../../../services/auth.service';
@@ -20,6 +20,7 @@ import {
 
 const ticketStatuses: TicketStatus[] = ['OPEN', 'IN_PROGRESS', 'RESOLVED', 'CLOSED'];
 const ticketPriorities: TicketPriority[] = ['LOW', 'MEDIUM', 'HIGH', 'URGENT'];
+const pageSizes = [10, 20, 50, 100];
 
 const formatLabel = (value?: string | null) =>
   (value ?? 'N/A')
@@ -71,11 +72,44 @@ function SkeletonTable() {
 
 function EmptyState({ message }: { message: string }) {
   return (
-    <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 p-8 text-center text-sm text-slate-500">
+    <div className="p-8 text-center text-sm text-slate-500">
       {message}
     </div>
   );
 }
+
+type TableIconName = 'copy' | 'file' | 'print' | 'refresh' | 'chevron';
+
+const TableIcon = ({ name, className = 'h-4 w-4' }: { name: TableIconName; className?: string }) => {
+  const common = {
+    className,
+    viewBox: '0 0 24 24',
+    fill: 'none',
+    stroke: 'currentColor',
+    strokeWidth: 2,
+    strokeLinecap: 'round' as const,
+    strokeLinejoin: 'round' as const,
+    'aria-hidden': true,
+  };
+
+  if (name === 'copy') return <svg {...common}><rect x="8" y="8" width="12" height="12" rx="2" /><path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2" /></svg>;
+  if (name === 'file') return <svg {...common}><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8Z" /><path d="M14 2v6h6" /><path d="M8 13h8" /><path d="M8 17h5" /></svg>;
+  if (name === 'print') return <svg {...common}><path d="M6 9V2h12v7" /><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2" /><path d="M6 14h12v8H6z" /></svg>;
+  if (name === 'refresh') return <svg {...common}><path d="M20 11a8.1 8.1 0 0 0-15.5-2M4 5v4h4" /><path d="M4 13a8.1 8.1 0 0 0 15.5 2M20 19v-4h-4" /></svg>;
+  return <svg {...common}><path d="m6 9 6 6 6-6" /></svg>;
+};
+
+const getPageItems = (currentPage: number, totalPages: number) => {
+  const pages = new Set<number>([1, totalPages, currentPage - 1, currentPage, currentPage + 1]);
+  return Array.from(pages)
+    .filter((page) => page >= 1 && page <= totalPages)
+    .sort((left, right) => left - right)
+    .reduce<Array<number | string>>((result, page, index, list) => {
+      if (index > 0 && page - list[index - 1] > 1) result.push(`ellipsis-${page}`);
+      result.push(page);
+      return result;
+    }, []);
+};
 
 export default function SupportPage() {
   const queryClient = useQueryClient();
@@ -95,6 +129,8 @@ export default function SupportPage() {
     schoolId: '',
     assignedToId: '',
   });
+  const [page, setPage] = useState(1);
+  const [limit, setLimit] = useState(20);
 
   const { data: session, isLoading: isSessionLoading } = useQuery({
     queryKey: ['session'],
@@ -167,6 +203,21 @@ export default function SupportPage() {
     });
   }, [filters.search, tickets]);
 
+  const totalRows = visibleTickets.length;
+  const totalPages = Math.max(1, Math.ceil(totalRows / limit));
+  const pageStart = totalRows === 0 ? 0 : (page - 1) * limit + 1;
+  const pageEnd = totalRows === 0 ? 0 : Math.min(page * limit, totalRows);
+  const pageRows = useMemo(() => visibleTickets.slice((page - 1) * limit, page * limit), [limit, page, visibleTickets]);
+  const pageItems = useMemo(() => getPageItems(page, totalPages), [page, totalPages]);
+
+  useEffect(() => {
+    setPage(1);
+  }, [filters.assignedToId, filters.priority, filters.schoolId, filters.search, filters.status, limit]);
+
+  useEffect(() => {
+    if (page > totalPages) setPage(totalPages);
+  }, [page, totalPages]);
+
   const createMutation = useMutation({
     mutationFn: createTicket,
     onSuccess: () => {
@@ -199,73 +250,75 @@ export default function SupportPage() {
   }
 
   return (
-    <div className="space-y-6">
-      <PageHeader
-        title="Support Tickets"
-        subtitle={isSuperAdmin ? 'Manage support tickets across all schools.' : 'Create and track support tickets for your school.'}
-      />
-
-      <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-        <div className="grid gap-4 xl:grid-cols-[1fr_180px_180px_220px_220px_auto] xl:items-end">
+    <DashboardPageContainer maxWidthClassName="max-w-none" className="space-y-4">
+      <header className="rounded-lg border border-[var(--shell-border)] bg-[var(--shell-card)] px-4 py-3 shadow-sm">
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <label htmlFor="support-search" className="mb-2 block text-sm font-medium text-slate-700">
-              Search
-            </label>
+            <h1 className="text-2xl font-bold text-[var(--shell-text)]">Support Tickets</h1>
+            <p className="mt-1 text-sm text-[var(--shell-muted)]">
+              {isSuperAdmin ? 'Manage support tickets across all schools.' : 'Create and track support tickets for your school.'}
+            </p>
+          </div>
+          <span className="text-sm font-semibold text-[var(--shell-muted)]">Dashboard / Support Tickets</span>
+        </div>
+      </header>
+
+      <section className="rounded-lg border border-[var(--shell-border)] bg-[var(--shell-card)] shadow-sm">
+        <div className="border-b border-[var(--shell-border)] px-4 py-3">
+          <h2 className="text-base font-bold text-[var(--shell-text)]">Select Criteria</h2>
+        </div>
+        <div className={`grid gap-3 p-4 ${isSuperAdmin ? 'xl:grid-cols-[minmax(220px,1fr)_160px_160px_220px_220px_auto]' : 'md:grid-cols-[minmax(220px,1fr)_160px_160px_auto]'} md:items-end`}>
+          <label className="block" htmlFor="support-search">
+            <span className="mb-1.5 block text-sm font-semibold text-[var(--shell-text)]">Search</span>
             <input
               id="support-search"
               value={filters.search}
               onChange={(event) => setFilters((prev) => ({ ...prev, search: event.target.value }))}
               placeholder="Ticket, subject, school"
-              className="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm outline-none focus:border-sky-500 focus:ring-2 focus:ring-sky-100"
+              className="h-10 w-full rounded-md border border-[var(--shell-border)] bg-white px-3 text-sm text-[var(--shell-text)] outline-none focus:border-[var(--shell-primary)] focus:ring-2 focus:ring-blue-100"
             />
-          </div>
-          <div>
-            <label htmlFor="support-status" className="mb-2 block text-sm font-medium text-slate-700">
-              Status
-            </label>
+          </label>
+          <label className="block" htmlFor="support-status">
+            <span className="mb-1.5 block text-sm font-semibold text-[var(--shell-text)]">Status</span>
             <select
               id="support-status"
               value={filters.status}
               onChange={(event) => setFilters((prev) => ({ ...prev, status: event.target.value }))}
-              className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm outline-none focus:border-sky-500 focus:ring-2 focus:ring-sky-100"
+              className="h-10 w-full rounded-md border border-[var(--shell-border)] bg-white px-3 text-sm text-[var(--shell-text)] outline-none focus:border-[var(--shell-primary)] focus:ring-2 focus:ring-blue-100"
             >
-              <option value="">All</option>
+              <option value="">All statuses</option>
               {ticketStatuses.map((status) => (
                 <option key={status} value={status}>
                   {formatLabel(status)}
                 </option>
               ))}
             </select>
-          </div>
-          <div>
-            <label htmlFor="support-priority" className="mb-2 block text-sm font-medium text-slate-700">
-              Priority
-            </label>
+          </label>
+          <label className="block" htmlFor="support-priority">
+            <span className="mb-1.5 block text-sm font-semibold text-[var(--shell-text)]">Priority</span>
             <select
               id="support-priority"
               value={filters.priority}
               onChange={(event) => setFilters((prev) => ({ ...prev, priority: event.target.value }))}
-              className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm outline-none focus:border-sky-500 focus:ring-2 focus:ring-sky-100"
+              className="h-10 w-full rounded-md border border-[var(--shell-border)] bg-white px-3 text-sm text-[var(--shell-text)] outline-none focus:border-[var(--shell-primary)] focus:ring-2 focus:ring-blue-100"
             >
-              <option value="">All</option>
+              <option value="">All priorities</option>
               {ticketPriorities.map((priority) => (
                 <option key={priority} value={priority}>
                   {formatLabel(priority)}
                 </option>
               ))}
             </select>
-          </div>
+          </label>
           {isSuperAdmin ? (
             <>
-              <div>
-                <label htmlFor="support-school" className="mb-2 block text-sm font-medium text-slate-700">
-                  School
-                </label>
+              <label className="block" htmlFor="support-school">
+                <span className="mb-1.5 block text-sm font-semibold text-[var(--shell-text)]">School</span>
                 <select
                   id="support-school"
                   value={filters.schoolId}
                   onChange={(event) => setFilters((prev) => ({ ...prev, schoolId: event.target.value }))}
-                  className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm outline-none focus:border-sky-500 focus:ring-2 focus:ring-sky-100"
+                  className="h-10 w-full rounded-md border border-[var(--shell-border)] bg-white px-3 text-sm text-[var(--shell-text)] outline-none focus:border-[var(--shell-primary)] focus:ring-2 focus:ring-blue-100"
                 >
                   <option value="">All schools</option>
                   {schools?.items.map((school) => (
@@ -274,16 +327,14 @@ export default function SupportPage() {
                     </option>
                   ))}
                 </select>
-              </div>
-              <div>
-                <label htmlFor="support-assigned" className="mb-2 block text-sm font-medium text-slate-700">
-                  Assigned
-                </label>
+              </label>
+              <label className="block" htmlFor="support-assigned">
+                <span className="mb-1.5 block text-sm font-semibold text-[var(--shell-text)]">Assigned</span>
                 <select
                   id="support-assigned"
                   value={filters.assignedToId}
                   onChange={(event) => setFilters((prev) => ({ ...prev, assignedToId: event.target.value }))}
-                  className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm outline-none focus:border-sky-500 focus:ring-2 focus:ring-sky-100"
+                  className="h-10 w-full rounded-md border border-[var(--shell-border)] bg-white px-3 text-sm text-[var(--shell-text)] outline-none focus:border-[var(--shell-primary)] focus:ring-2 focus:ring-blue-100"
                 >
                   <option value="">Anyone</option>
                   {assignableUsers?.map((user) => (
@@ -292,24 +343,18 @@ export default function SupportPage() {
                     </option>
                   ))}
                 </select>
-              </div>
+              </label>
             </>
           ) : null}
-          <div className="flex flex-wrap gap-2">
-            <Button variant="outline" size="sm" onClick={() => refetch()}>
-              Refresh
-            </Button>
-            <Button
-              variant="primary"
-              size="sm"
-              onClick={() => {
-                setFormError('');
-                setIsCreateModalOpen(true);
-              }}
-            >
-              New Ticket
-            </Button>
-          </div>
+          <button
+            type="button"
+            onClick={() => {
+              setFilters({ search: '', status: '', priority: '', schoolId: '', assignedToId: '' });
+            }}
+            className="h-10 rounded-md border border-[var(--shell-border)] bg-white px-4 text-sm font-semibold text-[var(--shell-text)] hover:bg-[var(--shell-subtle)]"
+          >
+            Reset
+          </button>
         </div>
       </section>
 
@@ -389,67 +434,103 @@ export default function SupportPage() {
         </div>
       ) : null}
 
-      <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-        <div className="mb-5 flex items-center justify-between gap-3">
+      <section className="overflow-hidden rounded-lg border border-[var(--shell-border)] bg-[var(--shell-card)] shadow-sm">
+        <div className="flex flex-col gap-3 border-b border-[var(--shell-border)] px-4 py-3 lg:flex-row lg:items-center lg:justify-between">
           <div>
-            <h2 className="text-lg font-semibold text-slate-950">Tickets</h2>
-            <p className="mt-1 text-sm text-slate-500">
-              {isSuperAdmin ? 'All school tickets are visible to Super Admin users.' : 'Only your school tickets are shown.'}
+            <h2 className="text-base font-bold text-[var(--shell-text)]">Support Ticket List</h2>
+            <p className="mt-0.5 text-sm text-[var(--shell-muted)]">
+              Showing {pageStart} to {pageEnd} of {totalRows} tickets
             </p>
           </div>
-          <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-600">
-            {visibleTickets.length} shown
-          </span>
+          <div className="flex flex-wrap items-center gap-2">
+            <label className="relative">
+              <span className="sr-only">Rows per page</span>
+              <select
+                value={limit}
+                onChange={(event) => setLimit(Number(event.target.value))}
+                className="h-10 appearance-none rounded-md border border-[var(--shell-border)] bg-white pl-3 pr-9 text-sm font-semibold text-[var(--shell-text)] outline-none focus:border-[var(--shell-primary)] focus:ring-2 focus:ring-blue-100"
+              >
+                {pageSizes.map((size) => (
+                  <option key={size} value={size}>
+                    {size}
+                  </option>
+                ))}
+              </select>
+              <TableIcon name="chevron" className="pointer-events-none absolute right-3 top-3 h-4 w-4 text-[var(--shell-muted)]" />
+            </label>
+            <button type="button" className="grid h-10 w-10 place-items-center rounded-md border border-[var(--shell-border)] bg-white text-[var(--shell-muted)] hover:text-[var(--shell-text)]" title="Copy">
+              <TableIcon name="copy" />
+            </button>
+            <button type="button" className="grid h-10 w-10 place-items-center rounded-md border border-[var(--shell-border)] bg-white text-[var(--shell-muted)] hover:text-[var(--shell-text)]" title="Export">
+              <TableIcon name="file" />
+            </button>
+            <button type="button" onClick={() => window.print()} className="grid h-10 w-10 place-items-center rounded-md border border-[var(--shell-border)] bg-white text-[var(--shell-muted)] hover:text-[var(--shell-text)]" title="Print">
+              <TableIcon name="print" />
+            </button>
+            <button type="button" onClick={() => refetch()} className="grid h-10 w-10 place-items-center rounded-md border border-[var(--shell-border)] bg-white text-[var(--shell-muted)] hover:text-[var(--shell-text)]" title="Refresh">
+              <TableIcon name="refresh" />
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setFormError('');
+                setIsCreateModalOpen(true);
+              }}
+              className="h-10 rounded-md bg-[var(--shell-primary)] px-4 text-sm font-bold text-white shadow-sm hover:opacity-90"
+            >
+              New Ticket
+            </button>
+          </div>
         </div>
 
         {isTicketsLoading ? (
           <SkeletonTable />
         ) : isTicketsError ? (
           <EmptyState message="Unable to load support tickets." />
-        ) : visibleTickets.length ? (
+        ) : pageRows.length ? (
           <div className="overflow-x-auto">
-            <table className="min-w-full divide-y divide-slate-200 text-sm">
-              <thead>
-                <tr className="text-left text-xs font-semibold uppercase text-slate-500">
-                  <th className="whitespace-nowrap px-3 py-3">Ticket</th>
-                  {isSuperAdmin ? <th className="whitespace-nowrap px-3 py-3">School</th> : null}
-                  <th className="whitespace-nowrap px-3 py-3">Created by</th>
-                  <th className="whitespace-nowrap px-3 py-3">Status</th>
-                  <th className="whitespace-nowrap px-3 py-3">Priority</th>
-                  <th className="whitespace-nowrap px-3 py-3">Assigned to</th>
-                  <th className="whitespace-nowrap px-3 py-3">Created</th>
-                  <th className="whitespace-nowrap px-3 py-3">Updated</th>
-                  <th className="whitespace-nowrap px-3 py-3 text-right">Action</th>
+            <table className="min-w-full divide-y divide-[var(--shell-border)] text-sm">
+              <thead className="bg-[var(--shell-subtle)]">
+                <tr className="text-left text-xs font-bold uppercase text-[var(--shell-muted)]">
+                  <th className="whitespace-nowrap px-4 py-3">Ticket</th>
+                  {isSuperAdmin ? <th className="whitespace-nowrap px-4 py-3">School</th> : null}
+                  <th className="whitespace-nowrap px-4 py-3">Created By</th>
+                  <th className="whitespace-nowrap px-4 py-3">Status</th>
+                  <th className="whitespace-nowrap px-4 py-3">Priority</th>
+                  <th className="whitespace-nowrap px-4 py-3">Assigned To</th>
+                  <th className="whitespace-nowrap px-4 py-3">Created</th>
+                  <th className="whitespace-nowrap px-4 py-3">Updated</th>
+                  <th className="whitespace-nowrap px-4 py-3 text-right">Action</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-100">
-                {visibleTickets.map((ticket: SupportTicket) => (
-                  <tr key={ticket.id} className="align-top hover:bg-slate-50">
-                    <td className="max-w-[260px] px-3 py-4">
-                      <p className="font-semibold text-slate-950">{ticket.ticketNumber ?? ticket.id}</p>
-                      <p className="mt-1 truncate text-slate-700">{ticket.subject}</p>
+              <tbody className="divide-y divide-[var(--shell-border)]">
+                {pageRows.map((ticket: SupportTicket) => (
+                  <tr key={ticket.id} className="align-top hover:bg-[var(--shell-subtle)]/70">
+                    <td className="max-w-[280px] px-4 py-3">
+                      <p className="font-semibold text-[var(--shell-text)]">{ticket.ticketNumber ?? ticket.id}</p>
+                      <p className="mt-1 truncate text-[var(--shell-muted)]">{ticket.subject}</p>
                     </td>
                     {isSuperAdmin ? (
-                      <td className="px-3 py-4 text-slate-700">
-                        <p className="font-medium">{ticket.school?.name ?? 'N/A'}</p>
-                        <p className="text-xs text-slate-500">{ticket.school?.code ?? ''}</p>
+                      <td className="px-4 py-3 text-[var(--shell-muted)]">
+                        <p className="font-medium text-[var(--shell-text)]">{ticket.school?.name ?? 'N/A'}</p>
+                        <p className="text-xs">{ticket.school?.code ?? ''}</p>
                       </td>
                     ) : null}
-                    <td className="px-3 py-4 text-slate-700">
+                    <td className="px-4 py-3 text-[var(--shell-muted)]">
                       <p>{ticket.createdBy?.name ?? 'N/A'}</p>
-                      <p className="text-xs text-slate-500">{formatLabel(ticket.createdBy?.role)}</p>
+                      <p className="text-xs">{formatLabel(ticket.createdBy?.role)}</p>
                     </td>
-                    <td className="px-3 py-4">
+                    <td className="whitespace-nowrap px-4 py-3">
                       <Badge className={statusBadgeClass(ticket.status)}>{formatLabel(ticket.status)}</Badge>
                     </td>
-                    <td className="px-3 py-4">
+                    <td className="whitespace-nowrap px-4 py-3">
                       <Badge className={priorityBadgeClass(ticket.priority)}>{formatLabel(ticket.priority)}</Badge>
                     </td>
-                    <td className="px-3 py-4 text-slate-700">{ticket.assignedTo?.name ?? 'Unassigned'}</td>
-                    <td className="px-3 py-4 text-slate-600">{formatDateTime(ticket.createdAt)}</td>
-                    <td className="px-3 py-4 text-slate-600">{formatDateTime(ticket.updatedAt)}</td>
-                    <td className="px-3 py-4 text-right">
-                      <Link href={`/dashboard/support/${ticket.id}`} prefetch={false} className="font-semibold text-sky-700 hover:underline">
+                    <td className="whitespace-nowrap px-4 py-3 text-[var(--shell-muted)]">{ticket.assignedTo?.name ?? 'Unassigned'}</td>
+                    <td className="whitespace-nowrap px-4 py-3 text-[var(--shell-muted)]">{formatDateTime(ticket.createdAt)}</td>
+                    <td className="whitespace-nowrap px-4 py-3 text-[var(--shell-muted)]">{formatDateTime(ticket.updatedAt)}</td>
+                    <td className="whitespace-nowrap px-4 py-3 text-right">
+                      <Link href={`/dashboard/support/${ticket.id}`} prefetch={false} className="inline-flex rounded-md bg-[var(--shell-primary)] px-3 py-2 text-xs font-bold text-white shadow-sm hover:opacity-90">
                         View
                       </Link>
                     </td>
@@ -461,7 +542,47 @@ export default function SupportPage() {
         ) : (
           <EmptyState message="No support tickets found." />
         )}
+
+        <div className="flex flex-col gap-3 border-t border-[var(--shell-border)] px-4 py-3 text-sm text-[var(--shell-muted)] sm:flex-row sm:items-center sm:justify-between">
+          <span>
+            Showing {pageStart} to {pageEnd} of {totalRows} entries
+          </span>
+          <div className="flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              onClick={() => setPage((current) => Math.max(1, current - 1))}
+              disabled={page <= 1}
+              className="rounded-md border border-[var(--shell-border)] bg-white px-3 py-1.5 font-semibold text-[var(--shell-text)] disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              Previous
+            </button>
+            {pageItems.map((item) =>
+              typeof item === 'number' ? (
+                <button
+                  key={item}
+                  type="button"
+                  onClick={() => setPage(item)}
+                  className={`h-8 min-w-8 rounded-md px-2 font-semibold ${
+                    item === page ? 'bg-[var(--shell-primary)] text-white' : 'border border-[var(--shell-border)] bg-white text-[var(--shell-text)]'
+                  }`}
+                >
+                  {item}
+                </button>
+              ) : (
+                <span key={item} className="px-1">...</span>
+              ),
+            )}
+            <button
+              type="button"
+              onClick={() => setPage((current) => Math.min(totalPages, current + 1))}
+              disabled={page >= totalPages}
+              className="rounded-md border border-[var(--shell-border)] bg-white px-3 py-1.5 font-semibold text-[var(--shell-text)] disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              Next
+            </button>
+          </div>
+        </div>
       </section>
-    </div>
+    </DashboardPageContainer>
   );
 }

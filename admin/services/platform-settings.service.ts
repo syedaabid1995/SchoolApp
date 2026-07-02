@@ -18,7 +18,7 @@ export const DEFAULT_PLATFORM_GENERAL_SETTINGS: PlatformGeneralSettings = {
   supportEmail: 'support@schoolapp.local',
   supportUrl: '',
   footerText: 'SAAPT - School Management Console',
-  defaultThemeMode: 'system',
+  defaultThemeMode: 'light',
   maintenanceMode: false,
 };
 
