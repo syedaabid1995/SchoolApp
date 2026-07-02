@@ -3,7 +3,6 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import PageHeader from '../../../components/PageHeader';
 import FullPageLoader from '../../../components/FullPageLoader';
 import { useNotify } from '../../../components/NotificationProvider';
 import { getSession } from '../../../services/auth.service';
@@ -15,7 +14,6 @@ import {
   getAdminUserById,
   getAdminUserSessions,
   getAdminUsers,
-  getAdminUsersSummary,
   lockAdminUser,
   revokeUserSessions,
   unlockAdminUser,
@@ -66,16 +64,6 @@ function Badge({ children, className }: { children: ReactNode; className: string
   return <span className={`inline-flex rounded-full px-2.5 py-1 text-xs font-semibold ring-1 ${className}`}>{children}</span>;
 }
 
-function StatCard({ label, value, helper }: { label: string; value: number | string; helper: string }) {
-  return (
-    <div className="rounded-2xl border border-[var(--shell-border)] bg-[var(--shell-card)] p-5 shadow-sm">
-      <p className="text-xs font-semibold uppercase tracking-[0.16em] text-[var(--shell-muted)]">{label}</p>
-      <p className="mt-3 text-3xl font-bold text-[var(--shell-text)]">{value}</p>
-      <p className="mt-1 text-sm text-[var(--shell-muted)]">{helper}</p>
-    </div>
-  );
-}
-
 function SkeletonRows() {
   return (
     <div className="space-y-3 p-5">
@@ -94,6 +82,40 @@ type UserAction =
   | 'force-password-reset'
   | 'revoke-sessions'
   | 'disable-mfa';
+
+type TableIconName = 'copy' | 'file' | 'print' | 'search' | 'refresh' | 'chevron';
+
+const TableIcon = ({ name, className = 'h-4 w-4' }: { name: TableIconName; className?: string }) => {
+  const common = {
+    className,
+    viewBox: '0 0 24 24',
+    fill: 'none',
+    stroke: 'currentColor',
+    strokeWidth: 2,
+    strokeLinecap: 'round' as const,
+    strokeLinejoin: 'round' as const,
+    'aria-hidden': true,
+  };
+
+  if (name === 'copy') return <svg {...common}><rect x="8" y="8" width="12" height="12" rx="2" /><path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2" /></svg>;
+  if (name === 'file') return <svg {...common}><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8Z" /><path d="M14 2v6h6" /><path d="M8 13h8" /><path d="M8 17h5" /></svg>;
+  if (name === 'print') return <svg {...common}><path d="M6 9V2h12v7" /><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2" /><path d="M6 14h12v8H6z" /></svg>;
+  if (name === 'search') return <svg {...common}><circle cx="11" cy="11" r="7" /><path d="m20 20-3.5-3.5" /></svg>;
+  if (name === 'refresh') return <svg {...common}><path d="M20 11a8.1 8.1 0 0 0-15.5-2M4 5v4h4" /><path d="M4 13a8.1 8.1 0 0 0 15.5 2M20 19v-4h-4" /></svg>;
+  return <svg {...common}><path d="m6 9 6 6 6-6" /></svg>;
+};
+
+const getPageItems = (currentPage: number, totalPages: number) => {
+  const pages = new Set<number>([1, totalPages, currentPage - 1, currentPage, currentPage + 1]);
+  return Array.from(pages)
+    .filter((page) => page >= 1 && page <= totalPages)
+    .sort((left, right) => left - right)
+    .reduce<Array<number | string>>((result, page, index, list) => {
+      if (index > 0 && page - list[index - 1] > 1) result.push(`ellipsis-${page}`);
+      result.push(page);
+      return result;
+    }, []);
+};
 
 export default function GlobalUsersPage() {
   const router = useRouter();
@@ -166,14 +188,6 @@ export default function GlobalUsersPage() {
     refetchOnWindowFocus: false,
   });
 
-  const { data: summary, isLoading: isSummaryLoading } = useQuery({
-    queryKey: ['admin-users-summary'],
-    queryFn: getAdminUsersSummary,
-    enabled: isSuperAdmin,
-    staleTime: 30_000,
-    refetchOnWindowFocus: false,
-  });
-
   const { data: schools } = useQuery({
     queryKey: ['admin-user-schools'],
     queryFn: () => listSchools({ limit: 100 }),
@@ -227,7 +241,6 @@ export default function GlobalUsersPage() {
     },
     onSuccess: (_result, variables) => {
       queryClient.invalidateQueries({ queryKey: ['admin-users'] });
-      queryClient.invalidateQueries({ queryKey: ['admin-users-summary'] });
       queryClient.invalidateQueries({ queryKey: ['admin-user-detail', variables.user.id] });
       queryClient.invalidateQueries({ queryKey: ['admin-user-activity', variables.user.id] });
       queryClient.invalidateQueries({ queryKey: ['admin-user-sessions', variables.user.id] });
@@ -330,172 +343,235 @@ export default function GlobalUsersPage() {
   const rows = users?.items ?? [];
   const pagination = users?.pagination;
   const totalPages = pagination?.totalPages ?? 1;
-  const busy = isUsersLoading || isSummaryLoading || actionMutation.isPending;
+  const busy = actionMutation.isPending;
+  const totalItems = pagination?.total ?? 0;
+  const firstItem = totalItems === 0 ? 0 : (filters.page - 1) * filters.limit + 1;
+  const lastItem = Math.min(filters.page * filters.limit, totalItems);
+  const pageItems = getPageItems(filters.page, totalPages);
+
+  const userTableRows = rows.map((user) => ({
+    name: user.name || user.email,
+    email: user.email,
+    role: formatLabel(user.role),
+    school: user.schoolName ?? 'Platform',
+    status: `${formatLabel(user.status)}${user.isLocked ? ' (Locked)' : ''}`,
+    mfa: user.mfaEnabled ? formatLabel(user.mfaMethod ?? 'Enabled') : 'Disabled',
+    created: formatDateTime(user.createdAt),
+  }));
+
+  const toCsv = (items: typeof userTableRows) => {
+    const headers = ['Name', 'Email', 'Role', 'School', 'Status', 'MFA', 'Created'];
+    const escapeCell = (value: string) => `"${value.replace(/"/g, '""')}"`;
+    return [headers, ...items.map((item) => [item.name, item.email, item.role, item.school, item.status, item.mfa, item.created])]
+      .map((line) => line.map(escapeCell).join(','))
+      .join('\n');
+  };
+
+  const copyVisibleUsers = async () => {
+    try {
+      await navigator.clipboard.writeText(toCsv(userTableRows));
+      notify.success('Copied', 'Visible users copied to clipboard.');
+    } catch {
+      notify.error('Copy failed', 'Unable to copy visible users.');
+    }
+  };
+
+  const exportVisibleUsers = () => {
+    const blob = new Blob([toCsv(userTableRows)], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `global-users-page-${filters.page}.csv`;
+    link.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const printVisibleUsers = () => {
+    const printWindow = window.open('', '_blank', 'width=1100,height=720');
+    if (!printWindow) {
+      notify.error('Print blocked', 'Allow popups to print the users table.');
+      return;
+    }
+    const escapeHtml = (value: string) =>
+      value
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#039;');
+    const rowsHtml = userTableRows
+      .map(
+        (user) => `
+          <tr>
+            <td>${escapeHtml(user.name)}</td>
+            <td>${escapeHtml(user.email)}</td>
+            <td>${escapeHtml(user.role)}</td>
+            <td>${escapeHtml(user.school)}</td>
+            <td>${escapeHtml(user.status)}</td>
+            <td>${escapeHtml(user.mfa)}</td>
+            <td>${escapeHtml(user.created)}</td>
+          </tr>
+        `,
+      )
+      .join('');
+    printWindow.document.write(`
+      <html>
+        <head>
+          <title>Global Users</title>
+          <style>
+            body { font-family: Arial, sans-serif; color: #111827; padding: 24px; }
+            h1 { font-size: 20px; margin: 0 0 16px; }
+            table { width: 100%; border-collapse: collapse; font-size: 12px; }
+            th, td { border: 1px solid #d1d5db; padding: 8px; text-align: left; }
+            th { background: #f3f4f6; }
+          </style>
+        </head>
+        <body>
+          <h1>Global Users</h1>
+          <table>
+            <thead><tr><th>Name</th><th>Email</th><th>Role</th><th>School</th><th>Status</th><th>MFA</th><th>Created</th></tr></thead>
+            <tbody>${rowsHtml}</tbody>
+          </table>
+        </body>
+      </html>
+    `);
+    printWindow.document.close();
+    printWindow.focus();
+    printWindow.print();
+  };
 
   return (
-    <div className="space-y-6 pb-12">
+    <div className="space-y-4 pb-8">
       {busy ? <FullPageLoader label="Loading users..." /> : null}
-      <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-        <PageHeader
-          title="Users"
-          subtitle="Manage platform users, school admins, staff, parents, and account security status."
-        />
-        <div className="flex shrink-0 gap-2">
+
+      <header className="rounded-lg border border-[var(--shell-border)] bg-[var(--shell-card)] px-4 py-3 shadow-sm">
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+          <div className="min-w-0">
+            <h1 className="text-2xl font-bold tracking-tight text-[var(--shell-text)]">Users</h1>
+            <p className="mt-0.5 text-sm text-[var(--shell-muted)]">Manage global users and account access from one list.</p>
+          </div>
+          <div className="text-sm font-semibold text-[var(--shell-muted)]">
+            Dashboard <span className="px-1 text-[var(--shell-muted)]">/</span> <span className="text-[var(--shell-text)]">Users</span>
+          </div>
+        </div>
+      </header>
+
+      <section className="rounded-lg border border-[var(--shell-border)] bg-[var(--shell-card)] p-4 shadow-sm">
+        <div className="flex flex-col gap-3 xl:flex-row xl:items-end">
+          <div className="shrink-0 xl:w-40">
+            <h2 className="text-lg font-semibold text-[var(--shell-text)]">Select Criteria</h2>
+          </div>
+          <div className="grid flex-1 gap-3 md:grid-cols-2 xl:grid-cols-4">
+            <label>
+              <span className="text-xs font-semibold text-[var(--shell-text)]">Role</span>
+              <select
+                value={filters.role}
+                onChange={(event) => setFilter('role', event.target.value)}
+                className="mt-1 h-9 w-full rounded-md border border-[var(--shell-border)] bg-[var(--shell-card)] px-3 text-sm text-[var(--shell-text)] outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+              >
+                <option value="">All roles</option>
+                {roleOptions.map((role) => (
+                  <option key={role} value={role}>
+                    {formatLabel(role)}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label>
+              <span className="text-xs font-semibold text-[var(--shell-text)]">Status</span>
+              <select
+                value={filters.status}
+                onChange={(event) => setFilter('status', event.target.value)}
+                className="mt-1 h-9 w-full rounded-md border border-[var(--shell-border)] bg-[var(--shell-card)] px-3 text-sm text-[var(--shell-text)] outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+              >
+                <option value="">All statuses</option>
+                {statusOptions.map((status) => (
+                  <option key={status} value={status}>
+                    {formatLabel(status)}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label>
+              <span className="text-xs font-semibold text-[var(--shell-text)]">School</span>
+              <select
+                value={filters.schoolId}
+                onChange={(event) => setFilter('schoolId', event.target.value)}
+                className="mt-1 h-9 w-full rounded-md border border-[var(--shell-border)] bg-[var(--shell-card)] px-3 text-sm text-[var(--shell-text)] outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+              >
+                <option value="">All schools</option>
+                {(schools?.items ?? []).map((school) => (
+                  <option key={school.id} value={school.id}>
+                    {school.name} ({school.code})
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label>
+              <span className="text-xs font-semibold text-[var(--shell-text)]">Locked</span>
+              <select
+                value={filters.locked}
+                onChange={(event) => setFilter('locked', event.target.value)}
+                className="mt-1 h-9 w-full rounded-md border border-[var(--shell-border)] bg-[var(--shell-card)] px-3 text-sm text-[var(--shell-text)] outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+              >
+                <option value="">Any</option>
+                <option value="true">Locked</option>
+                <option value="false">Not locked</option>
+              </select>
+            </label>
+          </div>
           <button
             type="button"
             onClick={() => refetch()}
-            className="rounded-xl border border-[var(--shell-border)] bg-[var(--shell-card)] px-4 py-2 text-sm font-semibold text-[var(--shell-text)] shadow-sm hover:bg-[var(--shell-hover)]"
+            className="inline-flex h-9 shrink-0 items-center justify-center gap-2 rounded-md bg-blue-600 px-4 text-sm font-semibold text-white shadow-sm hover:bg-blue-700"
           >
-            Refresh
+            <TableIcon name="search" />
+            Search
           </button>
         </div>
-      </div>
-
-      <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        <StatCard label="Total Users" value={summary?.total ?? 0} helper="All platform accounts" />
-        <StatCard label="School Admins" value={summary?.schoolAdmins ?? 0} helper="Tenant admin users" />
-        <StatCard label="Teachers" value={summary?.teachers ?? 0} helper="Employee accounts" />
-        <StatCard label="Locked Users" value={summary?.lockedUsers ?? 0} helper="Mapped to suspended status" />
-        <StatCard label="Super Admins" value={summary?.superAdmins ?? 0} helper="Platform administrators" />
-        <StatCard label="Parents" value={summary?.parents ?? 0} helper="Parent portal accounts" />
-        <StatCard label="Students" value={summary?.students ?? 0} helper="No student role in current schema" />
-        <StatCard label="MFA Admins" value={summary?.mfaEnabledAdmins ?? 0} helper="Admin accounts with MFA enabled" />
       </section>
 
-      <section className="rounded-2xl border border-[var(--shell-border)] bg-[var(--shell-card)] p-5 shadow-sm">
-        <div className="grid gap-3 lg:grid-cols-6">
-          <label className="lg:col-span-2">
-            <span className="text-xs font-semibold uppercase tracking-[0.14em] text-[var(--shell-muted)]">Search</span>
-            <input
-              value={filters.search}
-              onChange={(event) => setFilter('search', event.target.value)}
-              placeholder="Name, email, phone, school"
-              className="mt-1 w-full rounded-xl border border-[var(--shell-border)] bg-[var(--shell-subtle)] px-3 py-2 text-sm text-[var(--shell-text)] outline-none focus:ring-2 focus:ring-blue-500"
-            />
-          </label>
-          <label>
-            <span className="text-xs font-semibold uppercase tracking-[0.14em] text-[var(--shell-muted)]">Role</span>
-            <select
-              value={filters.role}
-              onChange={(event) => setFilter('role', event.target.value)}
-              className="mt-1 w-full rounded-xl border border-[var(--shell-border)] bg-[var(--shell-subtle)] px-3 py-2 text-sm text-[var(--shell-text)] outline-none focus:ring-2 focus:ring-blue-500"
-            >
-              <option value="">All roles</option>
-              {roleOptions.map((role) => (
-                <option key={role} value={role}>
-                  {formatLabel(role)}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label>
-            <span className="text-xs font-semibold uppercase tracking-[0.14em] text-[var(--shell-muted)]">Status</span>
-            <select
-              value={filters.status}
-              onChange={(event) => setFilter('status', event.target.value)}
-              className="mt-1 w-full rounded-xl border border-[var(--shell-border)] bg-[var(--shell-subtle)] px-3 py-2 text-sm text-[var(--shell-text)] outline-none focus:ring-2 focus:ring-blue-500"
-            >
-              <option value="">All statuses</option>
-              {statusOptions.map((status) => (
-                <option key={status} value={status}>
-                  {formatLabel(status)}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label>
-            <span className="text-xs font-semibold uppercase tracking-[0.14em] text-[var(--shell-muted)]">MFA</span>
-            <select
-              value={filters.mfaEnabled}
-              onChange={(event) => setFilter('mfaEnabled', event.target.value)}
-              className="mt-1 w-full rounded-xl border border-[var(--shell-border)] bg-[var(--shell-subtle)] px-3 py-2 text-sm text-[var(--shell-text)] outline-none focus:ring-2 focus:ring-blue-500"
-            >
-              <option value="">Any</option>
-              <option value="true">Enabled</option>
-              <option value="false">Disabled</option>
-            </select>
-          </label>
-          <label>
-            <span className="text-xs font-semibold uppercase tracking-[0.14em] text-[var(--shell-muted)]">Locked</span>
-            <select
-              value={filters.locked}
-              onChange={(event) => setFilter('locked', event.target.value)}
-              className="mt-1 w-full rounded-xl border border-[var(--shell-border)] bg-[var(--shell-subtle)] px-3 py-2 text-sm text-[var(--shell-text)] outline-none focus:ring-2 focus:ring-blue-500"
-            >
-              <option value="">Any</option>
-              <option value="true">Locked</option>
-              <option value="false">Not locked</option>
-            </select>
-          </label>
+      <section className="overflow-hidden rounded-lg border border-[var(--shell-border)] bg-[var(--shell-card)] shadow-sm">
+        <div className="border-b border-[var(--shell-border)] px-5 py-4">
+          <h2 className="text-lg font-semibold text-[var(--shell-text)]">Global Users</h2>
         </div>
 
-        <div className="mt-3 grid gap-3 lg:grid-cols-4">
-          <label className="lg:col-span-2">
-            <span className="text-xs font-semibold uppercase tracking-[0.14em] text-[var(--shell-muted)]">School</span>
-            <select
-              value={filters.schoolId}
-              onChange={(event) => setFilter('schoolId', event.target.value)}
-              className="mt-1 w-full rounded-xl border border-[var(--shell-border)] bg-[var(--shell-subtle)] px-3 py-2 text-sm text-[var(--shell-text)] outline-none focus:ring-2 focus:ring-blue-500"
-            >
-              <option value="">All schools</option>
-              {(schools?.items ?? []).map((school) => (
-                <option key={school.id} value={school.id}>
-                  {school.name} ({school.code})
-                </option>
-              ))}
-            </select>
-          </label>
-          <label>
-            <span className="text-xs font-semibold uppercase tracking-[0.14em] text-[var(--shell-muted)]">Sort</span>
-            <select
-              value={filters.sortBy}
-              onChange={(event) => setFilter('sortBy', event.target.value)}
-              className="mt-1 w-full rounded-xl border border-[var(--shell-border)] bg-[var(--shell-subtle)] px-3 py-2 text-sm text-[var(--shell-text)] outline-none focus:ring-2 focus:ring-blue-500"
-            >
-              <option value="createdAt">Created date</option>
-              <option value="email">Email</option>
-              <option value="status">Status</option>
-              <option value="name">Name</option>
-              <option value="role">Role</option>
-              <option value="schoolName">School</option>
-            </select>
-          </label>
-          <label>
-            <span className="text-xs font-semibold uppercase tracking-[0.14em] text-[var(--shell-muted)]">Order</span>
-            <select
-              value={filters.sortOrder}
-              onChange={(event) => setFilter('sortOrder', event.target.value as 'asc' | 'desc')}
-              className="mt-1 w-full rounded-xl border border-[var(--shell-border)] bg-[var(--shell-subtle)] px-3 py-2 text-sm text-[var(--shell-text)] outline-none focus:ring-2 focus:ring-blue-500"
-            >
-              <option value="desc">Newest first</option>
-              <option value="asc">Oldest first</option>
-            </select>
-          </label>
-        </div>
-      </section>
-
-      <section className="overflow-hidden rounded-2xl border border-[var(--shell-border)] bg-[var(--shell-card)] shadow-sm">
-        <div className="flex flex-col gap-3 border-b border-[var(--shell-border)] px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
-          <div>
-            <h2 className="text-lg font-semibold text-[var(--shell-text)]">Global Users</h2>
-            <p className="text-sm text-[var(--shell-muted)]">
-              {pagination ? `${pagination.total} users found` : 'Search and manage platform accounts'}
-            </p>
+        <div className="flex flex-col gap-4 px-5 py-4 lg:flex-row lg:items-center lg:justify-between">
+          <input
+            value={filters.search}
+            onChange={(event) => setFilter('search', event.target.value)}
+            placeholder="Search"
+            className="h-10 w-full rounded-md border border-[var(--shell-border)] bg-[var(--shell-card)] px-3 text-sm text-[var(--shell-text)] outline-none placeholder:text-[var(--shell-muted)] focus:border-blue-500 focus:ring-2 focus:ring-blue-100 sm:max-w-xs"
+          />
+          <div className="flex flex-wrap items-center gap-2 lg:justify-end">
+            <label className="relative">
+              <select
+                value={filters.limit}
+                onChange={(event) => setFilter('limit', Number(event.target.value))}
+                className="h-10 appearance-none rounded-md border border-[var(--shell-border)] bg-[var(--shell-card)] pl-3 pr-8 text-sm font-medium text-[var(--shell-text)] outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+                aria-label="Rows per page"
+              >
+                {pageSizes.map((size) => (
+                  <option key={size} value={size}>
+                    {size}
+                  </option>
+                ))}
+              </select>
+              <TableIcon name="chevron" className="pointer-events-none absolute right-2 top-3 h-4 w-4 text-[var(--shell-muted)]" />
+            </label>
+            <button type="button" onClick={copyVisibleUsers} className="grid h-10 w-10 place-items-center rounded-md border border-[var(--shell-border)] text-[var(--shell-muted)] hover:bg-[var(--shell-hover)] hover:text-[var(--shell-text)]" title="Copy visible users">
+              <TableIcon name="copy" />
+            </button>
+            <button type="button" onClick={exportVisibleUsers} className="grid h-10 w-10 place-items-center rounded-md border border-[var(--shell-border)] text-[var(--shell-muted)] hover:bg-[var(--shell-hover)] hover:text-[var(--shell-text)]" title="Export CSV">
+              <TableIcon name="file" />
+            </button>
+            <button type="button" onClick={printVisibleUsers} className="grid h-10 w-10 place-items-center rounded-md border border-[var(--shell-border)] text-[var(--shell-muted)] hover:bg-[var(--shell-hover)] hover:text-[var(--shell-text)]" title="Print">
+              <TableIcon name="print" />
+            </button>
+            <button type="button" onClick={() => refetch()} className="grid h-10 w-10 place-items-center rounded-md border border-[var(--shell-border)] text-[var(--shell-muted)] hover:bg-[var(--shell-hover)] hover:text-[var(--shell-text)]" title="Refresh">
+              <TableIcon name="refresh" />
+            </button>
           </div>
-          <label className="flex items-center gap-2 text-sm text-[var(--shell-muted)]">
-            Rows
-            <select
-              value={filters.limit}
-              onChange={(event) => setFilter('limit', Number(event.target.value))}
-              className="rounded-lg border border-[var(--shell-border)] bg-[var(--shell-subtle)] px-2 py-1 text-sm text-[var(--shell-text)]"
-            >
-              {pageSizes.map((size) => (
-                <option key={size} value={size}>
-                  {size}
-                </option>
-              ))}
-            </select>
-          </label>
         </div>
 
         {isUsersLoading ? (
@@ -515,48 +591,49 @@ export default function GlobalUsersPage() {
           <div className="p-10 text-center text-sm text-[var(--shell-muted)]">No users found.</div>
         ) : (
           <div className="overflow-x-auto">
-            <table className="min-w-full divide-y divide-[var(--shell-border)] text-sm">
-              <thead className="bg-[var(--shell-subtle)] text-left text-xs font-semibold uppercase tracking-[0.14em] text-[var(--shell-muted)]">
+            <table className="min-w-full border-y border-[var(--shell-border)] text-sm">
+              <thead className="bg-[var(--shell-subtle)] text-left text-sm font-semibold text-[var(--shell-text)]">
                 <tr>
-                  <th className="px-5 py-3">User</th>
-                  <th className="px-5 py-3">Role</th>
-                  <th className="px-5 py-3">School</th>
-                  <th className="px-5 py-3">Status</th>
-                  <th className="px-5 py-3">MFA</th>
-                  <th className="px-5 py-3">Created</th>
-                  <th className="px-5 py-3 text-right">Actions</th>
+                  <th className="whitespace-nowrap border-b border-[var(--shell-border)] px-4 py-3">User Name</th>
+                  <th className="whitespace-nowrap border-b border-[var(--shell-border)] px-4 py-3">Email</th>
+                  <th className="whitespace-nowrap border-b border-[var(--shell-border)] px-4 py-3">Role</th>
+                  <th className="whitespace-nowrap border-b border-[var(--shell-border)] px-4 py-3">School</th>
+                  <th className="whitespace-nowrap border-b border-[var(--shell-border)] px-4 py-3">Status</th>
+                  <th className="whitespace-nowrap border-b border-[var(--shell-border)] px-4 py-3">MFA</th>
+                  <th className="whitespace-nowrap border-b border-[var(--shell-border)] px-4 py-3">Created</th>
+                  <th className="whitespace-nowrap border-b border-[var(--shell-border)] px-4 py-3 text-right">Action</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-[var(--shell-border)]">
+              <tbody>
                 {rows.map((user) => (
-                  <tr key={user.id} className="hover:bg-[var(--shell-hover)]">
-                    <td className="px-5 py-4">
-                      <div className="font-semibold text-[var(--shell-text)]">{user.name || user.email}</div>
-                      <div className="text-xs text-[var(--shell-muted)]">{user.email}</div>
+                  <tr key={user.id} className="border-b border-[var(--shell-border)] hover:bg-[var(--shell-hover)]">
+                    <td className="whitespace-nowrap px-4 py-3">
+                      <div className="font-medium text-[var(--shell-text)]">{user.name || user.email}</div>
                       {user.phone ? <div className="text-xs text-[var(--shell-muted)]">{user.phone}</div> : null}
                     </td>
-                    <td className="px-5 py-4">
+                    <td className="whitespace-nowrap px-4 py-3 text-[var(--shell-muted)]">{user.email}</td>
+                    <td className="whitespace-nowrap px-4 py-3">
                       <Badge className={roleBadgeClass(user.role)}>{formatLabel(user.role)}</Badge>
                     </td>
-                    <td className="px-5 py-4 text-[var(--shell-muted)]">{user.schoolName ?? 'Platform'}</td>
-                    <td className="px-5 py-4">
+                    <td className="whitespace-nowrap px-4 py-3 text-[var(--shell-muted)]">{user.schoolName ?? 'Platform'}</td>
+                    <td className="whitespace-nowrap px-4 py-3">
                       <div className="flex flex-col gap-1">
                         <Badge className={statusBadgeClass(user.status)}>{formatLabel(user.status)}</Badge>
                         {user.isLocked ? <span className="text-xs font-semibold text-rose-600">Locked</span> : null}
                       </div>
                     </td>
-                    <td className="px-5 py-4">
+                    <td className="whitespace-nowrap px-4 py-3">
                       <Badge className={user.mfaEnabled ? 'bg-emerald-50 text-emerald-700 ring-emerald-200' : 'bg-slate-100 text-slate-600 ring-slate-200'}>
                         {user.mfaEnabled ? formatLabel(user.mfaMethod ?? 'Enabled') : 'Disabled'}
                       </Badge>
                     </td>
-                    <td className="px-5 py-4 text-[var(--shell-muted)]">{formatDateTime(user.createdAt)}</td>
-                    <td className="px-5 py-4">
-                      <div className="flex flex-wrap justify-end gap-2">
+                    <td className="whitespace-nowrap px-4 py-3 text-[var(--shell-muted)]">{formatDateTime(user.createdAt)}</td>
+                    <td className="px-4 py-3">
+                      <div className="flex flex-nowrap justify-end gap-2">
                         <button
                           type="button"
                           onClick={() => setSelectedUserId(user.id)}
-                          className="rounded-lg border border-[var(--shell-border)] px-3 py-1.5 text-xs font-semibold text-[var(--shell-text)] hover:bg-[var(--shell-hover)]"
+                          className="rounded-md bg-blue-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-blue-700"
                         >
                           View
                         </button>
@@ -565,14 +642,14 @@ export default function GlobalUsersPage() {
                             <button
                               type="button"
                               onClick={() => runAction(user, 'deactivate')}
-                              className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-1.5 text-xs font-semibold text-amber-700"
+                              className="rounded-md border border-amber-200 bg-amber-50 px-3 py-1.5 text-xs font-semibold text-amber-700"
                             >
                               Deactivate
                             </button>
                             <button
                               type="button"
                               onClick={() => runAction(user, 'lock')}
-                              className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-1.5 text-xs font-semibold text-rose-700"
+                              className="rounded-md border border-rose-200 bg-rose-50 px-3 py-1.5 text-xs font-semibold text-rose-700"
                             >
                               Lock
                             </button>
@@ -581,7 +658,7 @@ export default function GlobalUsersPage() {
                           <button
                             type="button"
                             onClick={() => runAction(user, user.status === 'SUSPENDED' ? 'unlock' : 'activate')}
-                            className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-1.5 text-xs font-semibold text-emerald-700"
+                            className="rounded-md border border-emerald-200 bg-emerald-50 px-3 py-1.5 text-xs font-semibold text-emerald-700"
                           >
                             {user.status === 'SUSPENDED' ? 'Unlock' : 'Activate'}
                           </button>
@@ -595,24 +672,44 @@ export default function GlobalUsersPage() {
           </div>
         )}
 
-        <div className="flex flex-col gap-3 border-t border-[var(--shell-border)] px-5 py-4 text-sm text-[var(--shell-muted)] sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex flex-col gap-3 px-5 py-4 text-sm text-[var(--shell-muted)] lg:flex-row lg:items-center lg:justify-between">
           <span>
-            Page {filters.page} of {totalPages}
+            Showing {firstItem} to {lastItem} of {totalItems} entries
           </span>
-          <div className="flex gap-2">
+          <div className="flex flex-wrap items-center gap-1">
             <button
               type="button"
               disabled={filters.page <= 1}
               onClick={() => setFilter('page', Math.max(1, filters.page - 1))}
-              className="rounded-lg border border-[var(--shell-border)] px-3 py-1.5 font-semibold disabled:opacity-40"
+              className="rounded-md border border-[var(--shell-border)] px-3 py-1.5 font-semibold text-[var(--shell-text)] disabled:opacity-40"
             >
               Previous
             </button>
+            {pageItems.map((item) =>
+              typeof item === 'number' ? (
+                <button
+                  key={item}
+                  type="button"
+                  onClick={() => setFilter('page', item)}
+                  className={`min-w-9 rounded-md border px-3 py-1.5 font-semibold ${
+                    item === filters.page
+                      ? 'border-blue-600 bg-blue-600 text-white'
+                      : 'border-[var(--shell-border)] text-[var(--shell-text)] hover:bg-[var(--shell-hover)]'
+                  }`}
+                >
+                  {item}
+                </button>
+              ) : (
+                <span key={item} className="px-2">
+                  ...
+                </span>
+              ),
+            )}
             <button
               type="button"
               disabled={filters.page >= totalPages}
               onClick={() => setFilter('page', filters.page + 1)}
-              className="rounded-lg border border-[var(--shell-border)] px-3 py-1.5 font-semibold disabled:opacity-40"
+              className="rounded-md border border-[var(--shell-border)] px-3 py-1.5 font-semibold text-[var(--shell-text)] disabled:opacity-40"
             >
               Next
             </button>

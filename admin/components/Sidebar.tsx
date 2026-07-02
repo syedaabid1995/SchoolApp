@@ -157,6 +157,8 @@ const iconForItem = (item: NavItem): IconName => {
   if (key.includes('report')) return 'file';
   if (key.includes('school')) return 'building';
   if (key.includes('user') || key.includes('teacher') || key.includes('parent') || key.includes('student')) return 'users';
+  if (key.includes('billing')) return 'card';
+  if (key.includes('catalog')) return 'clipboard';
   if (key.includes('subscription') || key.includes('plan')) return 'card';
   if (key.includes('support')) return 'support';
   if (key.includes('audit') || key.includes('log')) return 'shield';
@@ -216,7 +218,9 @@ const platformSections: NavSection[] = [
     id: 'platform-subscriptions',
     label: 'Subscriptions',
     items: [
-      { href: '/dashboard/subscriptions', label: 'Subscriptions & Billing', icon: 'SB' },
+      { href: '/dashboard/subscriptions', label: 'Subscriptions', icon: 'SB' },
+      { href: '/dashboard/billing', label: 'Billing', icon: 'BL' },
+      { href: '/dashboard/catalog', label: 'Catalog', icon: 'CT' },
     ],
   },
   {
@@ -502,9 +506,9 @@ export const Sidebar = ({
         key={item.href}
         href={item.href}
         prefetch={false}
-        className={`group relative flex min-h-9 items-center gap-2 rounded-lg px-2.5 py-2 text-sm font-semibold transition-all duration-200 ${
+        className={`group relative flex min-h-9 items-center gap-2 rounded-md px-2.5 py-2 text-sm font-medium transition-colors ${
           active
-            ? 'bg-[var(--shell-sidebar-active)] text-[var(--shell-sidebar-active-text)] shadow-sm'
+            ? 'bg-[var(--shell-sidebar-active)] text-[var(--shell-sidebar-active-text)]'
             : 'text-[var(--shell-sidebar-muted)] hover:bg-[var(--shell-sidebar-hover)] hover:text-[var(--shell-sidebar-text)]'
         }`}
         onClick={onClose}
@@ -540,20 +544,20 @@ export const Sidebar = ({
       ) : null}
 
       <aside
-        className={`fixed left-0 top-0 z-50 flex h-screen w-[18.5rem] shrink-0 transform flex-col border-r border-[var(--shell-sidebar-border)] bg-[var(--shell-sidebar)] px-3 py-3 text-[var(--shell-sidebar-text)] shadow-2xl shadow-slate-950/10 transition-transform duration-300 ease-in-out lg:static lg:translate-x-0 ${
+        className={`fixed left-0 top-0 z-50 flex h-screen w-[18rem] shrink-0 transform flex-col border-r border-[var(--shell-sidebar-border)] bg-[var(--shell-sidebar)] px-3 py-3 text-[var(--shell-sidebar-text)] shadow-xl shadow-slate-950/10 transition-transform duration-300 ease-in-out lg:static lg:translate-x-0 lg:shadow-none ${
           isOpen ? 'translate-x-0' : '-translate-x-full'
         }`}
       >
-        <div className="mb-3 flex shrink-0 items-center gap-3 rounded-xl border border-[var(--shell-sidebar-border)] bg-[var(--shell-sidebar-card)] p-3">
+        <div className="mb-3 flex shrink-0 items-center gap-3 rounded-lg border border-[var(--shell-sidebar-border)] bg-[var(--shell-sidebar-card)] p-3">
           {logoUrl ? (
             // eslint-disable-next-line @next/next/no-img-element
-            <img src={logoUrl} alt="School logo" className="h-10 w-10 rounded-lg object-cover" />
+            <img src={logoUrl} alt="School logo" className="h-10 w-10 rounded-md object-cover" />
           ) : (
             // eslint-disable-next-line @next/next/no-img-element
-            <img src="/icon.png" alt="SchoolApp" className="h-10 w-10 rounded-lg object-cover" />
+            <img src="/icon.png" alt="SchoolApp" className="h-10 w-10 rounded-md object-cover" />
           )}
           <div className="min-w-0 flex-1">
-            <p className="truncate text-sm font-bold">{isPlatform ? platformName : schoolName || 'School Console'}</p>
+            <p className="truncate text-sm font-semibold">{isPlatform ? platformName : schoolName || 'School Console'}</p>
             <p className="text-xs text-[var(--shell-sidebar-muted)]">
               {isPlatform ? platformSubtitle : 'School Workspace'}
             </p>
@@ -575,7 +579,7 @@ export const Sidebar = ({
             return (
               <div
                 key={section.id}
-                className={`rounded-xl border transition-colors ${
+                className={`rounded-lg border transition-colors ${
                   activeSection
                     ? 'border-[var(--shell-sidebar-border)] bg-[var(--shell-sidebar-card)]'
                     : 'border-transparent'
@@ -584,7 +588,7 @@ export const Sidebar = ({
                 <button
                   type="button"
                   onClick={() => toggleSection(section.id)}
-                  className={`flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-xs font-bold transition-colors ${
+                  className={`flex w-full items-center gap-2 rounded-md px-2.5 py-2 text-xs font-semibold transition-colors ${
                     activeSection
                       ? 'text-[var(--shell-sidebar-text)]'
                       : 'text-[var(--shell-sidebar-muted)] hover:bg-[var(--shell-sidebar-hover)] hover:text-[var(--shell-sidebar-text)]'
@@ -601,7 +605,7 @@ export const Sidebar = ({
                     <Icon name={iconForSection(section.label)} className="h-4 w-4" />
                   </span>
                   <span className="min-w-0 flex-1 truncate text-left">{section.label}</span>
-                  <span className="rounded-full border border-[var(--shell-sidebar-border)] px-2 py-0.5 text-[10px] text-[var(--shell-sidebar-muted)]">
+                  <span className="rounded-md border border-[var(--shell-sidebar-border)] px-2 py-0.5 text-[10px] font-medium text-[var(--shell-sidebar-muted)]">
                     {section.items.length}
                   </span>
                   <span className={`transition-transform ${isOpenSection ? 'rotate-90' : ''}`}>

@@ -58,7 +58,12 @@ export function middleware(req: NextRequest) {
     }
 
     if (
-      (pathname.startsWith('/dashboard/schools') || pathname.startsWith('/dashboard/subscriptions')) &&
+      (
+        pathname.startsWith('/dashboard/schools') ||
+        pathname.startsWith('/dashboard/subscriptions') ||
+        pathname.startsWith('/dashboard/billing') ||
+        pathname.startsWith('/dashboard/catalog')
+      ) &&
       !isSuperAdmin(role)
     ) {
       return NextResponse.redirect(new URL('/dashboard', req.url));

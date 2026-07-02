@@ -94,6 +94,14 @@ body {
   background: var(--shell-subtle);
 }
 
+.dashboard-shell ::-webkit-scrollbar-thumb {
+  background: color-mix(in srgb, var(--shell-muted) 35%, transparent);
+}
+
+.dashboard-shell ::-webkit-scrollbar-thumb:hover {
+  background: color-mix(in srgb, var(--shell-muted) 55%, transparent);
+}
+
 .super-admin-console {
   --sa-border: var(--shell-border);
   --sa-card: var(--shell-card);

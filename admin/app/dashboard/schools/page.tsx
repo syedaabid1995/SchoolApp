@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState, type ReactNode } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
@@ -16,44 +16,12 @@ import {
 import { listSubscriptionPlans, upsertSubscription } from '../../../services/subscription.service';
 import { useNotify } from '../../../components/NotificationProvider';
 import FullPageLoader from '../../../components/FullPageLoader';
-import PageHeader from '../../../components/PageHeader';
 import Button from '../../../components/Button';
 
 type ToolbarAction = 'refresh' | 'export' | 'print' | 'pdf' | null;
 type MoreAction = 'export-page' | 'export-all';
 
 const pageSizes = [10, 20, 50, 100];
-
-function ToolbarButton({
-  label,
-  icon,
-  onClick,
-  loading = false,
-}: {
-  label: string;
-  icon: ReactNode;
-  onClick: () => void;
-  loading?: boolean;
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      disabled={loading}
-      className="inline-flex items-center gap-2 rounded-xl border border-gray-300 bg-white px-3 py-2 text-xs font-semibold text-gray-700 shadow-sm transition hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-60"
-    >
-      {loading ? (
-        <svg className="h-4 w-4 animate-spin" fill="none" viewBox="0 0 24 24">
-          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-          <path className="opacity-75" fill="currentColor" d="m4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
-        </svg>
-      ) : (
-        icon
-      )}
-      {label}
-    </button>
-  );
-}
 
 export default function SchoolsPage() {
   const queryClient = useQueryClient();
@@ -442,27 +410,37 @@ export default function SchoolsPage() {
   };
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4 pb-8">
       {isBusy ? <FullPageLoader label={loaderLabel} /> : null}
-      <div className="mx-auto max-w-[1500px] space-y-6 pb-12">
-        <PageHeader title="Schools" subtitle="Manage tenant lifecycle, status, and subscription visibility." />
+      <div className="mx-auto max-w-[1500px] space-y-4">
+        <header className="rounded-lg border border-[var(--shell-border)] bg-[var(--shell-card)] px-4 py-3 shadow-sm">
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+            <div className="min-w-0">
+              <h1 className="text-2xl font-bold tracking-tight text-[var(--shell-text)]">Schools</h1>
+              <p className="mt-0.5 text-sm text-[var(--shell-muted)]">Manage tenant lifecycle, status, and subscription visibility.</p>
+            </div>
+            <div className="text-sm font-semibold text-[var(--shell-muted)]">
+              Dashboard <span className="px-1">/</span> <span className="text-[var(--shell-text)]">Schools</span>
+            </div>
+          </div>
+        </header>
 
 
         {/* School Directory */}
-        <section className="rounded-2xl bg-white p-6 shadow-lg ring-1 ring-gray-200">
-          <div className="flex flex-wrap items-center justify-between gap-4 mb-6">
+        <section className="overflow-hidden rounded-lg border border-[var(--shell-border)] bg-[var(--shell-card)] shadow-sm">
+          <div className="flex flex-col gap-3 border-b border-[var(--shell-border)] px-4 py-3 lg:flex-row lg:items-center lg:justify-between">
             <div className="flex items-center gap-3">
-              <div className="rounded-full bg-gradient-to-br from-blue-100 to-purple-100 p-3">
+              <div className="hidden rounded-full bg-gradient-to-br from-blue-100 to-purple-100 p-3">
                 <svg className="h-6 w-6 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
                 </svg>
               </div>
               <div>
-                <h2 className="text-xl font-bold text-gray-900">School Directory</h2>
+                <h2 className="text-lg font-semibold text-[var(--shell-text)]">School Directory</h2>
                 <p className="text-sm text-gray-500">{rows.length} schools registered</p>
               </div>
             </div>
-            <div className="flex flex-wrap items-center gap-3">
+            <div className="flex flex-wrap items-center gap-2">
               <Button
                 variant="primary"
                 size="sm"
@@ -480,9 +458,9 @@ export default function SchoolsPage() {
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
                 placeholder="Search schools..."
-                className="rounded-xl border border-gray-300 px-4 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-200"
+                className="h-9 rounded-md border border-[var(--shell-border)] bg-[var(--shell-card)] px-3 text-sm text-[var(--shell-text)] outline-none placeholder:text-[var(--shell-muted)] focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
               />
-              <label className="inline-flex items-center gap-2 rounded-lg border border-gray-300 px-3 py-2 text-xs font-semibold text-gray-600">
+              <label className="inline-flex h-9 items-center gap-2 rounded-md border border-[var(--shell-border)] px-3 text-xs font-semibold text-[var(--shell-muted)]">
                 <input
                   type="checkbox"
                   className="h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-200"
@@ -493,7 +471,7 @@ export default function SchoolsPage() {
               </label>
             </div>
           </div>
-          <div className="mb-4 flex flex-col gap-3 rounded-xl border border-gray-200 bg-gray-50 p-3 lg:flex-row lg:items-center lg:justify-between">
+          <div className="flex flex-col gap-3 border-b border-[var(--shell-border)] px-4 py-3 lg:flex-row lg:items-center lg:justify-between">
             <div className="text-sm text-gray-600">
               <span className="font-semibold text-gray-900">
                 Showing {pageStart}-{pageEnd}
@@ -502,56 +480,59 @@ export default function SchoolsPage() {
               {isFetching && !isLoading ? <span className="ml-2 text-xs font-semibold text-indigo-600">Updating...</span> : null}
             </div>
             <div className="flex flex-wrap items-center gap-2">
-              <ToolbarButton
-                label="Refresh"
-                loading={toolbarAction === 'refresh'}
+              <button
+                type="button"
                 onClick={refreshSchools}
-                icon={
-                  <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v6h6M20 20v-6h-6M5 19A9 9 0 0119 5M19 5h-5M5 19h5" />
-                  </svg>
-                }
-              />
-              <ToolbarButton
-                label="Export"
-                loading={toolbarAction === 'export'}
+                disabled={toolbarAction === 'refresh'}
+                className="inline-flex h-9 items-center gap-2 rounded-md border border-[var(--shell-border)] bg-[var(--shell-card)] px-3 text-xs font-semibold text-[var(--shell-text)] hover:bg-[var(--shell-hover)] disabled:opacity-60"
+              >
+                <svg className={`h-4 w-4 ${toolbarAction === 'refresh' ? 'animate-spin' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v6h6M20 20v-6h-6M5 19A9 9 0 0119 5M19 5h-5M5 19h5" />
+                </svg>
+                Refresh
+              </button>
+              <button
+                type="button"
                 onClick={() => exportSchools('export-all')}
-                icon={
-                  <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 3v12m0 0 4-4m-4 4-4-4M5 19h14" />
-                  </svg>
-                }
-              />
-              <ToolbarButton
-                label="Print"
-                loading={toolbarAction === 'print'}
+                disabled={toolbarAction === 'export'}
+                className="inline-flex h-9 items-center gap-2 rounded-md border border-[var(--shell-border)] bg-[var(--shell-card)] px-3 text-xs font-semibold text-[var(--shell-text)] hover:bg-[var(--shell-hover)] disabled:opacity-60"
+              >
+                <svg className={`h-4 w-4 ${toolbarAction === 'export' ? 'animate-spin' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 3v12m0 0 4-4m-4 4-4-4M5 19h14" />
+                </svg>
+                Export
+              </button>
+              <button
+                type="button"
                 onClick={() => printSchools(false)}
-                icon={
-                  <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 9V3h12v6M6 18H4a2 2 0 01-2-2v-5a2 2 0 012-2h16a2 2 0 012 2v5a2 2 0 01-2 2h-2M6 14h12v7H6v-7z" />
-                  </svg>
-                }
-              />
-              <ToolbarButton
-                label="PDF"
-                loading={toolbarAction === 'pdf'}
+                className="inline-flex h-9 items-center gap-2 rounded-md border border-[var(--shell-border)] bg-[var(--shell-card)] px-3 text-xs font-semibold text-[var(--shell-text)] hover:bg-[var(--shell-hover)]"
+              >
+                <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 9V3h12v6M6 18H4a2 2 0 01-2-2v-5a2 2 0 012-2h16a2 2 0 012 2v5a2 2 0 01-2 2h-2M6 14h12v7H6v-7z" />
+                </svg>
+                Print
+              </button>
+              <button
+                type="button"
                 onClick={() => printSchools(true)}
-                icon={
-                  <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 3h7l5 5v13H7V3zM14 3v6h5M9 14h6M9 17h4" />
-                  </svg>
-                }
-              />
+                className="inline-flex h-9 items-center gap-2 rounded-md border border-[var(--shell-border)] bg-[var(--shell-card)] px-3 text-xs font-semibold text-[var(--shell-text)] hover:bg-[var(--shell-hover)]"
+              >
+                <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 3h7l5 5v13H7V3zM14 3v6h5M9 14h6M9 17h4" />
+                </svg>
+                PDF
+              </button>
               <div className="relative">
-                <ToolbarButton
-                  label="More"
+                <button
+                  type="button"
                   onClick={() => setIsMoreOpen((open) => !open)}
-                  icon={
-                    <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6.75h.01M12 12h.01M12 17.25h.01" />
-                    </svg>
-                  }
-                />
+                  className="inline-flex h-9 items-center gap-2 rounded-md border border-[var(--shell-border)] bg-[var(--shell-card)] px-3 text-xs font-semibold text-[var(--shell-text)] hover:bg-[var(--shell-hover)]"
+                >
+                  <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6.75h.01M12 12h.01M12 17.25h.01" />
+                  </svg>
+                  More
+                </button>
                 {isMoreOpen ? (
                   <div className="absolute right-0 z-20 mt-2 w-56 overflow-hidden rounded-xl border border-gray-200 bg-white py-2 text-sm shadow-xl">
                     <button
@@ -585,23 +566,23 @@ export default function SchoolsPage() {
               </div>
             </div>
           </div>
-          <div className="overflow-hidden rounded-xl border border-gray-200">
-            <table className="w-full">
-              <thead className="bg-gray-50">
+          <div className="overflow-x-auto">
+            <table className="min-w-full border-y border-[var(--shell-border)] text-sm">
+              <thead className="bg-[var(--shell-subtle)] text-left text-sm font-semibold text-[var(--shell-text)]">
                 <tr>
-                  <th className="px-6 py-4 text-left text-xs font-semibold uppercase tracking-wider text-gray-600">Name</th>
-                  <th className="px-6 py-4 text-left text-xs font-semibold uppercase tracking-wider text-gray-600">Code</th>
-                  <th className="px-6 py-4 text-left text-xs font-semibold uppercase tracking-wider text-gray-600">Status</th>
-                  <th className="px-6 py-4 text-left text-xs font-semibold uppercase tracking-wider text-gray-600">Deleted At</th>
-                  <th className="px-6 py-4 text-left text-xs font-semibold uppercase tracking-wider text-gray-600">Plan</th>
-                  <th className="px-6 py-4 text-left text-xs font-semibold uppercase tracking-wider text-gray-600">Test Expiry</th>
-                  <th className="px-6 py-4 text-right text-xs font-semibold uppercase tracking-wider text-gray-600">Actions</th>
+                  <th className="whitespace-nowrap border-b border-[var(--shell-border)] px-4 py-3">Name</th>
+                  <th className="whitespace-nowrap border-b border-[var(--shell-border)] px-4 py-3">Code</th>
+                  <th className="whitespace-nowrap border-b border-[var(--shell-border)] px-4 py-3">Status</th>
+                  <th className="whitespace-nowrap border-b border-[var(--shell-border)] px-4 py-3">Deleted At</th>
+                  <th className="whitespace-nowrap border-b border-[var(--shell-border)] px-4 py-3">Plan</th>
+                  <th className="whitespace-nowrap border-b border-[var(--shell-border)] px-4 py-3">Test Expiry</th>
+                  <th className="whitespace-nowrap border-b border-[var(--shell-border)] px-4 py-3 text-right">Action</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-gray-200 bg-white">
+              <tbody>
                 {isLoading ? (
                   <tr>
-                    <td colSpan={7} className="px-6 py-12 text-center text-gray-500">
+                    <td colSpan={7} className="px-4 py-10 text-center text-[var(--shell-muted)]">
                       <div className="flex flex-col items-center">
                         <svg className="h-8 w-8 animate-spin text-gray-400" fill="none" viewBox="0 0 24 24">
                           <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
@@ -613,7 +594,7 @@ export default function SchoolsPage() {
                   </tr>
                 ) : rows.length === 0 ? (
                   <tr>
-                    <td colSpan={7} className="px-6 py-12 text-center">
+                    <td colSpan={7} className="px-4 py-10 text-center">
                       <div className="flex flex-col items-center text-gray-400">
                         <svg className="h-12 w-12" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
@@ -625,13 +606,13 @@ export default function SchoolsPage() {
                   </tr>
                 ) : (
                   rows.map((school) => (
-                    <tr key={school.id} className="hover:bg-gray-50 transition-colors">
-                      <td className="px-6 py-4">
+                    <tr key={school.id} className="border-b border-[var(--shell-border)] transition-colors hover:bg-[var(--shell-hover)]">
+                      <td className="whitespace-nowrap px-4 py-3">
                         <div className="flex items-center">
-                          <div className="flex h-10 w-10 items-center justify-center rounded-full bg-gradient-to-br from-indigo-500 to-purple-500 text-white font-bold">
+                          <div className="flex h-8 w-8 items-center justify-center rounded-md bg-blue-600 text-sm font-bold text-white">
                             {school.name.charAt(0).toUpperCase()}
                           </div>
-                          <div className="ml-3 text-sm font-medium text-gray-900">{school.name}</div>
+                          <div className="ml-3 text-sm font-medium text-[var(--shell-text)]">{school.name}</div>
                           {school.deletedAt ? (
                             <span className="ml-2 rounded-full bg-rose-100 px-2 py-0.5 text-[10px] font-semibold text-rose-700">
                               DELETED
@@ -639,8 +620,8 @@ export default function SchoolsPage() {
                           ) : null}
                         </div>
                       </td>
-                      <td className="px-6 py-4 text-sm text-gray-600">{school.code}</td>
-                      <td className="px-6 py-4">
+                      <td className="whitespace-nowrap px-4 py-3 text-[var(--shell-muted)]">{school.code}</td>
+                      <td className="whitespace-nowrap px-4 py-3">
                         <button
                           type="button"
                           aria-pressed={school.status === 'ACTIVE'}
@@ -662,16 +643,16 @@ export default function SchoolsPage() {
                           />
                         </button>
                       </td>
-                      <td className="px-6 py-4 text-sm text-gray-600">
+                      <td className="whitespace-nowrap px-4 py-3 text-[var(--shell-muted)]">
                         {school.deletedAt ? new Date(school.deletedAt).toLocaleDateString() : '-'}
                       </td>
-                      <td className="px-6 py-4">
+                      <td className="whitespace-nowrap px-4 py-3">
                         <select
                           value={plans?.find((plan) => plan.name === school.subscriptionPlan)?.id ?? ''}
                           onChange={(e) =>
                             planUpdateMutation.mutate({ schoolId: school.id, planId: e.target.value })
                           }
-                          className="rounded-lg border border-gray-300 px-3 py-1.5 text-xs focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-200"
+                          className="h-8 rounded-md border border-[var(--shell-border)] bg-[var(--shell-card)] px-2 text-xs text-[var(--shell-text)] outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
                           disabled={Boolean(school.deletedAt)}
                         >
                           <option value="">Select plan</option>
@@ -682,7 +663,7 @@ export default function SchoolsPage() {
                           ))}
                         </select>
                       </td>
-                      <td className="px-6 py-4">
+                      <td className="whitespace-nowrap px-4 py-3">
                         <div className="flex items-center gap-2">
                           <input
                             type="date"
@@ -690,11 +671,11 @@ export default function SchoolsPage() {
                             onChange={(e) =>
                               setExpiryDates((prev) => ({ ...prev, [school.id]: e.target.value }))
                             }
-                            className="rounded-lg border border-gray-300 px-2 py-1 text-xs focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-200"
+                            className="h-8 rounded-md border border-[var(--shell-border)] bg-[var(--shell-card)] px-2 text-xs text-[var(--shell-text)] outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
                             disabled={Boolean(school.deletedAt)}
                           />
                           <button
-                            className="inline-flex items-center gap-1 rounded-lg bg-indigo-600 px-3 py-1 text-xs font-medium text-white hover:bg-indigo-700 disabled:opacity-50"
+                            className="inline-flex h-8 items-center gap-1 rounded-md bg-blue-600 px-3 text-xs font-medium text-white hover:bg-blue-700 disabled:opacity-50"
                             disabled={!expiryDates[school.id] || Boolean(school.deletedAt)}
                             onClick={() =>
                               testExpiryMutation.mutate({
@@ -710,11 +691,11 @@ export default function SchoolsPage() {
                           </button>
                         </div>
                       </td>
-                      <td className="px-6 py-4 text-right">
-                        <div className="flex justify-end gap-2">
+                      <td className="px-4 py-3 text-right">
+                        <div className="flex flex-nowrap justify-end gap-2">
                           <Link
                             href={`/dashboard/schools/${school.id}/admins`}
-                            className="inline-flex items-center gap-1.5 rounded-lg border border-gray-300 px-3 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50"
+                            className="inline-flex items-center gap-1.5 rounded-md border border-[var(--shell-border)] px-3 py-1.5 text-xs font-medium text-[var(--shell-text)] hover:bg-[var(--shell-hover)]"
                           >
                             <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a4 4 0 00-4-4h-1M9 20H4v-2a4 4 0 014-4h1m6-4a4 4 0 11-8 0 4 4 0 018 0Zm6 0a3 3 0 11-6 0 3 3 0 016 0Z" />
@@ -723,13 +704,13 @@ export default function SchoolsPage() {
                           </Link>
                           <Link
                             href={`/dashboard/schools/${school.id}/onboarding`}
-                            className="inline-flex items-center gap-1.5 rounded-lg border border-sky-300 bg-sky-50 px-3 py-1.5 text-xs font-medium text-sky-700 hover:bg-sky-100"
+                            className="inline-flex items-center gap-1.5 rounded-md border border-sky-300 bg-sky-50 px-3 py-1.5 text-xs font-medium text-sky-700 hover:bg-sky-100"
                           >
                             Review
                           </Link>
                           {school.deletedAt ? (
                             <button
-                              className="inline-flex items-center gap-1.5 rounded-lg border border-emerald-300 bg-emerald-50 px-3 py-1.5 text-xs font-medium text-emerald-700 hover:bg-emerald-100"
+                              className="inline-flex items-center gap-1.5 rounded-md border border-emerald-300 bg-emerald-50 px-3 py-1.5 text-xs font-medium text-emerald-700 hover:bg-emerald-100"
                               onClick={() =>
                                 actionMutation.mutate({
                                   id: school.id,
@@ -744,7 +725,7 @@ export default function SchoolsPage() {
                             </button>
                           ) : (
                             <button
-                              className="inline-flex items-center gap-1.5 rounded-lg border border-rose-300 bg-rose-50 px-3 py-1.5 text-xs font-medium text-rose-700 hover:bg-rose-100"
+                              className="inline-flex items-center gap-1.5 rounded-md border border-rose-300 bg-rose-50 px-3 py-1.5 text-xs font-medium text-rose-700 hover:bg-rose-100"
                               onClick={() => setDeleteTarget(school)}
                             >
                               <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -761,18 +742,19 @@ export default function SchoolsPage() {
               </tbody>
             </table>
           </div>
-          <div className="mt-4 flex flex-col gap-3 rounded-xl border border-gray-200 bg-white px-4 py-3 text-sm text-gray-600 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex flex-col gap-3 px-4 py-3 text-sm text-[var(--shell-muted)] sm:flex-row sm:items-center sm:justify-between">
             <div className="flex flex-wrap items-center gap-3">
               <span>
-                Page <span className="font-semibold text-gray-900">{page}</span> of{' '}
-                <span className="font-semibold text-gray-900">{totalPages}</span>
+                Showing <span className="font-semibold text-[var(--shell-text)]">{pageStart}</span> to{' '}
+                <span className="font-semibold text-[var(--shell-text)]">{pageEnd}</span> of{' '}
+                <span className="font-semibold text-[var(--shell-text)]">{totalRows}</span> entries
               </span>
               <label className="flex items-center gap-2">
                 Rows
                 <select
                   value={limit}
                   onChange={(event) => setLimit(Number(event.target.value))}
-                  className="rounded-lg border border-gray-300 bg-white px-2 py-1 text-sm text-gray-700 outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100"
+                  className="rounded-md border border-[var(--shell-border)] bg-[var(--shell-card)] px-2 py-1 text-sm text-[var(--shell-text)] outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
                 >
                   {pageSizes.map((size) => (
                     <option key={size} value={size}>
@@ -787,7 +769,7 @@ export default function SchoolsPage() {
                 type="button"
                 onClick={() => setPage(1)}
                 disabled={page <= 1}
-                className="inline-flex items-center gap-1 rounded-lg border border-gray-300 px-3 py-1.5 font-semibold text-gray-700 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-40"
+                className="inline-flex items-center gap-1 rounded-md border border-[var(--shell-border)] px-3 py-1.5 font-semibold text-[var(--shell-text)] hover:bg-[var(--shell-hover)] disabled:cursor-not-allowed disabled:opacity-40"
               >
                 <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="m11 17-5-5 5-5M18 17l-5-5 5-5" />
@@ -798,7 +780,7 @@ export default function SchoolsPage() {
                 type="button"
                 onClick={() => setPage((current) => Math.max(1, current - 1))}
                 disabled={page <= 1}
-                className="inline-flex items-center gap-1 rounded-lg border border-gray-300 px-3 py-1.5 font-semibold text-gray-700 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-40"
+                className="inline-flex items-center gap-1 rounded-md border border-[var(--shell-border)] px-3 py-1.5 font-semibold text-[var(--shell-text)] hover:bg-[var(--shell-hover)] disabled:cursor-not-allowed disabled:opacity-40"
               >
                 <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="m15 18-6-6 6-6" />
@@ -810,10 +792,10 @@ export default function SchoolsPage() {
                   key={pageNumber}
                   type="button"
                   onClick={() => setPage(pageNumber)}
-                  className={`h-9 min-w-9 rounded-lg border px-3 font-semibold ${
+                  className={`h-9 min-w-9 rounded-md border px-3 font-semibold ${
                     pageNumber === page
-                      ? 'border-indigo-600 bg-indigo-600 text-white'
-                      : 'border-gray-300 text-gray-700 hover:bg-gray-50'
+                      ? 'border-blue-600 bg-blue-600 text-white'
+                      : 'border-[var(--shell-border)] text-[var(--shell-text)] hover:bg-[var(--shell-hover)]'
                   }`}
                 >
                   {pageNumber}
@@ -823,7 +805,7 @@ export default function SchoolsPage() {
                 type="button"
                 onClick={() => setPage((current) => Math.min(totalPages, current + 1))}
                 disabled={page >= totalPages}
-                className="inline-flex items-center gap-1 rounded-lg border border-gray-300 px-3 py-1.5 font-semibold text-gray-700 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-40"
+                className="inline-flex items-center gap-1 rounded-md border border-[var(--shell-border)] px-3 py-1.5 font-semibold text-[var(--shell-text)] hover:bg-[var(--shell-hover)] disabled:cursor-not-allowed disabled:opacity-40"
               >
                 Next
                 <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -834,7 +816,7 @@ export default function SchoolsPage() {
                 type="button"
                 onClick={() => setPage(totalPages)}
                 disabled={page >= totalPages}
-                className="inline-flex items-center gap-1 rounded-lg border border-gray-300 px-3 py-1.5 font-semibold text-gray-700 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-40"
+                className="inline-flex items-center gap-1 rounded-md border border-[var(--shell-border)] px-3 py-1.5 font-semibold text-[var(--shell-text)] hover:bg-[var(--shell-hover)] disabled:cursor-not-allowed disabled:opacity-40"
               >
                 Last
                 <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">

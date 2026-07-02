@@ -5,22 +5,16 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import DashboardPageContainer from '../../../components/DashboardPageContainer';
 import FullPageLoader from '../../../components/FullPageLoader';
-import PageHeader from '../../../components/PageHeader';
 import { useNotify } from '../../../components/NotificationProvider';
-import { PLAN_PERMISSION_MODULES, buildPlanPermissionGroups } from '../../../config/plan-module-permissions';
 import { getSession } from '../../../services/auth.service';
 import {
   assignSchoolPlan,
   cancelSubscription,
-  createSubscriptionPlan,
-  deleteSubscriptionPlan,
   downgradeSubscription,
   extendTrial,
   generateSubscriptionInvoice,
   getSchoolSubscriptionDetail,
   getSchoolSubscriptions,
-  getSubscriptionSummary,
-  getPlanPermissions,
   listSubscriptionPlans,
   pauseSubscription,
   recordManualPayment,
@@ -28,10 +22,7 @@ import {
   resumeSubscription,
   startTrial,
   updateSubscriptionLimits,
-  updateSubscriptionPlan,
-  updatePlanPermissions,
   upgradeSubscription,
-  type PlanPermissionItem,
   type SchoolSubscriptionListItem,
   type SubscriptionPlan,
 } from '../../../services/subscription.service';
@@ -111,47 +102,6 @@ const statusBadgeClass = (status?: string | null) => {
   return 'bg-violet-50 text-violet-700 ring-violet-200';
 };
 
-type ShellTone = 'blue' | 'emerald' | 'amber' | 'rose' | 'slate' | 'violet';
-
-const toneClasses: Record<ShellTone, { icon: string; panel: string; bar: string; text: string }> = {
-  blue: {
-    icon: 'bg-blue-50 text-blue-700 ring-blue-100',
-    panel: 'border-blue-100 bg-blue-50/70',
-    bar: 'bg-blue-500',
-    text: 'text-blue-700',
-  },
-  emerald: {
-    icon: 'bg-emerald-50 text-emerald-700 ring-emerald-100',
-    panel: 'border-emerald-100 bg-emerald-50/70',
-    bar: 'bg-emerald-500',
-    text: 'text-emerald-700',
-  },
-  amber: {
-    icon: 'bg-amber-50 text-amber-700 ring-amber-100',
-    panel: 'border-amber-100 bg-amber-50/70',
-    bar: 'bg-amber-500',
-    text: 'text-amber-700',
-  },
-  rose: {
-    icon: 'bg-rose-50 text-rose-700 ring-rose-100',
-    panel: 'border-rose-100 bg-rose-50/70',
-    bar: 'bg-rose-500',
-    text: 'text-rose-700',
-  },
-  slate: {
-    icon: 'bg-slate-100 text-slate-700 ring-slate-200',
-    panel: 'border-[var(--shell-border)] bg-[var(--shell-subtle)]',
-    bar: 'bg-slate-500',
-    text: 'text-[var(--shell-text)]',
-  },
-  violet: {
-    icon: 'bg-violet-50 text-violet-700 ring-violet-100',
-    panel: 'border-violet-100 bg-violet-50/70',
-    bar: 'bg-violet-500',
-    text: 'text-violet-700',
-  },
-};
-
 function Icon({ path, className = 'h-4 w-4' }: { path: ReactNode; className?: string }) {
   return (
     <svg
@@ -171,92 +121,6 @@ function Icon({ path, className = 'h-4 w-4' }: { path: ReactNode; className?: st
 
 function Badge({ children, className }: { children: ReactNode; className: string }) {
   return <span className={`inline-flex items-center rounded-full px-2.5 py-1 text-xs font-semibold ring-1 ${className}`}>{children}</span>;
-}
-
-function StatCard({
-  label,
-  value,
-  helper,
-  tone = 'slate',
-  icon,
-}: {
-  label: string;
-  value: ReactNode;
-  helper: string;
-  tone?: ShellTone;
-  icon: ReactNode;
-}) {
-  return (
-    <div className="rounded-xl border border-[var(--shell-border)] bg-[var(--shell-card)] p-4 shadow-sm">
-      <div className="flex items-start justify-between gap-3">
-        <span className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-lg ring-1 ${toneClasses[tone].icon}`}>
-          {icon}
-        </span>
-        <p className="text-right text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--shell-muted)]">{label}</p>
-      </div>
-      <p className="mt-4 truncate text-2xl font-bold text-[var(--shell-text)]">{value}</p>
-      <p className="mt-1 text-sm leading-5 text-[var(--shell-muted)]">{helper}</p>
-    </div>
-  );
-}
-
-function LifecycleHealthPanel({
-  active,
-  trial,
-  paused,
-  cancelled,
-  expired,
-  overdue,
-  total,
-}: {
-  active: number;
-  trial: number;
-  paused: number;
-  cancelled: number;
-  expired: number;
-  overdue: number;
-  total: number;
-}) {
-  const items = [
-    { label: 'Active', value: active, tone: 'emerald' as const },
-    { label: 'Trial', value: trial, tone: 'blue' as const },
-    { label: 'Paused', value: paused, tone: 'amber' as const },
-    { label: 'Cancelled', value: cancelled, tone: 'slate' as const },
-    { label: 'Expired', value: expired, tone: 'rose' as const },
-    { label: 'Overdue', value: overdue, tone: 'rose' as const },
-  ];
-
-  return (
-    <section className="rounded-xl border border-[var(--shell-border)] bg-[var(--shell-card)] p-4 shadow-sm">
-      <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
-        <div>
-          <p className="text-xs font-semibold uppercase tracking-[0.14em] text-[var(--shell-muted)]">Lifecycle mix</p>
-          <h2 className="mt-1 text-lg font-bold text-[var(--shell-text)]">Subscription health</h2>
-        </div>
-        <Badge className={overdue || expired ? 'bg-rose-50 text-rose-700 ring-rose-200' : 'bg-emerald-50 text-emerald-700 ring-emerald-200'}>
-          {overdue || expired ? `${overdue + expired} need review` : 'Healthy'}
-        </Badge>
-      </div>
-
-      <div className="mt-4 grid gap-3 md:grid-cols-3 xl:grid-cols-6">
-        {items.map((item) => {
-          const percent = total ? Math.round((item.value / total) * 100) : 0;
-          return (
-            <div key={item.label} className={`rounded-xl border p-3 ${toneClasses[item.tone].panel}`}>
-              <div className="flex items-center justify-between gap-2">
-                <span className="text-xs font-semibold text-[var(--shell-muted)]">{item.label}</span>
-                <span className={`text-sm font-bold ${toneClasses[item.tone].text}`}>{item.value}</span>
-              </div>
-              <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-white/80 ring-1 ring-black/5">
-                <div className={`h-full rounded-full ${toneClasses[item.tone].bar}`} style={{ width: `${Math.max(percent, item.value ? 8 : 0)}%` }} />
-              </div>
-              <p className="mt-2 text-[11px] font-semibold text-[var(--shell-muted)]">{percent}% of schools</p>
-            </div>
-          );
-        })}
-      </div>
-    </section>
-  );
 }
 
 function UsageBar({ label, used, limit }: { label: string; used?: number; limit?: number | null }) {
@@ -307,18 +171,6 @@ const initialActionForm = {
   reason: '',
 };
 
-const initialPlanForm = {
-  name: '',
-  status: 'ACTIVE',
-  price: '0',
-  studentLimit: '',
-  teacherLimit: '',
-  features: '',
-};
-
-type PlanFormState = typeof initialPlanForm;
-type PlanModalMode = 'modules' | 'edit' | 'create';
-
 const initialSubscriptionFilters = {
   page: 1,
   limit: 20,
@@ -330,68 +182,6 @@ const initialSubscriptionFilters = {
   overdue: '',
 };
 
-type PlanPermissionGroupView = ReturnType<typeof buildPlanPermissionGroups>[number];
-type PlanSectionView = { parent: string; codes: string[] };
-
-const buildPlanSectionDefinitions = (): PlanSectionView[] => {
-  const sections = new Map<string, Set<string>>();
-
-  PLAN_PERMISSION_MODULES.forEach((definition) => {
-    const sectionCodes = sections.get(definition.parent) ?? new Set<string>();
-    definition.codes.forEach((code) => sectionCodes.add(code));
-    sections.set(definition.parent, sectionCodes);
-  });
-
-  return Array.from(sections.entries()).map(([parent, codes]) => ({
-    parent,
-    codes: Array.from(codes),
-  }));
-};
-
-const planSectionDefinitions = buildPlanSectionDefinitions();
-
-const getGroupCodes = (group: PlanPermissionGroupView) =>
-  Array.from(new Set(group.modules.flatMap((module) => module.permissions.map((permission) => permission.code))));
-
-const getSectionState = (codes: string[], enabledSet: Set<string>) => {
-  const enabledCount = codes.filter((code) => enabledSet.has(code)).length;
-  return {
-    enabledCount,
-    isIncluded: codes.length > 0 && enabledCount === codes.length,
-    isPartial: enabledCount > 0 && enabledCount < codes.length,
-  };
-};
-
-const getSectionsFromGroups = (groups: PlanPermissionGroupView[]): PlanSectionView[] =>
-  groups.map((group) => ({ parent: group.parent, codes: getGroupCodes(group) }));
-
-const countIncludedSections = (sections: PlanSectionView[], enabledSet: Set<string>) =>
-  sections.filter((section) => getSectionState(section.codes, enabledSet).isIncluded).length;
-
-const buildPlanPayload = (form: PlanFormState) => {
-  const price = Number(form.price);
-  const studentLimit = Number(form.studentLimit);
-  const teacherLimit = Number(form.teacherLimit);
-  const features = form.features
-    .split('\n')
-    .map((feature) => feature.trim())
-    .filter(Boolean);
-
-  if (!form.name.trim()) throw new Error('Plan name is required.');
-  if (!Number.isFinite(price) || price < 0) throw new Error('Enter a valid plan price.');
-  if (!Number.isInteger(studentLimit) || studentLimit < 1) throw new Error('Student limit must be at least 1.');
-  if (!Number.isInteger(teacherLimit) || teacherLimit < 1) throw new Error('Teacher limit must be at least 1.');
-
-  return {
-    name: form.name.trim(),
-    status: form.status,
-    priceCents: Math.round(price * 100),
-    studentLimit,
-    teacherLimit,
-    features,
-  };
-};
-
 export default function SubscriptionsPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -399,11 +189,7 @@ export default function SubscriptionsPage() {
   const queryClient = useQueryClient();
   const [selectedSchoolId, setSelectedSchoolId] = useState<string | null>(null);
   const [actionState, setActionState] = useState<{ action: LifecycleAction; item: SchoolSubscriptionListItem } | null>(null);
-  const [modulePlanId, setModulePlanId] = useState<string | null>(null);
-  const [planModalMode, setPlanModalMode] = useState<PlanModalMode | null>(null);
-  const [editedPermissionCodes, setEditedPermissionCodes] = useState<string[]>([]);
   const [actionForm, setActionForm] = useState(initialActionForm);
-  const [planForm, setPlanForm] = useState<PlanFormState>(initialPlanForm);
   const [filters, setFilters] = useState(initialSubscriptionFilters);
 
   const { data: session, isLoading: isSessionLoading } = useQuery({
@@ -442,14 +228,6 @@ export default function SubscriptionsPage() {
     };
   }, [filters]);
 
-  const { data: summary, isLoading: isSummaryLoading } = useQuery({
-    queryKey: ['subscription-lifecycle-summary'],
-    queryFn: getSubscriptionSummary,
-    enabled: isSuperAdmin,
-    staleTime: 30_000,
-    refetchOnWindowFocus: false,
-  });
-
   const {
     data: subscriptions,
     isLoading: isSubscriptionsLoading,
@@ -477,18 +255,6 @@ export default function SubscriptionsPage() {
     enabled: Boolean(selectedSchoolId) && isSuperAdmin,
     staleTime: 15_000,
   });
-
-  const { data: modulePermissions, isLoading: isModulePermissionsLoading } = useQuery({
-    queryKey: ['subscription-plan-modules', modulePlanId],
-    queryFn: () => getPlanPermissions(modulePlanId as string),
-    enabled: Boolean(modulePlanId) && isSuperAdmin && planModalMode === 'modules',
-    staleTime: 15_000,
-  });
-
-  useEffect(() => {
-    if (!modulePermissions) return;
-    setEditedPermissionCodes(modulePermissions.permissions.filter((permission) => permission.enabled).map((permission) => permission.code));
-  }, [modulePermissions]);
 
   const lifecycleMutation = useMutation({
     mutationFn: async () => {
@@ -592,74 +358,6 @@ export default function SubscriptionsPage() {
     },
   });
 
-  const modulePermissionMutation = useMutation({
-    mutationFn: async () => {
-      if (!modulePlanId) throw new Error('Select a plan.');
-      return updatePlanPermissions(modulePlanId, editedPermissionCodes);
-    },
-    onSuccess: () => {
-      notify.success('Plan modules updated', 'Sidebar modules and permissions were saved for this plan.');
-      queryClient.invalidateQueries({ queryKey: ['subscription-plan-modules', modulePlanId] });
-    },
-    onError: (error: any) => {
-      const message = error?.response?.data?.error?.message || error?.message || 'Unable to update plan modules.';
-      notify.error('Save failed', message);
-    },
-  });
-
-  const planCreateMutation = useMutation({
-    mutationFn: async () => {
-      const plan = await createSubscriptionPlan(buildPlanPayload(planForm));
-      await updatePlanPermissions(plan.id, editedPermissionCodes);
-      return plan;
-    },
-    onSuccess: () => {
-      notify.success('Plan created', 'Plan details and module sections were saved.');
-      queryClient.invalidateQueries({ queryKey: ['subscription-plans'] });
-      queryClient.invalidateQueries({ queryKey: ['active-plans'] });
-      queryClient.invalidateQueries({ queryKey: ['subscription-lifecycle-summary'] });
-      closePlanModal();
-    },
-    onError: (error: any) => {
-      const message = error?.response?.data?.error?.message || error?.message || 'Unable to create plan.';
-      notify.error('Plan create failed', message);
-    },
-  });
-
-  const planDeleteMutation = useMutation({
-    mutationFn: (planId: string) => deleteSubscriptionPlan(planId),
-    onSuccess: () => {
-      notify.success('Plan deleted', 'The plan was removed from the catalog.');
-      queryClient.invalidateQueries({ queryKey: ['subscription-plans'] });
-      queryClient.invalidateQueries({ queryKey: ['active-plans'] });
-      queryClient.invalidateQueries({ queryKey: ['school-subscriptions'] });
-      queryClient.invalidateQueries({ queryKey: ['subscription-lifecycle-summary'] });
-    },
-    onError: (error: any) => {
-      const message = error?.response?.data?.error?.message || error?.message || 'Unable to delete plan.';
-      notify.error('Plan delete failed', message);
-    },
-  });
-
-  const planEditMutation = useMutation({
-    mutationFn: async () => {
-      if (!modulePlanId) throw new Error('Select a plan.');
-      return updateSubscriptionPlan(modulePlanId, buildPlanPayload(planForm));
-    },
-    onSuccess: () => {
-      notify.success('Plan updated', 'Plan details were saved.');
-      queryClient.invalidateQueries({ queryKey: ['subscription-plans'] });
-      queryClient.invalidateQueries({ queryKey: ['active-plans'] });
-      queryClient.invalidateQueries({ queryKey: ['school-subscriptions'] });
-      queryClient.invalidateQueries({ queryKey: ['subscription-lifecycle-summary'] });
-      closePlanModal();
-    },
-    onError: (error: any) => {
-      const message = error?.response?.data?.error?.message || error?.message || 'Unable to update plan.';
-      notify.error('Plan update failed', message);
-    },
-  });
-
   const setFilter = (key: keyof typeof filters, value: string | number) => {
     setFilters((current) => ({
       ...current,
@@ -684,68 +382,12 @@ export default function SubscriptionsPage() {
     });
   };
 
-  const openPlanModules = (plan: SubscriptionPlan) => {
-    setModulePlanId(plan.id);
-    setPlanModalMode('modules');
-  };
-
-  const openPlanCreator = () => {
-    setPlanForm({
-      ...initialPlanForm,
-      status: 'ACTIVE',
-      price: '0',
-    });
-    setModulePlanId(null);
-    setEditedPermissionCodes([]);
-    setPlanModalMode('create');
-  };
-
-  const openPlanEditor = (plan: SubscriptionPlan) => {
-    setPlanForm({
-      name: plan.name,
-      status: plan.status === 'INACTIVE' ? 'INACTIVE' : 'ACTIVE',
-      price: String(plan.priceCents / 100),
-      studentLimit: String(plan.studentLimit),
-      teacherLimit: String(plan.teacherLimit),
-      features: (plan.features ?? []).join('\n'),
-    });
-    setModulePlanId(plan.id);
-    setPlanModalMode('edit');
-  };
-
-  const confirmDeletePlan = (plan: SubscriptionPlan) => {
-    if (
-      !window.confirm(
-        `Delete "${plan.name}"? Existing schools keep their current plan name, but this plan will no longer be available for assignment.`,
-      )
-    ) {
-      return;
-    }
-    planDeleteMutation.mutate(plan.id);
-  };
-
-  const closePlanModal = () => {
-    setPlanModalMode(null);
-    setModulePlanId(null);
-    setEditedPermissionCodes([]);
-    setPlanForm(initialPlanForm);
-  };
-
   const activePlans = plans?.filter((plan) => plan.status === 'ACTIVE') ?? [];
-  const selectedModulePlan = plans?.find((plan) => plan.id === modulePlanId) ?? null;
   const rows = subscriptions?.items ?? [];
   const pagination = subscriptions?.pagination;
   const totalPages = pagination?.totalPages ?? 1;
-  const busy = isSessionLoading || isSummaryLoading || isSubscriptionsLoading || lifecycleMutation.isPending;
-  const totalSchools = summary?.totalSchools ?? pagination?.total ?? rows.length;
-  const activeCount = summary?.activeSubscriptions ?? 0;
-  const trialCount = summary?.trialSubscriptions ?? 0;
-  const pausedCount = summary?.pausedSubscriptions ?? 0;
-  const cancelledCount = summary?.cancelledSubscriptions ?? 0;
-  const expiredCount = summary?.expiredSubscriptions ?? 0;
-  const overdueCount = summary?.overdueSubscriptions ?? 0;
-  const liveCoverage = totalSchools ? Math.round(((activeCount + trialCount) / totalSchools) * 100) : 0;
-  const activeFilterKeys: Array<keyof typeof filters> = ['search', 'status', 'planId', 'billingCycle', 'trial', 'overdue'];
+  const busy = isSessionLoading || isSubscriptionsLoading || lifecycleMutation.isPending;
+  const activeFilterKeys: Array<keyof typeof filters> = ['search', 'status', 'planId', 'trial', 'overdue'];
   const activeFiltersCount = activeFilterKeys.filter((key) => String(filters[key] ?? '').trim()).length;
   const clearFilters = () => setFilters({ ...initialSubscriptionFilters, limit: filters.limit });
 
@@ -758,107 +400,56 @@ export default function SubscriptionsPage() {
   }
 
   return (
-    <DashboardPageContainer maxWidthClassName="max-w-[96rem]" className="space-y-5">
+    <DashboardPageContainer maxWidthClassName="max-w-[96rem]" className="space-y-4">
       {busy ? <FullPageLoader label="Loading subscriptions..." /> : null}
-      <PageHeader
-        title="School Subscriptions"
-        subtitle="Manage plan assignments, billing periods, invoices, payments, limits, and module access across every school."
-        actions={
-          <button
-            type="button"
-            onClick={() => refetch()}
-            className="inline-flex h-10 items-center gap-2 rounded-lg border border-[var(--shell-border)] bg-[var(--shell-card)] px-3 text-sm font-semibold text-[var(--shell-text)] shadow-sm hover:bg-[var(--shell-hover)]"
-          >
-            <Icon path={<><path d="M21 12a9 9 0 0 1-9 9 8.6 8.6 0 0 1-6-2.4" /><path d="M3 12a9 9 0 0 1 15-6.7" /><path d="M21 3v6h-6" /></>} />
-            Refresh
-          </button>
-        }
-      />
 
-      <section className="grid gap-4 xl:grid-cols-[1fr_24rem]">
-        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-          <StatCard
-            label="Total schools"
-            value={formatNumber(totalSchools)}
-            helper={`${liveCoverage}% active or trial`}
-            tone="blue"
-            icon={<Icon path={<><path d="M3 21h18" /><path d="M5 21V7l8-4 6 3v15" /><path d="M9 9h1" /><path d="M9 13h1" /><path d="M14 10h1" /><path d="M14 14h1" /></>} />}
-          />
-          <StatCard
-            label="Live plans"
-            value={formatNumber(activeCount + trialCount)}
-            helper={`${activeCount} active, ${trialCount} trial`}
-            tone="emerald"
-            icon={<Icon path={<><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" /><circle cx="9" cy="7" r="4" /><path d="m16 11 2 2 4-4" /></>} />}
-          />
-          <StatCard
-            label="Estimated MRR"
-            value={formatCurrency(summary?.estimatedMonthlyRevenue, summary?.currency)}
-            helper="Projected from plan prices"
-            tone="violet"
-            icon={<Icon path={<><path d="M3 7h18v13H3z" /><path d="M16 3v4" /><path d="M8 3v4" /><path d="M7 14h5" /><path d="M16 14h1" /></>} />}
-          />
-          <StatCard
-            label="Open invoices"
-            value={formatNumber(summary?.pendingManualPayments)}
-            helper="Unpaid, partial, or overdue"
-            tone={overdueCount || expiredCount ? 'rose' : 'amber'}
-            icon={<Icon path={<><path d="M7 3h10v18l-2-1-2 1-2-1-2 1-2-1z" /><path d="M9 8h6" /><path d="M9 12h6" /><path d="M9 16h4" /></>} />}
-          />
-        </div>
-
-        <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm leading-6 text-amber-800 shadow-sm">
-          <div className="flex items-start gap-3">
-            <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-amber-500 text-white">
-              <Icon path={<><path d="M12 9v4" /><path d="M12 17h.01" /><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z" /></>} />
-            </span>
-            <div>
-              <p className="font-bold text-amber-950">Offline billing mode</p>
-              <p className="mt-1">
-                Billing gateway integration is not connected. Super Admin can generate subscription invoices and record offline payments against those invoices.
-              </p>
-            </div>
+      <header className="rounded-lg border border-[var(--shell-border)] bg-[var(--shell-card)] px-4 py-3 shadow-sm">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <h1 className="text-2xl font-bold text-[var(--shell-text)]">Subscriptions</h1>
+            <p className="mt-1 text-sm text-[var(--shell-muted)]">Manage tenant subscription status, plan assignment, and limits.</p>
+          </div>
+          <div className="flex items-center gap-3">
+            <span className="text-sm font-semibold text-[var(--shell-muted)]">Dashboard / Subscriptions</span>
+            <button
+              type="button"
+              onClick={() => refetch()}
+              className="inline-flex h-9 items-center gap-2 rounded-md border border-[var(--shell-border)] bg-[var(--shell-card)] px-3 text-sm font-semibold text-[var(--shell-text)] hover:bg-[var(--shell-hover)]"
+            >
+              <Icon path={<><path d="M21 12a9 9 0 0 1-9 9 8.6 8.6 0 0 1-6-2.4" /><path d="M3 12a9 9 0 0 1 15-6.7" /><path d="M21 3v6h-6" /></>} />
+              Refresh
+            </button>
           </div>
         </div>
-      </section>
+      </header>
 
-      <LifecycleHealthPanel
-        active={activeCount}
-        trial={trialCount}
-        paused={pausedCount}
-        cancelled={cancelledCount}
-        expired={expiredCount}
-        overdue={overdueCount}
-        total={Math.max(totalSchools, 1)}
-      />
-
-      <section className="rounded-xl border border-[var(--shell-border)] bg-[var(--shell-card)] p-4 shadow-sm">
-        <div className="flex flex-col gap-3 border-b border-[var(--shell-border)] pb-4 md:flex-row md:items-center md:justify-between">
+      <section className="overflow-hidden rounded-lg border border-[var(--shell-border)] bg-[var(--shell-card)] shadow-sm">
+        <div className="flex flex-col gap-2 border-b border-[var(--shell-border)] px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <h2 className="text-lg font-bold text-[var(--shell-text)]">Find subscriptions</h2>
+            <h2 className="text-lg font-bold text-[var(--shell-text)]">Select Criteria</h2>
             <p className="text-sm text-[var(--shell-muted)]">
-              {activeFiltersCount ? `${activeFiltersCount} filter${activeFiltersCount === 1 ? '' : 's'} applied` : 'All schools are included'}
+              {activeFiltersCount ? `${activeFiltersCount} filter${activeFiltersCount === 1 ? '' : 's'} applied` : 'All subscriptions'}
             </p>
           </div>
           <button
             type="button"
             onClick={clearFilters}
             disabled={!activeFiltersCount}
-            className="inline-flex h-9 items-center justify-center gap-2 rounded-lg border border-[var(--shell-border)] px-3 text-sm font-semibold text-[var(--shell-text)] disabled:cursor-not-allowed disabled:opacity-40"
+            className="inline-flex h-9 items-center justify-center gap-2 rounded-md border border-[var(--shell-border)] px-3 text-sm font-semibold text-[var(--shell-text)] disabled:cursor-not-allowed disabled:opacity-40"
           >
             <Icon path={<><path d="M3 6h18" /><path d="m8 6 8 12" /><path d="m16 6-8 12" /></>} />
             Clear
           </button>
         </div>
 
-        <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-7">
+        <div className="grid gap-3 px-4 py-3 md:grid-cols-2 xl:grid-cols-6">
           <label className="xl:col-span-2">
-            <span className="text-xs font-semibold uppercase tracking-[0.14em] text-[var(--shell-muted)]">Search</span>
+            <span className="text-sm font-semibold text-[var(--shell-text)]">Search</span>
             <input
               value={filters.search}
               onChange={(event) => setFilter('search', event.target.value)}
               placeholder="School name, code, plan"
-              className="mt-1 h-10 w-full rounded-lg border border-[var(--shell-border)] bg-[var(--shell-subtle)] px-3 text-sm text-[var(--shell-text)] outline-none focus:ring-2 focus:ring-blue-500"
+              className="mt-1 h-9 w-full rounded-md border border-[var(--shell-border)] bg-[var(--shell-subtle)] px-3 text-sm text-[var(--shell-text)] outline-none focus:ring-2 focus:ring-blue-500"
             />
           </label>
           <FilterSelect label="Status" value={filters.status} onChange={(value) => setFilter('status', value)}>
@@ -871,12 +462,6 @@ export default function SubscriptionsPage() {
             <option value="">All plans</option>
             {(plans ?? []).map((plan) => (
               <option key={plan.id} value={plan.id}>{plan.name}</option>
-            ))}
-          </FilterSelect>
-          <FilterSelect label="Billing" value={filters.billingCycle} onChange={(value) => setFilter('billingCycle', value)}>
-            <option value="">Any cycle</option>
-            {billingCycles.map((cycle) => (
-              <option key={cycle} value={cycle}>{formatLabel(cycle)}</option>
             ))}
           </FilterSelect>
           <FilterSelect label="Trial" value={filters.trial} onChange={(value) => setFilter('trial', value)}>
@@ -892,10 +477,10 @@ export default function SubscriptionsPage() {
         </div>
       </section>
 
-      <section className="overflow-hidden rounded-xl border border-[var(--shell-border)] bg-[var(--shell-card)] shadow-sm">
-        <div className="flex flex-col gap-3 border-b border-[var(--shell-border)] px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
+      <section className="overflow-hidden rounded-lg border border-[var(--shell-border)] bg-[var(--shell-card)] shadow-sm">
+        <div className="flex flex-col gap-3 border-b border-[var(--shell-border)] px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <h2 className="text-lg font-bold text-[var(--shell-text)]">School subscription lifecycle</h2>
+            <h2 className="text-lg font-bold text-[var(--shell-text)]">School Subscriptions</h2>
             <p className="text-sm text-[var(--shell-muted)]">
               {pagination ? `${pagination.total} schools found` : 'Manage every tenant subscription'}
             </p>
@@ -921,16 +506,15 @@ export default function SubscriptionsPage() {
           <div className="p-10 text-center text-sm text-[var(--shell-muted)]">No school subscriptions found.</div>
         ) : (
           <div className="overflow-x-auto">
-            <table className="min-w-full divide-y divide-[var(--shell-border)] text-sm">
-              <thead className="bg-[var(--shell-subtle)] text-left text-xs font-semibold uppercase tracking-[0.14em] text-[var(--shell-muted)]">
+            <table className="min-w-full border-y border-[var(--shell-border)] text-sm">
+              <thead className="bg-[var(--shell-subtle)] text-left text-sm font-semibold text-[var(--shell-text)]">
                 <tr>
-                  <th className="px-5 py-3">School</th>
-                  <th className="px-5 py-3">Plan</th>
-                  <th className="px-5 py-3">Status</th>
-                  <th className="px-5 py-3">Period</th>
-                  <th className="px-5 py-3">Usage</th>
-                  <th className="px-5 py-3">Billing</th>
-                  <th className="px-5 py-3 text-right">Actions</th>
+                  <th className="px-4 py-3">School</th>
+                  <th className="px-4 py-3">Subscription Plan</th>
+                  <th className="px-4 py-3">Status</th>
+                  <th className="px-4 py-3">Period</th>
+                  <th className="px-4 py-3">Usage</th>
+                  <th className="px-4 py-3 text-right">Action</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-[var(--shell-border)]">
@@ -939,9 +523,9 @@ export default function SubscriptionsPage() {
                   const periodTone = daysRemaining === null || daysRemaining > 14 ? 'text-[var(--shell-muted)]' : daysRemaining >= 0 ? 'text-amber-700' : 'text-rose-700';
                   return (
                     <tr key={item.schoolId} className="align-top hover:bg-[var(--shell-hover)]">
-                      <td className="min-w-[18rem] px-5 py-4">
+                      <td className="min-w-[18rem] px-4 py-3">
                         <div className="flex items-start gap-3">
-                          <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-blue-600 text-sm font-bold uppercase text-white">
+                          <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-blue-600 text-xs font-bold uppercase text-white">
                             {(item.schoolName || 'SC').slice(0, 2)}
                           </span>
                           <div className="min-w-0">
@@ -954,40 +538,34 @@ export default function SubscriptionsPage() {
                           </div>
                         </div>
                       </td>
-                      <td className="min-w-[12rem] px-5 py-4">
+                      <td className="min-w-[12rem] px-4 py-3">
                         <div className="font-semibold text-[var(--shell-text)]">{item.planName ?? 'No plan assigned'}</div>
-                        <div className="mt-1 text-xs text-[var(--shell-muted)]">{formatLabel(item.billingCycle)}</div>
+                        <div className="mt-1 text-xs text-[var(--shell-muted)]">{item.subscriptionId ? 'Assigned' : 'Not assigned'}</div>
                       </td>
-                      <td className="px-5 py-4">
+                      <td className="px-4 py-3">
                         <Badge className={statusBadgeClass(item.status)}>{formatLabel(item.status)}</Badge>
                       </td>
-                      <td className="min-w-[13rem] px-5 py-4">
+                      <td className="min-w-[13rem] px-4 py-3">
                         <div className="font-semibold text-[var(--shell-text)]">Ends {formatDate(item.currentPeriodEnd)}</div>
                         <div className={`mt-1 text-xs font-semibold ${periodTone}`}>
                           {daysRemaining === null ? 'No period date' : daysRemaining >= 0 ? `${daysRemaining} days remaining` : `${Math.abs(daysRemaining)} days past end`}
                         </div>
                         {item.trialEndsAt ? <div className="mt-1 text-xs text-[var(--shell-muted)]">Trial ends {formatDate(item.trialEndsAt)}</div> : null}
                       </td>
-                      <td className="min-w-[13rem] px-5 py-4">
+                      <td className="min-w-[13rem] px-4 py-3">
                         <UsageBar label="Students" used={item.usage?.students} limit={item.studentLimit} />
                         <div className="mt-3">
                           <UsageBar label="Teachers" used={item.usage?.teachers} limit={item.teacherLimit} />
                         </div>
                       </td>
-                      <td className="min-w-[9rem] px-5 py-4">
-                        <div className="font-semibold text-[var(--shell-text)]">{formatCurrency(item.price, item.currency)}</div>
-                        <div className="mt-1 text-xs text-[var(--shell-muted)]">{item.currency ?? 'INR'}</div>
-                      </td>
-                      <td className="min-w-[22rem] px-5 py-4">
+                      <td className="min-w-[17rem] px-4 py-3">
                         <div className="flex flex-wrap justify-end gap-2">
                           <ActionButton icon={<Icon path={<path d="M2 12s3.5-6 10-6 10 6 10 6-3.5 6-10 6-10-6-10-6z" />} />} onClick={() => setSelectedSchoolId(item.schoolId)}>View</ActionButton>
                           <ActionButton icon={<Icon path={<><path d="M4 7h16" /><path d="M4 12h16" /><path d="M4 17h10" /></>} />} onClick={() => openAction(item, item.subscriptionId ? 'upgrade' : 'assign')}>{item.subscriptionId ? 'Plan' : 'Assign'}</ActionButton>
                           {item.status === 'TRIAL' ? <ActionButton onClick={() => openAction(item, 'extend-trial')}>Extend</ActionButton> : <ActionButton onClick={() => openAction(item, 'start-trial')}>Trial</ActionButton>}
                           {item.status === 'PAUSED' ? <ActionButton onClick={() => openAction(item, 'resume')}>Resume</ActionButton> : <ActionButton onClick={() => openAction(item, 'pause')}>Pause</ActionButton>}
                           <ActionButton onClick={() => openAction(item, 'renew')}>Renew</ActionButton>
-                          <ActionButton icon={<Icon path={<><path d="M7 3h10v18l-2-1-2 1-2-1-2 1-2-1z" /><path d="M9 9h6" /></>} />} onClick={() => openAction(item, 'generate-invoice')}>Invoice</ActionButton>
                           <ActionButton onClick={() => openAction(item, 'limits')}>Limits</ActionButton>
-                          <ActionButton onClick={() => openAction(item, 'manual-payment')}>Payment</ActionButton>
                           {item.status !== 'CANCELLED' ? <ActionButton danger onClick={() => openAction(item, 'cancel')}>Cancel</ActionButton> : null}
                         </div>
                       </td>
@@ -999,7 +577,7 @@ export default function SubscriptionsPage() {
           </div>
         )}
 
-        <div className="flex flex-col gap-3 border-t border-[var(--shell-border)] px-5 py-4 text-sm text-[var(--shell-muted)] sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex flex-col gap-3 border-t border-[var(--shell-border)] px-4 py-3 text-sm text-[var(--shell-muted)] sm:flex-row sm:items-center sm:justify-between">
           <span>
             Showing {rows.length} of {pagination?.total ?? rows.length} schools
           </span>
@@ -1022,101 +600,6 @@ export default function SubscriptionsPage() {
             </button>
           </div>
         </div>
-      </section>
-
-      <section className="space-y-3">
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
-          <div>
-            <p className="text-xs font-semibold uppercase tracking-[0.14em] text-[var(--shell-muted)]">Plan catalog</p>
-            <h2 className="text-lg font-bold text-[var(--shell-text)]">Limits and module access</h2>
-          </div>
-          <div className="flex flex-wrap items-center gap-2">
-            <Badge className="bg-blue-50 text-blue-700 ring-blue-200">Modules follow School Admin sidebar names</Badge>
-            <button
-              type="button"
-              onClick={openPlanCreator}
-              className="inline-flex h-10 items-center justify-center gap-2 rounded-lg bg-blue-600 px-4 text-sm font-semibold text-white hover:bg-blue-700"
-            >
-              <Icon path={<><path d="M12 5v14" /><path d="M5 12h14" /></>} />
-              Create Plan
-            </button>
-          </div>
-        </div>
-
-        {(plans ?? []).length ? (
-          <div className="grid gap-4 lg:grid-cols-3">
-            {(plans ?? []).map((plan) => {
-              const featurePreview = (plan.features ?? []).slice(0, 3);
-              return (
-                <article key={plan.id} className="rounded-xl border border-[var(--shell-border)] bg-[var(--shell-card)] p-4 shadow-sm">
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="min-w-0">
-                      <h3 className="truncate text-lg font-bold text-[var(--shell-text)]">{plan.name}</h3>
-                      <p className="mt-1 text-sm font-semibold text-[var(--shell-muted)]">{formatCurrency(plan.priceCents / 100)} monthly</p>
-                    </div>
-                    <Badge className={statusBadgeClass(plan.status)}>{formatLabel(plan.status)}</Badge>
-                  </div>
-
-                  <div className="mt-4 grid grid-cols-2 gap-3">
-                    <div className="rounded-lg border border-[var(--shell-border)] bg-[var(--shell-subtle)] px-3 py-2">
-                      <p className="text-[11px] font-semibold uppercase text-[var(--shell-muted)]">Students</p>
-                      <p className="mt-1 text-lg font-bold text-blue-700">{formatNumber(plan.studentLimit)}</p>
-                    </div>
-                    <div className="rounded-lg border border-[var(--shell-border)] bg-[var(--shell-subtle)] px-3 py-2">
-                      <p className="text-[11px] font-semibold uppercase text-[var(--shell-muted)]">Teachers</p>
-                      <p className="mt-1 text-lg font-bold text-emerald-700">{formatNumber(plan.teacherLimit)}</p>
-                    </div>
-                  </div>
-
-                  <div className="mt-4 min-h-16 space-y-2">
-                    {featurePreview.length ? (
-                      featurePreview.map((feature) => (
-                        <p key={feature} className="flex items-start gap-2 text-sm leading-5 text-[var(--shell-muted)]">
-                          <span className="mt-1 h-1.5 w-1.5 shrink-0 rounded-full bg-blue-500" />
-                          {feature}
-                        </p>
-                      ))
-                    ) : (
-                      <p className="text-sm text-[var(--shell-muted)]">No feature summary added.</p>
-                    )}
-                  </div>
-
-                  <div className="mt-4 grid gap-2 sm:grid-cols-3">
-                    <button
-                      type="button"
-                      onClick={() => openPlanEditor(plan)}
-                      className="inline-flex h-10 items-center justify-center gap-2 rounded-lg bg-blue-600 px-3 text-sm font-semibold text-white hover:bg-blue-700"
-                    >
-                      <Icon path={<><path d="M12 20h9" /><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z" /></>} />
-                      Edit
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => openPlanModules(plan)}
-                      className="inline-flex h-10 items-center justify-center gap-2 rounded-lg border border-[var(--shell-border)] bg-[var(--shell-card)] px-3 text-sm font-semibold text-[var(--shell-text)] hover:bg-[var(--shell-hover)]"
-                    >
-                      <Icon path={<><path d="M4 4h7v7H4z" /><path d="M13 4h7v7h-7z" /><path d="M4 13h7v7H4z" /><path d="M13 13h7v7h-7z" /></>} />
-                      Modules
-                    </button>
-                    <button
-                      type="button"
-                      disabled={planDeleteMutation.isPending}
-                      onClick={() => confirmDeletePlan(plan)}
-                      className="inline-flex h-10 items-center justify-center gap-2 rounded-lg border border-rose-200 bg-rose-50 px-3 text-sm font-semibold text-rose-700 hover:bg-rose-100 disabled:opacity-50"
-                    >
-                      <Icon path={<><path d="M3 6h18" /><path d="M8 6V4h8v2" /><path d="M19 6l-1 14H6L5 6" /></>} />
-                      Delete
-                    </button>
-                  </div>
-                </article>
-              );
-            })}
-          </div>
-        ) : (
-          <div className="rounded-xl border border-dashed border-[var(--shell-border)] bg-[var(--shell-card)] p-8 text-center text-sm text-[var(--shell-muted)]">
-            No subscription plans found.
-          </div>
-        )}
       </section>
 
       {selectedSchoolId ? (
@@ -1152,45 +635,6 @@ export default function SubscriptionsPage() {
         />
       ) : null}
 
-      {modulePlanId && planModalMode === 'modules' ? (
-        <PlanModulesModal
-          plan={selectedModulePlan}
-          permissions={modulePermissions?.permissions ?? []}
-          editedCodes={editedPermissionCodes}
-          loading={isModulePermissionsLoading}
-          saving={modulePermissionMutation.isPending}
-          onChange={setEditedPermissionCodes}
-          onClose={closePlanModal}
-          onSubmit={() => modulePermissionMutation.mutate()}
-        />
-      ) : null}
-
-      {modulePlanId && planModalMode === 'edit' ? (
-        <PlanEditModal
-          mode="edit"
-          plan={selectedModulePlan}
-          form={planForm}
-          saving={planEditMutation.isPending}
-          onFormChange={(patch) => setPlanForm((current) => ({ ...current, ...patch }))}
-          onClose={closePlanModal}
-          onSubmit={() => planEditMutation.mutate()}
-        />
-      ) : null}
-
-      {planModalMode === 'create' ? (
-        <PlanEditModal
-          mode="create"
-          plan={null}
-          form={planForm}
-          saving={planCreateMutation.isPending}
-          moduleSections={planSectionDefinitions}
-          enabledCodes={editedPermissionCodes}
-          onFormChange={(patch) => setPlanForm((current) => ({ ...current, ...patch }))}
-          onModuleChange={setEditedPermissionCodes}
-          onClose={closePlanModal}
-          onSubmit={() => planCreateMutation.mutate()}
-        />
-      ) : null}
     </DashboardPageContainer>
   );
 }
@@ -1212,7 +656,7 @@ function FilterSelect({
       <select
         value={value}
         onChange={(event) => onChange(event.target.value)}
-        className="mt-1 h-10 w-full rounded-lg border border-[var(--shell-border)] bg-[var(--shell-subtle)] px-3 text-sm text-[var(--shell-text)] outline-none focus:ring-2 focus:ring-blue-500"
+        className="mt-1 h-9 w-full rounded-md border border-[var(--shell-border)] bg-[var(--shell-subtle)] px-3 text-sm text-[var(--shell-text)] outline-none focus:ring-2 focus:ring-blue-500"
       >
         {children}
       </select>
@@ -1244,361 +688,6 @@ function ActionButton({
       {icon}
       {children}
     </button>
-  );
-}
-
-function PlanEditModal({
-  mode,
-  plan,
-  form,
-  saving,
-  moduleSections = [],
-  enabledCodes = [],
-  onFormChange,
-  onModuleChange,
-  onClose,
-  onSubmit,
-}: {
-  mode: 'create' | 'edit';
-  plan: SubscriptionPlan | null;
-  form: PlanFormState;
-  saving: boolean;
-  moduleSections?: PlanSectionView[];
-  enabledCodes?: string[];
-  onFormChange: (patch: Partial<PlanFormState>) => void;
-  onModuleChange?: (codes: string[]) => void;
-  onClose: () => void;
-  onSubmit: () => void;
-}) {
-  const isCreate = mode === 'create';
-  const enabledSet = useMemo(() => new Set(enabledCodes), [enabledCodes]);
-  const includedSectionCount = useMemo(() => countIncludedSections(moduleSections, enabledSet), [moduleSections, enabledSet]);
-  const allModuleCodes = useMemo(() => Array.from(new Set(moduleSections.flatMap((section) => section.codes))), [moduleSections]);
-
-  return (
-    <div className="fixed inset-0 z-50 flex justify-end bg-black/40">
-      <button type="button" aria-label="Close plan drawer" className="absolute inset-0 cursor-default" onClick={onClose} />
-      <aside className="relative flex h-full w-full max-w-3xl flex-col overflow-hidden bg-[var(--shell-card)] shadow-2xl">
-      <form
-        onSubmit={(event) => {
-          event.preventDefault();
-          onSubmit();
-        }}
-        className="flex min-h-0 flex-1 flex-col"
-      >
-        <div className="flex flex-col gap-4 border-b border-[var(--shell-border)] p-5 lg:flex-row lg:items-start lg:justify-between">
-          <div>
-            <p className="text-xs font-semibold uppercase tracking-[0.16em] text-[var(--shell-muted)]">{isCreate ? 'Create plan' : 'Edit plan'}</p>
-            <h2 className="mt-1 text-2xl font-bold text-[var(--shell-text)]">{isCreate ? 'New Subscription Plan' : plan?.name ?? 'Subscription Plan'}</h2>
-            <p className="mt-1 text-sm text-[var(--shell-muted)]">
-              {isCreate
-                ? 'Set pricing, limits, features, and sidebar sections.'
-                : 'Update plan pricing, limits, and feature lines.'}
-            </p>
-          </div>
-          <button type="button" onClick={onClose} className="rounded-xl border border-[var(--shell-border)] px-3 py-2 text-sm font-semibold text-[var(--shell-text)]">
-            Close
-          </button>
-        </div>
-
-        <div className="flex-1 overflow-y-auto p-5">
-          <section className="rounded-xl border border-[var(--shell-border)] bg-[var(--shell-subtle)] p-4">
-            <div>
-              <h3 className="text-base font-bold text-[var(--shell-text)]">Plan Details</h3>
-              <div className="mt-4 space-y-4">
-                <label className="block">
-                  <span className="text-xs font-semibold uppercase tracking-[0.14em] text-[var(--shell-muted)]">Plan Name</span>
-                  <input
-                    value={form.name}
-                    onChange={(event) => onFormChange({ name: event.target.value })}
-                    className="mt-1 w-full rounded-xl border border-[var(--shell-border)] bg-[var(--shell-card)] px-3 py-2 text-sm text-[var(--shell-text)] outline-none focus:ring-2 focus:ring-blue-500"
-                    placeholder="Premium"
-                  />
-                </label>
-                <div className="grid gap-3 sm:grid-cols-2">
-                  <label className="block">
-                    <span className="text-xs font-semibold uppercase tracking-[0.14em] text-[var(--shell-muted)]">Status</span>
-                    <select
-                      value={form.status}
-                      onChange={(event) => onFormChange({ status: event.target.value })}
-                      className="mt-1 w-full rounded-xl border border-[var(--shell-border)] bg-[var(--shell-card)] px-3 py-2 text-sm text-[var(--shell-text)] outline-none focus:ring-2 focus:ring-blue-500"
-                    >
-                      <option value="ACTIVE">Active</option>
-                      <option value="INACTIVE">Inactive</option>
-                    </select>
-                  </label>
-                  <label className="block">
-                    <span className="text-xs font-semibold uppercase tracking-[0.14em] text-[var(--shell-muted)]">Monthly Price</span>
-                    <input
-                      type="number"
-                      min="0"
-                      step="1"
-                      value={form.price}
-                      onChange={(event) => onFormChange({ price: event.target.value })}
-                      className="mt-1 w-full rounded-xl border border-[var(--shell-border)] bg-[var(--shell-card)] px-3 py-2 text-sm text-[var(--shell-text)] outline-none focus:ring-2 focus:ring-blue-500"
-                    />
-                  </label>
-                </div>
-                <div className="grid gap-3 sm:grid-cols-2">
-                  <label className="block">
-                    <span className="text-xs font-semibold uppercase tracking-[0.14em] text-[var(--shell-muted)]">Student Limit</span>
-                    <input
-                      type="number"
-                      min="1"
-                      step="1"
-                      value={form.studentLimit}
-                      onChange={(event) => onFormChange({ studentLimit: event.target.value })}
-                      className="mt-1 w-full rounded-xl border border-[var(--shell-border)] bg-[var(--shell-card)] px-3 py-2 text-sm text-[var(--shell-text)] outline-none focus:ring-2 focus:ring-blue-500"
-                    />
-                  </label>
-                  <label className="block">
-                    <span className="text-xs font-semibold uppercase tracking-[0.14em] text-[var(--shell-muted)]">Teacher Limit</span>
-                    <input
-                      type="number"
-                      min="1"
-                      step="1"
-                      value={form.teacherLimit}
-                      onChange={(event) => onFormChange({ teacherLimit: event.target.value })}
-                      className="mt-1 w-full rounded-xl border border-[var(--shell-border)] bg-[var(--shell-card)] px-3 py-2 text-sm text-[var(--shell-text)] outline-none focus:ring-2 focus:ring-blue-500"
-                    />
-                  </label>
-                </div>
-                <label className="block">
-                  <span className="text-xs font-semibold uppercase tracking-[0.14em] text-[var(--shell-muted)]">Feature Lines</span>
-                  <textarea
-                    value={form.features}
-                    onChange={(event) => onFormChange({ features: event.target.value })}
-                    rows={8}
-                    className="mt-1 w-full rounded-xl border border-[var(--shell-border)] bg-[var(--shell-card)] px-3 py-2 text-sm text-[var(--shell-text)] outline-none focus:ring-2 focus:ring-blue-500"
-                    placeholder="One feature per line"
-                  />
-                </label>
-              </div>
-            </div>
-          </section>
-
-          {isCreate ? (
-            <section className="mt-4 rounded-xl border border-[var(--shell-border)] bg-[var(--shell-subtle)] p-4">
-              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                <div>
-                  <h3 className="text-base font-bold text-[var(--shell-text)]">Modules</h3>
-                  <p className="mt-1 text-sm text-[var(--shell-muted)]">
-                    {includedSectionCount} of {moduleSections.length} sections enabled
-                  </p>
-                </div>
-                <div className="flex flex-wrap gap-2">
-                  <button
-                    type="button"
-                    onClick={() => onModuleChange?.(allModuleCodes)}
-                    className="rounded-lg border border-[var(--shell-border)] bg-[var(--shell-card)] px-3 py-2 text-sm font-semibold text-[var(--shell-text)] hover:bg-[var(--shell-hover)]"
-                  >
-                    Enable All
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => onModuleChange?.([])}
-                    className="rounded-lg border border-[var(--shell-border)] bg-[var(--shell-card)] px-3 py-2 text-sm font-semibold text-[var(--shell-text)] hover:bg-[var(--shell-hover)]"
-                  >
-                    Disable All
-                  </button>
-                </div>
-              </div>
-              <div className="mt-4">
-                <PlanSectionList
-                  sections={moduleSections}
-                  enabledCodes={enabledCodes}
-                  disabled={saving}
-                  onChange={(codes) => onModuleChange?.(codes)}
-                />
-              </div>
-            </section>
-          ) : null}
-        </div>
-
-        <div className="flex shrink-0 justify-end gap-2 border-t border-[var(--shell-border)] p-5">
-          <button type="button" onClick={onClose} className="rounded-xl border border-[var(--shell-border)] px-4 py-2 text-sm font-semibold text-[var(--shell-text)]">
-            Cancel
-          </button>
-          <button
-            type="submit"
-            disabled={saving}
-            className="rounded-xl bg-blue-600 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50"
-          >
-            {saving ? 'Saving...' : isCreate ? 'Create Plan' : 'Save Plan'}
-          </button>
-        </div>
-      </form>
-      </aside>
-    </div>
-  );
-}
-
-function PlanSectionList({
-  sections,
-  enabledCodes,
-  disabled = false,
-  onChange,
-}: {
-  sections: PlanSectionView[];
-  enabledCodes: string[];
-  disabled?: boolean;
-  onChange: (codes: string[]) => void;
-}) {
-  const enabledSet = useMemo(() => new Set(enabledCodes), [enabledCodes]);
-
-  const toggleCodes = (codes: string[], enabled: boolean) => {
-    const next = new Set(enabledCodes);
-    codes.forEach((code) => {
-      if (enabled) next.add(code);
-      else next.delete(code);
-    });
-    onChange(Array.from(next));
-  };
-
-  if (!sections.length) {
-    return (
-      <div className="rounded-xl border border-dashed border-[var(--shell-border)] bg-[var(--shell-card)] p-8 text-center text-sm text-[var(--shell-muted)]">
-        No module sections found.
-      </div>
-    );
-  }
-
-  return (
-    <div className="overflow-hidden rounded-xl border border-[var(--shell-border)] bg-[var(--shell-card)]">
-      {sections.map((section) => {
-        const sectionState = getSectionState(section.codes, enabledSet);
-        return (
-          <div
-            key={section.parent}
-            className={`flex flex-col gap-3 border-b border-[var(--shell-border)] px-4 py-3 last:border-b-0 sm:flex-row sm:items-center sm:justify-between ${
-              sectionState.isIncluded ? 'bg-emerald-50/45' : sectionState.isPartial ? 'bg-amber-50/50' : 'bg-[var(--shell-card)]'
-            }`}
-          >
-            <h4 className="text-sm font-bold text-[var(--shell-text)]">{section.parent}</h4>
-            <button
-              type="button"
-              disabled={disabled}
-              onClick={() => toggleCodes(section.codes, !sectionState.isIncluded)}
-              className={`w-24 rounded-full px-3 py-1 text-xs font-semibold disabled:opacity-50 ${
-                sectionState.isIncluded
-                  ? 'bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200'
-                  : sectionState.isPartial
-                    ? 'bg-amber-50 text-amber-700 ring-1 ring-amber-200'
-                    : 'bg-slate-100 text-slate-600 ring-1 ring-slate-200'
-              }`}
-            >
-              {sectionState.isIncluded ? 'Enabled' : sectionState.isPartial ? 'Partial' : 'Disabled'}
-            </button>
-          </div>
-        );
-      })}
-    </div>
-  );
-}
-
-function PlanModulesModal({
-  plan,
-  permissions,
-  editedCodes,
-  loading,
-  saving,
-  onChange,
-  onClose,
-  onSubmit,
-}: {
-  plan: SubscriptionPlan | null;
-  permissions: PlanPermissionItem[];
-  editedCodes: string[];
-  loading: boolean;
-  saving: boolean;
-  onChange: (codes: string[]) => void;
-  onClose: () => void;
-  onSubmit: () => void;
-}) {
-  const groups = useMemo(() => buildPlanPermissionGroups(permissions), [permissions]);
-  const sections = useMemo(() => getSectionsFromGroups(groups), [groups]);
-  const enabledSet = useMemo(() => new Set(editedCodes), [editedCodes]);
-  const allCodes = useMemo(() => Array.from(new Set(permissions.map((permission) => permission.code))), [permissions]);
-  const includedSectionCount = useMemo(() => countIncludedSections(sections, enabledSet), [sections, enabledSet]);
-
-  const setCodes = (codes: string[]) => onChange(Array.from(new Set(codes)));
-
-  return (
-    <div className="fixed inset-0 z-50 flex justify-end bg-black/40">
-      <button type="button" aria-label="Close modules drawer" className="absolute inset-0 cursor-default" onClick={onClose} />
-      <aside className="relative flex h-full w-full max-w-3xl flex-col overflow-hidden bg-[var(--shell-card)] shadow-2xl">
-        <div className="flex flex-col gap-4 border-b border-[var(--shell-border)] p-5 lg:flex-row lg:items-start lg:justify-between">
-          <div>
-            <p className="text-xs font-semibold uppercase tracking-[0.16em] text-[var(--shell-muted)]">Plan modules and sidebar access</p>
-            <h2 className="mt-1 text-2xl font-bold text-[var(--shell-text)]">{plan?.name ?? 'Subscription Plan'}</h2>
-            <p className="mt-1 text-sm text-[var(--shell-muted)]">
-              {includedSectionCount} of {sections.length} sections enabled
-            </p>
-          </div>
-          <div className="flex flex-wrap gap-2">
-            <button
-              type="button"
-              onClick={() => setCodes(allCodes)}
-              disabled={loading}
-              className="rounded-xl border border-[var(--shell-border)] px-3 py-2 text-sm font-semibold text-[var(--shell-text)] disabled:opacity-50"
-            >
-              Enable All
-            </button>
-            <button
-              type="button"
-              onClick={() => onChange([])}
-              disabled={loading}
-              className="rounded-xl border border-[var(--shell-border)] px-3 py-2 text-sm font-semibold text-[var(--shell-text)] disabled:opacity-50"
-            >
-              Disable All
-            </button>
-            <button type="button" onClick={onClose} className="rounded-xl border border-[var(--shell-border)] px-3 py-2 text-sm font-semibold text-[var(--shell-text)]">
-              Close
-            </button>
-          </div>
-        </div>
-
-        <div className="flex-1 overflow-y-auto p-5">
-          {loading ? (
-            <div className="space-y-3">
-              {Array.from({ length: 5 }).map((_, index) => (
-                <div key={index} className="h-16 animate-pulse rounded-xl bg-[var(--shell-subtle)]" />
-              ))}
-            </div>
-          ) : sections.length ? (
-            <PlanSectionList
-              sections={sections}
-              enabledCodes={editedCodes}
-              disabled={saving || loading}
-              onChange={onChange}
-            />
-          ) : (
-            <div className="rounded-xl border border-dashed border-[var(--shell-border)] p-10 text-center text-sm text-[var(--shell-muted)]">
-              No module permissions found for this plan.
-            </div>
-          )}
-        </div>
-
-        <div className="flex shrink-0 flex-col gap-3 border-t border-[var(--shell-border)] p-5 sm:flex-row sm:items-center sm:justify-between">
-          <p className="text-sm text-[var(--shell-muted)]">
-            {includedSectionCount} of {sections.length} sections enabled
-          </p>
-          <div className="flex justify-end gap-2">
-            <button type="button" onClick={onClose} className="rounded-xl border border-[var(--shell-border)] px-4 py-2 text-sm font-semibold text-[var(--shell-text)]">
-              Cancel
-            </button>
-            <button
-              type="button"
-              disabled={saving || loading}
-              onClick={onSubmit}
-              className="rounded-xl bg-blue-600 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50"
-            >
-              {saving ? 'Saving...' : 'Save Modules'}
-            </button>
-          </div>
-        </div>
-      </aside>
-    </div>
   );
 }
 
