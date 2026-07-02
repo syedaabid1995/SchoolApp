@@ -36,6 +36,8 @@ frontend/.env.*
 
 # Logs
 logs
+!admin/app/dashboard/communication/logs/
+!admin/app/dashboard/communication/logs/page.tsx
 *.log
 
 # Runtime data
