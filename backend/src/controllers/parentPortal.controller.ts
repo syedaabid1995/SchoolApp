@@ -427,8 +427,31 @@ export const getParentAttendance = async (req: Request, res: Response) => {
   res.status(200).json({ calendar, presentDays, absentDays });
 };
 
-export const listParentNotices = async (_req: Request, res: Response) => {
-  res.status(200).json([]);
+export const listParentNotices = async (req: Request, res: Response) => {
+  const auth = requireAuth(req);
+  const { childId } = req.query;
+  const { child } = await requireChildAccess(auth.userId, typeof childId === 'string' ? childId : undefined);
+  const now = new Date();
+  const notices = await prisma.communicationNotice.findMany({
+    where: {
+      schoolId: child.schoolId,
+      status: 'PUBLISHED',
+      publishedAt: { lte: now },
+      OR: [{ expiresAt: null }, { expiresAt: { gte: now } }],
+    },
+    orderBy: [{ publishedAt: 'desc' }, { createdAt: 'desc' }],
+    take: 50,
+  });
+
+  res.status(200).json(
+    notices.map((notice) => ({
+      id: notice.id,
+      title: notice.title,
+      date: notice.publishedAt.toISOString(),
+      summary: notice.message,
+      audience: notice.audience,
+    })),
+  );
 };
 
 export const listParentTimetable = async (_req: Request, res: Response) => {

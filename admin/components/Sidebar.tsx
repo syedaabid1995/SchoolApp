@@ -356,8 +356,8 @@ export const Sidebar = ({
         id: 'attendance',
         label: 'Attendance',
         items: [
-          { href: '/dashboard/attendance/students/mark', label: 'Mark Attendance', icon: 'MA' },
-          { href: '/dashboard/students/attendance', label: 'Student Attendance', icon: 'SA' },
+          { href: '/dashboard/attendance/my', label: 'Mark Attendance', icon: 'MA' },
+          { href: '/dashboard/attendance/students/mark', label: 'Student Attendance', icon: 'SA' },
           { href: '/dashboard/staff/attendance', label: 'Staff Attendance', icon: 'EA' },
           { href: '/dashboard/leave/my', label: 'Apply Leave', icon: 'LV' },
           { href: '/dashboard/leave/requests', label: 'Leave Management', icon: 'LM' },
@@ -392,11 +392,16 @@ export const Sidebar = ({
       },
       {
         id: 'communication',
-        label: 'Communication',
+        label: 'Communicate',
         items: [
-          // { href: '/dashboard/settings?tab=messaging', label: 'Messaging Settings', icon: 'SM' },
-          { href: '/dashboard/support', label: 'Complaint / Support', icon: 'CP' },
-          { href: '/parent/login', label: 'Parent Portal', icon: 'PP' },
+          { href: '/dashboard/communication/notice-board', label: 'Notice Board', icon: 'NB' },
+          { href: '/dashboard/communication/send-email', label: 'Send Email', icon: 'EM' },
+          { href: '/dashboard/communication/send-sms', label: 'Send SMS', icon: 'SM' },
+          { href: '/dashboard/communication/logs', label: 'Email / SMS Log', icon: 'LG' },
+          { href: '/dashboard/communication/scheduled-logs', label: 'Schedule Email SMS Log', icon: 'SL' },
+          { href: '/dashboard/communication/login-credentials', label: 'Login Credentials Send', icon: 'LC' },
+          { href: '/dashboard/communication/email-templates', label: 'Email Template', icon: 'ET' },
+          { href: '/dashboard/communication/sms-templates', label: 'SMS Template', icon: 'ST' },
         ],
       },
       {

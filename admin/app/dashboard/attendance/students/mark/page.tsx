@@ -247,7 +247,7 @@ function LegacyStudentAttendanceMarkPage({ onUseV2 }: { onUseV2: () => void }) {
   );
 }
 
-function StudentAttendanceMarkV2Page({ onUseLegacy }: { onUseLegacy: () => void }) {
+function StudentAttendanceMarkV2Page({ onUseLegacy }: { onUseLegacy?: () => void }) {
   const notify = useNotify();
   const queryClient = useQueryClient();
   const { data: session } = useQuery({ queryKey: ['session'], queryFn: getSession });
@@ -381,7 +381,7 @@ function StudentAttendanceMarkV2Page({ onUseLegacy }: { onUseLegacy: () => void 
           title="Student Attendance"
           subtitle="Resolve attendance configuration, choose the daily slot or period, and mark the canonical attendance sheet."
           breadcrumbs={[{ label: 'Dashboard', href: '/dashboard' }, { label: 'Attendance', href: '/dashboard/attendance/overview' }, { label: 'Students' }]}
-          actions={<Button variant="outline" size="sm" onClick={onUseLegacy}>Use Legacy Flow</Button>}
+          actions={onUseLegacy ? <Button variant="outline" size="sm" onClick={onUseLegacy}>Use Legacy Flow</Button> : null}
         />
 
         <section className="mb-5 rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
@@ -500,7 +500,7 @@ function StudentAttendanceMarkV2Page({ onUseLegacy }: { onUseLegacy: () => void 
 }
 
 export default function StudentAttendanceMarkPage() {
-  const [flow, setFlow] = useState<'v2' | 'legacy'>('v2');
-  if (flow === 'legacy') return <LegacyStudentAttendanceMarkPage onUseV2={() => setFlow('v2')} />;
-  return <StudentAttendanceMarkV2Page onUseLegacy={() => setFlow('legacy')} />;
+  const [flow] = useState<'v2' | 'legacy'>('v2');
+  if (flow === 'legacy') return <LegacyStudentAttendanceMarkPage onUseV2={() => undefined} />;
+  return <StudentAttendanceMarkV2Page />;
 }

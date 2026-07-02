@@ -19,6 +19,11 @@ export class SendGridEmailAdapter implements NotificationAdapter {
       return { status: 'FAILED', error: 'SendGrid credentials are incomplete' };
     }
 
+    const content = [{ type: 'text/plain', value: payload.body }];
+    if (payload.html) {
+      content.push({ type: 'text/html', value: payload.html });
+    }
+
     try {
       const response = await fetch(apiUrl?.trim() || SENDGRID_MAIL_SEND_URL, {
         method: 'POST',
@@ -31,7 +36,7 @@ export class SendGridEmailAdapter implements NotificationAdapter {
           from: { email: fromEmail, ...(fromName ? { name: fromName } : {}) },
           ...(replyToEmail ? { reply_to: { email: replyToEmail } } : {}),
           subject: payload.subject ?? 'Notification',
-          content: [{ type: 'text/plain', value: payload.body }],
+          content,
         }),
       });
 

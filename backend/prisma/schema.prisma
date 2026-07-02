@@ -103,6 +103,8 @@ model School {
   featureFlagOverrides           FeatureFlagOverride[]
   configOverrides                TenantConfigOverride[]
   notificationLogs               NotificationLog[]
+  notificationTemplates           NotificationTemplate[]
+  communicationNotices            CommunicationNotice[]
   backupJobs                     BackupJob[]
   subscription                   Subscription?
   subscriptionInvoices           SubscriptionInvoice[]
@@ -212,6 +214,7 @@ model User {
   markRevaluations                       MarkRevaluation[]
   featureFlagOverrides                   FeatureFlagOverride[]
   notificationLogs                       NotificationLog[]
+  communicationNoticesCreated            CommunicationNotice[]             @relation("CommunicationNoticeCreatedBy")
   backupRequests                         BackupJob[]
   restoreApprovals                       RestoreJob[]                    @relation("RestoreApprovedBy")
   restoreRequests                        RestoreJob[]                    @relation("RestoreRequestedBy")
@@ -4068,15 +4071,20 @@ enum MessagingServiceStatus {
 
 model NotificationTemplate {
   id        String              @id @default(uuid()) @db.Uuid
+  schoolId  String?             @map("school_id") @db.Uuid
   key       String              @unique
+  name      String?
   channel   NotificationChannel
   subject   String?
   body      String
   createdAt DateTime            @default(now()) @map("created_at")
   updatedAt DateTime            @updatedAt @map("updated_at")
 
+  school School? @relation(fields: [schoolId], references: [id], onDelete: Cascade)
   logs NotificationLog[]
 
+  @@index([schoolId])
+  @@index([schoolId, channel])
   @@map("notification_templates")
 }
 
@@ -4090,6 +4098,7 @@ model NotificationLog {
   status     NotificationStatus  @default(QUEUED)
   providerId String?             @map("provider_id")
   error      String?
+  scheduledAt DateTime?          @map("scheduled_at")
   sentAt     DateTime?           @map("sent_at")
   createdAt  DateTime            @default(now()) @map("created_at")
   updatedAt  DateTime            @updatedAt @map("updated_at")
@@ -4100,11 +4109,35 @@ model NotificationLog {
 
   @@index([schoolId])
   @@index([schoolId, createdAt])
+  @@index([schoolId, channel, createdAt])
+  @@index([schoolId, channel, scheduledAt])
   @@index([schoolId, status, createdAt])
   @@index([userId])
   @@index([userId, createdAt])
   @@index([templateId])
   @@map("notification_logs")
+}
+
+model CommunicationNotice {
+  id          String   @id @default(uuid()) @db.Uuid
+  schoolId    String   @map("school_id") @db.Uuid
+  title       String
+  message     String
+  audience    Json
+  status      String   @default("PUBLISHED")
+  publishedAt DateTime @default(now()) @map("published_at")
+  expiresAt   DateTime? @map("expires_at")
+  createdById String?  @map("created_by_id") @db.Uuid
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  school    School @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  createdBy User?  @relation("CommunicationNoticeCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+
+  @@index([schoolId])
+  @@index([schoolId, status, publishedAt])
+  @@index([createdById])
+  @@map("communication_notices")
 }
 
 model MessagingService {

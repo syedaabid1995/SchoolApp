@@ -128,12 +128,12 @@ export default function DashboardPage() {
     if (isTeacher) {
       return [
         { title: 'Timetable', href: '/dashboard/timetable', icon: 'TT', description: 'Open class schedule', tone: 'blue' as const },
-        { title: 'Mark Attendance', href: '/dashboard/students/attendance', icon: 'AT', description: 'Start attendance workflow', tone: 'emerald' as const },
+        { title: 'Mark Attendance', href: '/dashboard/attendance/my', icon: 'AT', description: 'Mark your own attendance', tone: 'emerald' as const },
         { title: 'Upload Marks', href: '/dashboard/academics/marks', icon: 'MK', description: 'Update assessment records', tone: 'violet' as const },
         { title: 'Reports', href: '/dashboard/reports', icon: 'RP', description: 'Review assigned reports', tone: 'slate' as const },
       ].filter((action) => {
         if (action.href === '/dashboard/timetable') return hasPermission('academics.setup');
-        if (action.href === '/dashboard/students/attendance') return hasPermission('attendance.view');
+        if (action.href === '/dashboard/attendance/my') return hasPermission('attendance.view');
         if (action.href === '/dashboard/academics/marks') return hasPermission('academics.marks');
         if (action.href === '/dashboard/reports') return hasPermission('reports.view');
         return false;

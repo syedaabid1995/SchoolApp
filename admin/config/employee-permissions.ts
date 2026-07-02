@@ -6,7 +6,7 @@ export type PermissionCatalogItem = {
   code: string;
   label: string;
   path: string;
-  group: 'Overview' | 'Plans' | 'AI Assistant' | 'Employees' | 'Academics' | 'Students' | 'Attendance' | 'Fees' | 'Payroll' | 'Support' | 'Audit' | 'Utilities';
+  group: 'Overview' | 'Plans' | 'AI Assistant' | 'Employees' | 'Academics' | 'Students' | 'Attendance' | 'Fees' | 'Payroll' | 'Communication' | 'Support' | 'Audit' | 'Utilities';
 };
 
 export const EMPLOYEE_PERMISSION_CATALOG: PermissionCatalogItem[] = [
@@ -30,6 +30,23 @@ export const EMPLOYEE_PERMISSION_CATALOG: PermissionCatalogItem[] = [
   { code: P.complianceReview, label: 'Compliance - Review', path: '/dashboard/compliance', group: 'Audit' },
   { code: P.complianceExportReview, label: 'Compliance Export - Review', path: '/dashboard/compliance', group: 'Audit' },
   { code: P.complianceDeletionReview, label: 'Compliance Deletion - Review', path: '/dashboard/compliance', group: 'Audit' },
+  { code: P.communicationNoticeBoardView, label: 'Notice Board - View', path: '/dashboard/communication/notice-board', group: 'Communication' },
+  { code: P.communicationNoticeBoardCreate, label: 'Notice Board - Create', path: '/dashboard/communication/notice-board', group: 'Communication' },
+  { code: P.communicationNoticeBoardEdit, label: 'Notice Board - Edit', path: '/dashboard/communication/notice-board', group: 'Communication' },
+  { code: P.communicationNoticeBoardDelete, label: 'Notice Board - Delete', path: '/dashboard/communication/notice-board', group: 'Communication' },
+  { code: P.communicationEmailSend, label: 'Send Email', path: '/dashboard/communication/send-email', group: 'Communication' },
+  { code: P.communicationSmsSend, label: 'Send SMS', path: '/dashboard/communication/send-sms', group: 'Communication' },
+  { code: P.communicationEmailLogView, label: 'Email / SMS Logs', path: '/dashboard/communication/logs', group: 'Communication' },
+  { code: P.communicationScheduledLogView, label: 'Scheduled Email / SMS Logs', path: '/dashboard/communication/scheduled-logs', group: 'Communication' },
+  { code: P.communicationLoginCredentialsSend, label: 'Login Credentials Send', path: '/dashboard/communication/login-credentials', group: 'Communication' },
+  { code: P.communicationEmailTemplateView, label: 'Email Templates - View', path: '/dashboard/communication/email-templates', group: 'Communication' },
+  { code: P.communicationEmailTemplateCreate, label: 'Email Templates - Create', path: '/dashboard/communication/email-templates', group: 'Communication' },
+  { code: P.communicationEmailTemplateEdit, label: 'Email Templates - Edit', path: '/dashboard/communication/email-templates', group: 'Communication' },
+  { code: P.communicationEmailTemplateDelete, label: 'Email Templates - Delete', path: '/dashboard/communication/email-templates', group: 'Communication' },
+  { code: P.communicationSmsTemplateView, label: 'SMS Templates - View', path: '/dashboard/communication/sms-templates', group: 'Communication' },
+  { code: P.communicationSmsTemplateCreate, label: 'SMS Templates - Create', path: '/dashboard/communication/sms-templates', group: 'Communication' },
+  { code: P.communicationSmsTemplateEdit, label: 'SMS Templates - Edit', path: '/dashboard/communication/sms-templates', group: 'Communication' },
+  { code: P.communicationSmsTemplateDelete, label: 'SMS Templates - Delete', path: '/dashboard/communication/sms-templates', group: 'Communication' },
   { code: P.plansView, label: 'Plans', path: '/dashboard/plans', group: 'Plans' },
   { code: P.aiAssistantView, label: 'AI Assistant - View', path: '/dashboard/assistant', group: 'AI Assistant' },
   { code: P.aiAssistantUse, label: 'AI Assistant - Chat', path: '/dashboard/assistant', group: 'AI Assistant' },
@@ -113,10 +130,10 @@ export const EMPLOYEE_PERMISSION_CATALOG: PermissionCatalogItem[] = [
   { code: P.studentTimelineView, label: 'Student Timeline - View', path: '/dashboard/students', group: 'Students' },
   { code: P.studentTimelineCreate, label: 'Student Timeline - Create', path: '/dashboard/students', group: 'Students' },
   { code: P.studentTimelineDelete, label: 'Student Timeline - Delete', path: '/dashboard/students', group: 'Students' },
-  { code: P.attendanceView, label: 'Student Attendance - View', path: '/dashboard/students/attendance', group: 'Attendance' },
-  { code: P.attendanceCreate, label: 'Student Attendance - Create', path: '/dashboard/students/attendance', group: 'Attendance' },
-  { code: P.attendanceEdit, label: 'Student Attendance - Edit', path: '/dashboard/students/attendance', group: 'Attendance' },
-  { code: P.attendanceReport, label: 'Student Attendance - Report', path: '/dashboard/students/attendance', group: 'Attendance' },
+  { code: P.attendanceView, label: 'Student Attendance - View', path: '/dashboard/attendance/students/mark', group: 'Attendance' },
+  { code: P.attendanceCreate, label: 'Student Attendance - Create', path: '/dashboard/attendance/students/mark', group: 'Attendance' },
+  { code: P.attendanceEdit, label: 'Student Attendance - Edit', path: '/dashboard/attendance/students/mark', group: 'Attendance' },
+  { code: P.attendanceReport, label: 'Student Attendance - Report', path: '/dashboard/attendance/students/mark', group: 'Attendance' },
   { code: P.staffAttendanceView, label: 'Staff Attendance - View', path: '/dashboard/staff/attendance', group: 'Attendance' },
   { code: P.staffAttendanceCreate, label: 'Staff Attendance - Create', path: '/dashboard/staff/attendance', group: 'Attendance' },
   { code: P.staffAttendanceEdit, label: 'Staff Attendance - Edit', path: '/dashboard/staff/attendance', group: 'Attendance' },
@@ -202,6 +219,14 @@ export const getRequiredPermissionForPath = (pathname: string) => {
   if (pathname.startsWith('/dashboard/assistant')) return P.aiAssistantView;
   if (pathname.startsWith('/dashboard/onboarding')) return P.schoolOnboardingView;
   if (/^\/dashboard\/schools\/[^/]+\/onboarding/.test(pathname)) return P.schoolOnboardingReview;
+  if (pathname.startsWith('/dashboard/communication/notice-board')) return P.communicationNoticeBoardView;
+  if (pathname.startsWith('/dashboard/communication/send-email')) return P.communicationEmailSend;
+  if (pathname.startsWith('/dashboard/communication/send-sms')) return P.communicationSmsSend;
+  if (pathname.startsWith('/dashboard/communication/logs')) return P.communicationEmailLogView;
+  if (pathname.startsWith('/dashboard/communication/scheduled-logs')) return P.communicationScheduledLogView;
+  if (pathname.startsWith('/dashboard/communication/login-credentials')) return P.communicationLoginCredentialsSend;
+  if (pathname.startsWith('/dashboard/communication/email-templates')) return P.communicationEmailTemplateView;
+  if (pathname.startsWith('/dashboard/communication/sms-templates')) return P.communicationSmsTemplateView;
 
   if (pathname.startsWith('/dashboard/teachers/add')) return P.teachersAdd;
   if (pathname.startsWith('/dashboard/teachers/onboarding')) return P.teacherOnboardingView;

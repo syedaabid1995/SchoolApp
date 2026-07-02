@@ -55,6 +55,7 @@ import { leaveRouter } from './routes/leave.routes';
 import { uploadRouter } from './routes/upload.routes';
 import { messagingAdminRouter } from './routes/messagingAdmin.routes';
 import { messagingSettingsRouter } from './routes/messagingSettings.routes';
+import { communicationRouter } from './routes/communication.routes';
 import { schoolSystemSettingsRouter } from './routes/schoolSystemSettings.routes';
 import { publicBrandingRouter } from './routes/publicBranding.routes';
 import { publicAssetRouter } from './routes/publicAsset.routes';
@@ -215,6 +216,7 @@ export const createApp = () => {
   app.use('/api/v1/uploads', uploadRouter);
   app.use('/api/v1/admin/messaging-services', messagingAdminRouter);
   app.use('/api/v1/messaging-services', messagingSettingsRouter);
+  app.use('/api/v1/communication', communicationRouter);
   app.use('/api/v1/system-settings', schoolSystemSettingsRouter);
 
   app.use(notFoundMiddleware);

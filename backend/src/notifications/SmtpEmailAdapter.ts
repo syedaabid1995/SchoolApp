@@ -59,6 +59,7 @@ export class SmtpEmailAdapter implements NotificationAdapter {
         replyTo: this.credentials.replyToEmail?.trim() || undefined,
         subject: payload.subject ?? 'Notification',
         text: payload.body,
+        html: payload.html || undefined,
       });
       return { status: 'SENT', providerId: result.messageId };
     } catch (error) {

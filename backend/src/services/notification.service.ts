@@ -8,6 +8,7 @@ export type NotificationPayload = {
   userId?: string | null;
   channel: 'PUSH' | 'WHATSAPP' | 'SMS' | 'EMAIL';
   templateKey?: string;
+  scheduledAt?: Date | null;
   data: Record<string, unknown>;
 };
 
@@ -22,6 +23,7 @@ export const sendNotification = async (payload: NotificationPayload) => {
   let templateId: string | undefined;
   let subject = payload.data.subject ? String(payload.data.subject) : undefined;
   let body = payload.data.body ? String(payload.data.body) : undefined;
+  let html = payload.data.html ? String(payload.data.html) : undefined;
   let delivery: DeliveryResult | null = null;
 
   if (payload.templateKey) {
@@ -31,8 +33,11 @@ export const sendNotification = async (payload: NotificationPayload) => {
 
     if (template) {
       templateId = template.id;
-      subject = template.subject ?? subject;
-      body = renderTemplate(template.body, payload.data);
+      subject = subject ?? template.subject ?? undefined;
+      if (!body && !html) {
+        body = renderTemplate(template.body, payload.data);
+        html = payload.channel === 'EMAIL' ? body : html;
+      }
     }
   }
 
@@ -44,16 +49,18 @@ export const sendNotification = async (payload: NotificationPayload) => {
       templateId: templateId ?? null,
       payload: payload.data as Prisma.InputJsonValue,
       status: 'QUEUED',
+      scheduledAt: payload.scheduledAt ?? null,
     },
   });
 
-  if (body) {
+  const shouldDispatchNow = !payload.scheduledAt || payload.scheduledAt.getTime() <= Date.now();
+  if ((body || html) && shouldDispatchNow) {
     delivery = await dispatchNotification({
       logId: log.id,
       to: payload.data.to ? String(payload.data.to) : '',
       channel: payload.channel,
       schoolId: payload.schoolId ?? null,
-      payload: { to: payload.data.to ? String(payload.data.to) : '', subject, body },
+      payload: { to: payload.data.to ? String(payload.data.to) : '', subject, body: body ?? '', html },
     });
   }
 

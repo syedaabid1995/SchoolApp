@@ -8,7 +8,7 @@ export type EmployeePermissionItem = {
   code: string;
   label: string;
   path: string;
-  group: 'Overview' | 'Plans' | 'AI Assistant' | 'Employees' | 'Academics' | 'Students' | 'Attendance' | 'Fees' | 'Payroll' | 'Support' | 'Audit' | 'Utilities';
+  group: 'Overview' | 'Plans' | 'AI Assistant' | 'Employees' | 'Academics' | 'Students' | 'Attendance' | 'Fees' | 'Payroll' | 'Communication' | 'Support' | 'Audit' | 'Utilities';
 };
 
 export const EMPLOYEE_PERMISSION_CATALOG: EmployeePermissionItem[] = [
@@ -31,6 +31,23 @@ export const EMPLOYEE_PERMISSION_CATALOG: EmployeePermissionItem[] = [
   { code: P.complianceReview, label: 'Compliance - Review', path: '/dashboard/compliance', group: 'Audit' },
   { code: P.complianceExportReview, label: 'Compliance Export - Review', path: '/dashboard/compliance', group: 'Audit' },
   { code: P.complianceDeletionReview, label: 'Compliance Deletion - Review', path: '/dashboard/compliance', group: 'Audit' },
+  { code: P.communicationNoticeBoardView, label: 'Notice Board - View', path: '/dashboard/communication/notice-board', group: 'Communication' },
+  { code: P.communicationNoticeBoardCreate, label: 'Notice Board - Create', path: '/dashboard/communication/notice-board', group: 'Communication' },
+  { code: P.communicationNoticeBoardEdit, label: 'Notice Board - Edit', path: '/dashboard/communication/notice-board', group: 'Communication' },
+  { code: P.communicationNoticeBoardDelete, label: 'Notice Board - Delete', path: '/dashboard/communication/notice-board', group: 'Communication' },
+  { code: P.communicationEmailSend, label: 'Send Email', path: '/dashboard/communication/send-email', group: 'Communication' },
+  { code: P.communicationSmsSend, label: 'Send SMS', path: '/dashboard/communication/send-sms', group: 'Communication' },
+  { code: P.communicationEmailLogView, label: 'Email / SMS Logs', path: '/dashboard/communication/logs', group: 'Communication' },
+  { code: P.communicationScheduledLogView, label: 'Scheduled Email / SMS Logs', path: '/dashboard/communication/scheduled-logs', group: 'Communication' },
+  { code: P.communicationLoginCredentialsSend, label: 'Login Credentials Send', path: '/dashboard/communication/login-credentials', group: 'Communication' },
+  { code: P.communicationEmailTemplateView, label: 'Email Templates - View', path: '/dashboard/communication/email-templates', group: 'Communication' },
+  { code: P.communicationEmailTemplateCreate, label: 'Email Templates - Create', path: '/dashboard/communication/email-templates', group: 'Communication' },
+  { code: P.communicationEmailTemplateEdit, label: 'Email Templates - Edit', path: '/dashboard/communication/email-templates', group: 'Communication' },
+  { code: P.communicationEmailTemplateDelete, label: 'Email Templates - Delete', path: '/dashboard/communication/email-templates', group: 'Communication' },
+  { code: P.communicationSmsTemplateView, label: 'SMS Templates - View', path: '/dashboard/communication/sms-templates', group: 'Communication' },
+  { code: P.communicationSmsTemplateCreate, label: 'SMS Templates - Create', path: '/dashboard/communication/sms-templates', group: 'Communication' },
+  { code: P.communicationSmsTemplateEdit, label: 'SMS Templates - Edit', path: '/dashboard/communication/sms-templates', group: 'Communication' },
+  { code: P.communicationSmsTemplateDelete, label: 'SMS Templates - Delete', path: '/dashboard/communication/sms-templates', group: 'Communication' },
   { code: P.plansView, label: 'Plans', path: '/dashboard/plans', group: 'Plans' },
   { code: P.aiAssistantView, label: 'AI Assistant - View', path: '/dashboard/assistant', group: 'AI Assistant' },
   { code: P.aiAssistantUse, label: 'AI Assistant - Chat', path: '/dashboard/assistant', group: 'AI Assistant' },
