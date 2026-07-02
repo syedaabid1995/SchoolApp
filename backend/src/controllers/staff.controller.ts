@@ -13,6 +13,7 @@ import { enforceLimits, incrementUsage } from '../services/subscription.service'
 import { attendanceReadService } from '../modules/attendance/services/attendance-read.service';
 import { AuthorizationService } from '../services/authorization.service';
 import { PermissionCodes as P } from '../permissions/permission-manifest';
+import { sendAccountCreatedWhatsapp } from '../services/accountOnboardingWhatsapp.service';
 
 const staffRoles = ['SCHOOL_ADMIN', 'TEACHER', 'ACCOUNTANT', 'LIBRARIAN', 'STAFF'] as const;
 const attendanceStatuses = ['PRESENT', 'LATE', 'ABSENT', 'HOLIDAY', 'HALF_DAY', 'LEAVE', 'LOP', 'CASUAL_LEAVE'] as const;
@@ -674,7 +675,24 @@ export const createStaff = async (req: Request, res: Response) => {
 
   const staff = await prisma.teacherProfile.findFirst({ where: { id: result.staff.id, schoolId }, include: staffInclude });
   const includeSensitive = await canViewPayrollProjection(req);
-  res.status(201).json({ staff: formatStaff(staff, { includeSensitive }), tempPassword: payload.password ? null : tempPassword });
+  const whatsapp = await sendAccountCreatedWhatsapp({
+    role: payload.roleName,
+    schoolId,
+    email: result.user.email,
+    mobile: result.staff.phone,
+    tempPassword: payload.password ? null : tempPassword,
+    fullName: `${result.staff.firstName} ${result.staff.lastName}`.trim(),
+  });
+
+  res.status(201).json({
+    staff: formatStaff(staff, { includeSensitive }),
+    tempPassword: payload.password ? null : tempPassword,
+    whatsappSentTo: whatsapp.sentTo,
+    manualShareRequired: whatsapp.manualShareRequired,
+    manualShareText: whatsapp.manualShareText,
+    manualShareUrl: whatsapp.manualShareUrl,
+    notificationDeliveries: whatsapp.deliveries,
+  });
 };
 
 export const getStaff = async (req: Request, res: Response) => {

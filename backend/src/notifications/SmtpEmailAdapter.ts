@@ -28,6 +28,7 @@ export class SmtpEmailAdapter implements NotificationAdapter {
       password?: string;
       fromEmail: string;
       fromName?: string;
+      replyToEmail?: string;
       secure?: string;
     },
   ) {}
@@ -55,6 +56,7 @@ export class SmtpEmailAdapter implements NotificationAdapter {
       const result = await transporter.sendMail({
         to: payload.to,
         from: formatFrom(this.credentials.fromEmail, this.credentials.fromName),
+        replyTo: this.credentials.replyToEmail?.trim() || undefined,
         subject: payload.subject ?? 'Notification',
         text: payload.body,
       });

@@ -62,6 +62,14 @@ const cleanCredentials = (credentials: Record<string, string>) =>
     return acc;
   }, {});
 
+const mergeSavedCredentials = (
+  existingCredentials: unknown,
+  incomingCredentials: Record<string, string>,
+) => ({
+  ...readStringCredentials(existingCredentials),
+  ...cleanCredentials(incomingCredentials),
+});
+
 const validateCredentials = (serviceCode: string, channel: NotificationChannel, credentials: Record<string, string>) => {
   const required = REQUIRED_CREDENTIALS[serviceCode]?.[channel] ?? [];
   const missing = required.filter((key) => !credentials[key]?.trim());
@@ -77,10 +85,18 @@ const validateCredentials = (serviceCode: string, channel: NotificationChannel, 
     if (!isValidEmail(credentials.fromEmail)) {
       throw new HttpError(400, 'SMTP fromEmail must be a valid email address');
     }
+    if (credentials.replyToEmail && !isValidEmail(credentials.replyToEmail)) {
+      throw new HttpError(400, 'SMTP replyToEmail must be a valid email address');
+    }
   }
 
-  if (serviceCode === SENDGRID_SERVICE_CODE && channel === 'EMAIL' && !isValidEmail(credentials.fromEmail)) {
-    throw new HttpError(400, 'SendGrid fromEmail must be a valid email address');
+  if (serviceCode === SENDGRID_SERVICE_CODE && channel === 'EMAIL') {
+    if (!isValidEmail(credentials.fromEmail)) {
+      throw new HttpError(400, 'SendGrid fromEmail must be a valid email address');
+    }
+    if (credentials.replyToEmail && !isValidEmail(credentials.replyToEmail)) {
+      throw new HttpError(400, 'SendGrid replyToEmail must be a valid email address');
+    }
   }
 };
 
@@ -236,7 +252,13 @@ export const upsertSchoolMessagingConfig = async (params: {
     throw new HttpError(400, 'Selected service does not support this channel');
   }
 
-  const credentials = cleanCredentials(params.credentials);
+  const existing = await prisma.schoolMessagingConfig.findUnique({
+    where: { schoolId_channel: { schoolId: params.schoolId, channel: params.channel } },
+  });
+  const credentials =
+    existing?.serviceId === params.serviceId
+      ? mergeSavedCredentials(existing.credentials, params.credentials)
+      : cleanCredentials(params.credentials);
   validateCredentials(service.code, params.channel, credentials);
 
   const config = await prisma.schoolMessagingConfig.upsert({
@@ -292,7 +314,14 @@ export const upsertPlatformEmailConfig = async (params: {
     throw new HttpError(400, 'Selected service does not support email');
   }
 
-  const credentials = cleanCredentials(params.credentials);
+  const entry = await prisma.configEntry.findUnique({
+    where: { key: PLATFORM_EMAIL_CONFIG_KEY },
+  });
+  const existing = parsePlatformEmailConfigValue(entry?.value);
+  const credentials =
+    existing?.serviceId === params.serviceId
+      ? { ...existing.credentials, ...cleanCredentials(params.credentials) }
+      : cleanCredentials(params.credentials);
   validateCredentials(service.code, 'EMAIL', credentials);
 
   await prisma.configEntry.upsert({

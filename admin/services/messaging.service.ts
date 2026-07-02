@@ -22,6 +22,15 @@ export type SchoolMessagingConfig = {
   maskedCredentials: Record<string, string>;
 };
 
+export type MessagingTestResult = {
+  success: boolean;
+  logId: string;
+  delivery: {
+    status: 'SENT' | 'FAILED';
+    error: string | null;
+  } | null;
+};
+
 export const listMessagingServicesAdmin = async () => {
   const { data } = await api.get<{ items: MessagingServiceItem[] }>('/admin/messaging-services');
   return data.items;
@@ -108,5 +117,20 @@ export const toggleSchoolMessagingConfigStatus = async (payload: {
   schoolId?: string;
 }) => {
   const { data } = await api.patch('/messaging-services/config/status', payload);
+  return data;
+};
+
+export const sendTestEmail = async (payload: { schoolId?: string; to: string }) => {
+  const { data } = await api.post<MessagingTestResult>('/messaging-services/test-email', payload);
+  return data;
+};
+
+export const sendTestSms = async (payload: { schoolId?: string; to: string }) => {
+  const { data } = await api.post<MessagingTestResult>('/messaging-services/test-sms', payload);
+  return data;
+};
+
+export const sendTestWhatsapp = async (payload: { schoolId?: string; to: string }) => {
+  const { data } = await api.post<MessagingTestResult>('/messaging-services/test-whatsapp', payload);
   return data;
 };

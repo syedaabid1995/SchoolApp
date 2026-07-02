@@ -84,7 +84,7 @@ export default function DashboardClientLayout({
     pathname === '/dashboard/settings' &&
     (!settingsTab ||
       settingsTab === 'security' ||
-      (effectiveRole === 'SCHOOL_ADMIN' && ['brand', 'branding', 'theme'].includes(settingsTab)));
+      (effectiveRole === 'SCHOOL_ADMIN' && ['brand', 'branding', 'theme', 'messaging'].includes(settingsTab)));
   const isSafeSchoolSetupRoute =
     effectiveRole === 'SCHOOL_ADMIN' && schoolSetupAllowedPaths.some((allowedPath) => pathname === allowedPath);
   const { data: shellBranding } = useQuery({

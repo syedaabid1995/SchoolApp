@@ -396,7 +396,7 @@ export const Sidebar = ({
         id: 'communication',
         label: 'Communication',
         items: [
-          { href: '/dashboard/sms-settings', label: 'SMS Settings', icon: 'SM' },
+          { href: '/dashboard/settings?tab=messaging', label: 'Messaging Settings', icon: 'SM' },
           { href: '/dashboard/support', label: 'Complaint / Support', icon: 'CP' },
           { href: '/parent/login', label: 'Parent Portal', icon: 'PP' },
         ],

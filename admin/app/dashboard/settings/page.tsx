@@ -92,8 +92,8 @@ const settingsTabs: SettingsTab[] = [
   {
     id: 'messaging',
     label: 'Messaging',
-    description: 'Super Admin provider settings for platform and per-school delivery credentials.',
-    roles: ['SUPER_ADMIN'],
+    description: 'School-level Email, SMS, and WhatsApp provider credentials.',
+    roles: ['SUPER_ADMIN', 'SCHOOL_ADMIN'],
   },
   {
     id: 'features',

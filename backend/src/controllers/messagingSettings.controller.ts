@@ -1,13 +1,16 @@
 import type { Request, Response } from 'express';
 import { NotificationChannel } from '@prisma/client';
 import { z } from 'zod';
+import { HttpError } from '../middlewares/error.middleware';
 import { resolveSchoolId } from '../utils/tenant';
 import {
   getSchoolMessagingConfig,
   listMessagingServicesForSchool,
+  resolveSchoolMessagingProvider,
   setSchoolMessagingConfigStatus,
   upsertSchoolMessagingConfig,
 } from '../services/messagingSettings.service';
+import { sendNotification } from '../services/notification.service';
 
 const channelSchema = z.nativeEnum(NotificationChannel).default('WHATSAPP');
 
@@ -24,6 +27,42 @@ const toggleSchema = z.object({
   channel: z.nativeEnum(NotificationChannel),
   isEnabled: z.boolean(),
 });
+
+const testMessageSchema = z.object({
+  schoolId: z.string().uuid().optional(),
+  to: z.string().trim().min(1, 'Recipient is required'),
+});
+
+const sendTestMessage = async (req: Request, res: Response, channel: 'EMAIL' | 'SMS' | 'WHATSAPP') => {
+  const payload = testMessageSchema.parse(req.body);
+  const schoolId = resolveSchoolId(req, payload.schoolId);
+  const provider = await resolveSchoolMessagingProvider({ schoolId, channel });
+  if (!provider) {
+    throw new HttpError(400, `${channel} provider is not configured for this school`);
+  }
+
+  const result = await sendNotification({
+    schoolId,
+    userId: req.auth?.userId ?? null,
+    channel,
+    data: {
+      to: payload.to,
+      subject: `Test ${channel.toLowerCase()} from School ERP`,
+      body: `This is a test ${channel.toLowerCase()} from your school messaging settings.`,
+    },
+  });
+
+  res.status(200).json({
+    success: result.delivery?.status === 'SENT',
+    logId: result.logId,
+    delivery: result.delivery
+      ? {
+          status: result.delivery.status,
+          error: result.delivery.error ?? null,
+        }
+      : null,
+  });
+};
 
 export const listMessagingServicesForSchoolApi = async (req: Request, res: Response) => {
   const schoolId = resolveSchoolId(req, req.query.schoolId as string | undefined);
@@ -68,4 +107,16 @@ export const toggleSchoolMessagingConfigApi = async (req: Request, res: Response
     serviceId: result.serviceId,
     serviceCode: result.service.code,
   });
+};
+
+export const testEmailMessagingConfigApi = async (req: Request, res: Response) => {
+  await sendTestMessage(req, res, 'EMAIL');
+};
+
+export const testSmsMessagingConfigApi = async (req: Request, res: Response) => {
+  await sendTestMessage(req, res, 'SMS');
+};
+
+export const testWhatsappMessagingConfigApi = async (req: Request, res: Response) => {
+  await sendTestMessage(req, res, 'WHATSAPP');
 };

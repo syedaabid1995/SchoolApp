@@ -8,12 +8,13 @@ export class SendGridEmailAdapter implements NotificationAdapter {
       apiKey: string;
       fromEmail: string;
       fromName?: string;
+      replyToEmail?: string;
       apiUrl?: string;
     },
   ) {}
 
   async send(payload: NotificationDispatch): Promise<DeliveryResult> {
-    const { apiKey, fromEmail, fromName, apiUrl } = this.credentials;
+    const { apiKey, fromEmail, fromName, replyToEmail, apiUrl } = this.credentials;
     if (!apiKey || !fromEmail) {
       return { status: 'FAILED', error: 'SendGrid credentials are incomplete' };
     }
@@ -28,6 +29,7 @@ export class SendGridEmailAdapter implements NotificationAdapter {
         body: JSON.stringify({
           personalizations: [{ to: [{ email: payload.to }] }],
           from: { email: fromEmail, ...(fromName ? { name: fromName } : {}) },
+          ...(replyToEmail ? { reply_to: { email: replyToEmail } } : {}),
           subject: payload.subject ?? 'Notification',
           content: [{ type: 'text/plain', value: payload.body }],
         }),

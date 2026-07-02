@@ -10,6 +10,9 @@ import {
   getSchoolMessagingConfigForScope,
   listMessagingServicesAdmin,
   listMessagingServicesForSchoolScope,
+  sendTestEmail,
+  sendTestSms,
+  sendTestWhatsapp,
   togglePlatformEmailConfigStatus,
   upsertSchoolMessagingConfig,
   upsertPlatformEmailConfig,
@@ -55,12 +58,14 @@ const providerFields: Record<string, CredentialField[]> = {
     { key: 'password', label: 'SMTP Password', secret: true, placeholder: 'SMTP password or app password' },
     { key: 'fromEmail', label: 'From Email', required: true, inputType: 'email', placeholder: 'no-reply@example.com' },
     { key: 'fromName', label: 'From Name', placeholder: 'School Management' },
+    { key: 'replyToEmail', label: 'Reply-To Email', inputType: 'email', placeholder: 'support@example.com' },
     { key: 'secure', label: 'Secure TLS', placeholder: 'true or false', help: 'Use true for port 465. For port 587, false usually enables STARTTLS.' },
   ],
   SENDGRID: [
     { key: 'apiKey', label: 'SendGrid API Key', required: true, secret: true, placeholder: 'SG.xxxxx' },
     { key: 'fromEmail', label: 'From Email', required: true, inputType: 'email', placeholder: 'no-reply@example.com' },
     { key: 'fromName', label: 'From Name', placeholder: 'School Management' },
+    { key: 'replyToEmail', label: 'Reply-To Email', inputType: 'email', placeholder: 'support@example.com' },
     { key: 'apiUrl', label: 'API URL', inputType: 'url', placeholder: 'https://api.sendgrid.com/v3/mail/send', help: 'Optional. Leave empty for SendGrid default.' },
   ],
 };
@@ -107,6 +112,11 @@ export default function SmsSettingsPage() {
   const [platformEmailEnabled, setPlatformEmailEnabled] = useState(true);
   const [enabled, setEnabled] = useState(true);
   const [channel, setChannel] = useState<MessagingChannel>('WHATSAPP');
+  const [testRecipients, setTestRecipients] = useState<Record<'EMAIL' | 'SMS' | 'WHATSAPP', string>>({
+    EMAIL: '',
+    SMS: '',
+    WHATSAPP: '',
+  });
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
 
@@ -118,10 +128,12 @@ export default function SmsSettingsPage() {
     staleTime: 5 * 60_000,
   });
   const isSuperAdmin = session?.role === 'SUPER_ADMIN';
-  const schoolScopeReady = Boolean(isSuperAdmin && selectedSchoolId);
+  const isSchoolAdmin = session?.role === 'SCHOOL_ADMIN';
+  const canManageSchoolMessaging = Boolean(isSuperAdmin || isSchoolAdmin);
+  const schoolScopeReady = Boolean(isSchoolAdmin || (isSuperAdmin && selectedSchoolId));
   const schoolScopeParams = {
     channel,
-    ...(selectedSchoolId ? { schoolId: selectedSchoolId } : {}),
+    ...(isSuperAdmin && selectedSchoolId ? { schoolId: selectedSchoolId } : {}),
   };
 
   const { data: schools } = useQuery({
@@ -169,7 +181,7 @@ export default function SmsSettingsPage() {
     queryFn: () =>
       getSchoolMessagingConfigForScope({
         channel: 'SMS',
-        ...(selectedSchoolId ? { schoolId: selectedSchoolId } : {}),
+        ...(isSuperAdmin && selectedSchoolId ? { schoolId: selectedSchoolId } : {}),
       }),
     enabled: schoolScopeReady,
     refetchOnWindowFocus: false,
@@ -181,7 +193,7 @@ export default function SmsSettingsPage() {
     queryFn: () =>
       getSchoolMessagingConfigForScope({
         channel: 'WHATSAPP',
-        ...(selectedSchoolId ? { schoolId: selectedSchoolId } : {}),
+        ...(isSuperAdmin && selectedSchoolId ? { schoolId: selectedSchoolId } : {}),
       }),
     enabled: schoolScopeReady,
     refetchOnWindowFocus: false,
@@ -193,7 +205,7 @@ export default function SmsSettingsPage() {
     queryFn: () =>
       getSchoolMessagingConfigForScope({
         channel: 'EMAIL',
-        ...(selectedSchoolId ? { schoolId: selectedSchoolId } : {}),
+        ...(isSuperAdmin && selectedSchoolId ? { schoolId: selectedSchoolId } : {}),
       }),
     enabled: schoolScopeReady,
     refetchOnWindowFocus: false,
@@ -268,6 +280,27 @@ export default function SmsSettingsPage() {
     },
   });
 
+  const testMessageMutation = useMutation({
+    mutationFn: ({ channel: testChannel, to }: { channel: 'EMAIL' | 'SMS' | 'WHATSAPP'; to: string }) => {
+      const payload = {
+        to,
+        ...(isSuperAdmin && selectedSchoolId ? { schoolId: selectedSchoolId } : {}),
+      };
+      if (testChannel === 'EMAIL') return sendTestEmail(payload);
+      if (testChannel === 'SMS') return sendTestSms(payload);
+      return sendTestWhatsapp(payload);
+    },
+    onSuccess: (result) => {
+      setMessage(result.success ? 'Test message sent successfully.' : `Test message failed: ${result.delivery?.error ?? 'Unknown error'}`);
+      setError('');
+      queryClient.invalidateQueries({ queryKey: ['messaging-config'] });
+    },
+    onError: (mutationError) => {
+      setMessage('');
+      setError(getApiErrorMessage(mutationError));
+    },
+  });
+
   const selectedService = useMemo<MessagingServiceItem | null>(
     () => schoolServices?.services.find((service) => service.id === selectedServiceId) ?? null,
     [schoolServices, selectedServiceId],
@@ -284,6 +317,10 @@ export default function SmsSettingsPage() {
   const activePlatformEmailService =
     platformEmailServices.find((service) => service.id === activePlatformEmailServiceId) || null;
   const platformEmailFields = providerFields[activePlatformEmailService?.code ?? ''] ?? [];
+  const hasSavedSchoolCredential = (fieldKey: string) =>
+    currentConfig?.serviceId === activeServiceId && currentConfig.credentialKeys.includes(fieldKey);
+  const hasSavedPlatformCredential = (fieldKey: string) =>
+    platformEmailConfig?.serviceId === activePlatformEmailServiceId && platformEmailConfig.credentialKeys.includes(fieldKey);
 
   useEffect(() => {
     setSelectedServiceId('');
@@ -325,10 +362,11 @@ export default function SmsSettingsPage() {
     saveSchoolConfigMutation.isPending ||
     savePlatformEmailMutation.isPending ||
     togglePlatformEmailMutation.isPending ||
-    toggleSchoolConfigMutation.isPending;
+    toggleSchoolConfigMutation.isPending ||
+    testMessageMutation.isPending;
 
   const validateAndSave = () => {
-    if (!selectedSchoolId) {
+    if (isSuperAdmin && !selectedSchoolId) {
       window.alert('Select a school before saving provider credentials.');
       return;
     }
@@ -337,7 +375,9 @@ export default function SmsSettingsPage() {
       return;
     }
 
-    const missing = credentialFields.filter((field) => field.required && !credentials[field.key]?.trim());
+    const missing = credentialFields.filter(
+      (field) => field.required && !credentials[field.key]?.trim() && !hasSavedSchoolCredential(field.key),
+    );
     if (missing.length) {
       window.alert(`Enter required fields: ${missing.map((field) => field.label).join(', ')}`);
       return;
@@ -364,7 +404,7 @@ export default function SmsSettingsPage() {
       serviceId: activeServiceId,
       isEnabled: enabled,
       credentials,
-      schoolId: selectedSchoolId,
+      ...(isSuperAdmin ? { schoolId: selectedSchoolId } : {}),
     });
   };
 
@@ -374,7 +414,9 @@ export default function SmsSettingsPage() {
       return;
     }
 
-    const missing = platformEmailFields.filter((field) => field.required && !platformEmailCredentials[field.key]?.trim());
+    const missing = platformEmailFields.filter(
+      (field) => field.required && !platformEmailCredentials[field.key]?.trim() && !hasSavedPlatformCredential(field.key),
+    );
     if (missing.length) {
       window.alert(`Enter required fields: ${missing.map((field) => field.label).join(', ')}`);
       return;
@@ -409,6 +451,25 @@ export default function SmsSettingsPage() {
     });
   };
 
+  const testableChannel = channel === 'EMAIL' || channel === 'SMS' || channel === 'WHATSAPP' ? channel : null;
+  const sendTestMessage = () => {
+    if (!testableChannel) return;
+    if (isSuperAdmin && !selectedSchoolId) {
+      window.alert('Select a school before sending a test message.');
+      return;
+    }
+    const to = testRecipients[testableChannel].trim();
+    if (!to) {
+      window.alert(`Enter a test ${testableChannel === 'EMAIL' ? 'email address' : 'phone number'}.`);
+      return;
+    }
+    if (testableChannel === 'EMAIL' && !isValidEmail(to)) {
+      window.alert('Enter a valid email address for the test email.');
+      return;
+    }
+    testMessageMutation.mutate({ channel: testableChannel, to });
+  };
+
   const renderProviderBadge = (code: string) => {
     const color =
       code === 'TWILIO'
@@ -427,17 +488,17 @@ export default function SmsSettingsPage() {
     return <FullPageLoader label="Loading messaging settings..." />;
   }
 
-  if (!isSuperAdmin) {
+  if (!canManageSchoolMessaging) {
     return (
       <div className="mx-auto max-w-[1500px] space-y-6 pb-12">
         <PageHeader
           title="Messaging Settings"
-          subtitle="Provider credentials are managed only by Super Admin."
+          subtitle="Provider credentials are managed by Super Admin or School Admin."
         />
         <section className="rounded-2xl border border-[var(--shell-border)] bg-[var(--shell-card)] p-8 text-center">
-          <h2 className="text-lg font-bold text-[var(--shell-text)]">Super Admin Only</h2>
+          <h2 className="text-lg font-bold text-[var(--shell-text)]">Access Restricted</h2>
           <p className="mt-2 text-sm text-[var(--shell-muted)]">
-            Messaging provider credentials are configured centrally and per school by Super Admin.
+            Messaging provider credentials are configured by authorized administrators.
           </p>
         </section>
       </div>
@@ -452,7 +513,7 @@ export default function SmsSettingsPage() {
           title="Messaging Settings"
           subtitle={isSuperAdmin
             ? 'Enable Twilio, MSG91, WATI, SMTP, and SendGrid globally, then configure provider credentials for each school.'
-            : 'Select an SMS, WhatsApp, or Email provider and save school-level credentials.'}
+            : 'Configure SMS, WhatsApp, and Email providers for your school.'}
         />
 
         {message ? <p className="rounded-xl bg-emerald-50 px-4 py-3 text-sm font-semibold text-emerald-700">{message}</p> : null}
@@ -811,6 +872,37 @@ export default function SmsSettingsPage() {
                       ) : null}
                     </div>
                   ) : null}
+
+                  <div className="mt-5 rounded-xl border border-[var(--shell-border)] bg-[var(--shell-card)] p-4">
+                    <div className="grid gap-3 md:grid-cols-[1fr_auto] md:items-end">
+                      <label className="space-y-2">
+                        <span className="text-sm font-semibold text-[var(--shell-text)]">
+                          Test {channel === 'EMAIL' ? 'Email' : channel === 'SMS' ? 'SMS' : 'WhatsApp'} Recipient
+                        </span>
+                        <input
+                          type={channel === 'EMAIL' ? 'email' : 'text'}
+                          value={testableChannel ? testRecipients[testableChannel] : ''}
+                          onChange={(event) =>
+                            testableChannel
+                              ? setTestRecipients((current) => ({ ...current, [testableChannel]: event.target.value }))
+                              : undefined
+                          }
+                          placeholder={channel === 'EMAIL' ? 'admin@example.com' : '+919876543210'}
+                          className="w-full rounded-xl border border-[var(--shell-border)] bg-[var(--shell-card)] px-4 py-3 text-sm text-[var(--shell-text)] outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10"
+                        />
+                      </label>
+                      <button
+                        className="rounded-xl border border-[var(--shell-border)] bg-[var(--shell-subtle)] px-5 py-3 text-sm font-bold text-[var(--shell-text)] transition-colors hover:bg-[var(--shell-hover)] disabled:cursor-not-allowed disabled:opacity-50"
+                        onClick={sendTestMessage}
+                        disabled={!currentConfig || testMessageMutation.isPending}
+                      >
+                        Send Test {channel === 'EMAIL' ? 'Email' : channel === 'SMS' ? 'SMS' : 'WhatsApp'}
+                      </button>
+                    </div>
+                    <p className="mt-2 text-xs text-[var(--shell-muted)]">
+                      Tests use the saved provider for this school. Save changes before testing new credentials.
+                    </p>
+                  </div>
 
                   <button
                     className="mt-5 rounded-xl bg-blue-600 px-6 py-3 text-sm font-bold text-white transition-colors hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"

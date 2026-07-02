@@ -4,6 +4,8 @@ import { prisma } from '../config/db';
 import { HttpError } from '../middlewares/error.middleware';
 import { createAuditLog } from './auditLog.service';
 import { env } from '../config/env';
+import { hasActiveMessagingGateway } from './messagingSettings.service';
+import { sendNotification } from './notification.service';
 
 const OTP_TTL_MINUTES = 5;
 const PURPOSE = 'PARENT_LOGIN';
@@ -40,8 +42,23 @@ export const requestOtp = async (params: { schoolId: string; phone: string; acto
     });
   }
 
+  let smsSent = false;
+  const hasSmsGateway = await hasActiveMessagingGateway({ schoolId: params.schoolId, channels: ['SMS'] });
+  if (hasSmsGateway) {
+    const result = await sendNotification({
+      schoolId: params.schoolId,
+      userId: params.actorId ?? null,
+      channel: 'SMS',
+      data: {
+        to: phone,
+        body: `Your parent login OTP is ${code}. It expires in ${OTP_TTL_MINUTES} minutes.`,
+      },
+    });
+    smsSent = result.delivery?.status === 'SENT';
+  }
+
   return {
-    sent: true,
+    sent: smsSent,
     ...(env.NODE_ENV !== 'production' && env.OTP_EXPOSE_CODE_IN_DEV ? { code } : {}),
   };
 };

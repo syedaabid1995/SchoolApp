@@ -76,6 +76,7 @@ const resolveAdapter = async (params: {
       password: provider.credentials.password,
       fromEmail: provider.credentials.fromEmail ?? '',
       fromName: provider.credentials.fromName,
+      replyToEmail: provider.credentials.replyToEmail,
       secure: provider.credentials.secure,
     });
   }
@@ -85,6 +86,7 @@ const resolveAdapter = async (params: {
       apiKey: provider.credentials.apiKey ?? '',
       fromEmail: provider.credentials.fromEmail ?? '',
       fromName: provider.credentials.fromName,
+      replyToEmail: provider.credentials.replyToEmail,
       apiUrl: provider.credentials.apiUrl,
     });
   }
