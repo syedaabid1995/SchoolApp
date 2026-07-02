@@ -475,7 +475,7 @@ export default function LoginPage() {
   if (domainNotFound) {
     const mainLoginHref = typeof window !== 'undefined' && window.location.hostname.endsWith('.localhost')
       ? 'http://localhost:3001/login'
-      : 'https://akademify.techstageit.com/login';
+      : `https://${process.env.NEXT_PUBLIC_SCHOOL_ROOT_DOMAIN || 'app.akademifyy.in'}/login`;
 
     return (
       <main className="min-h-screen w-full overflow-x-hidden text-[var(--brand-text)]" style={brandStyle}>

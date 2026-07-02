@@ -1,4 +1,4 @@
-const DEFAULT_ROOT_DOMAIN = 'akademify.techstageit.com';
+const DEFAULT_ROOT_DOMAIN = 'app.akademifyy.in';
 const DEFAULT_LOCAL_HOST = 'localhost';
 
 const RESERVED_SUBDOMAINS = new Set(['www', 'admin', 'app', 'api', 'assets', 'static']);

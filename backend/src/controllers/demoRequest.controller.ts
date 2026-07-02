@@ -5,7 +5,7 @@ import { prisma } from '../config/db';
 import { HttpError } from '../middlewares/error.middleware';
 import { sendConfiguredEmail } from '../services/email.service';
 
-const DEMO_ACCESS_BASE_URL = 'https://app.akacemify.com';
+const DEMO_ACCESS_BASE_URL = 'https://app.akademifyy.in';
 
 const publicDemoRequestSchema = z.object({
   name: z.string().trim().min(2).max(120),

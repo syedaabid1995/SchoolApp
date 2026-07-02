@@ -43,9 +43,9 @@ type DemoForm = {
   message: string;
 };
 
-const DEFAULT_API_BASE = import.meta.env.PROD ? 'https://api.akacemify.com/api/v1' : 'http://localhost:4000/api/v1';
+const DEFAULT_API_BASE = import.meta.env.PROD ? 'https://api.akademifyy.in/api/v1' : 'http://localhost:4000/api/v1';
 const API_BASE = (import.meta.env.VITE_API_BASE_URL || DEFAULT_API_BASE).replace(/\/$/, '');
-const LOGIN_URL = 'https://app.akacemify.com/';
+const LOGIN_URL = 'https://app.akademifyy.in/';
 
 const defaultPlans: Plan[] = [
   {

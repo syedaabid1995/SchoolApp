@@ -1,4 +1,9 @@
-const ROOT_DOMAIN = 'akademify.techstageit.com';
+const DEFAULT_ROOT_DOMAIN = 'app.akademifyy.in';
+const ROOT_DOMAIN = (process.env.NEXT_PUBLIC_SCHOOL_ROOT_DOMAIN || DEFAULT_ROOT_DOMAIN)
+  .trim()
+  .toLowerCase()
+  .replace(/^https?:\/\//, '')
+  .replace(/\/+$/, '');
 const RESERVED_SUBDOMAINS = new Set(['www', 'admin', 'app', 'api', 'assets', 'static']);
 
 const cleanHost = (host?: string | null) => {

@@ -41,7 +41,7 @@ const envSchema = z.object({
   AI_ASSISTANT_ENABLED: boolEnv(false).default(false),
   AI_ASSISTANT_REQUIRE_CONFIRMATION: boolEnv(true).default(true),
   FRONTEND_URL: z.string().url().default('http://localhost:3001'),
-  CORS_ORIGINS: z.string().default('http://localhost:3000,http://127.0.0.1:3000,http://localhost:3001,http://127.0.0.1:3001,http://localhost:5173,http://127.0.0.1:5173,https://app.akacemify.com'),
+  CORS_ORIGINS: z.string().default('http://localhost:3000,http://127.0.0.1:3000,http://localhost:3001,http://127.0.0.1:3001,http://localhost:5173,http://127.0.0.1:5173,https://app.akademifyy.in'),
   LOG_LEVEL: z.enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace']).default('info'),
   ACADEMIFY_PROCESS_ROLE: z.enum(['api', 'worker', 'scheduler', 'all']).default(process.env.NODE_ENV === 'production' ? 'api' : 'all'),
   RUN_API: boolEnv(true).default(true),
