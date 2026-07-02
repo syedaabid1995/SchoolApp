@@ -34,12 +34,16 @@ export const resolveNotificationContent = (params: {
   if (template) {
     subject = subject ?? template.subject ?? undefined;
     if (!body && !html) {
-      body = renderTemplate(template.body, params.data);
+      body = template.body;
       html = params.channel === 'EMAIL' ? body : html;
     }
   }
 
-  return { subject, body, html };
+  return {
+    subject: subject !== undefined ? renderTemplate(subject, params.data) : undefined,
+    body: body !== undefined ? renderTemplate(body, params.data) : undefined,
+    html: html !== undefined ? renderTemplate(html, params.data) : undefined,
+  };
 };
 
 export const sendNotification = async (payload: NotificationPayload) => {
@@ -63,6 +67,12 @@ export const sendNotification = async (payload: NotificationPayload) => {
     template,
     data: payload.data,
   });
+  const resolvedPayload = {
+    ...payload.data,
+    ...(subject !== undefined ? { subject } : {}),
+    ...(body !== undefined ? { body } : {}),
+    ...(html !== undefined ? { html } : {}),
+  };
 
   const log = await prisma.notificationLog.create({
     data: {
@@ -70,7 +80,7 @@ export const sendNotification = async (payload: NotificationPayload) => {
       userId: payload.userId ?? null,
       channel: payload.channel,
       templateId: templateId ?? null,
-      payload: payload.data as Prisma.InputJsonValue,
+      payload: resolvedPayload as Prisma.InputJsonValue,
       status: 'QUEUED',
       scheduledAt: payload.scheduledAt ?? null,
     },
