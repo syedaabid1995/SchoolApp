@@ -69,7 +69,7 @@ class AppLocalizations {
 
   static const _strings = <String, Map<String, String>>{
     'en': {
-      'appTitle': 'School ERP Staff',
+      'appTitle': 'Akademifyy Staff',
       'dashboard': 'Dashboard',
       'settings': 'Settings',
       'refresh': 'Refresh',
@@ -115,7 +115,7 @@ class AppLocalizations {
       'noDiagnosticsSecrets': 'Diagnostics never display secrets or tokens.',
     },
     'ar': {
-      'appTitle': 'نظام المدرسة للموظفين',
+      'appTitle': 'Akademifyy للموظفين',
       'dashboard': 'لوحة التحكم',
       'settings': 'الإعدادات',
       'refresh': 'تحديث',
@@ -161,7 +161,7 @@ class AppLocalizations {
       'noDiagnosticsSecrets': 'لا تعرض التشخيصات أي أسرار أو رموز.',
     },
     'ur': {
-      'appTitle': 'اسکول ERP اسٹاف',
+      'appTitle': 'Akademifyy اسٹاف',
       'dashboard': 'ڈیش بورڈ',
       'settings': 'ترتیبات',
       'refresh': 'تازہ کریں',

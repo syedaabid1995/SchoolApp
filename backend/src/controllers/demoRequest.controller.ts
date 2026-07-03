@@ -103,10 +103,10 @@ export const approveDemoRequestApi = async (req: Request, res: Response) => {
 
   const emailStatus = await sendConfiguredEmail({
     to: existing.email,
-    subject: 'Your Akademify demo access is ready',
+    subject: 'Your Akademifyy demo access is ready',
     body: [
       `Hello ${existing.name},`,
-      'Your Akademify demo request has been approved.',
+      'Your Akademifyy demo request has been approved.',
       `Use this link within 24 hours: ${demoUrl}`,
       `This link expires at ${expiresAt.toISOString()}.`,
       'If you did not request this demo, you can ignore this email.',

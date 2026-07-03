@@ -1,0 +1,43 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630" role="img" aria-labelledby="title desc">
+  <title id="title">Akademifyy school management software dashboard preview</title>
+  <desc id="desc">Open graph image for Akademifyy, a school management software and school ERP platform in India.</desc>
+  <rect width="1200" height="630" fill="#16382f"/>
+  <path d="M0 0h1200v630H0z" fill="#16382f"/>
+  <path d="M0 0h1200v630H0z" fill="url(#grid)" opacity=".18"/>
+  <circle cx="987" cy="95" r="220" fill="#d69c35" opacity=".22"/>
+  <circle cx="142" cy="560" r="210" fill="#4aa56f" opacity=".18"/>
+  <g transform="translate(88 84)">
+    <rect width="80" height="80" rx="16" fill="#f7f4eb"/>
+    <path d="M22 51 40 20l18 31H49l-3-5H35l-3 5H22Z" fill="#16382f"/>
+    <path d="M37 41h6l-3-6-3 6Z" fill="#d69c35"/>
+    <path d="M26 62h28" stroke="#4aa56f" stroke-width="6" stroke-linecap="round"/>
+  </g>
+  <text x="88" y="222" fill="#f7f4eb" font-family="Public Sans, Arial, sans-serif" font-size="34" font-weight="800">Akademifyy</text>
+  <text x="88" y="306" fill="#f7f4eb" font-family="Georgia, serif" font-size="68" font-weight="800">School management</text>
+  <text x="88" y="382" fill="#f7f4eb" font-family="Georgia, serif" font-size="68" font-weight="800">software for India</text>
+  <text x="91" y="446" fill="#d8e3da" font-family="Public Sans, Arial, sans-serif" font-size="26" font-weight="600">Admissions, attendance, fees, exams, reports, and parent communication.</text>
+  <g transform="translate(738 152)">
+    <rect width="360" height="330" rx="18" fill="#f7f4eb"/>
+    <rect x="0" y="0" width="360" height="58" rx="18" fill="#fffdf7"/>
+    <circle cx="30" cy="30" r="7" fill="#c7493f"/>
+    <circle cx="52" cy="30" r="7" fill="#d69c35"/>
+    <circle cx="74" cy="30" r="7" fill="#4aa56f"/>
+    <rect x="30" y="90" width="138" height="98" rx="8" fill="#fffdf7" stroke="#ded8c7"/>
+    <rect x="192" y="90" width="138" height="98" rx="8" fill="#fffdf7" stroke="#ded8c7"/>
+    <rect x="30" y="212" width="300" height="80" rx="8" fill="#fffdf7" stroke="#ded8c7"/>
+    <text x="52" y="135" fill="#16382f" font-family="Public Sans, Arial, sans-serif" font-size="32" font-weight="800">94%</text>
+    <text x="52" y="164" fill="#637068" font-family="Public Sans, Arial, sans-serif" font-size="14" font-weight="700">Attendance</text>
+    <text x="214" y="135" fill="#16382f" font-family="Public Sans, Arial, sans-serif" font-size="32" font-weight="800">1.2k</text>
+    <text x="214" y="164" fill="#637068" font-family="Public Sans, Arial, sans-serif" font-size="14" font-weight="700">Students</text>
+    <rect x="56" y="254" width="30" height="24" rx="4" fill="#d69c35"/>
+    <rect x="101" y="234" width="30" height="44" rx="4" fill="#4aa56f"/>
+    <rect x="146" y="244" width="30" height="34" rx="4" fill="#d69c35"/>
+    <rect x="191" y="222" width="30" height="56" rx="4" fill="#235544"/>
+    <rect x="236" y="240" width="30" height="38" rx="4" fill="#c7493f"/>
+  </g>
+  <defs>
+    <pattern id="grid" width="42" height="42" patternUnits="userSpaceOnUse">
+      <path d="M42 0H0v42" fill="none" stroke="#f7f4eb" stroke-width="1"/>
+    </pattern>
+  </defs>
+</svg>

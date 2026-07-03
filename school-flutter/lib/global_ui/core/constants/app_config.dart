@@ -1,7 +1,7 @@
 class AppConfig {
   const AppConfig._();
 
-  static const appName = 'School ERP Staff';
+  static const appName = 'Akademifyy Staff';
   static const clientPlatform = 'school-mobile';
 
   static const apiBaseUrl = String.fromEnvironment(

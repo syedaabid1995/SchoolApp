@@ -122,9 +122,9 @@ function Header() {
     <header className="site-header">
       <a className="skip-link" href="#main">Skip to content</a>
       <nav className="nav" aria-label="Main navigation">
-        <a className="brand" href="#top" aria-label="Akademify home">
+        <a className="brand" href="#top" aria-label="Akademifyy home">
           <BrandMark />
-          <span>Akademify</span>
+          <span>Akademifyy</span>
         </a>
         <div className="nav-links">
           {nav.map(([label, href]) => (
@@ -176,12 +176,12 @@ function Hero() {
         <div className="hero-copy">
           <div className="eyebrow">
             <Sparkles size={16} />
-            School ERP for growing institutions
+            School ERP for growing Indian institutions
           </div>
-          <h1>Run admissions, academics, fees, and communication from one calm workspace.</h1>
+          <h1>School management software for focused daily operations.</h1>
           <p>
-            Akademify gives school leaders a reliable operating system for daily administration, staff coordination,
-            parent updates, and student records.
+            Akademifyy gives school leaders in India a reliable school ERP for admissions, attendance, fees, exams,
+            staff coordination, parent updates, reports, and student records.
           </p>
           <div className="hero-actions">
             <a className="btn btn-primary" href="#demo">
@@ -198,7 +198,7 @@ function Hero() {
             <span>Live plan pricing</span>
           </div>
         </div>
-        <div className="dashboard-visual" aria-label="Akademify dashboard preview">
+        <div className="dashboard-visual" aria-label="Akademifyy dashboard preview">
           <div className="visual-top">
             <span />
             <span />
@@ -418,7 +418,7 @@ function DemoFormSection() {
           <span className="kicker">Book a demo</span>
           <h2>Tell us about your school.</h2>
           <p>
-            After submission, the request appears in the super-admin panel. Once approved, Akademify sends the contact
+            After submission, the request appears in the super-admin panel. Once approved, Akademifyy sends the contact
             a demo access link that is valid for 24 hours.
           </p>
           <div className="contact-panel">
@@ -496,13 +496,57 @@ function DemoFormSection() {
   );
 }
 
+function FaqSection() {
+  const faqs = [
+    {
+      question: 'What is Akademifyy?',
+      answer:
+        'Akademifyy is school management software that helps institutions manage admissions, student records, attendance, fees, exams, reports, and communication from one web-based workspace.',
+    },
+    {
+      question: 'Which school operations does Akademifyy support?',
+      answer:
+        'Akademifyy supports attendance workflows, academic records, exam and marks management, fee operations, parent communication, role-based access, analytics, and school administration reports.',
+    },
+    {
+      question: 'Does Akademifyy include parent communication tools?',
+      answer:
+        'Yes. Akademifyy includes parent portal access and communication workflows so schools can share notices, updates, attendance information, and student progress with families.',
+    },
+    {
+      question: 'How can a school try Akademifyy?',
+      answer:
+        'Schools can submit the demo form on the Akademifyy website. After admin approval, the school receives a demo access link that is valid for 24 hours.',
+    },
+  ];
+
+  return (
+    <section className="section section-muted" id="faq">
+      <div className="container">
+        <div className="section-head centered">
+          <span className="kicker">FAQ</span>
+          <h2>School ERP questions, answered directly.</h2>
+        </div>
+        <div className="faq-grid">
+          {faqs.map((faq) => (
+            <article className="faq-item" key={faq.question}>
+              <h3>{faq.question}</h3>
+              <p>{faq.answer}</p>
+            </article>
+          ))}
+        </div>
+      </div>
+    </section>
+  );
+}
+
 function Footer() {
   return (
     <footer className="footer">
       <div className="container footer-inner">
         <a className="brand" href="#top">
           <BrandMark />
-          <span>Akademify</span>
+          <span>Akademifyy</span>
         </a>
         <p>School management software for structured, visible, and accountable operations.</p>
         <a href={LOGIN_URL}>Login to app</a>
@@ -551,6 +595,7 @@ function App() {
           loading={plansLoading}
           error={plansError}
         />
+        <FaqSection />
         <DemoFormSection />
       </main>
       <Footer />

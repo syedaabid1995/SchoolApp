@@ -10,7 +10,7 @@ class SaaptApp extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     return MaterialApp.router(
-      title: 'SAAPT Teacher',
+      title: 'Akademifyy Teacher',
       debugShowCheckedModeBanner: false,
       theme: SaaptTheme.light,
       routerConfig: ref.watch(saaptRouterProvider),

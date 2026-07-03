@@ -424,7 +424,8 @@ svg {
 .workflow-step,
 .price-card,
 .demo-form,
-.contact-panel {
+.contact-panel,
+.faq-item {
   border: 1px solid var(--line);
   border-radius: var(--radius);
   background: var(--white);
@@ -452,7 +453,8 @@ svg {
 
 .feature-card h3,
 .workflow-step h3,
-.price-card h3 {
+.price-card h3,
+.faq-item h3 {
   margin: 20px 0 8px;
   color: var(--green);
   font-size: 1.1rem;
@@ -460,7 +462,8 @@ svg {
 
 .feature-card p,
 .workflow-step p,
-.price-card p {
+.price-card p,
+.faq-item p {
   margin: 0;
   color: var(--muted);
   line-height: 1.65;
@@ -556,6 +559,20 @@ svg {
 .price-card li svg {
   flex: 0 0 auto;
   color: var(--mint);
+}
+
+.faq-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 18px;
+}
+
+.faq-item {
+  padding: 26px;
+}
+
+.faq-item h3 {
+  margin-top: 0;
 }
 
 .demo-section {
@@ -756,7 +773,8 @@ textarea {
   }
 
   .feature-grid,
-  .pricing-grid {
+  .pricing-grid,
+  .faq-grid {
     grid-template-columns: 1fr 1fr;
   }
 
@@ -791,6 +809,7 @@ textarea {
   .feature-grid,
   .workflow-grid,
   .pricing-grid,
+  .faq-grid,
   .form-row,
   .footer-inner {
     grid-template-columns: 1fr;

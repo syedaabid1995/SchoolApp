@@ -106,7 +106,7 @@ void main() {
     test('delegate loads localization object', () async {
       final l10n = await AppLocalizations.delegate.load(const Locale('en'));
 
-      expect(l10n.appTitle, 'School ERP Staff');
+      expect(l10n.appTitle, 'Akademifyy Staff');
     });
   });
 

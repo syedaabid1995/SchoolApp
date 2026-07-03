@@ -5,8 +5,8 @@ import { ThemeProvider } from '../components/ThemeProvider';
 import { NotificationProvider } from '../components/NotificationProvider';
 
 export const metadata = {
-  title: 'Akademify',
-  description: 'SAAPT Admin Console',
+  title: 'Akademifyy',
+  description: 'Akademifyy Admin Console',
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
