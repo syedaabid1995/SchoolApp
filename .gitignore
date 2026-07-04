@@ -154,3 +154,7 @@ backend/test-deployment.json
 *deployment*.json
 *deployment*.local.json
 /tools
+
+# Load test outputs
+load-tests/k6/results/*
+!load-tests/k6/results/.gitkeep

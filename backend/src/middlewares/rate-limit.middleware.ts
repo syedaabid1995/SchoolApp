@@ -16,6 +16,8 @@ const defaultLimiter = new RateLimiterMemory({
   duration: 60,
 });
 
+const LOAD_TEST_HEADER = 'x-load-test-key';
+
 const otpLimiter = new RateLimiterMemory({
   points: 5,
   duration: 300,
@@ -64,6 +66,20 @@ const requestIp = (req: Request) => {
 };
 
 const keyFor = (req: Request) => req.auth?.schoolId ?? requestIp(req);
+
+const constantTimeEqual = (left: string, right: string) => {
+  const leftBuffer = Buffer.from(left);
+  const rightBuffer = Buffer.from(right);
+  if (leftBuffer.length !== rightBuffer.length) return false;
+  return crypto.timingSafeEqual(leftBuffer, rightBuffer);
+};
+
+export const isLoadTestingRateLimitBypass = (req: Request) => {
+  if (!env.LOAD_TESTING_ENABLED || !env.LOAD_TESTING_SECRET) return false;
+  const suppliedKey = firstHeaderValue(req.headers[LOAD_TEST_HEADER]);
+  if (!suppliedKey) return false;
+  return constantTimeEqual(suppliedKey, env.LOAD_TESTING_SECRET);
+};
 
 export const authLimiterSchoolScope = (body: unknown) => {
   const record = typeof body === 'object' && body !== null ? (body as Record<string, unknown>) : {};
@@ -266,6 +282,17 @@ export const rateLimit = () => async (req: Request, _res: Response, next: NextFu
     return next();
   }
   if (req.path === '/api/v1/auth/login' || req.path === '/api/auth/login') {
+    return next();
+  }
+  if (isLoadTestingRateLimitBypass(req)) {
+    logger.info(
+      {
+        method: req.method,
+        path: req.path,
+        ip: requestIp(req),
+      },
+      'load-test rate limit bypass used',
+    );
     return next();
   }
   try {

@@ -48,6 +48,8 @@ const envSchema = z.object({
   RUN_WORKERS: boolEnv(process.env.NODE_ENV !== 'production').default(process.env.NODE_ENV !== 'production'),
   RUN_SCHEDULERS: boolEnv(process.env.NODE_ENV !== 'production').default(process.env.NODE_ENV !== 'production'),
   SHUTDOWN_GRACE_MS: z.coerce.number().int().min(1000).max(120000).default(30000),
+  LOAD_TESTING_ENABLED: boolEnv(false).default(false),
+  LOAD_TESTING_SECRET: optionalEnvString(),
   STORAGE_DRIVER: z.enum(['local', 's3']).default(process.env.NODE_ENV === 'production' ? 's3' : 'local'),
   STORAGE_LOCAL_ROOT: z.string().min(1).default('storage/runtime'),
   STORAGE_LEGACY_LOCAL_UPLOADS_READ_ENABLED: boolEnv(process.env.NODE_ENV !== 'production').default(process.env.NODE_ENV !== 'production'),
@@ -118,6 +120,10 @@ const normalizedEnv = {
   S3_ACCESS_KEY_ID: parsed.data.S3_ACCESS_KEY_ID ?? parsed.data.AWS_ACCESS_KEY_ID,
   S3_SECRET_ACCESS_KEY: parsed.data.S3_SECRET_ACCESS_KEY ?? parsed.data.AWS_SECRET_ACCESS_KEY,
 };
+
+if (normalizedEnv.LOAD_TESTING_ENABLED && !normalizedEnv.LOAD_TESTING_SECRET) {
+  throw new Error('LOAD_TESTING_SECRET is required when LOAD_TESTING_ENABLED=true');
+}
 
 if (normalizedEnv.NODE_ENV === 'production') {
   const missingGoogleSmtpEnv = REQUIRED_PRODUCTION_GOOGLE_SMTP_ENV.filter((key) => !normalizedEnv[key]);

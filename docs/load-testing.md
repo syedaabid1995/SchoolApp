@@ -22,6 +22,39 @@ Recommended:
 - `autocannon` for quick single-endpoint checks.
 - `Artillery` if the team prefers YAML scenario definitions.
 
+The repository includes a ready-to-run k6 script:
+
+```sh
+k6 run load-tests/k6/schoolapp-load-test.js
+```
+
+See [../load-tests/k6/README.md](../load-tests/k6/README.md) for environment variables, VU profiles, fixed-RPS mode, endpoint mix examples, and result files.
+
+## Temporary Rate-Limit Bypass
+
+The API has a safe staging/pilot-only load-test bypass for the global request rate limiter. It is disabled by default.
+
+Server-side requirements:
+
+```dotenv
+LOAD_TESTING_ENABLED=true
+LOAD_TESTING_SECRET=<strong-random-secret>
+```
+
+Client-side k6 requirement:
+
+```sh
+export ACADEMIFY_LOAD_TEST_KEY="<same-strong-random-secret>"
+```
+
+Rules:
+
+- Use only on staging, pilot, or disposable production-like environments.
+- Remove or set `LOAD_TESTING_ENABLED=false` immediately after the test window.
+- The bypass applies only to the generic global request limiter.
+- It does not bypass authentication, authorization, login/MFA rate limits, subscription write guards, or endpoint permissions.
+- The backend logs every bypassed request with method, path, and IP.
+
 Use placeholders for credentials:
 
 ```text
