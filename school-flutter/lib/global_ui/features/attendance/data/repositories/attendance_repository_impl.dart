@@ -312,6 +312,18 @@ class AttendanceRepositoryImpl implements AttendanceRepository {
   }
 
   @override
+  Future<AiAttendanceRecognition> recognizeAiAttendance({
+    required AttendanceSheetQuery query,
+    required List<AttendancePhotoUpload> photos,
+  }) async {
+    try {
+      return await _remote.recognizeAiAttendance(query: query, photos: photos);
+    } catch (error) {
+      throw ErrorHandler.toFailure(error);
+    }
+  }
+
+  @override
   Future<AttendanceSheetSession> lockAttendanceSheet({
     required String sessionId,
     String? reason,

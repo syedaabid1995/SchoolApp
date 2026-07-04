@@ -32,19 +32,28 @@ class _StudentAttendancePreviewScreenState
   final _picker = ImagePicker();
   late List<XFile> _captures;
   late List<AttendanceStudentRecord> _rows;
+  Map<String, AiAttendanceRecord> _aiByStudent = const {};
+  bool _recognitionDirty = true;
 
   @override
   void initState() {
     super.initState();
     _captures = [...widget.initialCaptures];
     _rows = [...widget.initialSheet.rows];
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted && _captures.isNotEmpty) _runRecognition();
+    });
   }
 
   @override
   Widget build(BuildContext context) {
     final saveState = ref.watch(saveAttendanceProvider);
+    final recognitionState = ref.watch(recognizeAiAttendanceProvider);
     final present = _rows.where((row) => row.status == 'PRESENT').length;
     final absent = _rows.where((row) => row.status == 'ABSENT').length;
+    final needsReview = _aiByStudent.values
+        .where((record) => record.needsReview)
+        .length;
     return Scaffold(
       appBar: AppBar(title: const Text('Attendance Preview')),
       body: Column(
@@ -77,8 +86,8 @@ class _StudentAttendancePreviewScreenState
                 ),
                 Expanded(
                   child: _Summary(
-                    label: 'Images',
-                    value: '${_captures.length}',
+                    label: 'Review',
+                    value: '$needsReview',
                     color: SaaptTheme.warning,
                   ),
                 ),
@@ -94,7 +103,7 @@ class _StudentAttendancePreviewScreenState
               separatorBuilder: (_, _) => const SizedBox(width: 8),
               itemBuilder: (_, index) {
                 if (index == _captures.length) {
-                  return _AddImageButton(onPressed: _captureAnother);
+                  return _AddImageButton(onPressed: _chooseImageSource);
                 }
                 return ClipRRect(
                   borderRadius: BorderRadius.circular(8),
@@ -108,6 +117,12 @@ class _StudentAttendancePreviewScreenState
               },
             ),
           ),
+          _RecognitionBar(
+            state: recognitionState,
+            dirty: _recognitionDirty,
+            imageCount: _captures.length,
+            onAnalyze: recognitionState.isLoading ? null : _runRecognition,
+          ),
           Expanded(
             child: ListView.separated(
               padding: const EdgeInsets.fromLTRB(16, 8, 16, 100),
@@ -115,6 +130,7 @@ class _StudentAttendancePreviewScreenState
               separatorBuilder: (_, _) => const SizedBox(height: 8),
               itemBuilder: (context, index) {
                 final row = _rows[index];
+                final aiRecord = _aiByStudent[row.studentId];
                 return Container(
                   padding: const EdgeInsets.fromLTRB(14, 10, 10, 10),
                   decoration: BoxDecoration(
@@ -155,6 +171,10 @@ class _StudentAttendancePreviewScreenState
                                   fontSize: 12,
                                 ),
                               ),
+                            if (aiRecord != null) ...[
+                              const SizedBox(height: 5),
+                              _AiStatusBadge(record: aiRecord),
+                            ],
                           ],
                         ),
                       ),
@@ -180,8 +200,13 @@ class _StudentAttendancePreviewScreenState
                         onChanged: widget.initialSheet.isLocked
                             ? null
                             : (status) => setState(
-                                () =>
-                                    _rows[index] = row.copyWith(status: status),
+                                () => _rows[index] = row.copyWith(
+                                  status: status,
+                                  clearConfidence: true,
+                                  manualOverrideReason: aiRecord == null
+                                      ? row.manualOverrideReason
+                                      : 'Manual correction after AI attendance',
+                                ),
                               ),
                       ),
                     ],
@@ -204,7 +229,11 @@ class _StudentAttendancePreviewScreenState
                 borderRadius: BorderRadius.circular(8),
               ),
             ),
-            onPressed: saveState.isLoading || widget.initialSheet.isLocked
+            onPressed:
+                saveState.isLoading ||
+                    widget.initialSheet.isLocked ||
+                    recognitionState.isLoading ||
+                    _recognitionDirty
                 ? null
                 : _save,
             icon: saveState.isLoading
@@ -228,20 +257,114 @@ class _StudentAttendancePreviewScreenState
     );
   }
 
-  Future<void> _captureAnother() async {
+  Future<void> _chooseImageSource() async {
+    final source = await showModalBottomSheet<ImageSource>(
+      context: context,
+      builder: (context) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(
+              leading: const Icon(Icons.camera_alt_outlined),
+              title: const Text('Camera'),
+              onTap: () => Navigator.of(context).pop(ImageSource.camera),
+            ),
+            ListTile(
+              leading: const Icon(Icons.photo_library_outlined),
+              title: const Text('Upload'),
+              onTap: () => Navigator.of(context).pop(ImageSource.gallery),
+            ),
+          ],
+        ),
+      ),
+    );
+    if (source == null) return;
+    await _captureAnother(source);
+  }
+
+  Future<void> _captureAnother(ImageSource source) async {
     try {
       final capture = await _picker.pickImage(
-        source: ImageSource.camera,
+        source: source,
         imageQuality: 82,
         maxWidth: 2048,
       );
-      if (capture != null && mounted) setState(() => _captures.add(capture));
+      if (capture != null && mounted) {
+        setState(() {
+          _captures.add(capture);
+          _recognitionDirty = true;
+        });
+      }
     } catch (error) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Unable to capture image: $error')),
       );
     }
+  }
+
+  Future<void> _runRecognition() async {
+    if (_captures.isEmpty) return;
+    final photos = [
+      for (var index = 0; index < _captures.length; index += 1)
+        AttendancePhotoUpload(
+          path: _captures[index].path,
+          name: _captures[index].name.isNotEmpty
+              ? _captures[index].name
+              : 'attendance-${index + 1}.jpg',
+        ),
+    ];
+    await ref
+        .read(recognizeAiAttendanceProvider.notifier)
+        .recognize(query: widget.query, photos: photos);
+    if (!mounted) return;
+    final result = ref.read(recognizeAiAttendanceProvider);
+    if (result.hasError) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(result.error.toString())));
+      return;
+    }
+    final recognition = result.value;
+    if (recognition == null) return;
+    setState(() {
+      _applyRecognition(recognition);
+      _recognitionDirty = false;
+    });
+  }
+
+  void _applyRecognition(AiAttendanceRecognition recognition) {
+    final byStudent = {
+      for (final record in recognition.records) record.studentId: record,
+    };
+    _aiByStudent = byStudent;
+    _rows = [
+      for (final row in _rows)
+        _applyRecognitionToRow(row, byStudent[row.studentId]),
+    ];
+  }
+
+  AttendanceStudentRecord _applyRecognitionToRow(
+    AttendanceStudentRecord row,
+    AiAttendanceRecord? record,
+  ) {
+    if (record == null) {
+      return row.copyWith(status: 'ABSENT', clearConfidence: true);
+    }
+    if (record.isPresent) {
+      return row.copyWith(
+        status: 'PRESENT',
+        confidence: record.confidence == null ? null : record.confidence! / 100,
+        manualOverrideReason: '',
+      );
+    }
+    return row.copyWith(
+      status: 'ABSENT',
+      clearConfidence: true,
+      manualOverrideReason: record.needsReview
+          ? 'AI attendance needs review'
+          : '',
+    );
   }
 
   Future<void> _save() async {
@@ -288,6 +411,110 @@ class _AddImageButton extends StatelessWidget {
       child: const Icon(Icons.add_a_photo_outlined, color: SaaptTheme.primary),
     ),
   );
+}
+
+class _RecognitionBar extends StatelessWidget {
+  const _RecognitionBar({
+    required this.state,
+    required this.dirty,
+    required this.imageCount,
+    required this.onAnalyze,
+  });
+
+  final AsyncValue<AiAttendanceRecognition?> state;
+  final bool dirty;
+  final int imageCount;
+  final VoidCallback? onAnalyze;
+
+  @override
+  Widget build(BuildContext context) {
+    final recognition = state.value;
+    final error = state.hasError ? state.error : null;
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.fromLTRB(16, 8, 16, 10),
+      decoration: const BoxDecoration(
+        color: Colors.white,
+        border: Border(bottom: BorderSide(color: Color(0xFFDDE5F2))),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          if (state.isLoading) ...[
+            const LinearProgressIndicator(minHeight: 3),
+            const SizedBox(height: 8),
+          ],
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  error != null
+                      ? error.toString()
+                      : recognition == null
+                      ? '$imageCount image${imageCount == 1 ? '' : 's'} ready'
+                      : '${recognition.summary.detectedFaces} faces scanned - ${recognition.summary.registeredFaceSamples} samples',
+                  style: TextStyle(
+                    color: error == null
+                        ? const Color(0xFF60708F)
+                        : const Color(0xFFD64545),
+                    fontSize: 12,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ),
+              const SizedBox(width: 10),
+              OutlinedButton.icon(
+                onPressed: onAnalyze,
+                icon: const Icon(Icons.auto_awesome_outlined, size: 18),
+                label: Text(
+                  dirty || recognition == null ? 'Analyze' : 'Re-analyze',
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _AiStatusBadge extends StatelessWidget {
+  const _AiStatusBadge({required this.record});
+
+  final AiAttendanceRecord record;
+
+  @override
+  Widget build(BuildContext context) {
+    final color = record.isPresent
+        ? SaaptTheme.success
+        : record.needsReview
+        ? SaaptTheme.warning
+        : const Color(0xFF8A9AB8);
+    final label = record.isPresent
+        ? 'AI present'
+        : record.needsReview
+        ? 'Needs review'
+        : 'Not detected';
+    final confidence = record.confidence == null
+        ? ''
+        : ' ${record.confidence!.round()}%';
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.10),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: color.withValues(alpha: 0.35)),
+      ),
+      child: Text(
+        '$label$confidence',
+        style: TextStyle(
+          color: color,
+          fontSize: 11,
+          fontWeight: FontWeight.w800,
+        ),
+      ),
+    );
+  }
 }
 
 class _Summary extends StatelessWidget {

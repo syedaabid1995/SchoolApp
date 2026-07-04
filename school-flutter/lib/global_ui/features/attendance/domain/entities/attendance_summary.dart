@@ -501,6 +501,7 @@ class AttendanceStudentRecord extends Equatable {
     this.recordId,
     this.admissionNo,
     this.rollNo,
+    this.confidence,
     this.manualOverrideReason,
   });
 
@@ -510,11 +511,14 @@ class AttendanceStudentRecord extends Equatable {
   final String? recordId;
   final String? admissionNo;
   final String? rollNo;
+  final double? confidence;
   final String? manualOverrideReason;
 
   AttendanceStudentRecord copyWith({
     String? status,
+    double? confidence,
     String? manualOverrideReason,
+    bool clearConfidence = false,
   }) {
     return AttendanceStudentRecord(
       studentId: studentId,
@@ -523,6 +527,7 @@ class AttendanceStudentRecord extends Equatable {
       recordId: recordId,
       admissionNo: admissionNo,
       rollNo: rollNo,
+      confidence: clearConfidence ? null : confidence ?? this.confidence,
       manualOverrideReason: manualOverrideReason ?? this.manualOverrideReason,
     );
   }
@@ -535,6 +540,7 @@ class AttendanceStudentRecord extends Equatable {
     recordId,
     admissionNo,
     rollNo,
+    confidence,
     manualOverrideReason,
   ];
 }
@@ -571,4 +577,150 @@ class AttendanceSheetSaveRequest extends Equatable {
 
   @override
   List<Object?> get props => [query, records, deviceId];
+}
+
+class AttendancePhotoUpload extends Equatable {
+  const AttendancePhotoUpload({required this.path, required this.name});
+
+  final String path;
+  final String name;
+
+  @override
+  List<Object?> get props => [path, name];
+}
+
+class AiAttendancePhoto extends Equatable {
+  const AiAttendancePhoto({
+    required this.key,
+    required this.url,
+    this.contentType,
+    this.size,
+  });
+
+  final String key;
+  final String url;
+  final String? contentType;
+  final int? size;
+
+  @override
+  List<Object?> get props => [key, url, contentType, size];
+}
+
+class AiAttendancePossibleMatch extends Equatable {
+  const AiAttendancePossibleMatch({
+    required this.studentId,
+    required this.fullName,
+    this.confidence,
+  });
+
+  final String studentId;
+  final String fullName;
+  final double? confidence;
+
+  @override
+  List<Object?> get props => [studentId, fullName, confidence];
+}
+
+class AiAttendanceRecord extends Equatable {
+  const AiAttendanceRecord({
+    required this.studentId,
+    required this.fullName,
+    required this.status,
+    required this.attendanceStatus,
+    this.admissionNo,
+    this.rollNo,
+    this.confidence,
+    this.possibleMatches = const [],
+  });
+
+  final String studentId;
+  final String fullName;
+  final String status;
+  final String attendanceStatus;
+  final String? admissionNo;
+  final String? rollNo;
+  final double? confidence;
+  final List<AiAttendancePossibleMatch> possibleMatches;
+
+  bool get isPresent => status == 'PRESENT';
+  bool get needsReview => status == 'NEEDS_REVIEW';
+
+  @override
+  List<Object?> get props => [
+    studentId,
+    fullName,
+    status,
+    attendanceStatus,
+    admissionNo,
+    rollNo,
+    confidence,
+    possibleMatches,
+  ];
+}
+
+class AiAttendanceSummary extends Equatable {
+  const AiAttendanceSummary({
+    required this.totalStudents,
+    required this.present,
+    required this.needsReview,
+    required this.absent,
+    required this.detectedFaces,
+    required this.unmatchedFaces,
+    required this.unindexedFaces,
+    required this.registeredFaceSamples,
+    required this.photos,
+  });
+
+  final int totalStudents;
+  final int present;
+  final int needsReview;
+  final int absent;
+  final int detectedFaces;
+  final int unmatchedFaces;
+  final int unindexedFaces;
+  final int registeredFaceSamples;
+  final int photos;
+
+  @override
+  List<Object?> get props => [
+    totalStudents,
+    present,
+    needsReview,
+    absent,
+    detectedFaces,
+    unmatchedFaces,
+    unindexedFaces,
+    registeredFaceSamples,
+    photos,
+  ];
+}
+
+class AiAttendanceThresholds extends Equatable {
+  const AiAttendanceThresholds({
+    required this.autoPresent,
+    required this.review,
+  });
+
+  final double autoPresent;
+  final double review;
+
+  @override
+  List<Object?> get props => [autoPresent, review];
+}
+
+class AiAttendanceRecognition extends Equatable {
+  const AiAttendanceRecognition({
+    required this.thresholds,
+    required this.photos,
+    required this.summary,
+    required this.records,
+  });
+
+  final AiAttendanceThresholds thresholds;
+  final List<AiAttendancePhoto> photos;
+  final AiAttendanceSummary summary;
+  final List<AiAttendanceRecord> records;
+
+  @override
+  List<Object?> get props => [thresholds, photos, summary, records];
 }

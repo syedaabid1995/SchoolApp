@@ -6,7 +6,7 @@ class AppConfig {
 
   static const apiBaseUrl = String.fromEnvironment(
     'API_BASE_URL',
-    defaultValue: 'https://schoolapp-6a6f.onrender.com/api/v1',
+    defaultValue: 'https://api.akademifyy.in/api/v1',
     // defaultValue: 'http://10.0.2.2:3000/api/v1',
   );
 

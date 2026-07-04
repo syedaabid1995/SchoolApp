@@ -25,6 +25,10 @@ abstract class AttendanceRepository {
   Future<AttendanceSheet> saveAttendanceSheet(
     AttendanceSheetSaveRequest request,
   );
+  Future<AiAttendanceRecognition> recognizeAiAttendance({
+    required AttendanceSheetQuery query,
+    required List<AttendancePhotoUpload> photos,
+  });
   Future<AttendanceSheetSession> lockAttendanceSheet({
     required String sessionId,
     String? reason,

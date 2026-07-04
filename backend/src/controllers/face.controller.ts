@@ -5,21 +5,34 @@ import { HttpError } from '../middlewares/error.middleware';
 import {
   approveFaceEnrollment,
   createFaceEnrollment,
+  type FaceImageUpload,
   type FaceSampleInput,
+  registerStudentFaceImages,
   reEnrollFace,
   rejectFaceEnrollment,
 } from '../services/face.service';
 import { prisma } from '../config/db';
 
 const sampleSchema = z.object({
-  imageUrl: z.string().url(),
+  imageUrl: z.string().min(1),
   embedding: z.array(z.number()).min(1),
 });
 
 const enrollSchema = z.object({
   studentId: z.string().uuid(),
-  samples: z.array(sampleSchema).min(2),
+  samples: z.array(sampleSchema).min(2).max(4),
   schoolId: z.string().uuid().optional(),
+});
+
+const boolFromForm = z.preprocess((value) => {
+  if (typeof value === 'boolean') return value;
+  if (typeof value === 'string') return value.toLowerCase() === 'true';
+  return undefined;
+}, z.boolean().optional());
+
+const registerImagesSchema = z.object({
+  schoolId: z.string().uuid().optional(),
+  replace: boolFromForm.default(true),
 });
 
 const approveSchema = z.object({
@@ -61,6 +74,29 @@ export const reEnroll = async (req: Request, res: Response) => {
   });
 
   res.status(200).json(profile);
+};
+
+export const registerStudentFaceImagesApi = async (req: Request, res: Response) => {
+  const payload = registerImagesSchema.parse(req.body);
+  const schoolId = resolveSchoolId(req, payload.schoolId);
+  const auth = req.auth;
+  if (!auth) throw new HttpError(401, 'Unauthorized');
+  const files = Array.isArray(req.files) ? (req.files as Express.Multer.File[]) : [];
+  if (!files.length) throw new HttpError(400, 'At least one face image is required');
+
+  const profile = await registerStudentFaceImages({
+    schoolId,
+    studentId: req.params.studentId,
+    createdById: auth.userId,
+    replace: payload.replace,
+    files: files.map((file) => ({
+      buffer: file.buffer,
+      mimetype: file.mimetype,
+      originalname: file.originalname,
+    })) satisfies FaceImageUpload[],
+  });
+
+  res.status(201).json(profile);
 };
 
 export const approveFace = async (req: Request, res: Response) => {

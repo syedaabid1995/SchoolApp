@@ -1,5 +1,7 @@
 import { Router } from 'express';
+import multer from 'multer';
 import { authMiddleware } from '../middlewares/auth.middleware';
+import { aiRateLimit } from '../middlewares/rate-limit.middleware';
 import { blockSuperAdminSchoolOperations, requirePermission } from '../middlewares/rbac.middleware';
 import { validateBody, validateParams, validateQuery } from '../middlewares/validation.middleware';
 import { PermissionCodes as P } from '../permissions/permission-manifest';
@@ -69,6 +71,10 @@ import {
   saveAttendanceSheetApi,
 } from '../controllers/attendanceSheet.controller';
 import {
+  recognizeAttendanceAiApi,
+  uploadAttendanceAiPhotosApi,
+} from '../controllers/attendanceAi.controller';
+import {
   cancelAttendanceSubstitutionApi,
   createAttendanceSubstitutionApi,
   listAttendanceSubstitutionsApi,
@@ -76,6 +82,18 @@ import {
 import { idempotencyMiddleware } from '../middlewares/idempotency.middleware';
 
 export const attendanceRouter = Router();
+
+const aiAttendanceUpload = multer({
+  storage: multer.memoryStorage(),
+  fileFilter: (_req, file, cb) => {
+    if (file.mimetype.startsWith('image/')) {
+      cb(null, true);
+      return;
+    }
+    cb(new Error('Only image uploads are allowed'));
+  },
+  limits: { fileSize: 12 * 1024 * 1024, files: 5 },
+});
 
 attendanceRouter.use(authMiddleware);
 
@@ -100,6 +118,8 @@ attendanceRouter.post('/configurations/:id/deactivate', blockSuperAdminSchoolOpe
 attendanceRouter.patch('/configurations/:id/deactivate', blockSuperAdminSchoolOperations('Super Admin cannot manage attendance configuration'), requirePermission(P.attendanceEdit), validateParams(uuidParamsSchema), validateBody(attendanceConfigurationDeactivateSchema), deactivateAttendanceConfigurationApi);
 attendanceRouter.get('/config/resolve', requirePermission(P.attendanceView, P.attendanceEdit, P.attendanceCreate), validateQuery(resolveAttendanceConfigQuerySchema), resolveAttendanceConfigApi);
 attendanceRouter.get('/units', requirePermission(P.attendanceView, P.attendanceEdit, P.attendanceCreate), validateQuery(attendanceUnitsQuerySchema), listAttendanceUnitsApi);
+attendanceRouter.post('/ai/photos', blockSuperAdminSchoolOperations('Super Admin cannot manage student attendance'), requirePermission(P.attendanceCreate, P.attendanceEdit), aiRateLimit(), aiAttendanceUpload.any(), uploadAttendanceAiPhotosApi);
+attendanceRouter.post('/ai/recognize', blockSuperAdminSchoolOperations('Super Admin cannot manage student attendance'), requirePermission(P.attendanceCreate, P.attendanceEdit), aiRateLimit(), aiAttendanceUpload.any(), recognizeAttendanceAiApi);
 attendanceRouter.get('/sheet', requirePermission(P.attendanceView, P.attendanceEdit, P.attendanceCreate), validateQuery(attendanceSheetQuerySchema), getAttendanceSheetApi);
 attendanceRouter.put('/sheet', blockSuperAdminSchoolOperations('Super Admin cannot manage student attendance'), requirePermission(P.attendanceCreate, P.attendanceEdit), validateBody(saveAttendanceSheetSchema), saveAttendanceSheetApi);
 attendanceRouter.post('/sheet/:id/lock', blockSuperAdminSchoolOperations('Super Admin cannot manage student attendance'), requirePermission(P.attendanceEdit), validateParams(uuidParamsSchema), validateBody(attendanceSheetLockSchema), lockAttendanceSheetApi);

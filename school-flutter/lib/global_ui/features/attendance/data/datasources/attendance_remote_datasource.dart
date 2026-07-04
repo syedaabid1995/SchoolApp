@@ -158,6 +158,33 @@ class AttendanceRemoteDatasource {
     );
   }
 
+  Future<AiAttendanceRecognitionModel> recognizeAiAttendance({
+    required AttendanceSheetQuery query,
+    required List<AttendancePhotoUpload> photos,
+  }) async {
+    final form = FormData();
+    for (final entry in attendanceSheetQueryParams(query).entries) {
+      form.fields.add(MapEntry(entry.key, entry.value.toString()));
+    }
+    for (final photo in photos) {
+      form.files.add(
+        MapEntry(
+          'photos',
+          await MultipartFile.fromFile(photo.path, filename: photo.name),
+        ),
+      );
+    }
+
+    final response = await _dio.post<Map<String, dynamic>>(
+      ApiEndpoints.attendanceAiRecognize,
+      data: form,
+      options: Options(contentType: 'multipart/form-data'),
+    );
+    return AiAttendanceRecognitionModel.fromJson(
+      response.data ?? const <String, dynamic>{},
+    );
+  }
+
   Future<AttendanceSheetSessionModel> lockAttendanceSheet({
     required String sessionId,
     String? reason,
@@ -193,9 +220,9 @@ class AttendanceRemoteDatasource {
     final response = await _dio.get<List<dynamic>>(
       ApiEndpoints.attendanceConfigurations,
       queryParameters: {
-        if (academicYearId != null) 'academicYearId': academicYearId,
-        if (classId != null) 'classId': classId,
-        if (sectionId != null) 'sectionId': sectionId,
+        'academicYearId': ?academicYearId,
+        'classId': ?classId,
+        'sectionId': ?sectionId,
         if (active != null) 'active': active.toString(),
       },
     );

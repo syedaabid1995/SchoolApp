@@ -375,6 +375,27 @@ class _FakeAttendanceRepository implements AttendanceRepository {
   ) async => getAttendanceSheet(request.query);
 
   @override
+  Future<AiAttendanceRecognition> recognizeAiAttendance({
+    required AttendanceSheetQuery query,
+    required List<AttendancePhotoUpload> photos,
+  }) async => const AiAttendanceRecognition(
+    thresholds: AiAttendanceThresholds(autoPresent: 90, review: 80),
+    photos: [],
+    summary: AiAttendanceSummary(
+      totalStudents: 0,
+      present: 0,
+      needsReview: 0,
+      absent: 0,
+      detectedFaces: 0,
+      unmatchedFaces: 0,
+      unindexedFaces: 0,
+      registeredFaceSamples: 0,
+      photos: 0,
+    ),
+    records: [],
+  );
+
+  @override
   Future<AttendanceSheetSession> lockAttendanceSheet({
     required String sessionId,
     String? reason,

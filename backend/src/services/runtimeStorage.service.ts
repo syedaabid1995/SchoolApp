@@ -22,6 +22,8 @@ export type RuntimeStorageCategory =
   | 'exports'
   | 'audit-exports'
   | 'backups'
+  | 'attendance-photos'
+  | 'face-samples'
   | 'student-transfers'
   | 'tmp';
 

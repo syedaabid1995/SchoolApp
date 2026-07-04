@@ -154,6 +154,30 @@ class SaveAttendanceController extends AsyncNotifier<AttendanceSheet?> {
   }
 }
 
+final recognizeAiAttendanceProvider =
+    AsyncNotifierProvider<
+      RecognizeAiAttendanceController,
+      AiAttendanceRecognition?
+    >(RecognizeAiAttendanceController.new);
+
+class RecognizeAiAttendanceController
+    extends AsyncNotifier<AiAttendanceRecognition?> {
+  @override
+  Future<AiAttendanceRecognition?> build() async => null;
+
+  Future<void> recognize({
+    required AttendanceSheetQuery query,
+    required List<AttendancePhotoUpload> photos,
+  }) async {
+    state = const AsyncLoading();
+    state = await AsyncValue.guard(
+      () => ref
+          .read(attendanceRepositoryProvider)
+          .recognizeAiAttendance(query: query, photos: photos),
+    );
+  }
+}
+
 final lockAttendanceSheetProvider =
     AsyncNotifierProvider<
       LockAttendanceSheetController,

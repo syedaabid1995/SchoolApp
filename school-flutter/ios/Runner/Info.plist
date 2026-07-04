@@ -8,6 +8,8 @@
 	<string>Akademifyy</string>
 	<key>NSCameraUsageDescription</key>
 	<string>Capture classroom images for attendance preview.</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>Upload classroom images for attendance preview.</string>
 	<key>CFBundleExecutable</key>
 	<string>$(EXECUTABLE_NAME)</string>
 	<key>CFBundleIdentifier</key>

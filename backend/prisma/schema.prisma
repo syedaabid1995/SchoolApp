@@ -1925,15 +1925,25 @@ model FaceProfile {
 }
 
 model FaceSample {
-  id            String   @id @default(uuid()) @db.Uuid
-  faceProfileId String   @map("face_profile_id") @db.Uuid
-  imageUrl      String   @map("image_url")
-  embedding     Json
-  createdAt     DateTime @default(now()) @map("created_at")
+  id                String   @id @default(uuid()) @db.Uuid
+  faceProfileId     String   @map("face_profile_id") @db.Uuid
+  schoolId          String?  @map("school_id") @db.Uuid
+  classId           String?  @map("class_id") @db.Uuid
+  sectionId         String?  @map("section_id") @db.Uuid
+  imageUrl          String   @map("image_url")
+  imageKey          String?  @map("image_key")
+  embedding         Json
+  collectionId      String?  @map("collection_id")
+  rekognitionFaceId String?  @map("rekognition_face_id")
+  createdAt         DateTime @default(now()) @map("created_at")
 
   faceProfile FaceProfile @relation(fields: [faceProfileId], references: [id], onDelete: Cascade)
 
+  @@unique([collectionId, rekognitionFaceId])
   @@index([faceProfileId])
+  @@index([schoolId, classId, sectionId])
+  @@index([collectionId])
+  @@index([rekognitionFaceId])
   @@map("face_samples")
 }
 

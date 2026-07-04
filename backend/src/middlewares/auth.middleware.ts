@@ -574,6 +574,9 @@ export const resolvePermissionForPath = (path: string, method = 'GET') => {
   if (pathOnly.startsWith('/api/v1/attendance/evidence')) {
     return verb === 'POST' ? [P.attendanceCreate, P.attendanceEdit] : P.attendanceView;
   }
+  if (pathOnly.startsWith('/api/v1/attendance/ai')) {
+    return [P.attendanceCreate, P.attendanceEdit];
+  }
   if (pathOnly.startsWith('/api/v1/attendance/summary')) {
     return [P.attendanceView, P.attendanceReport, P.staffAttendanceView, P.staffAttendanceReport];
   }

@@ -17,6 +17,7 @@ class ApiEndpoints {
   static const attendanceConfigResolve = '/attendance/config/resolve';
   static const attendanceUnits = '/attendance/units';
   static const attendanceSheet = '/attendance/sheet';
+  static const attendanceAiRecognize = '/attendance/ai/recognize';
   static const attendanceConfigurations = '/attendance/configurations';
   static const studentAttendance = '/students/attendance';
   static const studentAttendanceOptions = '/students/attendance/options';

@@ -435,6 +435,7 @@ class AttendanceStudentRecordModel extends AttendanceStudentRecord {
     super.recordId,
     super.admissionNo,
     super.rollNo,
+    super.confidence,
     super.manualOverrideReason,
   });
 
@@ -456,6 +457,7 @@ class AttendanceStudentRecordModel extends AttendanceStudentRecord {
       rollNo: student['rollNo']?.toString(),
       recordId: json['recordId']?.toString(),
       status: json['status']?.toString() ?? 'PRESENT',
+      confidence: _toNullableDouble(json['confidence']),
       manualOverrideReason: json['manualOverrideReason']?.toString(),
     );
   }
@@ -467,6 +469,7 @@ class AttendanceStudentRecordModel extends AttendanceStudentRecord {
     'rollNo': rollNo,
     'recordId': recordId,
     'status': status,
+    'confidence': confidence,
     'manualOverrideReason': manualOverrideReason,
   };
 }
@@ -534,10 +537,156 @@ class AttendanceSheetModel extends AttendanceSheet {
           'rollNo': row.rollNo,
           'recordId': row.recordId,
           'status': row.status,
+          'confidence': row.confidence,
           'manualOverrideReason': row.manualOverrideReason,
         },
     ],
   };
+}
+
+class AiAttendanceRecognitionModel extends AiAttendanceRecognition {
+  const AiAttendanceRecognitionModel({
+    required super.thresholds,
+    required super.photos,
+    required super.summary,
+    required super.records,
+  });
+
+  factory AiAttendanceRecognitionModel.fromJson(Map<String, dynamic> json) {
+    final photos = json['photos'] is List ? json['photos'] as List : const [];
+    final records = json['records'] is List
+        ? json['records'] as List
+        : const [];
+    return AiAttendanceRecognitionModel(
+      thresholds: AiAttendanceThresholdsModel.fromJson(
+        json['thresholds'] is Map
+            ? _stringMap(json['thresholds'] as Map)
+            : const <String, dynamic>{},
+      ),
+      photos: [
+        for (final item in photos)
+          if (item is Map) AiAttendancePhotoModel.fromJson(_stringMap(item)),
+      ],
+      summary: AiAttendanceSummaryModel.fromJson(
+        json['summary'] is Map
+            ? _stringMap(json['summary'] as Map)
+            : const <String, dynamic>{},
+      ),
+      records: [
+        for (final item in records)
+          if (item is Map) AiAttendanceRecordModel.fromJson(_stringMap(item)),
+      ],
+    );
+  }
+}
+
+class AiAttendanceThresholdsModel extends AiAttendanceThresholds {
+  const AiAttendanceThresholdsModel({
+    required super.autoPresent,
+    required super.review,
+  });
+
+  factory AiAttendanceThresholdsModel.fromJson(Map<String, dynamic> json) {
+    return AiAttendanceThresholdsModel(
+      autoPresent: _toDouble(json['autoPresent']),
+      review: _toDouble(json['review']),
+    );
+  }
+}
+
+class AiAttendancePhotoModel extends AiAttendancePhoto {
+  const AiAttendancePhotoModel({
+    required super.key,
+    required super.url,
+    super.contentType,
+    super.size,
+  });
+
+  factory AiAttendancePhotoModel.fromJson(Map<String, dynamic> json) {
+    return AiAttendancePhotoModel(
+      key: json['key']?.toString() ?? '',
+      url: json['url']?.toString() ?? '',
+      contentType: json['contentType']?.toString(),
+      size: _toNullableInt(json['size']),
+    );
+  }
+}
+
+class AiAttendanceSummaryModel extends AiAttendanceSummary {
+  const AiAttendanceSummaryModel({
+    required super.totalStudents,
+    required super.present,
+    required super.needsReview,
+    required super.absent,
+    required super.detectedFaces,
+    required super.unmatchedFaces,
+    required super.unindexedFaces,
+    required super.registeredFaceSamples,
+    required super.photos,
+  });
+
+  factory AiAttendanceSummaryModel.fromJson(Map<String, dynamic> json) {
+    return AiAttendanceSummaryModel(
+      totalStudents: _toInt(json['totalStudents']),
+      present: _toInt(json['present']),
+      needsReview: _toInt(json['needsReview']),
+      absent: _toInt(json['absent']),
+      detectedFaces: _toInt(json['detectedFaces']),
+      unmatchedFaces: _toInt(json['unmatchedFaces']),
+      unindexedFaces: _toInt(json['unindexedFaces']),
+      registeredFaceSamples: _toInt(json['registeredFaceSamples']),
+      photos: _toInt(json['photos']),
+    );
+  }
+}
+
+class AiAttendanceRecordModel extends AiAttendanceRecord {
+  const AiAttendanceRecordModel({
+    required super.studentId,
+    required super.fullName,
+    required super.status,
+    required super.attendanceStatus,
+    super.admissionNo,
+    super.rollNo,
+    super.confidence,
+    super.possibleMatches,
+  });
+
+  factory AiAttendanceRecordModel.fromJson(Map<String, dynamic> json) {
+    final matches = json['possibleMatches'] is List
+        ? json['possibleMatches'] as List
+        : const [];
+    return AiAttendanceRecordModel(
+      studentId: json['studentId']?.toString() ?? '',
+      fullName: json['fullName']?.toString() ?? '',
+      status: json['status']?.toString() ?? 'ABSENT',
+      attendanceStatus: json['attendanceStatus']?.toString() ?? 'ABSENT',
+      admissionNo: json['admissionNo']?.toString(),
+      rollNo: json['rollNo']?.toString(),
+      confidence: _toNullableDouble(json['confidence']),
+      possibleMatches: [
+        for (final item in matches)
+          if (item is Map)
+            AiAttendancePossibleMatchModel.fromJson(_stringMap(item)),
+      ],
+    );
+  }
+}
+
+class AiAttendancePossibleMatchModel extends AiAttendancePossibleMatch {
+  const AiAttendancePossibleMatchModel({
+    required super.studentId,
+    required super.fullName,
+    super.confidence,
+  });
+
+  factory AiAttendancePossibleMatchModel.fromJson(Map<String, dynamic> json) {
+    return AiAttendancePossibleMatchModel(
+      studentId: json['studentId']?.toString() ?? '',
+      fullName: json['fullName']?.toString() ?? '',
+      confidence: _toNullableDouble(json['confidence']),
+    );
+  }
 }
 
 Map<String, dynamic> studentAttendanceQueryParams(
@@ -580,6 +729,7 @@ Map<String, dynamic> attendanceSheetSavePayload(
       {
         'studentId': record.studentId,
         'status': record.status,
+        if (record.confidence != null) 'confidence': record.confidence,
         if (record.manualOverrideReason != null &&
             record.manualOverrideReason!.trim().isNotEmpty)
           'manualOverrideReason': record.manualOverrideReason,
@@ -608,6 +758,22 @@ int _toInt(Object? value) {
   if (value is int) return value;
   if (value is num) return value.toInt();
   return int.tryParse(value?.toString() ?? '') ?? 0;
+}
+
+int? _toNullableInt(Object? value) {
+  if (value == null) return null;
+  if (value is int) return value;
+  if (value is num) return value.toInt();
+  return int.tryParse(value.toString());
+}
+
+double _toDouble(Object? value) => _toNullableDouble(value) ?? 0;
+
+double? _toNullableDouble(Object? value) {
+  if (value == null) return null;
+  if (value is double) return value;
+  if (value is num) return value.toDouble();
+  return double.tryParse(value.toString());
 }
 
 DateTime _toDate(Object? value) {

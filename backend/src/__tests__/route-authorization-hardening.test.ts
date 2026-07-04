@@ -56,6 +56,7 @@ describe('route authorization hardening', () => {
     );
     assert.equal(resolvePermissionForPath('/api/v1/attendance/sessions/abc', 'PATCH'), P.attendanceEdit);
     assert.equal(resolvePermissionForPath('/api/v1/attendance/legacy/records/abc/override', 'PATCH'), P.attendanceEdit);
+    assert.deepEqual(resolvePermissionForPath('/api/v1/attendance/ai/recognize', 'POST'), [P.attendanceCreate, P.attendanceEdit]);
     assert.equal(resolvePermissionForPath('/api/v1/attendance-approval/sessions/abc/approve', 'POST'), P.attendanceEdit);
   });
 
@@ -65,5 +66,6 @@ describe('route authorization hardening', () => {
     assert.equal(resolvePermissionForPath('/api/v1/uploads/branding', 'POST'), P.settingsAccess);
     assert.equal(resolvePermissionForPath('/api/v1/notifications/send', 'POST'), P.settingsAccess);
     assert.deepEqual(resolvePermissionForPath('/api/v1/faces/enroll', 'POST'), [P.studentDocumentCreate, P.studentEdit]);
+    assert.deepEqual(resolvePermissionForPath('/api/v1/faces/students/student-id/register', 'POST'), [P.studentDocumentCreate, P.studentEdit]);
   });
 });
