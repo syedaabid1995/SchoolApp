@@ -76,6 +76,17 @@ const sumInvoiceField = (items: FeeInvoice[], field: 'totalAmount' | 'discountAm
 
 type StudentMark = NonNullable<Student['marks']>[number];
 
+const attendanceFacePhotoUrls = (student?: Student | null) =>
+  student?.faceProfile?.samples?.map((sample) => sample.imageUrl).filter((url): url is string => Boolean(url)) ?? [];
+
+const sameStringList = (left: string[], right: string[]) =>
+  left.length === right.length && left.every((value, index) => value === right[index]);
+
+const appendFacePhotoUrl = (urls: string[], url: string) => {
+  if (urls.includes(url) || urls.length >= 4) return urls;
+  return [...urls, url];
+};
+
 const formatMark = (value?: number | string | null, fractionDigits = 2) => {
   if (value === undefined || value === null || value === '') return '-';
   const amount = Number(value);
@@ -215,12 +226,18 @@ export default function StudentDetailPage() {
       presentAddress: student.presentAddress ?? student.addressLine1 ?? '',
       permanentAddress: student.permanentAddress ?? student.addressLine2 ?? '',
       photoUrl: student.photoUrl ?? null,
-      facePhotoUrls: student.faceProfile?.samples?.map((sample) => sample.imageUrl).filter(Boolean) ?? [],
+      facePhotoUrls: attendanceFacePhotoUrls(student),
     });
   }, [student, displayName]);
 
   const updateMutation = useMutation({
-    mutationFn: () => updateStudent(studentId, editForm),
+    mutationFn: () => {
+      const payload: Parameters<typeof updateStudent>[1] = { ...editForm };
+      if (sameStringList(editForm.facePhotoUrls, attendanceFacePhotoUrls(student))) {
+        delete payload.facePhotoUrls;
+      }
+      return updateStudent(studentId, payload);
+    },
     onSuccess: (updated: any) => {
       notify.success('Student updated', 'Profile changes were saved.');
       if (updated?.faceRegistration?.success) {
@@ -248,8 +265,14 @@ export default function StudentDetailPage() {
     try {
       const uploaded = await uploadStudentPhoto(file, { studentId });
       if (target === 'student') {
-        setEditForm((prev) => ({ ...prev, photoUrl: uploaded.url }));
-        notify.success('Student photo uploaded', 'Save changes to apply the new profile photo.');
+        const facePhotoLimitReached = editForm.facePhotoUrls.length >= 4 && !editForm.facePhotoUrls.includes(uploaded.url);
+        setEditForm((prev) => ({ ...prev, photoUrl: uploaded.url, facePhotoUrls: appendFacePhotoUrl(prev.facePhotoUrls, uploaded.url) }));
+        notify.success(
+          'Student photo uploaded',
+          facePhotoLimitReached
+            ? 'Save changes to apply the new profile photo. Attendance face photo limit is already full.'
+            : 'Save changes to apply the new profile photo and register it for AI attendance.',
+        );
       } else if (target === 'face') {
         setEditForm((prev) => {
           if (prev.facePhotoUrls.length >= 4) return prev;
