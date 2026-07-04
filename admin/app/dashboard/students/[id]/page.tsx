@@ -10,7 +10,9 @@ import { useNotify } from '../../../../components/NotificationProvider';
 import { getSession } from '../../../../services/auth.service';
 import {
   addStudentDocument,
+  addStudentPhoto,
   addStudentTimeline,
+  deleteStudentPhoto,
   deleteStudentDocument,
   deleteStudentTimeline,
   getStudent,
@@ -19,6 +21,7 @@ import {
   type Student,
   updateStudent,
   uploadStudentDocument,
+  uploadStudentPhoto,
 } from '../../../../services/student.service';
 import {
   listFeeInvoices,
@@ -105,9 +108,19 @@ export default function StudentDetailPage() {
   const studentId = params.id as string;
   const [tab, setTab] = useState<TabKey>('profile');
   const [editMode, setEditMode] = useState(searchParams.get('edit') === '1');
-  const [editForm, setEditForm] = useState({ fullName: '', phone: '', email: '', category: '', presentAddress: '', permanentAddress: '' });
+  const [editForm, setEditForm] = useState({
+    fullName: '',
+    phone: '',
+    email: '',
+    category: '',
+    presentAddress: '',
+    permanentAddress: '',
+    photoUrl: null as string | null,
+    facePhotoUrls: [] as string[],
+  });
   const [documentForm, setDocumentForm] = useState({ title: '', file: null as File | null });
   const [timelineForm, setTimelineForm] = useState({ title: '', description: '', timelineDate: new Date().toISOString().slice(0, 10) });
+  const [photoUploadTarget, setPhotoUploadTarget] = useState<'student' | 'gallery' | 'face' | null>(null);
 
   const { data: session, isLoading: isSessionLoading } = useQuery({ queryKey: ['session'], queryFn: getSession });
   const isSchoolAdmin = session?.role === 'SCHOOL_ADMIN';
@@ -201,18 +214,68 @@ export default function StudentDetailPage() {
       category: student.category ?? '',
       presentAddress: student.presentAddress ?? student.addressLine1 ?? '',
       permanentAddress: student.permanentAddress ?? student.addressLine2 ?? '',
+      photoUrl: student.photoUrl ?? null,
+      facePhotoUrls: student.faceProfile?.samples?.map((sample) => sample.imageUrl).filter(Boolean) ?? [],
     });
   }, [student, displayName]);
 
   const updateMutation = useMutation({
     mutationFn: () => updateStudent(studentId, editForm),
-    onSuccess: () => {
+    onSuccess: (updated: any) => {
       notify.success('Student updated', 'Profile changes were saved.');
+      if (updated?.faceRegistration?.success) {
+        notify.success('Face registration updated', `${updated.faceRegistration.sampleCount} attendance face sample${updated.faceRegistration.sampleCount === 1 ? '' : 's'} saved.`);
+      } else if (updated?.faceRegistration) {
+        notify.error('Face registration failed', updated.faceRegistration.error ?? 'Profile was saved, but attendance face registration failed.');
+      }
       setEditMode(false);
       queryClient.invalidateQueries({ queryKey: ['student', studentId] });
       queryClient.invalidateQueries({ queryKey: ['students'] });
     },
     onError: (error: any) => notify.error('Update failed', error?.response?.data?.error?.message ?? 'Unable to update student.'),
+  });
+
+  const uploadImageFile = async (file: File, target: 'student' | 'gallery' | 'face') => {
+    if (!file.type.startsWith('image/')) {
+      notify.error('Invalid image', 'Only image files are allowed.');
+      return;
+    }
+    if (file.size > 3 * 1024 * 1024) {
+      notify.error('Image too large', 'Use an image smaller than 3 MB.');
+      return;
+    }
+    setPhotoUploadTarget(target);
+    try {
+      const uploaded = await uploadStudentPhoto(file, { studentId });
+      if (target === 'student') {
+        setEditForm((prev) => ({ ...prev, photoUrl: uploaded.url }));
+        notify.success('Student photo uploaded', 'Save changes to apply the new profile photo.');
+      } else if (target === 'face') {
+        setEditForm((prev) => {
+          if (prev.facePhotoUrls.length >= 4) return prev;
+          return { ...prev, facePhotoUrls: [...prev.facePhotoUrls, uploaded.url] };
+        });
+        notify.success('Attendance photo uploaded', 'Save changes to register it for AI attendance.');
+      } else {
+        await addStudentPhoto(studentId, uploaded.url);
+        notify.success('Photo added', 'Student photo gallery was updated.');
+        queryClient.invalidateQueries({ queryKey: ['student', studentId] });
+      }
+    } catch (error: any) {
+      notify.error('Upload failed', error?.response?.data?.error?.message ?? 'Unable to upload image.');
+    } finally {
+      setPhotoUploadTarget(null);
+    }
+  };
+
+  const deleteGalleryPhotoMutation = useMutation({
+    mutationFn: (photoId: string) => deleteStudentPhoto(studentId, photoId),
+    onSuccess: () => {
+      notify.success('Photo deleted', 'Student photo was removed.');
+      queryClient.invalidateQueries({ queryKey: ['student', studentId] });
+      queryClient.invalidateQueries({ queryKey: ['students'] });
+    },
+    onError: (error: any) => notify.error('Delete failed', error?.response?.data?.error?.message ?? 'Unable to delete photo.'),
   });
 
   const documentMutation = useMutation({
@@ -349,6 +412,104 @@ export default function StudentDetailPage() {
                   <input value={editForm.email} onChange={(event) => setEditForm({ ...editForm, email: event.target.value })} placeholder="Email" className="rounded-xl border border-slate-200 px-3 py-2 text-sm" />
                   <textarea value={editForm.presentAddress} onChange={(event) => setEditForm({ ...editForm, presentAddress: event.target.value })} placeholder="Present address" className="rounded-xl border border-slate-200 px-3 py-2 text-sm md:col-span-2" />
                   <textarea value={editForm.permanentAddress} onChange={(event) => setEditForm({ ...editForm, permanentAddress: event.target.value })} placeholder="Permanent address" className="rounded-xl border border-slate-200 px-3 py-2 text-sm md:col-span-2" />
+                </div>
+                <div className="mt-5 grid gap-5 lg:grid-cols-3">
+                  <div>
+                    <p className="text-sm font-bold text-slate-900">Student photo</p>
+                    <div className="mt-3 flex items-center gap-3">
+                      <div className="grid h-20 w-20 shrink-0 place-items-center overflow-hidden rounded-xl border border-slate-200 bg-slate-50 text-sm font-bold text-slate-500">
+                        {editForm.photoUrl ? <img src={resolveUploadUrl(editForm.photoUrl) ?? editForm.photoUrl} alt={displayName} className="h-full w-full object-cover" /> : displayName.slice(0, 2).toUpperCase()}
+                      </div>
+                      <div className="space-y-2">
+                        <input
+                          type="file"
+                          accept="image/*"
+                          className="block text-xs"
+                          disabled={photoUploadTarget === 'student'}
+                          onChange={(event) => {
+                            const file = event.target.files?.[0];
+                            if (file) uploadImageFile(file, 'student');
+                            event.target.value = '';
+                          }}
+                        />
+                        {editForm.photoUrl ? (
+                          <button type="button" onClick={() => setEditForm((prev) => ({ ...prev, photoUrl: null }))} className="text-xs font-bold text-red-600">
+                            Remove photo
+                          </button>
+                        ) : null}
+                      </div>
+                    </div>
+                  </div>
+
+                  <div>
+                    <p className="text-sm font-bold text-slate-900">Photo gallery</p>
+                    <input
+                      type="file"
+                      accept="image/*"
+                      className="mt-3 block text-xs"
+                      disabled={photoUploadTarget === 'gallery'}
+                      onChange={(event) => {
+                        const file = event.target.files?.[0];
+                        if (file) uploadImageFile(file, 'gallery');
+                        event.target.value = '';
+                      }}
+                    />
+                    <div className="mt-3 flex flex-wrap gap-2">
+                      {student.photos?.length ? student.photos.map((item) => (
+                        <div key={item.id} className="group relative h-16 w-16 overflow-hidden rounded-lg border border-slate-200 bg-slate-50">
+                          <img src={resolveUploadUrl(item.url) ?? item.url} alt="Student gallery" className="h-full w-full object-cover" />
+                          <button
+                            type="button"
+                            disabled={deleteGalleryPhotoMutation.isPending}
+                            onClick={() => deleteGalleryPhotoMutation.mutate(item.id)}
+                            className="absolute right-1 top-1 hidden rounded bg-red-600 px-1.5 py-0.5 text-xs font-bold text-white group-hover:block disabled:opacity-50"
+                          >
+                            x
+                          </button>
+                        </div>
+                      )) : <p className="text-xs text-slate-500">No gallery photos.</p>}
+                    </div>
+                  </div>
+
+                  <div>
+                    <p className="text-sm font-bold text-slate-900">Attendance face photos</p>
+                    <input
+                      type="file"
+                      accept="image/*"
+                      multiple
+                      className="mt-3 block text-xs"
+                      disabled={photoUploadTarget === 'face' || editForm.facePhotoUrls.length >= 4}
+                      onChange={async (event) => {
+                        const files = Array.from(event.target.files ?? []);
+                        if (!files.length) return;
+                        const remainingSlots = 4 - editForm.facePhotoUrls.length;
+                        if (files.length > remainingSlots) {
+                          notify.error('Too many face photos', `You can add ${remainingSlots} more face photo${remainingSlots === 1 ? '' : 's'} for this student.`);
+                          event.target.value = '';
+                          return;
+                        }
+                        for (const file of files) {
+                          await uploadImageFile(file, 'face');
+                        }
+                        event.target.value = '';
+                      }}
+                    />
+                    <div className="mt-3 flex flex-wrap gap-2">
+                      {editForm.facePhotoUrls.length ? editForm.facePhotoUrls.map((url, index) => (
+                        <div key={`${url}-${index}`} className="group relative h-16 w-16 overflow-hidden rounded-lg border border-violet-200 bg-violet-50">
+                          <img src={resolveUploadUrl(url) ?? url} alt={`Attendance face ${index + 1}`} className="h-full w-full object-cover" />
+                          <button
+                            type="button"
+                            onClick={() => setEditForm((prev) => ({ ...prev, facePhotoUrls: prev.facePhotoUrls.filter((_, itemIndex) => itemIndex !== index) }))}
+                            className="absolute right-1 top-1 hidden rounded bg-red-600 px-1.5 py-0.5 text-xs font-bold text-white group-hover:block"
+                          >
+                            x
+                          </button>
+                        </div>
+                      )) : <p className="text-xs text-slate-500">No attendance face photos registered.</p>}
+                    </div>
+                    <p className="mt-2 text-xs text-slate-500">{editForm.facePhotoUrls.length}/4 attendance face photos selected.</p>
+                  </div>
                 </div>
                 <button onClick={() => updateMutation.mutate()} disabled={updateMutation.isPending} className="mt-4 rounded-xl bg-violet-600 px-5 py-2 text-sm font-bold text-white disabled:opacity-50">
                   {updateMutation.isPending ? 'Saving...' : 'Save changes'}

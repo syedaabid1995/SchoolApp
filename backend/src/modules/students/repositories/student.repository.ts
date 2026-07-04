@@ -71,6 +71,11 @@ export const StudentRepository = {
       },
       parentLinks: { include: { parent: true } },
       photos: { orderBy: { createdAt: 'desc' as const } },
+      faceProfile: {
+        include: {
+          samples: { orderBy: { createdAt: 'desc' as const } },
+        },
+      },
       statusEvents: { orderBy: { changedAt: 'desc' as const } },
     };
   },

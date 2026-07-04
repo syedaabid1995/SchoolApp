@@ -19,7 +19,7 @@ import { cacheTTL } from '../../../../services/cache/cache.ttl';
 import { invalidateStudentCache, invalidateAttendanceCache } from '../../../../services/cache/cache.invalidation';
 import { logger } from '../../../../config/logger';
 import { feeGenerationQueue } from '../../../../queues';
-import { registerStudentFaceImageRefs } from '../../../../services/face.service';
+import { clearStudentFaceRegistration, registerStudentFaceImageRefs } from '../../../../services/face.service';
 
 const requireSchoolAdmin = (req: Request) => {
   if (!req.auth?.userId) throw new HttpError(401, 'Unauthorized');
@@ -250,6 +250,7 @@ const updateSchema = z.object({
   height: z.coerce.number().positive().optional().nullable(),
   weight: z.coerce.number().positive().optional().nullable(),
   photoUrl: z.string().optional().nullable(),
+  facePhotoUrls: z.array(z.string().trim().min(1)).max(4).optional(),
   fatherName: z.string().optional().nullable(),
   fatherOccupation: z.string().optional().nullable(),
   fatherPhone: z.string().optional().nullable(),
@@ -702,7 +703,7 @@ export const createStudent = async (req: Request, res: Response) => {
 };
 
 export const updateStudent = async (req: Request, res: Response) => {
-  requireSchoolAdmin(req);
+  const auth = requireSchoolAdmin(req);
   const payload = updateSchema.parse(req.body);
   const schoolId = resolveSchoolId(req, payload.schoolId ?? (req.query.schoolId as string | undefined));
   const { id } = req.params;
@@ -849,9 +850,38 @@ export const updateStudent = async (req: Request, res: Response) => {
     },
   });
 
+  let faceRegistration: Awaited<ReturnType<typeof autoRegisterAdmissionFaces>> | null = null;
+  if (payload.facePhotoUrls !== undefined) {
+    const imageRefs = faceRegistrationImageRefs({ facePhotoUrls: payload.facePhotoUrls });
+    if (imageRefs.length) {
+      faceRegistration = await autoRegisterAdmissionFaces({
+        schoolId,
+        studentId: student.id,
+        createdById: auth.userId,
+        imageRefs,
+      });
+    } else {
+      try {
+        await clearStudentFaceRegistration({
+          schoolId,
+          studentId: student.id,
+          clearedById: auth.userId,
+        });
+        faceRegistration = { success: true, sampleCount: 0 };
+      } catch (error) {
+        const message = error instanceof HttpError ? error.message : 'Face registration failed';
+        logger.warn({ err: error, schoolId, studentId: student.id }, 'Student face registration clear failed');
+        faceRegistration = { success: false, sampleCount: 0, error: message };
+      }
+    }
+  }
+
   await invalidateStudentCache(schoolId, student.id);
 
-  res.status(200).json(student);
+  res.status(200).json({
+    ...student,
+    faceRegistration,
+  });
 };
 
 export const deleteStudent = async (req: Request, res: Response) => {

@@ -475,6 +475,35 @@ export const registerStudentFaceImageRefs = async (params: {
   }
 };
 
+export const clearStudentFaceRegistration = async (params: {
+  schoolId: string;
+  studentId: string;
+  clearedById: string;
+}) => {
+  const profile = await prisma.faceProfile.findFirst({
+    where: { schoolId: params.schoolId, studentId: params.studentId },
+    include: { samples: true },
+  });
+
+  if (!profile) return null;
+
+  await deleteRekognitionFacesBestEffort(profile.samples);
+
+  return prisma.faceProfile.update({
+    where: { id: profile.id },
+    data: {
+      status: 'PENDING',
+      createdById: params.clearedById,
+      approvedById: null,
+      approvedAt: null,
+      samples: {
+        deleteMany: {},
+      },
+    },
+    include: { samples: true },
+  });
+};
+
 export const rejectFaceEnrollment = async (params: {
   schoolId: string;
   faceProfileId: string;

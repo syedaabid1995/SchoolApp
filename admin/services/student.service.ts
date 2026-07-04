@@ -99,6 +99,11 @@ export type Student = {
   }>;
   siblings?: Array<{ sibling: Pick<Student, 'id' | 'admissionNo' | 'rollNo' | 'fullName' | 'class' | 'section'> }>;
   photos?: Array<{ id: string; url: string; createdAt: string }>;
+  faceProfile?: {
+    id: string;
+    status: string;
+    samples: Array<{ id: string; imageUrl: string; imageKey?: string | null; createdAt: string }>;
+  } | null;
   parentLinks?: Array<{
     parentId: string;
     parent: { id: string; firstName: string; lastName: string; phone: string | null; email: string | null };
@@ -234,6 +239,7 @@ export const updateStudent = async (
     height: number | null;
     weight: number | null;
     photoUrl: string | null;
+    facePhotoUrls: string[];
     fatherName: string | null;
     fatherOccupation: string | null;
     fatherPhone: string | null;
