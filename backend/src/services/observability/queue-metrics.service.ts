@@ -10,6 +10,9 @@ type QueueTarget = {
 const queueTargets = (): QueueTarget[] => [
   { name: 'imports', queue: queues.importQueue },
   { name: 'notifications', queue: queues.notificationQueue },
+  { name: 'platform-email', queue: queues.platformEmailQueue },
+  { name: 'tenant-email', queue: queues.tenantEmailQueue },
+  { name: 'email-dead-letter', queue: queues.emailDeadLetterQueue },
   { name: 'reports', queue: queues.reportQueue },
   { name: 'face-processing', queue: queues.faceQueue },
 ];

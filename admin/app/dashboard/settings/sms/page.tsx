@@ -13,9 +13,7 @@ import {
   sendTestEmail,
   sendTestSms,
   sendTestWhatsapp,
-  togglePlatformEmailConfigStatus,
   upsertSchoolMessagingConfig,
-  upsertPlatformEmailConfig,
   toggleSchoolMessagingConfigStatus,
   updateMessagingServiceStatus,
   type MessagingChannel,
@@ -107,9 +105,6 @@ export default function SmsSettingsPage() {
   const [credentials, setCredentials] = useState<Record<string, string>>({});
   const [selectedServiceId, setSelectedServiceId] = useState('');
   const [selectedSchoolId, setSelectedSchoolId] = useState('');
-  const [platformEmailServiceId, setPlatformEmailServiceId] = useState('');
-  const [platformEmailCredentials, setPlatformEmailCredentials] = useState<Record<string, string>>({});
-  const [platformEmailEnabled, setPlatformEmailEnabled] = useState(true);
   const [enabled, setEnabled] = useState(true);
   const [channel, setChannel] = useState<MessagingChannel>('WHATSAPP');
   const [testRecipients, setTestRecipients] = useState<Record<'EMAIL' | 'SMS' | 'WHATSAPP', string>>({
@@ -240,33 +235,6 @@ export default function SmsSettingsPage() {
     },
   });
 
-  const savePlatformEmailMutation = useMutation({
-    mutationFn: upsertPlatformEmailConfig,
-    onSuccess: () => {
-      setMessage('Platform email credentials saved.');
-      setError('');
-      queryClient.invalidateQueries({ queryKey: ['platform-email-config'] });
-      queryClient.invalidateQueries({ queryKey: ['messaging-services-admin'] });
-    },
-    onError: (mutationError) => {
-      setMessage('');
-      setError(getApiErrorMessage(mutationError));
-    },
-  });
-
-  const togglePlatformEmailMutation = useMutation({
-    mutationFn: togglePlatformEmailConfigStatus,
-    onSuccess: () => {
-      setMessage('Platform email status updated.');
-      setError('');
-      queryClient.invalidateQueries({ queryKey: ['platform-email-config'] });
-    },
-    onError: (mutationError) => {
-      setMessage('');
-      setError(getApiErrorMessage(mutationError));
-    },
-  });
-
   const toggleSchoolConfigMutation = useMutation({
     mutationFn: toggleSchoolMessagingConfigStatus,
     onSuccess: () => {
@@ -309,18 +277,8 @@ export default function SmsSettingsPage() {
   const activeService =
     selectedService || schoolServices?.services.find((service) => service.id === activeServiceId) || null;
   const credentialFields = providerFields[activeService?.code ?? ''] ?? [];
-  const platformEmailServices = useMemo(
-    () => adminServices?.filter((service) => service.status === 'ACTIVE' && service.supportedChannels.includes('EMAIL')) ?? [],
-    [adminServices],
-  );
-  const activePlatformEmailServiceId = platformEmailServiceId || platformEmailConfig?.serviceId || '';
-  const activePlatformEmailService =
-    platformEmailServices.find((service) => service.id === activePlatformEmailServiceId) || null;
-  const platformEmailFields = providerFields[activePlatformEmailService?.code ?? ''] ?? [];
   const hasSavedSchoolCredential = (fieldKey: string) =>
     currentConfig?.serviceId === activeServiceId && currentConfig.credentialKeys.includes(fieldKey);
-  const hasSavedPlatformCredential = (fieldKey: string) =>
-    platformEmailConfig?.serviceId === activePlatformEmailServiceId && platformEmailConfig.credentialKeys.includes(fieldKey);
 
   useEffect(() => {
     setSelectedServiceId('');
@@ -341,27 +299,9 @@ export default function SmsSettingsPage() {
     }
   }, [activeService?.code]);
 
-  useEffect(() => {
-    if (platformEmailConfig?.serviceId && !platformEmailServiceId) {
-      setPlatformEmailServiceId(platformEmailConfig.serviceId);
-      setPlatformEmailEnabled(platformEmailConfig.isEnabled);
-    }
-  }, [platformEmailConfig?.serviceId, platformEmailConfig?.isEnabled, platformEmailServiceId]);
-
-  useEffect(() => {
-    if (activePlatformEmailService?.code) {
-      setPlatformEmailCredentials((current) => ({
-        ...defaultCredentialsForProvider(activePlatformEmailService.code),
-        ...current,
-      }));
-    }
-  }, [activePlatformEmailService?.code]);
-
   const isBusy =
     toggleMutation.isPending ||
     saveSchoolConfigMutation.isPending ||
-    savePlatformEmailMutation.isPending ||
-    togglePlatformEmailMutation.isPending ||
     toggleSchoolConfigMutation.isPending ||
     testMessageMutation.isPending;
 
@@ -405,49 +345,6 @@ export default function SmsSettingsPage() {
       isEnabled: enabled,
       credentials,
       ...(isSuperAdmin ? { schoolId: selectedSchoolId } : {}),
-    });
-  };
-
-  const validateAndSavePlatformEmail = () => {
-    if (!activePlatformEmailServiceId || !activePlatformEmailService) {
-      window.alert('Select a platform email provider.');
-      return;
-    }
-
-    const missing = platformEmailFields.filter(
-      (field) => field.required && !platformEmailCredentials[field.key]?.trim() && !hasSavedPlatformCredential(field.key),
-    );
-    if (missing.length) {
-      window.alert(`Enter required fields: ${missing.map((field) => field.label).join(', ')}`);
-      return;
-    }
-
-    const invalidEmail = platformEmailFields.find(
-      (field) =>
-        field.inputType === 'email' &&
-        platformEmailCredentials[field.key]?.trim() &&
-        !isValidEmail(platformEmailCredentials[field.key].trim()),
-    );
-    if (invalidEmail) {
-      window.alert(`Enter a valid email for ${invalidEmail.label}.`);
-      return;
-    }
-
-    const invalidUrl = platformEmailFields.find(
-      (field) =>
-        field.inputType === 'url' &&
-        platformEmailCredentials[field.key]?.trim() &&
-        !isValidUrl(platformEmailCredentials[field.key].trim()),
-    );
-    if (invalidUrl) {
-      window.alert(`Enter a valid URL for ${invalidUrl.label}.`);
-      return;
-    }
-
-    savePlatformEmailMutation.mutate({
-      serviceId: activePlatformEmailServiceId,
-      isEnabled: platformEmailEnabled,
-      credentials: platformEmailCredentials,
     });
   };
 
@@ -581,119 +478,32 @@ export default function SmsSettingsPage() {
               <div>
                 <h2 className="text-lg font-bold text-[var(--shell-text)]">Platform Email</h2>
                 <p className="mt-1 text-sm text-[var(--shell-muted)]">
-                  Used for Super Admin verification, password reset, and system emails when no school-specific provider applies.
+                  Google Workspace is configured from server environment variables. Credentials are never stored in the database.
                 </p>
               </div>
               <span
                 className={`rounded-full px-2.5 py-1 text-xs font-bold ${
-                  platformEmailConfig?.isEnabled ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-600'
+                  platformEmailConfig?.configured ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-600'
                 }`}
               >
-                {platformEmailConfig?.isEnabled ? 'Enabled' : 'Not enabled'}
+                {platformEmailConfig?.configured ? 'Configured' : 'Not Configured'}
               </span>
             </div>
 
-            <div className="grid gap-4 lg:grid-cols-2">
-              <label className="space-y-2">
-                <span className="text-sm font-semibold text-[var(--shell-text)]">Email Provider</span>
-                <select
-                  value={activePlatformEmailServiceId}
-                  onChange={(event) => {
-                    setPlatformEmailServiceId(event.target.value);
-                    const service = platformEmailServices.find((item) => item.id === event.target.value);
-                    setPlatformEmailCredentials(defaultCredentialsForProvider(service?.code));
-                  }}
-                  className="w-full rounded-xl border border-[var(--shell-border)] bg-[var(--shell-card)] px-4 py-3 text-sm text-[var(--shell-text)] outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10"
-                >
-                  <option value="">Select email provider</option>
-                  {platformEmailServices.map((service) => (
-                    <option key={service.id} value={service.id}>
-                      {service.name} ({service.code})
-                    </option>
-                  ))}
-                </select>
-              </label>
-
-              <label className="inline-flex items-center gap-2 self-end rounded-xl border border-[var(--shell-border)] bg-[var(--shell-subtle)] px-4 py-3 text-sm font-semibold text-[var(--shell-text)]">
-                <input
-                  type="checkbox"
-                  checked={platformEmailEnabled}
-                  onChange={(event) => setPlatformEmailEnabled(event.target.checked)}
-                  className="h-4 w-4"
-                />
-                Enable platform email after save
-              </label>
+            <div className="grid gap-4 md:grid-cols-3">
+              <div className="rounded-xl border border-[var(--shell-border)] bg-[var(--shell-subtle)] p-4">
+                <p className="text-xs font-semibold uppercase text-[var(--shell-muted)]">Provider</p>
+                <p className="mt-2 font-bold text-[var(--shell-text)]">{platformEmailConfig?.serviceName ?? 'Google Workspace'}</p>
+              </div>
+              <div className="rounded-xl border border-[var(--shell-border)] bg-[var(--shell-subtle)] p-4">
+                <p className="text-xs font-semibold uppercase text-[var(--shell-muted)]">Current Sender</p>
+                <p className="mt-2 break-all font-bold text-[var(--shell-text)]">{platformEmailConfig?.currentSender ?? 'Not configured'}</p>
+              </div>
+              <div className="rounded-xl border border-[var(--shell-border)] bg-[var(--shell-subtle)] p-4">
+                <p className="text-xs font-semibold uppercase text-[var(--shell-muted)]">Reply-To</p>
+                <p className="mt-2 break-all font-bold text-[var(--shell-text)]">{platformEmailConfig?.currentReplyTo ?? 'Not configured'}</p>
+              </div>
             </div>
-
-            {activePlatformEmailService ? (
-              <div className="mt-5 rounded-2xl border border-[var(--shell-border)] bg-[var(--shell-subtle)] p-4">
-                <div className="mb-4 flex flex-wrap items-center gap-2">
-                  <p className="font-bold text-[var(--shell-text)]">{activePlatformEmailService.name}</p>
-                  {renderProviderBadge(activePlatformEmailService.code)}
-                  <p className="text-sm text-[var(--shell-muted)]">{providerDescriptions[activePlatformEmailService.code]}</p>
-                </div>
-
-                <div className="grid gap-4 md:grid-cols-2">
-                  {platformEmailFields.map((field) => (
-                    <label key={field.key} className="space-y-2">
-                      <span className="text-sm font-semibold text-[var(--shell-text)]">
-                        {field.label}
-                        {field.required ? <span className="text-rose-600"> *</span> : null}
-                      </span>
-                      <input
-                        type={field.secret ? 'password' : field.inputType ?? 'text'}
-                        value={platformEmailCredentials[field.key] ?? ''}
-                        onChange={(event) =>
-                          setPlatformEmailCredentials((current) => ({ ...current, [field.key]: event.target.value }))
-                        }
-                        placeholder={field.placeholder || maskLabel(platformEmailConfig?.maskedCredentials[field.key])}
-                        className="w-full rounded-xl border border-[var(--shell-border)] bg-[var(--shell-card)] px-4 py-3 text-sm text-[var(--shell-text)] outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10"
-                      />
-                      {field.help ? <span className="block text-xs text-[var(--shell-muted)]">{field.help}</span> : null}
-                    </label>
-                  ))}
-                </div>
-
-                {platformEmailConfig?.serviceId === activePlatformEmailService.id ? (
-                  <div className="mt-5 rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-800">
-                    <p className="font-bold">Saved platform email configuration</p>
-                    <p className="mt-1">
-                      {platformEmailConfig.serviceName} | {platformEmailConfig.isEnabled ? 'Enabled' : 'Disabled'}
-                    </p>
-                    {platformEmailConfig.credentialKeys.length ? (
-                      <div className="mt-3 flex flex-wrap gap-2">
-                        {platformEmailConfig.credentialKeys.map((key) => (
-                          <span key={key} className="rounded-full bg-white px-2.5 py-1 text-xs font-bold text-emerald-700">
-                            {key}: {platformEmailConfig.maskedCredentials[key] || 'saved'}
-                          </span>
-                        ))}
-                      </div>
-                    ) : null}
-                  </div>
-                ) : null}
-
-                <div className="mt-5 flex flex-wrap gap-3">
-                  <button
-                    className="rounded-xl bg-blue-600 px-6 py-3 text-sm font-bold text-white transition-colors hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
-                    onClick={validateAndSavePlatformEmail}
-                    disabled={savePlatformEmailMutation.isPending}
-                  >
-                    Save Platform Email
-                  </button>
-                  <button
-                    className="rounded-xl border border-[var(--shell-border)] bg-[var(--shell-card)] px-6 py-3 text-sm font-bold text-[var(--shell-text)] transition-colors hover:bg-[var(--shell-hover)] disabled:cursor-not-allowed disabled:opacity-50"
-                    onClick={() => togglePlatformEmailMutation.mutate({ isEnabled: !platformEmailConfig?.isEnabled })}
-                    disabled={!platformEmailConfig || togglePlatformEmailMutation.isPending}
-                  >
-                    {platformEmailConfig?.isEnabled ? 'Disable Platform Email' : 'Enable Platform Email'}
-                  </button>
-                </div>
-              </div>
-            ) : (
-              <div className="mt-5 rounded-xl border border-dashed border-[var(--shell-border)] p-6 text-center text-sm text-[var(--shell-muted)]">
-                Enable SMTP Email or SendGrid globally, then select it here.
-              </div>
-            )}
           </section>
         ) : null}
 

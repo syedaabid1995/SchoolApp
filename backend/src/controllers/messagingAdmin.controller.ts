@@ -13,7 +13,7 @@ const statusSchema = z.object({
 });
 
 const platformEmailSchema = z.object({
-  serviceId: z.string().uuid(),
+  serviceId: z.string().optional(),
   isEnabled: z.boolean().default(true),
   credentials: z.record(z.string(), z.string()).default({}),
 });
@@ -53,4 +53,3 @@ export const togglePlatformEmailConfigApi = async (req: Request, res: Response) 
   const config = await setPlatformEmailConfigStatus(payload.isEnabled);
   res.status(200).json(config);
 };
-

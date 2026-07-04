@@ -352,6 +352,7 @@ const sendCommunication = async (req: Request, res: Response, channel: Communica
         subject,
         body: textBody,
         html: htmlBody,
+        ...(channel === 'EMAIL' ? { emailIntent: 'GENERAL_COMMUNICATION' } : {}),
         recipientName: recipient.name,
         recipientType: recipient.type,
         targetMode: payload.targetMode,
@@ -366,7 +367,8 @@ const sendCommunication = async (req: Request, res: Response, channel: Communica
     scheduled: Boolean(scheduledAt && scheduledAt.getTime() > Date.now()),
     recipientCount: recipients.length,
     logIds: results.map((result) => result.logId),
-    sentCount: results.filter((result) => result.delivery?.status === 'SENT').length,
+    sentCount: results.filter((result) => result.delivery?.status === 'SENT' || result.delivery?.status === 'QUEUED').length,
+    queuedCount: results.filter((result) => result.delivery?.status === 'QUEUED').length,
     failedCount: results.filter((result) => result.delivery?.status === 'FAILED').length,
   });
 };
@@ -611,6 +613,7 @@ export const sendLoginCredentialInstructionsApi = async (req: Request, res: Resp
           to: recipient.to,
           subject,
           body,
+          ...(channel === 'EMAIL' ? { emailIntent: 'GENERAL_COMMUNICATION' } : {}),
           recipientName: recipient.name,
           recipientType: recipient.type,
           targetMode: payload.targetMode,

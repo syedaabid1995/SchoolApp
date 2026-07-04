@@ -2,6 +2,8 @@ import { prisma } from '../config/db';
 import type { NotificationTemplate, Prisma } from '@prisma/client';
 import { dispatchNotification } from './notificationDispatcher.service';
 import type { DeliveryResult } from '../notifications/NotificationAdapter';
+import { EmailService } from './email.service';
+import { normalizeEmailIntent } from './email/email.types';
 
 export type NotificationPayload = {
   schoolId?: string | null;
@@ -88,13 +90,29 @@ export const sendNotification = async (payload: NotificationPayload) => {
 
   const shouldDispatchNow = !payload.scheduledAt || payload.scheduledAt.getTime() <= Date.now();
   if ((body || html) && shouldDispatchNow) {
-    delivery = await dispatchNotification({
-      logId: log.id,
-      to: payload.data.to ? String(payload.data.to) : '',
-      channel: payload.channel,
-      schoolId: payload.schoolId ?? null,
-      payload: { to: payload.data.to ? String(payload.data.to) : '', subject, body: body ?? '', html },
-    });
+    if (payload.channel === 'EMAIL') {
+      const fallbackIntent = payload.schoolId ? 'GENERAL_COMMUNICATION' : 'PLATFORM_NOTIFICATION';
+      delivery = await EmailService.enqueueExistingNotificationLog({
+        logId: log.id,
+        schoolId: payload.schoolId ?? null,
+        userId: payload.userId ?? null,
+        intent: normalizeEmailIntent(payload.data.emailIntent, fallbackIntent),
+        to: payload.data.to ? String(payload.data.to) : '',
+        subject,
+        body: body ?? '',
+        html,
+        templateKey: payload.templateKey ?? null,
+        payload: resolvedPayload,
+      });
+    } else {
+      delivery = await dispatchNotification({
+        logId: log.id,
+        to: payload.data.to ? String(payload.data.to) : '',
+        channel: payload.channel,
+        schoolId: payload.schoolId ?? null,
+        payload: { to: payload.data.to ? String(payload.data.to) : '', subject, body: body ?? '', html },
+      });
+    }
   }
 
   return { logId: log.id, subject, body, delivery };

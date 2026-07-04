@@ -7,7 +7,7 @@ export type NotificationDispatch = {
 
 export type DeliveryResult = {
   providerId?: string;
-  status: 'SENT' | 'FAILED';
+  status: 'QUEUED' | 'SENT' | 'FAILED';
   error?: string;
 };
 

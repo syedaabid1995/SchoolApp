@@ -261,13 +261,18 @@ METRICS_ENABLED=true
 
 SENTRY_DSN=<sentry-backend-dsn-if-supported>
 
-EMAIL_PROVIDER=<email-provider-if-used>
-EMAIL_API_KEY=<email-provider-key-if-used>
+GOOGLE_SMTP_HOST=smtp-relay.gmail.com
+GOOGLE_SMTP_PORT=587
+GOOGLE_SMTP_FROM_NAME=Akademifyy
+GOOGLE_SMTP_FROM_EMAIL=noreply@akademifyy.in
+GOOGLE_SMTP_REPLY_TO=support@akademifyy.in
 SMS_PROVIDER=<sms-provider-if-used>
 SMS_API_KEY=<sms-provider-key-if-used>
 ```
 
 Worker and scheduler use the same backend env file, but PM2 overrides the runtime role variables per process in the ecosystem example below.
+
+Google Workspace SMTP Relay must allow the VPS public IP in Google Admin. Do not set `GOOGLE_SMTP_USERNAME` or `GOOGLE_SMTP_PASSWORD` for platform email; relay authentication is IP-based.
 
 Admin placeholder example:
 

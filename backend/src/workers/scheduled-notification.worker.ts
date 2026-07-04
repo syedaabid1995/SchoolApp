@@ -2,6 +2,8 @@ import { prisma } from '../config/db';
 import { logger } from '../config/logger';
 import { dispatchNotification } from '../services/notificationDispatcher.service';
 import { resolveNotificationContent } from '../services/notification.service';
+import { EmailService } from '../services/email.service';
+import { normalizeEmailIntent } from '../services/email/email.types';
 import { runWithDistributedLock, type DistributedLockClient } from '../services/distributedLock.service';
 
 type DispatchableChannel = 'PUSH' | 'WHATSAPP' | 'SMS' | 'EMAIL';
@@ -71,20 +73,33 @@ export const processDueScheduledNotifications = async (params?: { now?: Date; ba
     }
 
     try {
-      const delivery = await dispatchNotification({
-        logId: log.id,
-        to,
-        channel,
-        schoolId: log.schoolId,
-        payload: {
-          to,
-          subject,
-          body: body ?? '',
-          html,
-        },
-      });
+      const delivery =
+        channel === 'EMAIL'
+          ? await EmailService.enqueueExistingNotificationLog({
+              logId: log.id,
+              schoolId: log.schoolId,
+              userId: log.userId,
+              intent: normalizeEmailIntent(payload.emailIntent, log.schoolId ? 'GENERAL_COMMUNICATION' : 'PLATFORM_NOTIFICATION'),
+              to,
+              subject,
+              body: body ?? '',
+              html,
+              payload,
+            })
+          : await dispatchNotification({
+              logId: log.id,
+              to,
+              channel,
+              schoolId: log.schoolId,
+              payload: {
+                to,
+                subject,
+                body: body ?? '',
+                html,
+              },
+            });
 
-      if (delivery.status === 'SENT') sent += 1;
+      if (delivery.status === 'SENT' || delivery.status === 'QUEUED') sent += 1;
       else failed += 1;
     } catch (error) {
       failed += 1;

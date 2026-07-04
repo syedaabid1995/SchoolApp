@@ -2,6 +2,9 @@ import { DeliveryResult, NotificationAdapter, NotificationDispatch } from './Not
 
 const SENDGRID_MAIL_SEND_URL = 'https://api.sendgrid.com/v3/mail/send';
 
+/**
+ * @deprecated Legacy email adapter retained for compatibility. New email sends must use EmailService.
+ */
 export class SendGridEmailAdapter implements NotificationAdapter {
   constructor(
     private readonly credentials: {

@@ -81,11 +81,26 @@ const envSchema = z.object({
   TEACHER_SELF_ATTENDANCE_ENABLED: boolEnv(true).default(true),
   LEAVE_BASIC_ENABLED: boolEnv(true).default(true),
   WHATSAPP_FALLBACK_TO: z.string().default('8072428026'),
+  GOOGLE_SMTP_HOST: optionalEnvString(),
+  GOOGLE_SMTP_PORT: z.coerce.number().int().min(1).max(65535).optional(),
+  GOOGLE_SMTP_FROM_NAME: optionalEnvString(),
+  GOOGLE_SMTP_FROM_EMAIL: optionalEnvString(),
+  GOOGLE_SMTP_REPLY_TO: optionalEnvString(),
   AWS_ACCESS_KEY_ID: optionalEnvString(),
   AWS_SECRET_ACCESS_KEY: optionalEnvString(),
   AWS_REGION: optionalEnvString(),
   AWS_S3_BUCKET: optionalEnvString(),
 });
+
+const REQUIRED_PRODUCTION_GOOGLE_SMTP_ENV = [
+  'GOOGLE_SMTP_HOST',
+  'GOOGLE_SMTP_PORT',
+  'GOOGLE_SMTP_FROM_EMAIL',
+  'GOOGLE_SMTP_FROM_NAME',
+  'GOOGLE_SMTP_REPLY_TO',
+] as const;
+
+const emailEnvValuePattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 const parsed = envSchema.safeParse(process.env);
 
@@ -103,6 +118,25 @@ const normalizedEnv = {
   S3_ACCESS_KEY_ID: parsed.data.S3_ACCESS_KEY_ID ?? parsed.data.AWS_ACCESS_KEY_ID,
   S3_SECRET_ACCESS_KEY: parsed.data.S3_SECRET_ACCESS_KEY ?? parsed.data.AWS_SECRET_ACCESS_KEY,
 };
+
+if (normalizedEnv.NODE_ENV === 'production') {
+  const missingGoogleSmtpEnv = REQUIRED_PRODUCTION_GOOGLE_SMTP_ENV.filter((key) => !normalizedEnv[key]);
+  if (missingGoogleSmtpEnv.length) {
+    throw new Error(
+      `Missing required Google SMTP environment variables for production: ${missingGoogleSmtpEnv.join(', ')}`,
+    );
+  }
+
+  const invalidEmailEnv = [
+    ['GOOGLE_SMTP_FROM_EMAIL', normalizedEnv.GOOGLE_SMTP_FROM_EMAIL],
+    ['GOOGLE_SMTP_REPLY_TO', normalizedEnv.GOOGLE_SMTP_REPLY_TO],
+  ].filter(([, value]) => typeof value !== 'string' || !emailEnvValuePattern.test(value));
+  if (invalidEmailEnv.length) {
+    throw new Error(
+      `Invalid Google SMTP email environment variables for production: ${invalidEmailEnv.map(([key]) => key).join(', ')}`,
+    );
+  }
+}
 
 assertSafeStorageConfig({
   nodeEnv: normalizedEnv.NODE_ENV,

@@ -17,6 +17,7 @@ import { rememberCache, setCacheHeader } from '../services/cache/cache.service';
 import { cacheTTL } from '../services/cache/cache.ttl';
 import { invalidateSchoolCache, invalidateSubscriptionCache } from '../services/cache/cache.invalidation';
 import { sendAccountCreatedWhatsapp } from '../services/accountOnboardingWhatsapp.service';
+import { EmailService } from '../services/email.service';
 
 const bankDetailsSchema = z
   .object({
@@ -88,6 +89,7 @@ export const createSchoolApi = async (req: Request, res: Response) => {
   let manualShareText: string | null = null;
   let manualShareUrl: string | null = null;
   let notificationDeliveries: unknown = null;
+  let platformEmailDeliveryStatus: string | null = null;
   if (result.adminUser) {
     await logAudit(req, {
       schoolId: result.school.id,
@@ -109,6 +111,14 @@ export const createSchoolApi = async (req: Request, res: Response) => {
     manualShareText = whatsapp.manualShareText;
     manualShareUrl = whatsapp.manualShareUrl;
     notificationDeliveries = whatsapp.deliveries;
+    const platformEmail = await EmailService.sendSchoolAdminCredentials({
+      to: result.adminUser.email,
+      schoolName: result.school.name,
+      loginUrl: result.school.domainUrl,
+      tempPassword: result.tempPassword,
+      userId: result.adminUser.id,
+    });
+    platformEmailDeliveryStatus = platformEmail.status;
   }
   res.status(201).json({
     ...result,
@@ -118,6 +128,7 @@ export const createSchoolApi = async (req: Request, res: Response) => {
     manualShareText,
     manualShareUrl,
     notificationDeliveries,
+    platformEmailDeliveryStatus,
   });
 };
 
@@ -207,6 +218,13 @@ export const createSchoolAdminApi = async (req: Request, res: Response) => {
     tempPassword: result.tempPassword,
     fullName: result.adminUser.email,
   });
+  const platformEmail = await EmailService.sendSchoolAdminCredentials({
+    to: result.adminUser.email,
+    schoolName: result.school?.name ?? null,
+    loginUrl: result.school?.domainUrl ?? null,
+    tempPassword: result.tempPassword,
+    userId: result.adminUser.id,
+  });
   res.status(201).json({
     ...result,
     mappedSchoolId: req.params.id,
@@ -215,6 +233,7 @@ export const createSchoolAdminApi = async (req: Request, res: Response) => {
     manualShareText: whatsapp.manualShareText,
     manualShareUrl: whatsapp.manualShareUrl,
     notificationDeliveries: whatsapp.deliveries,
+    platformEmailDeliveryStatus: platformEmail.status,
   });
 };
 

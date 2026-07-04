@@ -73,6 +73,8 @@ flowchart LR
 | Compliance/support | Implemented | Consent, data export/deletion, support ticket routes/models/admin pages |
 | Backup/restore | Implemented | Backup routes/models/services/admin pages |
 
+Platform email is sent through Google Workspace SMTP Relay at `smtp-relay.gmail.com:587` using the server public IP allowlist. The platform provider does not use SMTP username/password authentication. Tenant email remains school-scoped and continues to use each school's SMTP settings.
+
 ## Repository Structure
 
 ```text

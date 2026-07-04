@@ -108,7 +108,7 @@ export const createSchoolAdmin = async (schoolId: string, adminEmail: string, ba
   return prisma.$transaction(async (tx) => {
     const school = await tx.school.findFirst({
       where: { id: schoolId, deletedAt: null },
-      select: { id: true },
+      select: { id: true, name: true, code: true, domainUrl: true },
     });
     if (!school) {
       throw new HttpError(404, 'School not found');
@@ -168,7 +168,7 @@ export const createSchoolAdmin = async (schoolId: string, adminEmail: string, ba
       });
     }
 
-    return { adminUser, tempPassword };
+    return { school, adminUser, tempPassword };
   });
 };
 

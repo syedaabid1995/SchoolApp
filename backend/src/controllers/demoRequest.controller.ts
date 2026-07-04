@@ -3,7 +3,7 @@ import type { Request, Response } from 'express';
 import { z } from 'zod';
 import { prisma } from '../config/db';
 import { HttpError } from '../middlewares/error.middleware';
-import { sendConfiguredEmail } from '../services/email.service';
+import { EmailService } from '../services/email.service';
 
 const DEMO_ACCESS_BASE_URL = 'https://app.akademifyy.in';
 
@@ -101,23 +101,21 @@ export const approveDemoRequestApi = async (req: Request, res: Response) => {
   const token = crypto.randomBytes(32).toString('hex');
   const demoUrl = `${DEMO_ACCESS_BASE_URL}/?demoToken=${token}`;
 
-  const emailStatus = await sendConfiguredEmail({
+  const email = await EmailService.sendEmail({
+    intent: 'DEMO_APPROVAL',
     to: existing.email,
-    subject: 'Your Akademifyy demo access is ready',
-    body: [
-      `Hello ${existing.name},`,
-      'Your Akademifyy demo request has been approved.',
-      `Use this link within 24 hours: ${demoUrl}`,
-      `This link expires at ${expiresAt.toISOString()}.`,
-      'If you did not request this demo, you can ignore this email.',
-    ].join('\n\n'),
-    schoolId: null,
+    data: {
+      recipientName: existing.name,
+      demoUrl,
+      expiresAt: expiresAt.toISOString(),
+    },
     safePayload: {
       purpose: 'DEMO_REQUEST_APPROVAL',
       demoRequestId: existing.id,
       expiresAt: expiresAt.toISOString(),
     },
   });
+  const emailStatus = email.status;
 
   const updated = await prisma.demoRequest.update({
     where: { id },

@@ -1,13 +1,14 @@
 import { NotificationChannel, Prisma } from '@prisma/client';
 import { prisma } from '../config/db';
 import { HttpError } from '../middlewares/error.middleware';
+import { encryptSecret, isEncryptedSecret } from '../utils/cryptoVault';
+import { PlatformEmailProvider } from './email/platformEmailProvider';
 
 export const TWILIO_SERVICE_CODE = 'TWILIO';
 export const MSG91_SERVICE_CODE = 'MSG91';
 export const WATI_SERVICE_CODE = 'WATI';
 export const SMTP_SERVICE_CODE = 'SMTP';
 export const SENDGRID_SERVICE_CODE = 'SENDGRID';
-export const PLATFORM_EMAIL_CONFIG_KEY = 'platform.email.messaging';
 
 const DEFAULT_SERVICES: Array<{ code: string; name: string; supportedChannels: NotificationChannel[] }> = [
   { code: TWILIO_SERVICE_CODE, name: 'Twilio', supportedChannels: ['SMS', 'WHATSAPP'] },
@@ -70,6 +71,20 @@ const mergeSavedCredentials = (
   ...cleanCredentials(incomingCredentials),
 });
 
+const prepareCredentialsForStorage = (
+  serviceCode: string,
+  channel: NotificationChannel,
+  credentials: Record<string, string>,
+) => {
+  if (serviceCode !== SMTP_SERVICE_CODE || channel !== 'EMAIL') return credentials;
+  const password = credentials.password?.trim();
+  if (!password || isEncryptedSecret(password)) return credentials;
+  return {
+    ...credentials,
+    password: encryptSecret(password),
+  };
+};
+
 const validateCredentials = (serviceCode: string, channel: NotificationChannel, credentials: Record<string, string>) => {
   const required = REQUIRED_CREDENTIALS[serviceCode]?.[channel] ?? [];
   const missing = required.filter((key) => !credentials[key]?.trim());
@@ -108,45 +123,6 @@ const readStringCredentials = (value: unknown) => {
     }
     return acc;
   }, {});
-};
-
-const parsePlatformEmailConfigValue = (value: unknown) => {
-  if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
-  const record = value as Record<string, unknown>;
-  if (typeof record.serviceId !== 'string') return null;
-  return {
-    serviceId: record.serviceId,
-    isEnabled: typeof record.isEnabled === 'boolean' ? record.isEnabled : true,
-    credentials: readStringCredentials(record.credentials),
-  };
-};
-
-const buildPlatformEmailValue = (params: {
-  serviceId: string;
-  isEnabled: boolean;
-  credentials: Record<string, string>;
-}) =>
-  ({
-    serviceId: params.serviceId,
-    isEnabled: params.isEnabled,
-    credentials: params.credentials,
-  }) as unknown as Prisma.InputJsonValue;
-
-const mapPlatformEmailConfig = (
-  value: ReturnType<typeof parsePlatformEmailConfigValue>,
-  service: { id: string; code: string; name: string } | null | undefined,
-) => {
-  if (!value || !service) return null;
-  return {
-    id: PLATFORM_EMAIL_CONFIG_KEY,
-    channel: 'EMAIL' as const,
-    isEnabled: value.isEnabled,
-    serviceId: service.id,
-    serviceCode: service.code,
-    serviceName: service.name,
-    credentialKeys: Object.keys(value.credentials),
-    maskedCredentials: maskCredentials(value.credentials),
-  };
 };
 
 export const ensureDefaultMessagingServices = async () => {
@@ -201,7 +177,8 @@ export const listMessagingServicesForSchool = async (schoolId: string, channel: 
     orderBy: { name: 'asc' },
   });
   const compatible = services.filter((service) =>
-    normalizeSupportedChannels(service.supportedChannels).includes(channel),
+    normalizeSupportedChannels(service.supportedChannels).includes(channel) &&
+      (channel !== 'EMAIL' || service.code === SMTP_SERVICE_CODE),
   );
   const current = await prisma.schoolMessagingConfig.findUnique({
     where: { schoolId_channel: { schoolId, channel } },
@@ -251,6 +228,9 @@ export const upsertSchoolMessagingConfig = async (params: {
   if (!normalizeSupportedChannels(service.supportedChannels).includes(params.channel)) {
     throw new HttpError(400, 'Selected service does not support this channel');
   }
+  if (params.channel === 'EMAIL' && service.code !== SMTP_SERVICE_CODE) {
+    throw new HttpError(400, 'Tenant email must use the school SMTP provider');
+  }
 
   const existing = await prisma.schoolMessagingConfig.findUnique({
     where: { schoolId_channel: { schoolId: params.schoolId, channel: params.channel } },
@@ -261,19 +241,20 @@ export const upsertSchoolMessagingConfig = async (params: {
       : cleanCredentials(params.credentials);
   validateCredentials(service.code, params.channel, credentials);
 
+  const credentialsForStorage = prepareCredentialsForStorage(service.code, params.channel, credentials);
   const config = await prisma.schoolMessagingConfig.upsert({
     where: { schoolId_channel: { schoolId: params.schoolId, channel: params.channel } },
     update: {
       serviceId: params.serviceId,
       isEnabled: params.isEnabled,
-      credentials: credentials as unknown as Prisma.InputJsonValue,
+      credentials: credentialsForStorage as unknown as Prisma.InputJsonValue,
     },
     create: {
       schoolId: params.schoolId,
       channel: params.channel,
       serviceId: params.serviceId,
       isEnabled: params.isEnabled,
-      credentials: credentials as unknown as Prisma.InputJsonValue,
+      credentials: credentialsForStorage as unknown as Prisma.InputJsonValue,
     },
     include: { service: true },
   });
@@ -286,19 +267,12 @@ export const upsertSchoolMessagingConfig = async (params: {
     serviceId: config.serviceId,
     serviceCode: config.service.code,
     serviceName: config.service.name,
-    credentialKeys: Object.keys(credentials),
+    credentialKeys: Object.keys(credentialsForStorage),
   };
 };
 
 export const getPlatformEmailConfig = async () => {
-  await ensureDefaultMessagingServices();
-  const entry = await prisma.configEntry.findUnique({
-    where: { key: PLATFORM_EMAIL_CONFIG_KEY },
-  });
-  const value = parsePlatformEmailConfigValue(entry?.value);
-  if (!value) return null;
-  const service = await prisma.messagingService.findUnique({ where: { id: value.serviceId } });
-  return mapPlatformEmailConfig(value, service);
+  return PlatformEmailProvider.getStatus();
 };
 
 export const upsertPlatformEmailConfig = async (params: {
@@ -306,72 +280,13 @@ export const upsertPlatformEmailConfig = async (params: {
   isEnabled: boolean;
   credentials: Record<string, string>;
 }) => {
-  await ensureDefaultMessagingServices();
-  const service = await prisma.messagingService.findUnique({ where: { id: params.serviceId } });
-  if (!service) throw new HttpError(404, 'Messaging service not found');
-  if (service.status !== 'ACTIVE') throw new HttpError(400, 'Messaging service is inactive');
-  if (!normalizeSupportedChannels(service.supportedChannels).includes('EMAIL')) {
-    throw new HttpError(400, 'Selected service does not support email');
-  }
-
-  const entry = await prisma.configEntry.findUnique({
-    where: { key: PLATFORM_EMAIL_CONFIG_KEY },
-  });
-  const existing = parsePlatformEmailConfigValue(entry?.value);
-  const credentials =
-    existing?.serviceId === params.serviceId
-      ? { ...existing.credentials, ...cleanCredentials(params.credentials) }
-      : cleanCredentials(params.credentials);
-  validateCredentials(service.code, 'EMAIL', credentials);
-
-  await prisma.configEntry.upsert({
-    where: { key: PLATFORM_EMAIL_CONFIG_KEY },
-    update: {
-      value: buildPlatformEmailValue({
-        serviceId: service.id,
-        isEnabled: params.isEnabled,
-        credentials,
-      }),
-      description: 'Platform-level email provider credentials for Super Admin and system emails.',
-    },
-    create: {
-      key: PLATFORM_EMAIL_CONFIG_KEY,
-      value: buildPlatformEmailValue({
-        serviceId: service.id,
-        isEnabled: params.isEnabled,
-        credentials,
-      }),
-      description: 'Platform-level email provider credentials for Super Admin and system emails.',
-    },
-  });
-
-  return mapPlatformEmailConfig(
-    {
-      serviceId: service.id,
-      isEnabled: params.isEnabled,
-      credentials,
-    },
-    service,
-  );
+  void params;
+  return PlatformEmailProvider.getStatus();
 };
 
 export const setPlatformEmailConfigStatus = async (isEnabled: boolean) => {
-  const entry = await prisma.configEntry.findUnique({ where: { key: PLATFORM_EMAIL_CONFIG_KEY } });
-  const existing = parsePlatformEmailConfigValue(entry?.value);
-  if (!existing) {
-    throw new HttpError(404, 'Platform email config not found');
-  }
-
-  const updatedValue = { ...existing, isEnabled };
-  await prisma.configEntry.update({
-    where: { key: PLATFORM_EMAIL_CONFIG_KEY },
-    data: {
-      value: buildPlatformEmailValue(updatedValue),
-    },
-  });
-
-  const service = await prisma.messagingService.findUnique({ where: { id: existing.serviceId } });
-  return mapPlatformEmailConfig(updatedValue, service);
+  void isEnabled;
+  return PlatformEmailProvider.getStatus();
 };
 
 export const setSchoolMessagingConfigStatus = async (params: {
@@ -398,11 +313,6 @@ export const hasActiveMessagingGateway = async (params: {
   channels?: NotificationChannel[];
 }) => {
   const channels: NotificationChannel[] = params.channels?.length ? params.channels : ['SMS', 'WHATSAPP'];
-  if (channels.includes('EMAIL')) {
-    const platformEmail = await resolvePlatformEmailProvider();
-    if (platformEmail) return true;
-  }
-
   if (!params.schoolId) return false;
 
   const count = await prisma.schoolMessagingConfig.count({
@@ -432,22 +342,5 @@ export const resolveSchoolMessagingProvider = async (params: {
   return {
     serviceCode: config.service.code,
     credentials: (config.credentials as Record<string, string>) ?? {},
-  };
-};
-
-export const resolvePlatformEmailProvider = async () => {
-  const entry = await prisma.configEntry.findUnique({
-    where: { key: PLATFORM_EMAIL_CONFIG_KEY },
-  });
-  const value = parsePlatformEmailConfigValue(entry?.value);
-  if (!value?.isEnabled) return null;
-
-  const service = await prisma.messagingService.findUnique({ where: { id: value.serviceId } });
-  if (!service || service.status !== 'ACTIVE') return null;
-  if (!normalizeSupportedChannels(service.supportedChannels).includes('EMAIL')) return null;
-
-  return {
-    serviceCode: service.code,
-    credentials: value.credentials,
   };
 };

@@ -19,6 +19,9 @@ const summarizeSmtpError = (error: unknown) => {
   return [code, responseCode, error.message].filter(Boolean).join(' ');
 };
 
+/**
+ * @deprecated Legacy email adapter retained for compatibility. New email sends must use EmailService.
+ */
 export class SmtpEmailAdapter implements NotificationAdapter {
   constructor(
     private readonly credentials: {

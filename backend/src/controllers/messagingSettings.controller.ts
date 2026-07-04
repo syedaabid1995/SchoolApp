@@ -49,11 +49,12 @@ const sendTestMessage = async (req: Request, res: Response, channel: 'EMAIL' | '
       to: payload.to,
       subject: `Test ${channel.toLowerCase()} from School ERP`,
       body: `This is a test ${channel.toLowerCase()} from your school messaging settings.`,
+      ...(channel === 'EMAIL' ? { emailIntent: 'GENERAL_COMMUNICATION' } : {}),
     },
   });
 
   res.status(200).json({
-    success: result.delivery?.status === 'SENT',
+    success: result.delivery?.status === 'SENT' || result.delivery?.status === 'QUEUED',
     logId: result.logId,
     delivery: result.delivery
       ? {

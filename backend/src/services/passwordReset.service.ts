@@ -9,7 +9,7 @@ import { hashPassword } from '../utils/password';
 import { buildAuthAuditMetadata, createAuthAuditLog, maskEmailForAudit } from '../utils/audit';
 import { schoolIdentifierWhere } from '../utils/schoolDomain';
 import type { ForgotPasswordInput, LoginType, ResetPasswordInput } from '../validations/auth.validation';
-import { sendConfiguredEmail, type EmailDeliveryResult } from './email.service';
+import { EmailService, type EmailDeliveryStatus } from './email.service';
 
 export const PASSWORD_RESET_PUBLIC_RESPONSE = {
   message: 'If an account exists, password reset instructions have been sent.',
@@ -84,7 +84,7 @@ const logForgotPasswordAudit = async (params: {
   email: string;
   resetTokenId: string;
   expiresAt: Date;
-  delivery: EmailDeliveryResult;
+  delivery: EmailDeliveryStatus;
 }) => {
   try {
     await createAuthAuditLog({
@@ -219,26 +219,23 @@ const sendPasswordResetInstructions = async (params: {
   schoolId: string | null;
   resetLink: string;
   expiresAt: Date;
-}): Promise<EmailDeliveryResult> => {
-  const delivery = await sendConfiguredEmail({
+}): Promise<EmailDeliveryStatus> => {
+  const result = await EmailService.sendEmail({
+    intent: 'PASSWORD_RESET',
     to: params.email,
-    subject: 'Reset your password',
-    body: [
-      'We received a request to reset your password.',
-      `Open this secure link to continue: ${params.resetLink}`,
-      `This link expires at ${params.expiresAt.toISOString()}.`,
-      'If you did not request this, you can ignore this message.',
-    ].join('\n\n'),
     userId: params.userId,
-    schoolId: params.schoolId,
+    data: {
+      resetLink: params.resetLink,
+      expiresAt: params.expiresAt.toISOString(),
+    },
     safePayload: {
       purpose: 'PASSWORD_RESET',
       expiresAt: params.expiresAt.toISOString(),
     },
   });
 
-  if (delivery !== 'email_not_configured') {
-    return delivery;
+  if (result.status !== 'email_not_configured') {
+    return result.status;
   }
 
   if (env.NODE_ENV === 'development') {
@@ -267,16 +264,14 @@ const sendPasswordChangedNotification = async (params: {
   userId: string;
   schoolId: string | null;
 }) => {
-  const delivery = await sendConfiguredEmail({
+  const result = await EmailService.sendEmail({
+    intent: 'PASSWORD_CHANGED',
     to: params.email,
-    subject: 'Your password was changed',
-    body: 'Your password was changed successfully. If this was not you, contact your school administrator immediately.',
     userId: params.userId,
-    schoolId: params.schoolId,
     safePayload: { purpose: 'PASSWORD_CHANGED' },
   });
 
-  if (delivery !== 'email_not_configured') {
+  if (result.status !== 'email_not_configured') {
     return;
   }
 

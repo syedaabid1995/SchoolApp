@@ -37,3 +37,9 @@ export const decryptSecret = (payload: string) => {
     decipher.final(),
   ]).toString('utf8');
 };
+
+export const isEncryptedSecret = (value: string | null | undefined) => {
+  if (!value) return false;
+  const [version, ivValue, tagValue, encryptedValue] = value.split(':');
+  return version === 'v1' && Boolean(ivValue && tagValue && encryptedValue);
+};

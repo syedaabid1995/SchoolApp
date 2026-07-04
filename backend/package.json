@@ -26,6 +26,7 @@
     "prod-lite:verify": "tsx scripts/verify-prod-lite.ts",
     "remediate:default-super-admin": "tsx scripts/remediate-default-super-admin.ts",
     "maintenance:default-super-admin": "tsx scripts/remediate-default-super-admin.ts",
+    "maintenance:encrypt-tenant-smtp-passwords": "tsx scripts/encrypt-tenant-smtp-passwords.ts",
     "pilot:reset": "tsx scripts/pilot-reset.ts",
     "reset:qa": "tsx scripts/reset-qa-data.ts",
     "prisma": "prisma",

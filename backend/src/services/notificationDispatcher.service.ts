@@ -4,13 +4,14 @@ import { WhatsAppAdapter } from '../notifications/WhatsAppAdapter';
 import { SmsAdapter } from '../notifications/SmsAdapter';
 import { NotificationAdapter, NotificationDispatch } from '../notifications/NotificationAdapter';
 import { logger } from '../config/logger';
-import { resolvePlatformEmailProvider, resolveSchoolMessagingProvider } from './messagingSettings.service';
+import { resolveSchoolMessagingProvider } from './messagingSettings.service';
 import { TwilioAdapter } from '../notifications/TwilioAdapter';
 import { Msg91Adapter } from '../notifications/Msg91Adapter';
 import { WatiAdapter } from '../notifications/WatiAdapter';
 import { EmailAdapter } from '../notifications/EmailAdapter';
 import { SmtpEmailAdapter } from '../notifications/SmtpEmailAdapter';
 import { SendGridEmailAdapter } from '../notifications/SendGridEmailAdapter';
+import { decryptSecret, isEncryptedSecret } from '../utils/cryptoVault';
 
 const adapters: Record<string, NotificationAdapter> = {
   PUSH: new PushAdapter(),
@@ -27,12 +28,10 @@ const resolveAdapter = async (params: {
     return adapters[params.channel];
   }
 
-  const provider =
-    (await resolveSchoolMessagingProvider({
-      schoolId: params.schoolId ?? null,
-      channel: params.channel,
-    })) ??
-    (params.channel === 'EMAIL' ? await resolvePlatformEmailProvider() : null);
+  const provider = await resolveSchoolMessagingProvider({
+    schoolId: params.schoolId ?? null,
+    channel: params.channel,
+  });
   if (!provider) {
     return adapters[params.channel];
   }
@@ -69,11 +68,12 @@ const resolveAdapter = async (params: {
   }
 
   if (provider.serviceCode === 'SMTP' && params.channel === 'EMAIL') {
+    const password = provider.credentials.password;
     return new SmtpEmailAdapter({
       host: provider.credentials.host ?? '',
       port: provider.credentials.port ?? '',
       username: provider.credentials.username,
-      password: provider.credentials.password,
+      password: isEncryptedSecret(password) ? decryptSecret(password) : password,
       fromEmail: provider.credentials.fromEmail ?? '',
       fromName: provider.credentials.fromName,
       replyToEmail: provider.credentials.replyToEmail,

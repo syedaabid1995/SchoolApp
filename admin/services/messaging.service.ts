@@ -15,11 +15,14 @@ export type SchoolMessagingConfig = {
   id: string;
   channel: MessagingChannel;
   isEnabled: boolean;
+  configured?: boolean;
   serviceId: string;
   serviceCode: string;
   serviceName: string;
   credentialKeys: string[];
   maskedCredentials: Record<string, string>;
+  currentSender?: string | null;
+  currentReplyTo?: string | null;
 };
 
 export type MessagingTestResult = {

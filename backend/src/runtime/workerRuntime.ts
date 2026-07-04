@@ -3,7 +3,9 @@ import { startFaceWorker, stopFaceWorker } from '../workers/face.worker';
 import { startFeeGenerationWorker, stopFeeGenerationWorker } from '../workers/fee-generation.worker';
 import { startImportWorker, stopImportWorker } from '../workers/import.worker';
 import { startNotificationWorker, stopNotificationWorker } from '../workers/notification.worker';
+import { startPlatformEmailWorker, stopPlatformEmailWorker } from '../workers/platform-email.worker';
 import { startReportWorker, stopReportWorker } from '../workers/report.worker';
+import { startTenantEmailWorker, stopTenantEmailWorker } from '../workers/tenant-email.worker';
 
 export type WorkerLifecycle = {
   name: string;
@@ -15,6 +17,8 @@ export const defaultWorkerLifecycles: WorkerLifecycle[] = [
   { name: 'fee-generation', start: startFeeGenerationWorker, stop: stopFeeGenerationWorker },
   { name: 'import-jobs', start: startImportWorker, stop: stopImportWorker },
   { name: 'notifications', start: startNotificationWorker, stop: stopNotificationWorker },
+  { name: 'platform-email', start: startPlatformEmailWorker, stop: stopPlatformEmailWorker },
+  { name: 'tenant-email', start: startTenantEmailWorker, stop: stopTenantEmailWorker },
   { name: 'report-generation', start: startReportWorker, stop: stopReportWorker },
   { name: 'face-processing', start: startFaceWorker, stop: stopFaceWorker },
 ];

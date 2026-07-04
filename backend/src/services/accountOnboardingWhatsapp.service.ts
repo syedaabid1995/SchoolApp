@@ -101,7 +101,7 @@ export const sendAccountCreatedWhatsapp = async (params: {
       });
       deliveries[channel] = {
         attempted: true,
-        sent: result.delivery?.status === 'SENT',
+        sent: result.delivery?.status === 'SENT' || result.delivery?.status === 'QUEUED',
         logId: result.logId,
         error: result.delivery?.error,
       };
@@ -124,7 +124,7 @@ export const sendAccountCreatedWhatsapp = async (params: {
     }
   };
 
-  if (isDeliverableEmail(params.email)) {
+  if (params.role !== 'SCHOOL_ADMIN' && isDeliverableEmail(params.email)) {
     await sendIfConfigured('EMAIL', params.email);
   }
   if (mobile) {

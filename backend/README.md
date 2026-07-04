@@ -66,6 +66,8 @@ The fee, student, and auth domains use decomposed services and repositories. Att
 - Attendance: `AttendanceHoliday`, `StudentAttendanceSession`, `StudentAttendanceRecord`, plus staff/teacher attendance models.
 - Timetable: `AttendancePeriod`, `TimetableVersion`, `TimetableEntry`.
 
+Platform email uses Google Workspace SMTP Relay through `smtp-relay.gmail.com:587` with server public IP authentication. Configure `GOOGLE_SMTP_HOST`, `GOOGLE_SMTP_PORT`, `GOOGLE_SMTP_FROM_NAME`, `GOOGLE_SMTP_FROM_EMAIL`, and `GOOGLE_SMTP_REPLY_TO`; do not configure platform SMTP username or password. Tenant email is separate and continues to use each school's SMTP configuration.
+
 ## Database Design
 
 The Prisma schema defines models for:

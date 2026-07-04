@@ -7,10 +7,12 @@ import { initializeTelemetry } from './telemetry';
 import { assertProcessRoleAllowed, parseProcessRole, processRoleStartsWorkers } from './runtime/processRole';
 import { createShutdownHandler } from './runtime/shutdown';
 import { createWorkerRuntime } from './runtime/workerRuntime';
+import { closeEmailTransports } from './services/email/transports';
 
 const workerRuntime = createWorkerRuntime();
 const shutdownHandler = createShutdownHandler([
   { name: 'queue-workers', run: workerRuntime.stop },
+  { name: 'email-transports', run: closeEmailTransports },
   { name: 'queues', run: closeQueues },
   { name: 'redis', run: closeRedis },
   { name: 'prisma', run: () => prisma.$disconnect() },
