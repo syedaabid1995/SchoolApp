@@ -15,6 +15,47 @@ import { logger } from '../config/logger';
 
 let rekognitionClient: RekognitionClient | null = null;
 
+const awsErrorName = (error: unknown) =>
+  typeof error === 'object' && error !== null && 'name' in error
+    ? String((error as { name?: unknown }).name ?? '')
+    : '';
+
+const awsErrorMessage = (error: unknown) =>
+  typeof error === 'object' && error !== null && 'message' in error
+    ? String((error as { message?: unknown }).message ?? '')
+    : '';
+
+const isCredentialError = (error: unknown) => {
+  const name = awsErrorName(error);
+  const message = awsErrorMessage(error).toLowerCase();
+  return (
+    name === 'UnrecognizedClientException' ||
+    name === 'InvalidSignatureException' ||
+    name === 'ExpiredTokenException' ||
+    name === 'CredentialsProviderError' ||
+    message.includes('security token') ||
+    message.includes('invalid token')
+  );
+};
+
+const isAccessDenied = (error: unknown) => awsErrorName(error) === 'AccessDeniedException';
+
+const withRekognitionErrors = async <T>(operation: string, run: () => Promise<T>) => {
+  try {
+    return await run();
+  } catch (error) {
+    if (isNotFound(error)) throw error;
+    logger.warn({ err: error, operation }, 'AWS Rekognition request failed');
+    if (isAccessDenied(error)) {
+      throw new HttpError(503, 'AWS Rekognition permission denied. Update IAM permissions for Rekognition collection access.');
+    }
+    if (isCredentialError(error)) {
+      throw new HttpError(503, 'AWS Rekognition credentials are invalid or expired.');
+    }
+    throw error;
+  }
+};
+
 const getRekognitionClient = () => {
   if (rekognitionClient) return rekognitionClient;
   if (!env.S3_ACCESS_KEY_ID || !env.S3_SECRET_ACCESS_KEY || !env.REKOGNITION_REGION) {
@@ -59,13 +100,17 @@ const isNotFound = (error: unknown) =>
 export const ensureRekognitionCollection = async (collectionId: string) => {
   const client = getRekognitionClient();
   try {
-    await client.send(new DescribeCollectionCommand({ CollectionId: collectionId }));
+    await withRekognitionErrors('DescribeCollection', () =>
+      client.send(new DescribeCollectionCommand({ CollectionId: collectionId })),
+    );
     return collectionId;
   } catch (error) {
     if (!isNotFound(error)) throw error;
   }
 
-  await client.send(new CreateCollectionCommand({ CollectionId: collectionId }));
+  await withRekognitionErrors('CreateCollection', () =>
+    client.send(new CreateCollectionCommand({ CollectionId: collectionId })),
+  );
   logger.info({ collectionId }, 'Created Rekognition collection for class-section attendance');
   return collectionId;
 };
@@ -76,15 +121,17 @@ export const indexRegisteredStudentFace = async (params: {
   image: Buffer;
 }) => {
   await ensureRekognitionCollection(params.collectionId);
-  const response = await getRekognitionClient().send(
-    new IndexFacesCommand({
-      CollectionId: params.collectionId,
-      Image: { Bytes: params.image },
-      ExternalImageId: params.studentId,
-      MaxFaces: 1,
-      QualityFilter: 'AUTO',
-      DetectionAttributes: [],
-    }),
+  const response = await withRekognitionErrors('IndexFaces:student', () =>
+    getRekognitionClient().send(
+      new IndexFacesCommand({
+        CollectionId: params.collectionId,
+        Image: { Bytes: params.image },
+        ExternalImageId: params.studentId,
+        MaxFaces: 1,
+        QualityFilter: 'AUTO',
+        DetectionAttributes: [],
+      }),
+    ),
   );
 
   logger.debug(
@@ -114,15 +161,17 @@ export const indexAttendancePhotoFaces = async (params: {
 }) => {
   await ensureRekognitionCollection(params.collectionId);
   const externalImageId = `attendance-${crypto.randomUUID()}`;
-  const response = await getRekognitionClient().send(
-    new IndexFacesCommand({
-      CollectionId: params.collectionId,
-      Image: { Bytes: params.image },
-      ExternalImageId: externalImageId,
-      MaxFaces: params.maxFaces ?? 100,
-      QualityFilter: 'AUTO',
-      DetectionAttributes: [],
-    }),
+  const response = await withRekognitionErrors('IndexFaces:attendance', () =>
+    getRekognitionClient().send(
+      new IndexFacesCommand({
+        CollectionId: params.collectionId,
+        Image: { Bytes: params.image },
+        ExternalImageId: externalImageId,
+        MaxFaces: params.maxFaces ?? 100,
+        QualityFilter: 'AUTO',
+        DetectionAttributes: [],
+      }),
+    ),
   );
 
   logger.debug(
@@ -147,13 +196,15 @@ export const searchFaceInCollection = async (params: {
   threshold: number;
   maxFaces?: number;
 }) => {
-  const response = await getRekognitionClient().send(
-    new SearchFacesCommand({
-      CollectionId: params.collectionId,
-      FaceId: params.faceId,
-      FaceMatchThreshold: params.threshold,
-      MaxFaces: params.maxFaces ?? 10,
-    }),
+  const response = await withRekognitionErrors('SearchFaces', () =>
+    getRekognitionClient().send(
+      new SearchFacesCommand({
+        CollectionId: params.collectionId,
+        FaceId: params.faceId,
+        FaceMatchThreshold: params.threshold,
+        MaxFaces: params.maxFaces ?? 10,
+      }),
+    ),
   );
 
   logger.debug(
@@ -173,11 +224,13 @@ export const deleteFacesFromCollection = async (params: {
 }) => {
   const faceIds = [...new Set(params.faceIds.filter(Boolean))];
   if (!faceIds.length) return;
-  await getRekognitionClient().send(
-    new DeleteFacesCommand({
-      CollectionId: params.collectionId,
-      FaceIds: faceIds,
-    }),
+  await withRekognitionErrors('DeleteFaces', () =>
+    getRekognitionClient().send(
+      new DeleteFacesCommand({
+        CollectionId: params.collectionId,
+        FaceIds: faceIds,
+      }),
+    ),
   );
 };
 

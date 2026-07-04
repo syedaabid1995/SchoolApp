@@ -258,7 +258,7 @@ class _StudentAttendancePreviewScreenState
   }
 
   Future<void> _chooseImageSource() async {
-    final source = await showModalBottomSheet<ImageSource>(
+    final source = await showModalBottomSheet<_AiAttendanceImageSource>(
       context: context,
       builder: (context) => SafeArea(
         child: Column(
@@ -267,12 +267,14 @@ class _StudentAttendancePreviewScreenState
             ListTile(
               leading: const Icon(Icons.camera_alt_outlined),
               title: const Text('Camera'),
-              onTap: () => Navigator.of(context).pop(ImageSource.camera),
+              onTap: () =>
+                  Navigator.of(context).pop(_AiAttendanceImageSource.camera),
             ),
             ListTile(
-              leading: const Icon(Icons.photo_library_outlined),
-              title: const Text('Upload'),
-              onTap: () => Navigator.of(context).pop(ImageSource.gallery),
+              leading: const Icon(Icons.folder_open_outlined),
+              title: const Text('Internal storage'),
+              onTap: () =>
+                  Navigator.of(context).pop(_AiAttendanceImageSource.storage),
             ),
           ],
         ),
@@ -282,25 +284,38 @@ class _StudentAttendancePreviewScreenState
     await _captureAnother(source);
   }
 
-  Future<void> _captureAnother(ImageSource source) async {
+  Future<void> _captureAnother(_AiAttendanceImageSource source) async {
     try {
-      final capture = await _picker.pickImage(
-        source: source,
-        imageQuality: 82,
-        maxWidth: 2048,
-      );
-      if (capture != null && mounted) {
+      final captures = await _pickAiAttendanceImages(source);
+      if (captures.isNotEmpty && mounted) {
         setState(() {
-          _captures.add(capture);
+          _captures.addAll(captures);
           _recognitionDirty = true;
         });
       }
     } catch (error) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Unable to capture image: $error')),
-      );
+      final label = source == _AiAttendanceImageSource.camera
+          ? 'camera'
+          : 'internal storage';
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Unable to open $label: $error')));
     }
+  }
+
+  Future<List<XFile>> _pickAiAttendanceImages(
+    _AiAttendanceImageSource source,
+  ) async {
+    if (source == _AiAttendanceImageSource.camera) {
+      final capture = await _picker.pickImage(
+        source: ImageSource.camera,
+        imageQuality: 82,
+        maxWidth: 2048,
+      );
+      return capture == null ? const <XFile>[] : [capture];
+    }
+    return _picker.pickMultiImage(imageQuality: 82, maxWidth: 2048);
   }
 
   Future<void> _runRecognition() async {
@@ -391,6 +406,8 @@ class _StudentAttendancePreviewScreenState
     _ => const Color(0xFF60708F),
   };
 }
+
+enum _AiAttendanceImageSource { camera, storage }
 
 class _AddImageButton extends StatelessWidget {
   const _AddImageButton({required this.onPressed});

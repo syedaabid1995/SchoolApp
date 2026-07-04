@@ -155,33 +155,76 @@ class _SaaptStudentsScreenState extends ConsumerState<SaaptStudentsScreen> {
     AttendanceSheet sheet,
   ) async {
     if (_openingCamera) return;
+    final source = await _chooseAiAttendanceSource();
+    if (source == null) return;
+
     setState(() => _openingCamera = true);
     try {
-      final capture = await _picker.pickImage(
-        source: ImageSource.camera,
-        imageQuality: 82,
-        maxWidth: 2048,
-      );
-      if (capture == null || !mounted) return;
+      final captures = await _pickAiAttendanceImages(source);
+      if (captures.isEmpty || !mounted) return;
       await Navigator.of(context).push(
         MaterialPageRoute(
           builder: (_) => StudentAttendancePreviewScreen(
             query: query,
             initialSheet: sheet,
-            initialCaptures: [capture],
+            initialCaptures: captures,
           ),
         ),
       );
     } catch (error) {
       if (!mounted) return;
+      final label = source == _AiAttendanceImageSource.camera
+          ? 'camera'
+          : 'internal storage';
       ScaffoldMessenger.of(
         context,
-      ).showSnackBar(SnackBar(content: Text('Unable to open camera: $error')));
+      ).showSnackBar(SnackBar(content: Text('Unable to open $label: $error')));
     } finally {
       if (mounted) setState(() => _openingCamera = false);
     }
   }
+
+  Future<List<XFile>> _pickAiAttendanceImages(
+    _AiAttendanceImageSource source,
+  ) async {
+    if (source == _AiAttendanceImageSource.camera) {
+      final capture = await _picker.pickImage(
+        source: ImageSource.camera,
+        imageQuality: 82,
+        maxWidth: 2048,
+      );
+      return capture == null ? const <XFile>[] : [capture];
+    }
+    return _picker.pickMultiImage(imageQuality: 82, maxWidth: 2048);
+  }
+
+  Future<_AiAttendanceImageSource?> _chooseAiAttendanceSource() {
+    return showModalBottomSheet<_AiAttendanceImageSource>(
+      context: context,
+      builder: (context) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(
+              leading: const Icon(Icons.camera_alt_outlined),
+              title: const Text('Camera'),
+              onTap: () =>
+                  Navigator.of(context).pop(_AiAttendanceImageSource.camera),
+            ),
+            ListTile(
+              leading: const Icon(Icons.folder_open_outlined),
+              title: const Text('Internal storage'),
+              onTap: () =>
+                  Navigator.of(context).pop(_AiAttendanceImageSource.storage),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
 }
+
+enum _AiAttendanceImageSource { camera, storage }
 
 class _SetupHeader extends ConsumerWidget {
   const _SetupHeader({required this.scope});
