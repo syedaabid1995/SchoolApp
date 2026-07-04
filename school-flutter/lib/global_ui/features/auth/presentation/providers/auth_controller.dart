@@ -1,5 +1,6 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../../core/network/auth_session_events.dart';
 import '../../domain/entities/auth_session.dart';
 import 'auth_providers.dart';
 
@@ -9,6 +10,10 @@ final authControllerProvider =
 class AuthController extends AsyncNotifier<AuthSession> {
   @override
   Future<AuthSession> build() {
+    ref.listen<int>(authSessionExpiredProvider, (previous, next) {
+      if (previous == next) return;
+      state = const AsyncData(AuthSession.unauthenticated());
+    });
     return ref.watch(authRepositoryProvider).restoreSession();
   }
 

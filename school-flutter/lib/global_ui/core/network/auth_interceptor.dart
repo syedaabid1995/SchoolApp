@@ -8,11 +8,14 @@ class AuthInterceptor extends Interceptor {
   AuthInterceptor({
     required SecureTokenStorage tokenStorage,
     required Dio refreshClient,
+    Future<void> Function()? onSessionExpired,
   }) : _tokenStorage = tokenStorage,
-       _refreshClient = refreshClient;
+       _refreshClient = refreshClient,
+       _onSessionExpired = onSessionExpired;
 
   final SecureTokenStorage _tokenStorage;
   final Dio _refreshClient;
+  final Future<void> Function()? _onSessionExpired;
 
   bool _isRefreshing = false;
 
@@ -25,6 +28,8 @@ class AuthInterceptor extends Interceptor {
     final token = await _tokenStorage.readAccessToken();
     if (token != null && token.isNotEmpty) {
       options.headers['Authorization'] = 'Bearer $token';
+    } else if (!_isPublicAuthPath(options.path)) {
+      await _notifySessionExpired();
     }
     handler.next(options);
   }
@@ -49,6 +54,7 @@ class AuthInterceptor extends Interceptor {
     try {
       final refreshToken = await _tokenStorage.readRefreshToken();
       if (refreshToken == null || refreshToken.isEmpty) {
+        await _notifySessionExpired();
         handler.next(err);
         return;
       }
@@ -78,9 +84,27 @@ class AuthInterceptor extends Interceptor {
       handler.resolve(retryResponse);
     } catch (_) {
       await _tokenStorage.clear();
+      await _notifySessionExpired();
       handler.next(err);
     } finally {
       _isRefreshing = false;
     }
+  }
+
+  Future<void> _notifySessionExpired() async {
+    try {
+      await _onSessionExpired?.call();
+    } catch (_) {
+      // Session navigation is best-effort and must not block the request.
+    }
+  }
+
+  bool _isPublicAuthPath(String path) {
+    final uriPath = Uri.tryParse(path)?.path ?? path;
+    return uriPath.endsWith(ApiEndpoints.login) ||
+        uriPath.endsWith(ApiEndpoints.refresh) ||
+        uriPath.endsWith(ApiEndpoints.forgotPassword) ||
+        uriPath.endsWith(ApiEndpoints.verifyTwoFactor) ||
+        uriPath.endsWith(ApiEndpoints.resendTwoFactor);
   }
 }

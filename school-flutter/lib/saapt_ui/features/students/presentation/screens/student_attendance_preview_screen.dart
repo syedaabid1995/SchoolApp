@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:image_picker/image_picker.dart';
 
+import '../../../../../global_ui/core/errors/app_error_mapper.dart';
 import '../../../../../global_ui/features/attendance/domain/entities/attendance_summary.dart';
 import '../../../../../global_ui/features/attendance/presentation/providers/attendance_providers.dart';
 import '../../../../app/theme/saapt_theme.dart';
@@ -447,6 +448,9 @@ class _RecognitionBar extends StatelessWidget {
   Widget build(BuildContext context) {
     final recognition = state.value;
     final error = state.hasError ? state.error : null;
+    final errorMessage = error == null
+        ? null
+        : AppErrorMapper.map(error).message;
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.fromLTRB(16, 8, 16, 10),
@@ -466,7 +470,7 @@ class _RecognitionBar extends StatelessWidget {
               Expanded(
                 child: Text(
                   error != null
-                      ? error.toString()
+                      ? errorMessage!
                       : recognition == null
                       ? '$imageCount image${imageCount == 1 ? '' : 's'} ready'
                       : '${recognition.summary.detectedFaces} faces scanned - ${recognition.summary.registeredFaceSamples} samples',

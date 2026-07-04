@@ -5,6 +5,7 @@ import 'package:logger/logger.dart';
 import '../constants/app_config.dart';
 import '../storage/secure_token_storage.dart';
 import 'auth_interceptor.dart';
+import 'auth_session_events.dart';
 import 'logging_interceptor.dart';
 
 final loggerProvider = Provider<Logger>((ref) => Logger());
@@ -39,6 +40,9 @@ final dioProvider = Provider<Dio>((ref) {
     AuthInterceptor(
       tokenStorage: ref.watch(secureTokenStorageProvider),
       refreshClient: ref.watch(rawDioProvider),
+      onSessionExpired: () async {
+        ref.read(authSessionExpiredProvider.notifier).notify();
+      },
     ),
     StaffLoggingInterceptor(ref.watch(loggerProvider)),
   ]);
