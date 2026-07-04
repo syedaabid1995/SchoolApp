@@ -58,14 +58,15 @@ const withRekognitionErrors = async <T>(operation: string, run: () => Promise<T>
 
 const getRekognitionClient = () => {
   if (rekognitionClient) return rekognitionClient;
-  if (!env.S3_ACCESS_KEY_ID || !env.S3_SECRET_ACCESS_KEY || !env.REKOGNITION_REGION) {
+  if (!env.REKOGNITION_ACCESS_KEY_ID || !env.REKOGNITION_SECRET_ACCESS_KEY || !env.REKOGNITION_REGION) {
     throw new HttpError(503, 'AWS Rekognition credentials are not configured');
   }
   rekognitionClient = new RekognitionClient({
     region: env.REKOGNITION_REGION,
     credentials: {
-      accessKeyId: env.S3_ACCESS_KEY_ID,
-      secretAccessKey: env.S3_SECRET_ACCESS_KEY,
+      accessKeyId: env.REKOGNITION_ACCESS_KEY_ID,
+      secretAccessKey: env.REKOGNITION_SECRET_ACCESS_KEY,
+      sessionToken: env.REKOGNITION_SESSION_TOKEN,
     },
   });
   return rekognitionClient;

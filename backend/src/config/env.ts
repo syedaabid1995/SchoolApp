@@ -95,6 +95,9 @@ const envSchema = z.object({
   AWS_REGION: optionalEnvString(),
   AWS_S3_BUCKET: optionalEnvString(),
   REKOGNITION_REGION: optionalEnvString(),
+  REKOGNITION_ACCESS_KEY_ID: optionalEnvString(),
+  REKOGNITION_SECRET_ACCESS_KEY: optionalEnvString(),
+  REKOGNITION_SESSION_TOKEN: optionalEnvString(),
   REKOGNITION_COLLECTION_PREFIX: z.string().min(1).default('schoolapp'),
   REKOGNITION_AUTO_PRESENT_THRESHOLD: z.coerce.number().min(0).max(100).default(90),
   REKOGNITION_REVIEW_THRESHOLD: z.coerce.number().min(0).max(100).default(80),
@@ -126,6 +129,9 @@ const normalizedEnv = {
   S3_ACCESS_KEY_ID: parsed.data.S3_ACCESS_KEY_ID ?? parsed.data.AWS_ACCESS_KEY_ID,
   S3_SECRET_ACCESS_KEY: parsed.data.S3_SECRET_ACCESS_KEY ?? parsed.data.AWS_SECRET_ACCESS_KEY,
   REKOGNITION_REGION: parsed.data.REKOGNITION_REGION ?? parsed.data.AWS_REGION ?? parsed.data.S3_REGION ?? 'us-east-1',
+  REKOGNITION_ACCESS_KEY_ID: parsed.data.REKOGNITION_ACCESS_KEY_ID ?? parsed.data.AWS_ACCESS_KEY_ID ?? parsed.data.S3_ACCESS_KEY_ID,
+  REKOGNITION_SECRET_ACCESS_KEY: parsed.data.REKOGNITION_SECRET_ACCESS_KEY ?? parsed.data.AWS_SECRET_ACCESS_KEY ?? parsed.data.S3_SECRET_ACCESS_KEY,
+  REKOGNITION_SESSION_TOKEN: parsed.data.REKOGNITION_SESSION_TOKEN,
 };
 
 if (normalizedEnv.LOAD_TESTING_ENABLED && !normalizedEnv.LOAD_TESTING_SECRET) {
