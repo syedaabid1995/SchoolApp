@@ -162,3 +162,90 @@ Use these starting criteria for early pilot testing:
 - Redis memory and BullMQ queue delay remain stable.
 
 If the API fails because of 401/403, fix credentials/permissions before treating the run as a capacity result.
+
+## Authenticated Realistic Test
+
+Use this for the real application-capacity test. It authenticates each VU once, refreshes tokens when the 15-minute access token expires, applies 1-5 second think time, and runs the production-like endpoint mix:
+
+```text
+25% GET /users/me
+20% GET /dashboard
+20% GET /students/students
+10% GET /teachers
+10% GET /attendance-summary
+5% attendance session create/update
+```
+
+Login is measured during per-VU startup. Repeated 10% login traffic is disabled by default because the backend intentionally keeps the login IP limiter active at `20 attempts / 15 minutes`. Enable repeated login only when you are explicitly measuring auth throughput from distributed generators:
+
+```sh
+export ACADEMIFY_ENABLE_RELOGIN_WEIGHT=true
+```
+
+Required:
+
+```sh
+export ACADEMIFY_BASE_URL="https://api.akademifyy.in"
+export ACADEMIFY_ADMIN_EMAIL="load-admin@example.com"
+export ACADEMIFY_ADMIN_PASSWORD="replace-with-test-password"
+export ACADEMIFY_SCHOOL_CODE="DKS00005"
+export ACADEMIFY_LOAD_TEST_KEY="<staging-or-pilot-load-test-secret>"
+```
+
+Attendance writes are enabled only when a dedicated test fixture is provided. Use a test school/class/student set; do not point this at normal production classes.
+
+```sh
+export ACADEMIFY_ATTENDANCE_CLASS_ID="<test-class-uuid>"
+export ACADEMIFY_ATTENDANCE_SECTION_ID="<test-section-uuid-if-required>"
+export ACADEMIFY_ATTENDANCE_STUDENT_IDS="<student-uuid-1>,<student-uuid-2>"
+export ACADEMIFY_ATTENDANCE_DATES="2026-07-04"
+```
+
+Run a one-minute authenticated smoke first:
+
+```sh
+ACADEMIFY_AUTH_PROFILE=smoke ./load-tests/k6/run-authenticated-load-test.sh
+```
+
+Then run stages separately, so you can see the exact stable ceiling:
+
+```sh
+ACADEMIFY_AUTH_PROFILE=stage1 ./load-tests/k6/run-authenticated-load-test.sh
+ACADEMIFY_AUTH_PROFILE=stage2 ./load-tests/k6/run-authenticated-load-test.sh
+ACADEMIFY_AUTH_PROFILE=stage3 ./load-tests/k6/run-authenticated-load-test.sh
+ACADEMIFY_AUTH_PROFILE=stage4 ./load-tests/k6/run-authenticated-load-test.sh
+```
+
+The full requested profile combines stage 1 through stage 4:
+
+```sh
+ACADEMIFY_AUTH_PROFILE=realistic ./load-tests/k6/run-authenticated-load-test.sh
+```
+
+Stress mode continues beyond 100 VUs to 125, 150, then 200 VUs and aborts when the aggregate failure or p95 thresholds are breached:
+
+```sh
+ACADEMIFY_AUTH_PROFILE=stress ./load-tests/k6/run-authenticated-load-test.sh
+```
+
+Each run writes these artifacts under `load-tests/k6/results/`:
+
+```text
+summary-authenticated-<profile>-<run-id>.json
+k6-authenticated-<profile>-<run-id>.log
+k6-authenticated-<profile>-<run-id>.console.log
+manifest-authenticated-<profile>-<run-id>.json
+metrics-before-<run-id>.prom
+metrics-after-<run-id>.prom
+health-before-<run-id>.json
+health-after-<run-id>.json
+performance-report-<run-id>.md
+```
+
+If `/metrics` is not exposed to your load generator, set:
+
+```sh
+export ACADEMIFY_CAPTURE_API_METRICS=false
+```
+
+Host CPU, RAM, disk I/O, network throughput, PostgreSQL connection count, Redis memory, and event-loop delay still need to be collected from Hostinger, PM2, PostgreSQL, Redis, or your monitoring stack while k6 is running.
