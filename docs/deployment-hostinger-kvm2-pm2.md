@@ -266,6 +266,8 @@ GOOGLE_SMTP_PORT=587
 GOOGLE_SMTP_FROM_NAME=Akademifyy
 GOOGLE_SMTP_FROM_EMAIL=no-reply@akademifyy.in
 GOOGLE_SMTP_REPLY_TO=support@akademifyy.in
+GOOGLE_SMTP_EHLO_NAME=mail.akademifyy.in
+GOOGLE_SMTP_DEBUG=false
 SMS_PROVIDER=<sms-provider-if-used>
 SMS_API_KEY=<sms-provider-key-if-used>
 ```

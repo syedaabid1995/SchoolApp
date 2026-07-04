@@ -88,6 +88,8 @@ const envSchema = z.object({
   GOOGLE_SMTP_FROM_NAME: optionalEnvString(),
   GOOGLE_SMTP_FROM_EMAIL: optionalEnvString(),
   GOOGLE_SMTP_REPLY_TO: optionalEnvString(),
+  GOOGLE_SMTP_EHLO_NAME: optionalEnvString(),
+  GOOGLE_SMTP_DEBUG: boolEnv(false).default(false),
   AWS_ACCESS_KEY_ID: optionalEnvString(),
   AWS_SECRET_ACCESS_KEY: optionalEnvString(),
   AWS_REGION: optionalEnvString(),

@@ -7,11 +7,17 @@ type SmtpTransportConfig = {
   port: number;
   username?: string;
   password?: string;
+  name?: string;
   fromEmail: string;
   fromName?: string;
   replyToEmail?: string;
   secure?: boolean;
   requireTLS?: boolean;
+  logger?: boolean;
+  debug?: boolean;
+  tls?: {
+    rejectUnauthorized?: boolean;
+  };
 };
 
 const SMTP_TIMEOUT_MS = 30_000;
@@ -51,8 +57,11 @@ const transportCacheKey = (provider: string, config: SmtpTransportConfig) =>
     port: config.port,
     username: config.username,
     passwordDigest: secretDigest(config.password),
+    name: config.name,
     secure: config.secure ?? config.port === 465,
     requireTLS: config.requireTLS ?? false,
+    logger: config.logger ?? false,
+    debug: config.debug ?? false,
   });
 
 const getCachedTransport = (provider: string, config: SmtpTransportConfig) => {
@@ -66,6 +75,10 @@ const getCachedTransport = (provider: string, config: SmtpTransportConfig) => {
     port: config.port,
     secure: config.secure ?? config.port === 465,
     requireTLS: config.requireTLS,
+    name: config.name,
+    logger: config.logger,
+    debug: config.debug,
+    tls: config.tls,
     connectionTimeout: SMTP_TIMEOUT_MS,
     greetingTimeout: SMTP_TIMEOUT_MS,
     socketTimeout: SMTP_TIMEOUT_MS,

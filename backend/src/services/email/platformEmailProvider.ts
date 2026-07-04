@@ -70,11 +70,17 @@ export const PlatformEmailProvider = {
     const transport = new GoogleWorkspaceTransport({
       host: env.GOOGLE_SMTP_HOST!,
       port: env.GOOGLE_SMTP_PORT!,
+      name: env.GOOGLE_SMTP_EHLO_NAME ?? 'mail.akademifyy.in',
       fromEmail: sender.email,
       fromName: sender.name,
       replyToEmail: sender.replyToEmail,
       secure: false,
       requireTLS: env.GOOGLE_SMTP_PORT === 587,
+      logger: env.GOOGLE_SMTP_DEBUG,
+      debug: env.GOOGLE_SMTP_DEBUG,
+      tls: {
+        rejectUnauthorized: true,
+      },
     });
 
     return transport.send({
