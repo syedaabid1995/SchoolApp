@@ -29,7 +29,6 @@ const PRESERVED_TABLES = new Set([
   'subscription_plan_permissions',
   'feature_flags',
   'config_entries',
-  'notification_templates',
   'messaging_services',
   'consent_documents',
 ]);

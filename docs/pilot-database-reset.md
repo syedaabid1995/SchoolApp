@@ -81,7 +81,6 @@ It also preserves these global/baseline tables:
 | `subscription_plan_permissions` | Plan permission mapping can be reused for the pilot. |
 | `feature_flags` | Global feature definitions can be reused. |
 | `config_entries` | Global config definitions can be reused. |
-| `notification_templates` | Global message templates can be reused after review. |
 | `messaging_services` | Global provider definitions can be reused after review. |
 | `consent_documents` | Global consent document versions can be reused after review. |
 
@@ -103,6 +102,7 @@ The cleared set includes:
 - Exam/results data: exams, exam types, grading settings, papers, centers, rooms, seating, invigilators, marks, moderation, revaluation.
 - Fees/subscriptions usage data: fee masters, invoices, payments, receipts, ledgers, discounts, fines, carry forwards, generation jobs, notifications, tenant subscriptions, invoices, payments, usage counters.
 - Operational data: imports, import row errors, notification logs, backup/restore jobs, audit logs, audit exports, data export/deletion jobs, compliance histories, support tickets/comments.
+- Communication data: notification templates and school notices.
 - Other school modules: homework, library, transport, dormitory, themes/history, AI conversations/messages/pending actions, face profiles/samples.
 
 Because this list is generated from the Prisma schema, new future Prisma model tables are cleared by default unless they are added to the preserved baseline list in `backend/scripts/pilot-reset.ts`.
