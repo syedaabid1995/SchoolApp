@@ -25,8 +25,6 @@ const PRESERVED_TABLES = new Set([
   'roles',
   'permissions',
   'role_permissions',
-  'subscription_plans',
-  'subscription_plan_permissions',
   'feature_flags',
   'config_entries',
   'messaging_services',
