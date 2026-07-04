@@ -36,7 +36,7 @@ export type EmailScope = 'PLATFORM' | 'TENANT';
 export type EmailSenderIdentity = 'NO_REPLY' | 'INFO' | 'SUPPORT' | 'BILLING' | 'SECURITY';
 
 export const PLATFORM_SENDER_EMAILS: Record<EmailSenderIdentity, string> = {
-  NO_REPLY: 'noreply@akademifyy.in',
+  NO_REPLY: 'no-reply@akademifyy.in',
   INFO: 'info@akademifyy.in',
   SUPPORT: 'support@akademifyy.in',
   BILLING: 'billing@akademifyy.in',
