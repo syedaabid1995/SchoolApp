@@ -3,6 +3,7 @@ import { z } from 'zod';
 import {
   assignSchoolSubscriptionPlan,
   cancelSchoolSubscription,
+  createSchoolSubscriptionCheckoutOrder,
   downgradeSchoolSubscription,
   extendSchoolSubscriptionTrial,
   getAdminSchoolSubscriptionDetail,
@@ -21,6 +22,7 @@ import {
   startSchoolSubscriptionTrial,
   upgradeSchoolSubscription,
   upsertSubscription,
+  verifySchoolSubscriptionCheckoutPayment,
 } from '../services/subscription.service';
 import { HttpError } from '../middlewares/error.middleware';
 import { resolveSchoolId } from '../utils/tenant';
@@ -130,6 +132,17 @@ const invoiceGenerationSchema = z.object({
   discountAmount: z.number().min(0).optional(),
 });
 
+const checkoutSchema = z.object({
+  planId: z.string().uuid(),
+  billingCycle: z.enum(['MONTHLY', 'ANNUAL']).default('MONTHLY'),
+});
+
+const checkoutVerificationSchema = z.object({
+  razorpay_order_id: z.string().trim().min(1),
+  razorpay_payment_id: z.string().trim().min(1),
+  razorpay_signature: z.string().trim().min(1),
+});
+
 const actorFromRequest = (req: Request) => {
   if (!req.auth?.userId) {
     throw new HttpError(401, 'Unauthorized');
@@ -162,6 +175,31 @@ export const upsertSubscriptionApi = async (req: Request, res: Response) => {
   await invalidateSchoolCache(schoolId);
 
   res.status(200).json(subscription);
+};
+
+export const createSubscriptionCheckoutOrderApi = async (req: Request, res: Response) => {
+  const schoolId = resolveSchoolId(req, req.body?.schoolId);
+  const payload = checkoutSchema.parse(req.body);
+  const data = await createSchoolSubscriptionCheckoutOrder({
+    schoolId,
+    planId: payload.planId,
+    billingCycle: payload.billingCycle,
+    actor: actorFromRequest(req),
+  });
+  res.status(201).json({ success: true, data });
+};
+
+export const verifySubscriptionCheckoutPaymentApi = async (req: Request, res: Response) => {
+  const schoolId = resolveSchoolId(req, req.body?.schoolId);
+  const payload = checkoutVerificationSchema.parse(req.body);
+  const data = await verifySchoolSubscriptionCheckoutPayment({
+    schoolId,
+    razorpayOrderId: payload.razorpay_order_id,
+    razorpayPaymentId: payload.razorpay_payment_id,
+    razorpaySignature: payload.razorpay_signature,
+    actor: actorFromRequest(req),
+  });
+  res.status(200).json({ success: true, data });
 };
 
 export const getSubscriptionApi = async (req: Request, res: Response) => {

@@ -4,6 +4,7 @@ import { requireSchoolAdminOrSuperAdmin, requireSuperAdmin } from '../middleware
 import {
   assignSchoolSubscriptionPlanApi,
   cancelSchoolSubscriptionApi,
+  createSubscriptionCheckoutOrderApi,
   downgradeSchoolSubscriptionApi,
   extendSchoolSubscriptionTrialApi,
   generateSchoolSubscriptionInvoiceApi,
@@ -24,6 +25,7 @@ import {
   startSchoolSubscriptionTrialApi,
   upgradeSchoolSubscriptionApi,
   upsertSubscriptionApi,
+  verifySubscriptionCheckoutPaymentApi,
 } from '../controllers/subscription.controller';
 import { listActivePlansApi } from '../controllers/subscriptionPlan.controller';
 
@@ -36,6 +38,8 @@ subscriptionRouter.get('/plans', requireSchoolAdminOrSuperAdmin, listActivePlans
 subscriptionRouter.get('/usage', requireSchoolAdminOrSuperAdmin, getSubscriptionUsageApi);
 subscriptionRouter.get('/invoices', requireSchoolAdminOrSuperAdmin, getSubscriptionInvoicesApi);
 subscriptionRouter.get('/', requireSchoolAdminOrSuperAdmin, getSubscriptionApi);
+subscriptionRouter.post('/checkout', requireSchoolAdminOrSuperAdmin, createSubscriptionCheckoutOrderApi);
+subscriptionRouter.post('/checkout/verify', requireSchoolAdminOrSuperAdmin, verifySubscriptionCheckoutPaymentApi);
 subscriptionRouter.post('/', requireSuperAdmin, upsertSubscriptionApi);
 
 adminSubscriptionRouter.use(authMiddleware);

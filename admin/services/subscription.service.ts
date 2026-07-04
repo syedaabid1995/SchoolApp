@@ -174,6 +174,39 @@ export type SubscriptionInvoice = {
   payments: SubscriptionPayment[];
 };
 
+export type SubscriptionCheckoutOrder = {
+  gateway: 'RAZORPAY';
+  keyId: string;
+  order: {
+    id: string;
+    amount: number;
+    currency: string;
+    receipt?: string | null;
+  };
+  plan: {
+    id: string;
+    name: string;
+  };
+  school: {
+    id: string;
+    name: string;
+  };
+  checkout: {
+    action: 'ACTIVATE' | 'UPGRADE' | 'DOWNGRADE' | 'RENEW' | 'CHANGE' | string;
+    billingCycle: 'MONTHLY' | 'ANNUAL';
+    amount: number;
+    currency: string;
+    receipt: string;
+  };
+};
+
+export type SubscriptionCheckoutResult = {
+  detail: SchoolSubscriptionDetail;
+  gatewayCharged: boolean;
+  payment?: SubscriptionPayment;
+  message: string;
+};
+
 export type SchoolSubscriptionDetail = {
   school: {
     id: string;
@@ -257,6 +290,23 @@ export const getSubscription = async (schoolId?: string) => {
 
 export const getSubscriptionSummary = async () => {
   const { data } = await api.get<ApiEnvelope<SubscriptionSummary>>('/admin/subscriptions/summary');
+  return unwrapData(data);
+};
+
+export const createSubscriptionCheckout = async (payload: {
+  planId: string;
+  billingCycle: 'MONTHLY' | 'ANNUAL';
+}) => {
+  const { data } = await api.post<ApiEnvelope<SubscriptionCheckoutOrder>>('/subscriptions/checkout', payload);
+  return unwrapData(data);
+};
+
+export const verifySubscriptionCheckout = async (payload: {
+  razorpay_order_id: string;
+  razorpay_payment_id: string;
+  razorpay_signature: string;
+}) => {
+  const { data } = await api.post<ApiEnvelope<SubscriptionCheckoutResult>>('/subscriptions/checkout/verify', payload);
   return unwrapData(data);
 };
 

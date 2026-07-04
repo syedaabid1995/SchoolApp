@@ -1,5 +1,7 @@
 import { prisma } from '../config/db';
 import { Prisma } from '@prisma/client';
+import crypto from 'crypto';
+import { env } from '../config/env';
 import { HttpError } from '../middlewares/error.middleware';
 import { invalidateSchoolCache, invalidateSubscriptionCache } from './cache/cache.invalidation';
 import { createAuditLog } from './auditLog.service';
@@ -9,10 +11,31 @@ import { PermissionCacheService } from './permissionCache.service';
 type BillingCycleInput = 'MONTHLY' | 'ANNUAL' | 'QUARTERLY' | 'YEARLY';
 type EffectiveDateInput = 'IMMEDIATE' | 'NEXT_BILLING_CYCLE';
 type CancelMode = 'IMMEDIATE' | 'PERIOD_END';
+type NormalizedBillingCycle = 'MONTHLY' | 'ANNUAL';
+type CheckoutAction = 'ACTIVATE' | 'UPGRADE' | 'DOWNGRADE' | 'RENEW' | 'CHANGE';
 
 type SubscriptionActor = {
   userId: string;
   role?: string | null;
+};
+
+type RazorpayOrder = {
+  id: string;
+  amount: number;
+  currency: string;
+  receipt?: string | null;
+  status: string;
+  notes?: Record<string, string | number | boolean | null>;
+};
+
+type RazorpayPayment = {
+  id: string;
+  order_id?: string | null;
+  amount: number;
+  currency: string;
+  status: string;
+  method?: string | null;
+  captured?: boolean;
 };
 
 type SubscriptionListParams = {
@@ -76,6 +99,78 @@ const money = (value: Prisma.Decimal.Value) => new Prisma.Decimal(value).toDecim
 
 const moneyNumber = (value: Prisma.Decimal.Value) => Number(new Prisma.Decimal(value).toFixed(2));
 
+const moneyToPaise = (value: Prisma.Decimal.Value) => Number(new Prisma.Decimal(value).mul(100).toDecimalPlaces(0).toFixed(0));
+
+const paiseToMoney = (value: number) => money(new Prisma.Decimal(value).div(100));
+
+const normalizeBillingCycle = (billingCycle?: BillingCycleInput): NormalizedBillingCycle =>
+  billingCycle === 'ANNUAL' || billingCycle === 'YEARLY' ? 'ANNUAL' : 'MONTHLY';
+
+const getPlanCharge = (plan: { priceCents: number }, billingCycle: NormalizedBillingCycle) => {
+  const months = billingCycle === 'ANNUAL' ? 12 : 1;
+  const subtotal = money(priceFromPlan(plan)).mul(months).toDecimalPlaces(2);
+  const discountAmount = billingCycle === 'ANNUAL' ? money(subtotal.mul(10).div(100)) : money(0);
+  const totalAmount = money(subtotal.minus(discountAmount));
+  return {
+    subtotal,
+    taxAmount: money(0),
+    discountAmount,
+    totalAmount,
+    amountPaise: moneyToPaise(totalAmount),
+  };
+};
+
+const getRazorpayConfig = () => {
+  if (!env.RAZORPAY_KEY_ID || !env.RAZORPAY_KEY_SECRET) {
+    throw new HttpError(503, 'Razorpay is not configured. Add RAZORPAY_KEY_ID and RAZORPAY_KEY_SECRET.');
+  }
+  return {
+    keyId: env.RAZORPAY_KEY_ID,
+    keySecret: env.RAZORPAY_KEY_SECRET,
+  };
+};
+
+const razorpayRequest = async <T>(path: string, options: { method?: string; body?: Record<string, unknown> } = {}) => {
+  const { keyId, keySecret } = getRazorpayConfig();
+  const response = await fetch(`https://api.razorpay.com/v1${path}`, {
+    method: options.method ?? 'GET',
+    headers: {
+      Authorization: `Basic ${Buffer.from(`${keyId}:${keySecret}`).toString('base64')}`,
+      'Content-Type': 'application/json',
+    },
+    body: options.body ? JSON.stringify(options.body) : undefined,
+  });
+
+  const payload = await response.json().catch(() => null);
+  if (!response.ok) {
+    const message =
+      (payload as any)?.error?.description ||
+      (payload as any)?.error?.reason ||
+      'Razorpay request failed';
+    throw new HttpError(502, message);
+  }
+  return payload as T;
+};
+
+const verifyRazorpaySignature = (orderId: string, paymentId: string, signature: string) => {
+  const { keySecret } = getRazorpayConfig();
+  const expected = crypto
+    .createHmac('sha256', keySecret)
+    .update(`${orderId}|${paymentId}`)
+    .digest('hex');
+  const expectedBuffer = Buffer.from(expected);
+  const actualBuffer = Buffer.from(signature);
+  return expectedBuffer.length === actualBuffer.length && crypto.timingSafeEqual(expectedBuffer, actualBuffer);
+};
+
+const paymentModeFromRazorpayMethod = (method?: string | null) => {
+  const normalized = (method ?? '').toLowerCase();
+  if (normalized === 'upi') return 'UPI';
+  if (normalized === 'card') return 'CARD';
+  if (normalized === 'netbanking') return 'BANK_TRANSFER';
+  return 'OTHER';
+};
+
 const isRestrictedByPaymentReason = (reason?: string | null) => {
   const normalized = (reason ?? '').toLowerCase();
   return paidRestrictedStatusReasons.some((item) => normalized.includes(item));
@@ -94,7 +189,7 @@ const invoiceInclude = {
 const requireSchool = async (schoolId: string) => {
   const school = await prisma.school.findFirst({
     where: { id: schoolId, deletedAt: null },
-    select: { id: true, name: true, code: true, status: true },
+    select: { id: true, name: true, code: true, status: true, statusReason: true },
   });
   if (!school) {
     throw new HttpError(404, 'School not found');
@@ -748,6 +843,356 @@ export const getAdminSchoolSubscriptionDetail = async (schoolId: string) => {
     invoices: invoices.items,
     manualPayments: invoices.items.flatMap((invoice: any) => invoice.payments ?? []),
     billingMessage: invoices.total ? null : 'No subscription invoices have been generated yet.',
+  };
+};
+
+const resolveCheckoutAction = (
+  subscription: Prisma.SubscriptionGetPayload<{ include: { plan: true } }> | null,
+  plan: { id: string; priceCents: number },
+): CheckoutAction => {
+  if (!subscription) return 'ACTIVATE';
+  if (subscription.planId === plan.id) return 'RENEW';
+  const currentPriceCents = subscription.plan?.priceCents ?? 0;
+  if (plan.priceCents > currentPriceCents) return 'UPGRADE';
+  if (plan.priceCents < currentPriceCents) return 'DOWNGRADE';
+  return 'CHANGE';
+};
+
+const createCheckoutReceipt = () => `sub_${crypto.randomUUID().replace(/-/g, '').slice(0, 28)}`;
+
+const getOrderNote = (notes: RazorpayOrder['notes'], key: string) => {
+  const value = notes?.[key];
+  if (typeof value === 'string' && value.trim()) return value.trim();
+  if (typeof value === 'number' && Number.isFinite(value)) return String(value);
+  throw new HttpError(400, `Razorpay order is missing ${key}`);
+};
+
+const getOrderNoteDate = (notes: RazorpayOrder['notes'], key: string) => {
+  const date = new Date(getOrderNote(notes, key));
+  if (Number.isNaN(date.getTime())) {
+    throw new HttpError(400, `Razorpay order has an invalid ${key}`);
+  }
+  return date;
+};
+
+const getOrderNoteMoney = (notes: RazorpayOrder['notes'], key: string) => {
+  const amount = money(getOrderNote(notes, key));
+  if (amount.isNaN() || amount.isNegative()) {
+    throw new HttpError(400, `Razorpay order has an invalid ${key}`);
+  }
+  return amount;
+};
+
+const getOrderNoteInteger = (notes: RazorpayOrder['notes'], key: string) => {
+  const value = Number(getOrderNote(notes, key));
+  if (!Number.isInteger(value) || value < 0) {
+    throw new HttpError(400, `Razorpay order has an invalid ${key}`);
+  }
+  return value;
+};
+
+export const createSchoolSubscriptionCheckoutOrder = async (params: {
+  schoolId: string;
+  planId: string;
+  billingCycle?: BillingCycleInput;
+  actor: SubscriptionActor;
+}) => {
+  const school = await requireSchool(params.schoolId);
+  const plan = await requirePlan(params.planId);
+  const billingCycle = normalizeBillingCycle(params.billingCycle);
+  const existingSubscription = await prisma.subscription.findUnique({
+    where: { schoolId: params.schoolId },
+    include: { plan: true },
+  });
+  const action = resolveCheckoutAction(existingSubscription, plan);
+
+  if (action === 'DOWNGRADE') {
+    const usage = await getAdminSubscriptionUsage(params.schoolId);
+    if (usage.students.used > plan.studentLimit || usage.teachers.used > plan.teacherLimit) {
+      throw new HttpError(409, 'Current usage exceeds the selected plan limits. Contact Super Admin to review the downgrade.');
+    }
+  }
+
+  const charge = getPlanCharge(plan, billingCycle);
+  if (charge.amountPaise <= 0) {
+    throw new HttpError(400, 'Selected plan price must be greater than zero for Razorpay checkout.');
+  }
+
+  const now = new Date();
+  const periodStart =
+    action === 'RENEW' && existingSubscription?.endsAt && existingSubscription.endsAt > now
+      ? existingSubscription.endsAt
+      : now;
+  const periodEnd = calculatePeriodEnd(periodStart, billingCycle);
+  const receipt = createCheckoutReceipt();
+
+  try {
+    const order = await razorpayRequest<RazorpayOrder>('/orders', {
+      method: 'POST',
+      body: {
+        amount: charge.amountPaise,
+        currency: safeCurrency,
+        receipt,
+        notes: {
+          schoolId: params.schoolId,
+          subscriptionId: existingSubscription?.id ?? '',
+          planId: plan.id,
+          billingCycle,
+          action,
+          periodStart: periodStart.toISOString(),
+          periodEnd: periodEnd.toISOString(),
+          subtotal: moneyNumber(charge.subtotal).toFixed(2),
+          taxAmount: moneyNumber(charge.taxAmount).toFixed(2),
+          discountAmount: moneyNumber(charge.discountAmount).toFixed(2),
+          totalAmount: moneyNumber(charge.totalAmount).toFixed(2),
+          amountPaise: String(charge.amountPaise),
+        },
+      },
+    });
+
+    await auditSubscriptionAction({
+      schoolId: params.schoolId,
+      subscriptionId: existingSubscription?.id ?? null,
+      actor: params.actor,
+      action: 'SUBSCRIPTION_RAZORPAY_ORDER_CREATED',
+      afterState: {
+        orderId: order.id,
+        receipt,
+        planId: plan.id,
+        planName: plan.name,
+        billingCycle,
+        checkoutAction: action,
+        amount: moneyNumber(charge.totalAmount),
+        currency: safeCurrency,
+      },
+    });
+
+    return {
+      gateway: 'RAZORPAY',
+      keyId: getRazorpayConfig().keyId,
+      order: {
+        id: order.id,
+        amount: order.amount,
+        currency: order.currency,
+        receipt: order.receipt,
+      },
+      plan: {
+        id: plan.id,
+        name: plan.name,
+      },
+      school: {
+        id: school.id,
+        name: school.name,
+      },
+      checkout: {
+        action,
+        billingCycle,
+        amount: moneyNumber(charge.totalAmount),
+        currency: safeCurrency,
+        receipt,
+      },
+    };
+  } catch (error) {
+    throw error;
+  }
+};
+
+export const verifySchoolSubscriptionCheckoutPayment = async (params: {
+  schoolId: string;
+  razorpayOrderId: string;
+  razorpayPaymentId: string;
+  razorpaySignature: string;
+  actor: SubscriptionActor;
+}) => {
+  if (!verifyRazorpaySignature(params.razorpayOrderId, params.razorpayPaymentId, params.razorpaySignature)) {
+    throw new HttpError(400, 'Invalid Razorpay payment signature');
+  }
+
+  const order = await razorpayRequest<RazorpayOrder>(`/orders/${encodeURIComponent(params.razorpayOrderId)}`);
+  const notes = order.notes ?? {};
+  const orderSchoolId = getOrderNote(notes, 'schoolId');
+  if (orderSchoolId !== params.schoolId) {
+    throw new HttpError(403, 'Razorpay order does not belong to this school');
+  }
+  const planId = getOrderNote(notes, 'planId');
+  const billingCycle = normalizeBillingCycle(getOrderNote(notes, 'billingCycle') as BillingCycleInput);
+  const checkoutAction = getOrderNote(notes, 'action');
+  const periodStart = getOrderNoteDate(notes, 'periodStart');
+  const periodEnd = getOrderNoteDate(notes, 'periodEnd');
+  const subtotal = getOrderNoteMoney(notes, 'subtotal');
+  const taxAmount = getOrderNoteMoney(notes, 'taxAmount');
+  const discountAmount = getOrderNoteMoney(notes, 'discountAmount');
+  const totalAmount = getOrderNoteMoney(notes, 'totalAmount');
+  const expectedPaise = getOrderNoteInteger(notes, 'amountPaise');
+
+  let payment = await razorpayRequest<RazorpayPayment>(`/payments/${encodeURIComponent(params.razorpayPaymentId)}`);
+  if (payment.order_id !== params.razorpayOrderId) {
+    throw new HttpError(400, 'Razorpay payment does not match this order');
+  }
+  if (payment.status === 'authorized') {
+    payment = await razorpayRequest<RazorpayPayment>(`/payments/${encodeURIComponent(params.razorpayPaymentId)}/capture`, {
+      method: 'POST',
+      body: {
+        amount: payment.amount,
+        currency: safeCurrency,
+      },
+    });
+  }
+  if (payment.status !== 'captured' || payment.captured === false) {
+    throw new HttpError(409, 'Razorpay payment was not captured');
+  }
+
+  const paymentReference = `razorpay:${payment.id};order:${order.id}`;
+  const existingPayment = await prisma.subscriptionPayment.findFirst({
+    where: {
+      schoolId: params.schoolId,
+      referenceNumber: paymentReference,
+    },
+  });
+  if (existingPayment) {
+    return {
+      detail: await getAdminSchoolSubscriptionDetail(params.schoolId),
+      gatewayCharged: true,
+      payment: existingPayment,
+      message: 'Razorpay payment was already verified for this subscription.',
+    };
+  }
+
+  if (
+    moneyToPaise(totalAmount) !== expectedPaise ||
+    order.amount !== expectedPaise ||
+    payment.amount !== expectedPaise ||
+    order.currency !== safeCurrency ||
+    payment.currency !== safeCurrency
+  ) {
+    throw new HttpError(400, 'Razorpay amount does not match checkout amount');
+  }
+
+  const [school, plan, existingSubscription] = await Promise.all([
+    requireSchool(params.schoolId),
+    requirePlan(planId, { allowInactive: true }),
+    prisma.subscription.findUnique({
+      where: { schoolId: params.schoolId },
+      include: { school: true },
+    }),
+  ]);
+  if (periodEnd <= periodStart) {
+    throw new HttpError(400, 'Razorpay order has an invalid billing period');
+  }
+
+  const paidAt = new Date();
+  const paymentAmount = paiseToMoney(payment.amount);
+  const graceDays = existingSubscription?.graceDays ?? 15;
+
+  const result = await prisma.$transaction(async (tx) => {
+    const subscription = await tx.subscription.upsert({
+      where: { schoolId: params.schoolId },
+      update: {
+        planId: plan.id,
+        planName: plan.name,
+        status: 'ACTIVE',
+        startsAt: periodStart,
+        endsAt: periodEnd,
+        billingCycle,
+        discountPercent: billingCycle === 'ANNUAL' ? 10 : 0,
+        paidAt,
+        nextDueAt: addDays(periodEnd, graceDays),
+        studentLimit: plan.studentLimit,
+        teacherLimit: plan.teacherLimit,
+      },
+      create: {
+        schoolId: params.schoolId,
+        planId: plan.id,
+        planName: plan.name,
+        status: 'ACTIVE',
+        startsAt: periodStart,
+        endsAt: periodEnd,
+        billingCycle,
+        discountPercent: billingCycle === 'ANNUAL' ? 10 : 0,
+        graceDays,
+        paidAt,
+        nextDueAt: addDays(periodEnd, graceDays),
+        studentLimit: plan.studentLimit,
+        teacherLimit: plan.teacherLimit,
+      },
+    });
+
+    const invoiceNumber = await getNextNumber({ schoolId: params.schoolId, type: 'INVOICE', prefix: 'SUB-INV' }, tx);
+    const invoice = await tx.subscriptionInvoice.create({
+      data: {
+        schoolId: params.schoolId,
+        subscriptionId: subscription.id,
+        planId: plan.id,
+        invoiceNumber,
+        billingPeriodStart: periodStart,
+        billingPeriodEnd: periodEnd,
+        subtotal,
+        taxAmount,
+        discountAmount,
+        totalAmount,
+        paidAmount: totalAmount,
+        balanceAmount: 0,
+        status: 'PAID',
+        dueDate: addDays(periodEnd, graceDays),
+        paidAt,
+      },
+      include: invoiceInclude,
+    });
+
+    const createdPayment = await tx.subscriptionPayment.create({
+      data: {
+        schoolId: params.schoolId,
+        invoiceId: invoice.id,
+        subscriptionId: subscription.id,
+        amount: paymentAmount,
+        paymentMode: paymentModeFromRazorpayMethod(payment.method) as any,
+        referenceNumber: paymentReference,
+        paymentDate: paidAt,
+        notes: `Razorpay ${payment.method ?? 'online'} payment for ${invoice.invoiceNumber}`,
+        proofUrl: null,
+        receivedByUserId: params.actor.userId,
+      },
+    });
+
+    if (school.status !== 'ACTIVE' && isRestrictedByPaymentReason(school.statusReason)) {
+      await tx.school.update({
+        where: { id: params.schoolId },
+        data: { status: 'ACTIVE', statusReason: null },
+      });
+    }
+
+    return { createdPayment, invoice, subscription };
+  });
+
+  await auditSubscriptionAction({
+    schoolId: params.schoolId,
+    subscriptionId: result.subscription.id,
+    actor: params.actor,
+    action: 'SUBSCRIPTION_RAZORPAY_PAYMENT_CAPTURED',
+    afterState: {
+      invoiceId: result.invoice.id,
+      invoiceNumber: result.invoice.invoiceNumber,
+      orderId: order.id,
+      paymentId: payment.id,
+      amount: moneyNumber(paymentAmount),
+      currency: safeCurrency,
+      paymentMode: paymentModeFromRazorpayMethod(payment.method),
+      planId: plan.id,
+      planName: plan.name,
+      billingCycle,
+      checkoutAction,
+      gatewayCharged: true,
+      status: 'PAID',
+    },
+  });
+  await invalidateSchoolSubscriptionAuthorizationCache(params.schoolId);
+  await invalidateSchoolCache(params.schoolId);
+
+  return {
+    detail: await getAdminSchoolSubscriptionDetail(params.schoolId),
+    gatewayCharged: true,
+    payment: result.createdPayment,
+    message: 'Razorpay payment verified and subscription updated.',
   };
 };
 

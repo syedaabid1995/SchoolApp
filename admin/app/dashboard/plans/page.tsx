@@ -2,11 +2,14 @@
 
 import type { ReactNode } from 'react';
 import { useMemo, useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { getSession } from '../../../services/auth.service';
 import {
+  createSubscriptionCheckout,
   getSubscription,
   listActivePlans,
+  verifySubscriptionCheckout,
+  type SubscriptionCheckoutOrder,
   type SubscriptionInfo,
   type SubscriptionPlan,
 } from '../../../services/subscription.service';
@@ -17,6 +20,22 @@ import DashboardPageContainer from '../../../components/DashboardPageContainer';
 
 type BillingCycle = 'MONTHLY' | 'ANNUAL';
 type NoticeTone = 'blue' | 'emerald' | 'amber' | 'rose' | 'slate';
+
+type RazorpaySuccessResponse = {
+  razorpay_order_id: string;
+  razorpay_payment_id: string;
+  razorpay_signature: string;
+};
+
+type RazorpayCheckoutInstance = {
+  open: () => void;
+};
+
+declare global {
+  interface Window {
+    Razorpay?: new (options: Record<string, unknown>) => RazorpayCheckoutInstance;
+  }
+}
 
 const toneClasses: Record<NoticeTone, { badge: string; panel: string; icon: string; button: string; text: string }> = {
   blue: {
@@ -68,6 +87,73 @@ const formatDate = (value?: string | null) => {
 
 const formatStatus = (value?: string | null) =>
   value ? value.toLowerCase().replace(/_/g, ' ').replace(/\b\w/g, (char) => char.toUpperCase()) : 'Inactive';
+
+const errorMessage = (error: unknown, fallback: string) =>
+  (error as any)?.response?.data?.error?.message ||
+  (error as any)?.response?.data?.message ||
+  (error as Error)?.message ||
+  fallback;
+
+const loadRazorpayCheckout = () =>
+  new Promise<void>((resolve, reject) => {
+    if (typeof window === 'undefined') {
+      reject(new Error('Payment checkout is unavailable on the server.'));
+      return;
+    }
+    if (window.Razorpay) {
+      resolve();
+      return;
+    }
+    const existingScript = document.getElementById('razorpay-checkout-js') as HTMLScriptElement | null;
+    if (existingScript) {
+      existingScript.addEventListener('load', () => resolve(), { once: true });
+      existingScript.addEventListener('error', () => reject(new Error('Unable to load Razorpay checkout.')), { once: true });
+      return;
+    }
+    const script = document.createElement('script');
+    script.id = 'razorpay-checkout-js';
+    script.src = 'https://checkout.razorpay.com/v1/checkout.js';
+    script.async = true;
+    script.onload = () => resolve();
+    script.onerror = () => reject(new Error('Unable to load Razorpay checkout.'));
+    document.body.appendChild(script);
+  });
+
+const openRazorpayCheckout = (
+  checkout: SubscriptionCheckoutOrder,
+  session?: { email?: string | null; displayName?: string | null; schoolName?: string | null } | null,
+) =>
+  new Promise<RazorpaySuccessResponse>((resolve, reject) => {
+    if (typeof window === 'undefined' || !window.Razorpay) {
+      reject(new Error('Razorpay checkout is unavailable.'));
+      return;
+    }
+
+    const instance = new window.Razorpay({
+      key: checkout.keyId,
+      amount: checkout.order.amount,
+      currency: checkout.order.currency,
+      name: 'Akademifyy',
+      description: `${checkout.plan.name} ${checkout.checkout.billingCycle.toLowerCase()} subscription`,
+      order_id: checkout.order.id,
+      prefill: {
+        name: session?.displayName ?? session?.schoolName ?? checkout.school.name,
+        email: session?.email ?? undefined,
+      },
+      notes: {
+        receipt: checkout.checkout.receipt,
+        planId: checkout.plan.id,
+      },
+      theme: {
+        color: '#2563eb',
+      },
+      modal: {
+        ondismiss: () => reject(new Error('Payment cancelled before completion.')),
+      },
+      handler: (response: RazorpaySuccessResponse) => resolve(response),
+    });
+    instance.open();
+  });
 
 const statusTone = (status?: string | null): NoticeTone => {
   const normalized = (status ?? '').toUpperCase();
@@ -300,7 +386,7 @@ function PlanCard({
   const price = getPriceParts(plan, billingCycle);
   const features = plan.features?.length ? plan.features : ['Core academic management'];
   const visibleFeatures = features.slice(0, 6);
-  const buttonDisabled = (isCurrent && !canRenewCurrent) || isPending;
+  const buttonDisabled = isPending;
   const tone: NoticeTone = isCurrent ? 'emerald' : isRecommended ? 'blue' : 'slate';
 
   return (
@@ -313,7 +399,7 @@ function PlanCard({
           <p className="text-xs font-black uppercase text-[var(--shell-muted)]">Plan</p>
           <h3 className="mt-2 truncate text-2xl font-black text-[var(--shell-text)]">{plan.name}</h3>
         </div>
-        {isCurrent ? <StatusBadge label={canRenewCurrent ? 'Renew' : 'Current'} tone="emerald" /> : null}
+        {isCurrent ? <StatusBadge label={canRenewCurrent ? 'Renew due' : 'Current'} tone="emerald" /> : null}
         {!isCurrent && isRecommended ? <StatusBadge label="Recommended" tone="blue" /> : null}
       </div>
 
@@ -356,9 +442,9 @@ function PlanCard({
         {isPending ? (
           <span className="h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent" />
         ) : (
-          <Icon path={isCurrent && !canRenewCurrent ? <path d="m8 12 3 3 5-6" /> : <path d="M5 12h14" />} />
+          <Icon path={isCurrent && !canRenewCurrent ? <path d="M12 5v14M5 12h14" /> : <path d="M5 12h14" />} />
         )}
-        {canRenewCurrent ? 'Renew plan' : isCurrent ? 'Current plan' : 'Select plan'}
+        {isPending ? 'Opening payment' : isCurrent ? 'Renew plan' : 'Select plan'}
       </button>
     </article>
   );
@@ -375,6 +461,7 @@ function EmptyPlans() {
 
 export default function PlansPage() {
   const notify = useNotify();
+  const queryClient = useQueryClient();
   const { data: session } = useQuery({
     queryKey: ['session'],
     queryFn: getSession,
@@ -384,6 +471,7 @@ export default function PlansPage() {
   });
   const schoolId = session?.schoolId ?? undefined;
   const [billingCycle, setBillingCycle] = useState<BillingCycle>('MONTHLY');
+  const [pendingPlanId, setPendingPlanId] = useState<string | null>(null);
 
   const { data: plans, isLoading: plansLoading } = useQuery({
     queryKey: ['active-plans'],
@@ -405,12 +493,48 @@ export default function PlansPage() {
   const currentPlanId = subscription?.planId ?? plans?.find((p) => p.name === subscription?.planName)?.id ?? null;
   const currentPlan = plans?.find((plan) => plan.id === currentPlanId) ?? null;
 
-  const requestPlanChange = (planId: string) => {
+  const checkoutMutation = useMutation({
+    mutationFn: createSubscriptionCheckout,
+  });
+  const verifyMutation = useMutation({
+    mutationFn: verifySubscriptionCheckout,
+  });
+
+  const requestPlanChange = async (planId: string) => {
     const plan = plans?.find((item) => item.id === planId);
-    notify.info(
-      'Contact Super Admin',
-      `${plan?.name ?? 'This plan'} can only be activated, upgraded, downgraded, or renewed by the platform Super Admin.`,
-    );
+    if (!schoolId) {
+      notify.error('Payment unavailable', 'School context was not found for this session.');
+      return;
+    }
+
+    setPendingPlanId(planId);
+    try {
+      await loadRazorpayCheckout();
+      const checkout = await checkoutMutation.mutateAsync({ planId, billingCycle });
+      const payment = await openRazorpayCheckout(checkout, session);
+      const result = await verifyMutation.mutateAsync({
+        razorpay_order_id: payment.razorpay_order_id,
+        razorpay_payment_id: payment.razorpay_payment_id,
+        razorpay_signature: payment.razorpay_signature,
+      });
+
+      notify.success('Payment successful', result.message || `${plan?.name ?? 'Selected plan'} is now active.`);
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ['subscription'] }),
+        queryClient.invalidateQueries({ queryKey: ['subscription', schoolId] }),
+        queryClient.invalidateQueries({ queryKey: ['school-subscriptions'] }),
+        queryClient.invalidateQueries({ queryKey: ['subscription-lifecycle-summary'] }),
+      ]);
+    } catch (error) {
+      const message = errorMessage(error, 'Unable to complete payment.');
+      if (message.toLowerCase().includes('cancelled')) {
+        notify.info('Payment cancelled', 'No changes were made to the subscription.');
+      } else {
+        notify.error('Payment failed', message);
+      }
+    } finally {
+      setPendingPlanId(null);
+    }
   };
 
   const planCards = useMemo(() => plans ?? [], [plans]);
@@ -480,7 +604,7 @@ export default function PlansPage() {
                   isCurrent={currentPlanId === plan.id}
                   isRecommended={recommendedPlanId === plan.id}
                   canRenewCurrent={currentPlanId === plan.id && canRenewCurrent}
-                  isPending={false}
+                  isPending={pendingPlanId === plan.id}
                   onSelect={requestPlanChange}
                 />
               ))}
