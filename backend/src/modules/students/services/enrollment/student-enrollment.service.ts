@@ -19,6 +19,7 @@ import { cacheTTL } from '../../../../services/cache/cache.ttl';
 import { invalidateStudentCache, invalidateAttendanceCache } from '../../../../services/cache/cache.invalidation';
 import { logger } from '../../../../config/logger';
 import { feeGenerationQueue } from '../../../../queues';
+import { registerStudentFaceImageRefs } from '../../../../services/face.service';
 
 const requireSchoolAdmin = (req: Request) => {
   if (!req.auth?.userId) throw new HttpError(401, 'Unauthorized');
@@ -34,6 +35,55 @@ const normalizeText = (value?: string | null) => {
 };
 
 const nullableText = (value?: string | null) => normalizeText(value) ?? null;
+
+const uniqueTextList = (values: string[] = []) =>
+  Array.from(new Set(values.map((value) => normalizeText(value)).filter((value): value is string => Boolean(value))));
+
+const faceRegistrationImageRefs = (payload: { photoUrl?: string | null; facePhotoUrls?: string[] }) => {
+  const explicitFacePhotos = uniqueTextList(payload.facePhotoUrls);
+  if (explicitFacePhotos.length) return explicitFacePhotos;
+  const studentPhoto = normalizeText(payload.photoUrl);
+  return studentPhoto ? [studentPhoto] : [];
+};
+
+const autoRegisterAdmissionFaces = async (params: {
+  schoolId: string;
+  studentId: string;
+  createdById: string;
+  imageRefs: string[];
+}) => {
+  if (!params.imageRefs.length) return null;
+
+  try {
+    const profile = await registerStudentFaceImageRefs({
+      schoolId: params.schoolId,
+      studentId: params.studentId,
+      createdById: params.createdById,
+      imageRefs: params.imageRefs,
+      replace: true,
+    });
+    return {
+      success: true,
+      sampleCount: profile.samples.length,
+    };
+  } catch (error) {
+    const message = error instanceof HttpError ? error.message : 'Face registration failed';
+    logger.warn(
+      {
+        err: error,
+        schoolId: params.schoolId,
+        studentId: params.studentId,
+        imageCount: params.imageRefs.length,
+      },
+      'Student admission face registration failed',
+    );
+    return {
+      success: false,
+      sampleCount: 0,
+      error: message,
+    };
+  }
+};
 
 const dateOnlyPattern = /^\d{4}-\d{2}-\d{2}$/;
 
@@ -145,6 +195,7 @@ const createSchema = z.object({
   height: z.coerce.number().positive().optional(),
   weight: z.coerce.number().positive().optional(),
   photoUrl: z.string().optional(),
+  facePhotoUrls: z.array(z.string().trim().min(1)).max(4).optional(),
   fatherName: z.string().optional(),
   fatherOccupation: z.string().optional(),
   fatherPhone: z.string().optional(),
@@ -618,6 +669,13 @@ export const createStudent = async (req: Request, res: Response) => {
     },
   });
 
+  const faceRegistration = await autoRegisterAdmissionFaces({
+    schoolId,
+    studentId: result.student.id,
+    createdById: auth.userId,
+    imageRefs: faceRegistrationImageRefs(payload),
+  });
+
   await invalidateStudentCache(schoolId, result.student.id);
 
   if (result.feeInvoiceGenerationJob) {
@@ -639,6 +697,7 @@ export const createStudent = async (req: Request, res: Response) => {
   res.status(201).json({
     ...result.student,
     feeInvoiceGenerationJob: result.feeInvoiceGenerationJob,
+    faceRegistration,
   });
 };
 

@@ -367,6 +367,7 @@ export default function AddStudentPage() {
         height: form.height ? Number(form.height) : undefined,
         weight: form.weight ? Number(form.weight) : undefined,
         photoUrl: form.photoUrl || undefined,
+        facePhotoUrls: form.facePhotoUrls.length ? form.facePhotoUrls : undefined,
         fatherName: form.fatherName || undefined,
         fatherOccupation: form.fatherOccupation || undefined,
         fatherPhone: form.fatherPhone || undefined,
@@ -411,6 +412,11 @@ export default function AddStudentPage() {
     },
     onSuccess: ({ student, parentLogin, parentLoginError }) => {
       notify.success('Student admitted', 'Enrollment was created for the selected session.');
+      if (student.faceRegistration?.success) {
+        notify.success('Face registration complete', `${student.faceRegistration.sampleCount} face sample${student.faceRegistration.sampleCount === 1 ? '' : 's'} registered for AI attendance.`);
+      } else if (student.faceRegistration) {
+        notify.error('Face registration failed', student.faceRegistration.error ?? 'Student was saved, but AI attendance face registration failed.');
+      }
       if (parentLogin) {
         const passwordText = parentLogin.tempPassword ? ` Temporary password: ${parentLogin.tempPassword}` : '';
         notify.success('Parent login created', `Parent login was linked to this student.${passwordText}`);
@@ -936,6 +942,17 @@ export default function AddStudentPage() {
                   onChange={async (event) => {
                     const files = Array.from(event.target.files ?? []);
                     if (!files.length) return;
+                    const remainingSlots = 4 - form.facePhotoUrls.length;
+                    if (remainingSlots <= 0) {
+                      notify.error('Face photo limit reached', 'A student can have a maximum of 4 face photos.');
+                      event.target.value = '';
+                      return;
+                    }
+                    if (files.length > remainingSlots) {
+                      notify.error('Too many face photos', `You can add ${remainingSlots} more face photo${remainingSlots === 1 ? '' : 's'} for this student.`);
+                      event.target.value = '';
+                      return;
+                    }
                     const oversized = files.find((f) => f.size > 3 * 1024 * 1024);
                     if (oversized) { notify.error('Image too large', `"${oversized.name}" exceeds 3 MB.`); return; }
                     try {

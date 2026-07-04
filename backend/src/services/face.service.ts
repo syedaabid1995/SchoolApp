@@ -1,8 +1,9 @@
 import crypto from 'crypto';
+import { Readable } from 'stream';
 import { prisma } from '../config/db';
 import { logger } from '../config/logger';
 import { HttpError } from '../middlewares/error.middleware';
-import { uploadBuffer, storageKeyFromUrl } from './s3.service';
+import { getObjectForKey, uploadBuffer, storageKeyFromUrl } from './s3.service';
 import { buildRuntimeObjectKey } from './runtimeStorage.service';
 import {
   buildClassSectionCollectionId,
@@ -23,6 +24,11 @@ export type FaceImageUpload = {
 
 const MAX_FACE_SAMPLES_PER_STUDENT = 4;
 
+type ExistingFaceProfileForRegistration = {
+  id: string;
+  samples: Array<{ collectionId: string | null; rekognitionFaceId: string | null }>;
+} | null;
+
 const assertSampleCount = (count: number, min = 2) => {
   if (count < min) {
     throw new HttpError(400, min === 1 ? 'At least one face sample is required' : 'At least two face samples are required');
@@ -31,6 +37,32 @@ const assertSampleCount = (count: number, min = 2) => {
     throw new HttpError(400, `A student can have a maximum of ${MAX_FACE_SAMPLES_PER_STUDENT} face samples`);
   }
 };
+
+const objectBodyToBuffer = async (body: unknown) => {
+  if (Buffer.isBuffer(body)) return body;
+  if (body instanceof Uint8Array) return Buffer.from(body);
+  if (typeof body === 'string') return Buffer.from(body);
+  if (body instanceof Readable) {
+    const chunks: Buffer[] = [];
+    for await (const chunk of body) {
+      chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+    }
+    return Buffer.concat(chunks);
+  }
+  if (body && typeof (body as { transformToByteArray?: () => Promise<Uint8Array> }).transformToByteArray === 'function') {
+    return Buffer.from(await (body as { transformToByteArray: () => Promise<Uint8Array> }).transformToByteArray());
+  }
+  if (body && typeof (body as AsyncIterable<Uint8Array>)[Symbol.asyncIterator] === 'function') {
+    const chunks: Buffer[] = [];
+    for await (const chunk of body as AsyncIterable<Uint8Array>) {
+      chunks.push(Buffer.from(chunk));
+    }
+    return Buffer.concat(chunks);
+  }
+  throw new HttpError(422, 'Unable to read face image');
+};
+
+const uniqueImageRefs = (imageRefs: string[]) => [...new Set(imageRefs.map((item) => item.trim()).filter(Boolean))];
 
 const deleteRekognitionFacesBestEffort = async (
   samples: Array<{ collectionId: string | null; rekognitionFaceId: string | null }>,
@@ -48,6 +80,66 @@ const deleteRekognitionFacesBestEffort = async (
     }
   }
 };
+
+const persistIndexedFaceSamples = async (params: {
+  schoolId: string;
+  studentId: string;
+  createdById: string;
+  student: { classId: string | null; sectionId: string | null };
+  indexedSamples: Array<{
+    imageUrl: string;
+    imageKey: string;
+    collectionId: string;
+    rekognitionFaceId: string;
+  }>;
+  existingProfile: ExistingFaceProfileForRegistration;
+  replace: boolean;
+}) =>
+  prisma.$transaction(async (tx) => {
+    if (params.existingProfile && params.replace) {
+      await tx.faceSample.deleteMany({ where: { faceProfileId: params.existingProfile.id } });
+    }
+
+    const currentProfile = params.existingProfile
+      ? await tx.faceProfile.update({
+          where: { id: params.existingProfile.id },
+          data: {
+            status: 'APPROVED',
+            createdById: params.createdById,
+            approvedById: params.createdById,
+            approvedAt: new Date(),
+          },
+        })
+      : await tx.faceProfile.create({
+          data: {
+            schoolId: params.schoolId,
+            studentId: params.studentId,
+            status: 'APPROVED',
+            createdById: params.createdById,
+            approvedById: params.createdById,
+            approvedAt: new Date(),
+          },
+        });
+
+    await tx.faceSample.createMany({
+      data: params.indexedSamples.map((sample) => ({
+        faceProfileId: currentProfile.id,
+        schoolId: params.schoolId,
+        classId: params.student.classId,
+        sectionId: params.student.sectionId,
+        imageUrl: sample.imageUrl,
+        imageKey: sample.imageKey,
+        embedding: [],
+        collectionId: sample.collectionId,
+        rekognitionFaceId: sample.rekognitionFaceId,
+      })),
+    });
+
+    return tx.faceProfile.findUniqueOrThrow({
+      where: { id: currentProfile.id },
+      include: { samples: true },
+    });
+  });
 
 export const createFaceEnrollment = async (params: {
   schoolId: string;
@@ -282,6 +374,94 @@ export const registerStudentFaceImages = async (params: {
         where: { id: currentProfile.id },
         include: { samples: true },
       });
+    });
+
+    if (replace) {
+      await deleteRekognitionFacesBestEffort(existingSamples);
+    }
+
+    return profile;
+  } catch (error) {
+    await deleteRekognitionFacesBestEffort(indexedSamples);
+    throw error;
+  }
+};
+
+export const registerStudentFaceImageRefs = async (params: {
+  schoolId: string;
+  studentId: string;
+  createdById: string;
+  imageRefs: string[];
+  replace?: boolean;
+}) => {
+  const { schoolId, studentId, createdById } = params;
+  const replace = params.replace ?? true;
+  const imageRefs = uniqueImageRefs(params.imageRefs);
+  assertSampleCount(imageRefs.length, 1);
+
+  const student = await prisma.student.findFirst({
+    where: { id: studentId, schoolId, status: 'ENROLLED' },
+    select: { id: true, classId: true, sectionId: true },
+  });
+
+  if (!student) throw new HttpError(404, 'Student not found');
+  if (!student.classId) throw new HttpError(400, 'Student must be assigned to a class before face registration');
+
+  const existingProfile = await prisma.faceProfile.findUnique({
+    where: { studentId },
+    include: { samples: true },
+  });
+  const existingSamples = existingProfile?.samples ?? [];
+
+  if (!replace && existingSamples.length + imageRefs.length > MAX_FACE_SAMPLES_PER_STUDENT) {
+    throw new HttpError(400, `A student can have a maximum of ${MAX_FACE_SAMPLES_PER_STUDENT} face samples`);
+  }
+
+  const collectionId = buildClassSectionCollectionId({
+    schoolId,
+    classId: student.classId,
+    sectionId: student.sectionId,
+  });
+
+  const indexedSamples: Array<{
+    imageUrl: string;
+    imageKey: string;
+    collectionId: string;
+    rekognitionFaceId: string;
+  }> = [];
+
+  try {
+    for (const imageUrl of imageRefs) {
+      const imageKey = storageKeyFromUrl(imageUrl);
+      if (!imageKey) throw new HttpError(400, 'Face image must be uploaded before registration');
+
+      const object = await getObjectForKey({ key: imageKey });
+      if (object.contentType && !object.contentType.startsWith('image/')) {
+        throw new HttpError(400, 'Only image uploads can be registered as face samples');
+      }
+
+      const image = await objectBodyToBuffer(object.body);
+      const indexed = await indexRegisteredStudentFace({
+        collectionId,
+        studentId,
+        image,
+      });
+      indexedSamples.push({
+        imageUrl,
+        imageKey,
+        collectionId: indexed.collectionId,
+        rekognitionFaceId: indexed.faceId,
+      });
+    }
+
+    const profile = await persistIndexedFaceSamples({
+      schoolId,
+      studentId,
+      createdById,
+      student,
+      indexedSamples,
+      existingProfile,
+      replace,
     });
 
     if (replace) {

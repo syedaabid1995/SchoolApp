@@ -174,6 +174,7 @@ export const createStudent = async (payload: {
   height?: number;
   weight?: number;
   photoUrl?: string;
+  facePhotoUrls?: string[];
   fatherName?: string;
   fatherOccupation?: string;
   fatherPhone?: string;
