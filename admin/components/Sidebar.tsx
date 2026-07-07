@@ -131,7 +131,7 @@ const platformSections: NavSection[] = [
     items: [
       { href: '/dashboard/demo-requests', label: 'Demo Requests', icon: 'calendar' },
       { href: '/dashboard/support', label: 'Support Tickets', icon: 'ticket' },
-      { href: '/dashboard/logs', label: 'Audit Logs', icon: 'history' },
+      { href: '/dashboard/audit', label: 'Audit Logs', icon: 'history' },
       { href: '/dashboard/system-health', label: 'System Health', icon: 'monitor' },
     ],
   },

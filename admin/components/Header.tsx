@@ -174,7 +174,7 @@ const superAdminSearchItems: GlobalSearchItem[] = [
   {
     title: 'Audit Logs',
     description: 'Inspect global audit and security events',
-    href: '/dashboard/logs',
+    href: '/dashboard/audit',
     group: 'Security',
     keywords: ['audit', 'logs', 'security logs', 'activity', 'export'],
   },
@@ -254,7 +254,7 @@ const buildSearchHref = (href: string, query: string) => {
   const trimmed = query.trim();
   if (!trimmed) return href;
   if (href === '/dashboard/schools') return `${href}?query=${encodeURIComponent(trimmed)}`;
-  if (['/dashboard/users', '/dashboard/subscriptions', '/dashboard/support', '/dashboard/logs'].includes(href)) {
+  if (['/dashboard/users', '/dashboard/subscriptions', '/dashboard/support', '/dashboard/audit'].includes(href)) {
     return `${href}?search=${encodeURIComponent(trimmed)}`;
   }
   return href;
@@ -369,7 +369,7 @@ export const Header = ({
             {
               title: `Search audit logs for "${globalSearchQuery.trim()}"`,
               description: 'Open Audit Logs with this search applied',
-              href: `/dashboard/logs?search=${encodeURIComponent(globalSearchQuery.trim())}`,
+              href: `/dashboard/audit?search=${encodeURIComponent(globalSearchQuery.trim())}`,
               group: 'Search',
               keywords: [],
             },
