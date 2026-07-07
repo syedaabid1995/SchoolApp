@@ -50,6 +50,33 @@ export const logout = async () => {
   return res.json();
 };
 
+export const stopImpersonation = async () => {
+  const res = await fetch('/api/auth/stop-impersonation', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({}),
+  });
+  const data = await res.json().catch(() => null);
+  if (!res.ok) {
+    throw new Error(data?.error?.message || data?.message || 'Unable to return to super admin.');
+  }
+  return data as Promise<{ success: true; redirectTo: string }>;
+};
+
+export type SessionInfo = {
+  role: string | null;
+  schoolId: string | null;
+  email: string | null;
+  subscriptionRestricted?: boolean;
+  mustChangePassword: boolean;
+  displayName?: string | null;
+  schoolName?: string | null;
+  permissionCodes?: string[];
+  isImpersonating?: boolean;
+  impersonatedByEmail?: string | null;
+  hasDashboardAccess?: boolean;
+};
+
 export const refreshToken = async () => {
   const res = await fetch('/api/auth/refresh', {
     method: 'POST',
@@ -229,15 +256,5 @@ export const getSession = async () => {
       hasDashboardAccess: false,
     };
   }
-  return res.json() as Promise<{
-    role: string | null;
-    schoolId: string | null;
-    email: string | null;
-    subscriptionRestricted?: boolean;
-    mustChangePassword: boolean;
-    displayName?: string | null;
-    schoolName?: string | null;
-    permissionCodes?: string[];
-    hasDashboardAccess?: boolean;
-  }>;
+  return res.json() as Promise<SessionInfo>;
 };

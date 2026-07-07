@@ -226,6 +226,8 @@ export default function DashboardClientLayout({
             resolvedThemeMode={resolvedThemeMode}
             onThemeModeChange={updateThemeMode}
             consoleTitle={platformSettings.consoleName}
+            isImpersonating={session?.isImpersonating}
+            impersonatedByEmail={session?.impersonatedByEmail}
           />
           <main className="min-w-0 flex-1 overflow-y-auto overflow-x-hidden bg-[var(--shell-bg)] p-4 transition-all duration-200 sm:p-6">
             <AccessDeniedPanel />
@@ -264,6 +266,8 @@ export default function DashboardClientLayout({
           resolvedThemeMode={resolvedThemeMode}
           onThemeModeChange={updateThemeMode}
           consoleTitle={platformSettings.consoleName}
+          isImpersonating={session?.isImpersonating}
+          impersonatedByEmail={session?.impersonatedByEmail}
         />
         <main
           className={

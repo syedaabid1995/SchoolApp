@@ -5,6 +5,7 @@ import { HttpError } from './error.middleware';
 import { prisma } from '../config/db';
 import { PermissionCodes as P, type PermissionCode } from '../permissions/permission-manifest';
 import { AuthorizationService } from '../services/authorization.service';
+import { runWithRequestContext } from '../services/requestContext.service';
 
 type PermissionRequirement = PermissionCode | PermissionCode[];
 
@@ -12,6 +13,9 @@ export type AuthContext = {
   userId: string;
   schoolId: string | null;
   role?: string | null;
+  impersonatedByUserId?: string | null;
+  impersonatedByRole?: string | null;
+  impersonatedByEmail?: string | null;
 };
 
 declare global {
@@ -45,6 +49,9 @@ export const authMiddleware = async (req: Request, _res: Response, next: NextFun
         typ?: string;
         role?: string | null;
         subscriptionRestricted?: boolean;
+        impersonatedByUserId?: string | null;
+        impersonatedByRole?: string | null;
+        impersonatedByEmail?: string | null;
       };
   try {
     decoded = jwt.verify(token, env.JWT_SECRET) as JwtPayload | {
@@ -52,6 +59,9 @@ export const authMiddleware = async (req: Request, _res: Response, next: NextFun
       schoolId?: string | null;
       typ?: string;
       role?: string | null;
+      impersonatedByUserId?: string | null;
+      impersonatedByRole?: string | null;
+      impersonatedByEmail?: string | null;
     };
   } catch {
     next(new HttpError(401, 'Invalid token'));
@@ -127,6 +137,9 @@ export const authMiddleware = async (req: Request, _res: Response, next: NextFun
     userId: decoded.sub,
     schoolId,
     role,
+    impersonatedByUserId: decoded.impersonatedByUserId ?? null,
+    impersonatedByRole: decoded.impersonatedByRole ?? null,
+    impersonatedByEmail: decoded.impersonatedByEmail ?? null,
   };
 
   if (schoolId && role && ['SCHOOL_ADMIN', 'TEACHER', 'ACCOUNTANT', 'LIBRARIAN', 'STAFF', 'PARENT', 'STUDENT'].includes(role)) {
@@ -139,7 +152,14 @@ export const authMiddleware = async (req: Request, _res: Response, next: NextFun
     }
   }
 
-  next();
+  runWithRequestContext(
+    {
+      impersonatedByUserId: req.auth.impersonatedByUserId,
+      impersonatedByRole: req.auth.impersonatedByRole,
+      impersonatedByEmail: req.auth.impersonatedByEmail,
+    },
+    () => next(),
+  );
 };
 
 const studentLookupPermissions = [

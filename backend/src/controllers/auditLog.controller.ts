@@ -109,6 +109,7 @@ export const listAuditLogs = async (req: Request, res: Response) => {
     dateTo: payload.dateTo?.toISOString() ?? null,
     page: payload.page,
     limit: payload.limit,
+    excludeSuperAdminOnly: req.auth?.role !== 'SUPER_ADMIN',
   });
   const { value: logs, status } = await rememberCache(
     cacheKeys.auditLogs(queryFingerprint),
@@ -125,6 +126,7 @@ export const listAuditLogs = async (req: Request, res: Response) => {
         dateTo: payload.dateTo,
         page: payload.page,
         limit: payload.limit,
+        excludeSuperAdminOnly: req.auth?.role !== 'SUPER_ADMIN',
       }),
   );
   setCacheHeader(res, status);

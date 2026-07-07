@@ -28,6 +28,7 @@ export async function POST(req: Request, context: { params: Promise<{ schoolId: 
   const { schoolId } = await context.params;
   const store = await cookies();
   const accessToken = store.get('access_token')?.value;
+  const refreshToken = store.get('refresh_token')?.value;
   if (!accessToken) {
     return NextResponse.json({ error: { message: 'Missing authorization token' } }, { status: 401 });
   }
@@ -63,6 +64,10 @@ export async function POST(req: Request, context: { params: Promise<{ schoolId: 
     school: data.school,
     user: data.user,
   });
+  response.cookies.set('super_admin_access_token', accessToken, cookieOptions(60 * 60));
+  if (refreshToken) {
+    response.cookies.set('super_admin_refresh_token', refreshToken, cookieOptions(60 * 60));
+  }
   response.cookies.set('access_token', data.accessToken, cookieOptions(data.accessTokenMaxAge ?? 15 * 60));
   response.cookies.set('refresh_token', data.refreshToken, cookieOptions(data.refreshTokenMaxAge ?? 60 * 60));
   response.cookies.delete('must_change_password');

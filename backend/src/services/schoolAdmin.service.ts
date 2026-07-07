@@ -55,6 +55,9 @@ type AuthTokenPayload = {
   role: string | null;
   email?: string | null;
   subscriptionRestricted?: boolean;
+  impersonatedByUserId?: string | null;
+  impersonatedByRole?: string | null;
+  impersonatedByEmail?: string | null;
   jti?: string;
   typ: 'access' | 'refresh';
 };
@@ -311,12 +314,22 @@ export const createSchoolImpersonationSession = async (req: Request, schoolId: s
     throw new HttpError(404, 'No active school admin found for this school');
   }
 
+  const impersonator = req.auth?.userId
+    ? await prisma.user.findUnique({
+        where: { id: req.auth.userId },
+        select: { id: true, email: true },
+      })
+    : null;
+
   const payloadBase = {
     sub: admin.id,
     schoolId: admin.schoolId ?? null,
     role: 'SCHOOL_ADMIN',
     email: admin.email,
     subscriptionRestricted: false,
+    impersonatedByUserId: impersonator?.id ?? req.auth?.userId ?? null,
+    impersonatedByRole: req.auth?.role ?? 'SUPER_ADMIN',
+    impersonatedByEmail: impersonator?.email ?? null,
   };
   const accessToken = signToken({ ...payloadBase, typ: 'access' }, IMPERSONATION_ACCESS_TOKEN_TTL);
   const refreshTokenExpiresAt = new Date(Date.now() + IMPERSONATION_REFRESH_TOKEN_TTL_SECONDS * 1000);

@@ -265,6 +265,7 @@ export const impersonateSchoolApi = async (req: Request, res: Response) => {
       schoolCode: result.school.code,
       impersonatedUserId: result.user.id,
       impersonatedUserEmail: result.user.email,
+      visibleToSuperAdminOnly: true,
     },
   });
   res.status(200).json(result);

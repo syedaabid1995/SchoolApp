@@ -100,13 +100,24 @@ export const getRecentActivitiesApi = async (req: Request, res: Response) => {
     return;
   }
   const schoolId = resolveSchoolId(req, req.query.schoolId as string | undefined);
-  const queryFingerprint = buildQueryFingerprint({ schoolId, take: 10 });
+  const excludeSuperAdminOnly = req.auth?.role !== 'SUPER_ADMIN';
+  const queryFingerprint = buildQueryFingerprint({ schoolId, take: 10, excludeSuperAdminOnly });
   const { value: activities, status } = await rememberCache(
     cacheKeys.auditLogs(queryFingerprint),
     cacheTTL.DASHBOARD,
     () =>
       prisma.auditLog.findMany({
-        where: { schoolId },
+        where: {
+          schoolId,
+          ...(excludeSuperAdminOnly
+            ? {
+                NOT: [
+                  { action: 'SCHOOL_ADMIN_IMPERSONATED' },
+                  { afterState: { path: ['visibleToSuperAdminOnly'], equals: true } },
+                ],
+              }
+            : {}),
+        },
         orderBy: { createdAt: 'desc' },
         take: 10,
       }),

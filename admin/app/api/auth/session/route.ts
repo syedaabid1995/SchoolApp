@@ -13,6 +13,7 @@ const decodePayload = (token: string) => {
 export async function GET() {
   const store = await cookies();
   const token = store.get('access_token')?.value;
+  const hasSuperAdminReturnSession = Boolean(store.get('super_admin_access_token')?.value);
   const mustChangePassword = store.get('must_change_password')?.value === '1';
   if (!token) {
     return NextResponse.json({ role: null, schoolId: null, mustChangePassword: false, permissionCodes: [] });
@@ -83,6 +84,8 @@ export async function GET() {
       mustChangePassword,
       displayName,
       permissionCodes,
+      isImpersonating: Boolean(payload?.impersonatedByUserId && hasSuperAdminReturnSession),
+      impersonatedByEmail: (payload?.impersonatedByEmail as string | undefined) ?? null,
       hasDashboardAccess: Boolean(resolvedRole && (resolvedRole === 'SUPER_ADMIN' || permissionCodes.length > 0)),
     });
   } catch {

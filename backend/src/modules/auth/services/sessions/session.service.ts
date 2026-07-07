@@ -77,6 +77,9 @@ export type AuthTokenPayload = {
   role: string | null;
   email?: string | null;
   subscriptionRestricted?: boolean;
+  impersonatedByUserId?: string | null;
+  impersonatedByRole?: string | null;
+  impersonatedByEmail?: string | null;
   jti?: string;
   typ: 'access' | 'refresh';
 };
@@ -362,6 +365,9 @@ export const refreshToken = async (req: Request, res: Response) => {
     role: roleName,
     email: user.email,
     subscriptionRestricted: schoolAccessState === 'PAYMENT_RESTRICTED',
+    impersonatedByUserId: decoded.impersonatedByUserId ?? null,
+    impersonatedByRole: decoded.impersonatedByRole ?? null,
+    impersonatedByEmail: decoded.impersonatedByEmail ?? null,
   };
 
   const accessToken = signToken({ ...payloadBase, typ: 'access' }, ACCESS_TOKEN_TTL);

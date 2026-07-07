@@ -4,7 +4,7 @@ import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useQuery } from '@tanstack/react-query';
-import { logout } from '../services/auth.service';
+import { logout, stopImpersonation } from '../services/auth.service';
 import { listNotificationSummary } from '../services/notificationSummary.service';
 
 export type DashboardThemeMode = 'light' | 'dark' | 'system';
@@ -269,6 +269,8 @@ export const Header = ({
   resolvedThemeMode,
   onThemeModeChange,
   consoleTitle,
+  isImpersonating,
+  impersonatedByEmail,
 }: {
   role: string | null;
   email: string | null;
@@ -279,6 +281,8 @@ export const Header = ({
   resolvedThemeMode: DashboardResolvedThemeMode;
   onThemeModeChange: (mode: DashboardThemeMode) => void;
   consoleTitle?: string;
+  isImpersonating?: boolean;
+  impersonatedByEmail?: string | null;
 }) => {
   const router = useRouter();
   const [showNotifications, setShowNotifications] = useState(false);
@@ -378,6 +382,11 @@ export const Header = ({
   const handleLogout = async () => {
     await logout();
     router.replace('/login');
+  };
+
+  const handleStopImpersonation = async () => {
+    const result = await stopImpersonation();
+    window.location.assign(result.redirectTo);
   };
 
   const runGlobalSearch = (href: string) => {
@@ -480,6 +489,21 @@ export const Header = ({
         ) : null}
 
         <div className="flex shrink-0 items-center gap-2">
+          {isImpersonating ? (
+            <button
+              type="button"
+              onClick={handleStopImpersonation}
+              className="inline-flex h-10 items-center gap-2 rounded-xl border border-indigo-200 bg-indigo-50 px-3 text-xs font-bold text-indigo-700 hover:bg-indigo-100"
+              title={impersonatedByEmail ? `Return to ${impersonatedByEmail}` : 'Return to Super Admin'}
+            >
+              <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
+                <path d="M19 12H5" />
+                <path d="m12 19-7-7 7-7" />
+              </svg>
+              <span className="hidden sm:inline">Back to Super Admin</span>
+              <span className="sm:hidden">Back</span>
+            </button>
+          ) : null}
           {isSuperAdmin ? (
             <button
               type="button"

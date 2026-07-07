@@ -1,5 +1,6 @@
 import { prisma } from '../config/db';
 import type { Prisma } from '@prisma/client';
+import { getRequestContext } from './requestContext.service';
 
 export type AuditCreateInput = {
   schoolId?: string | null;
@@ -12,6 +13,23 @@ export type AuditCreateInput = {
   afterState?: Prisma.InputJsonValue | null;
 };
 
+const isJsonRecord = (value: Prisma.InputJsonValue | null | undefined): value is Prisma.InputJsonObject =>
+  Boolean(value && typeof value === 'object' && !Array.isArray(value));
+
+const withRequestContextMetadata = (afterState?: Prisma.InputJsonValue | null) => {
+  const context = getRequestContext();
+  if (!context.impersonatedByUserId) return afterState ?? null;
+
+  const base = isJsonRecord(afterState) ? afterState : afterState === null || afterState === undefined ? {} : { value: afterState };
+  return {
+    ...base,
+    impersonatedByUserId: context.impersonatedByUserId,
+    impersonatedByRole: context.impersonatedByRole ?? 'SUPER_ADMIN',
+    impersonatedByEmail: context.impersonatedByEmail ?? null,
+    visibleToSuperAdminOnly: true,
+  } satisfies Prisma.InputJsonObject;
+};
+
 export const createAuditLog = async (payload: AuditCreateInput) => {
   return prisma.auditLog.create({
     data: {
@@ -22,7 +40,7 @@ export const createAuditLog = async (payload: AuditCreateInput) => {
       entityId: payload.entityId,
       action: payload.action,
       beforeState: payload.beforeState ?? null,
-      afterState: payload.afterState ?? null,
+      afterState: withRequestContextMetadata(payload.afterState),
     },
   });
 };
@@ -38,8 +56,9 @@ export const queryAuditLogs = async (params: {
   dateTo?: Date;
   page: number;
   limit: number;
+  excludeSuperAdminOnly?: boolean;
 }) => {
-  const where = {
+  const where: Prisma.AuditLogWhereInput = {
     ...(params.schoolId ? { schoolId: params.schoolId } : {}),
     ...(params.actorId ? { actorId: params.actorId } : {}),
     ...(params.actorRole ? { actorRole: params.actorRole } : {}),
@@ -52,6 +71,14 @@ export const queryAuditLogs = async (params: {
             ...(params.dateFrom ? { gte: params.dateFrom } : {}),
             ...(params.dateTo ? { lte: params.dateTo } : {}),
           },
+        }
+      : {}),
+    ...(params.excludeSuperAdminOnly
+      ? {
+          NOT: [
+            { action: 'SCHOOL_ADMIN_IMPERSONATED' },
+            { afterState: { path: ['visibleToSuperAdminOnly'], equals: true } },
+          ],
         }
       : {}),
   };
