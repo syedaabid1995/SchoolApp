@@ -12,6 +12,7 @@ import {
   restoreSchoolApi,
   createSchoolAdminApi,
   setSchoolAdminStatusApi,
+  impersonateSchoolApi,
 } from '../controllers/schoolAdmin.controller';
 
 export const schoolAdminRouter = Router();
@@ -26,6 +27,7 @@ schoolAdminRouter.patch('/:id', updateSchoolApi);
 schoolAdminRouter.patch('/:id/admins/:adminId/status', setSchoolAdminStatusApi);
 schoolAdminRouter.post('/:id/activate', activateSchoolApi);
 schoolAdminRouter.post('/:id/suspend', suspendSchoolApi);
+schoolAdminRouter.post('/:id/impersonate', impersonateSchoolApi);
 schoolAdminRouter.post('/:id/admins', createSchoolAdminApi);
 schoolAdminRouter.delete('/:id', deleteSchoolApi);
 schoolAdminRouter.post('/:id/restore', restoreSchoolApi);

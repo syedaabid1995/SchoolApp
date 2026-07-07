@@ -1,9 +1,13 @@
 import crypto from 'crypto';
+import type { Request } from 'express';
+import jwt, { type Secret, type SignOptions } from 'jsonwebtoken';
 import { Prisma, type SubscriptionPlan } from '@prisma/client';
 import { prisma } from '../config/db';
+import { env } from '../config/env';
 import { HttpError } from '../middlewares/error.middleware';
 import { hashPassword } from '../utils/password';
 import { buildSchoolDomainUrl, normalizeSchoolSubdomain } from '../utils/schoolDomain';
+import { createRefreshSession } from './refreshSession.service';
 import { upsertSubscription } from './subscription.service';
 
 export type SchoolCreateInput = {
@@ -40,6 +44,23 @@ type BankDetailsInput = {
   branchName?: string | null;
   panNumber?: string | null;
 };
+
+const IMPERSONATION_ACCESS_TOKEN_TTL = '15m';
+const IMPERSONATION_REFRESH_TOKEN_TTL_SECONDS = 60 * 60;
+const jwtSecret: Secret = env.JWT_SECRET;
+
+type AuthTokenPayload = {
+  sub: string;
+  schoolId: string | null;
+  role: string | null;
+  email?: string | null;
+  subscriptionRestricted?: boolean;
+  jti?: string;
+  typ: 'access' | 'refresh';
+};
+
+const signToken = (payload: AuthTokenPayload, expiresIn: SignOptions['expiresIn']) =>
+  jwt.sign(payload, jwtSecret, { expiresIn });
 
 const hasBankDetails = (details?: BankDetailsInput) =>
   Boolean(
@@ -261,6 +282,82 @@ export const setSchoolAdminStatus = async (
     data: { status },
     select: { id: true, email: true, status: true, createdAt: true },
   });
+};
+
+export const createSchoolImpersonationSession = async (req: Request, schoolId: string) => {
+  const school = await prisma.school.findFirst({
+    where: { id: schoolId, deletedAt: null },
+    select: { id: true, name: true, code: true, subdomain: true, domainUrl: true, status: true, statusReason: true },
+  });
+  if (!school) {
+    throw new HttpError(404, 'School not found');
+  }
+  if (school.status !== 'ACTIVE') {
+    throw new HttpError(409, 'Only active schools can be impersonated');
+  }
+
+  const admin = await prisma.user.findFirst({
+    where: {
+      schoolId,
+      status: 'ACTIVE',
+      roles: {
+        some: { role: { name: 'SCHOOL_ADMIN' } },
+      },
+    },
+    orderBy: { createdAt: 'asc' },
+    select: { id: true, email: true, schoolId: true },
+  });
+  if (!admin) {
+    throw new HttpError(404, 'No active school admin found for this school');
+  }
+
+  const payloadBase = {
+    sub: admin.id,
+    schoolId: admin.schoolId ?? null,
+    role: 'SCHOOL_ADMIN',
+    email: admin.email,
+    subscriptionRestricted: false,
+  };
+  const accessToken = signToken({ ...payloadBase, typ: 'access' }, IMPERSONATION_ACCESS_TOKEN_TTL);
+  const refreshTokenExpiresAt = new Date(Date.now() + IMPERSONATION_REFRESH_TOKEN_TTL_SECONDS * 1000);
+  const refreshToken = signToken(
+    { ...payloadBase, jti: crypto.randomUUID(), typ: 'refresh' },
+    IMPERSONATION_REFRESH_TOKEN_TTL_SECONDS,
+  );
+
+  await createRefreshSession({
+    req,
+    userId: admin.id,
+    schoolId: admin.schoolId ?? null,
+    refreshToken,
+    expiresAt: refreshTokenExpiresAt,
+  });
+
+  const targetBaseUrl = school.domainUrl || (school.subdomain ? buildSchoolDomainUrl(school.subdomain) : null);
+  if (!targetBaseUrl) {
+    throw new HttpError(409, 'School domain is not configured');
+  }
+
+  return {
+    accessToken,
+    refreshToken,
+    accessTokenMaxAge: 15 * 60,
+    refreshTokenMaxAge: IMPERSONATION_REFRESH_TOKEN_TTL_SECONDS,
+    refreshTokenExpiresAt: refreshTokenExpiresAt.toISOString(),
+    targetUrl: `${targetBaseUrl.replace(/\/+$/, '')}/dashboard`,
+    school: {
+      id: school.id,
+      name: school.name,
+      code: school.code,
+      domainUrl: targetBaseUrl,
+    },
+    user: {
+      id: admin.id,
+      email: admin.email,
+      role: 'SCHOOL_ADMIN',
+      schoolId: admin.schoolId,
+    },
+  };
 };
 
 export const createSchool = async (payload: SchoolCreateInput) => {

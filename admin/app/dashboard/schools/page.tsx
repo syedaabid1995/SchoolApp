@@ -11,6 +11,7 @@ import {
   suspendSchool,
   deleteSchool,
   restoreSchool,
+  impersonateSchool,
   type School,
 } from '../../../services/school.service';
 import { listSubscriptionPlans, upsertSubscription } from '../../../services/subscription.service';
@@ -146,6 +147,17 @@ export default function SchoolsPage() {
     },
   });
 
+  const impersonateMutation = useMutation({
+    mutationFn: impersonateSchool,
+    onSuccess: (result) => {
+      window.location.assign(result.targetUrl);
+    },
+    onError: (error: any) => {
+      const message = error?.response?.data?.error?.message || error?.message || 'Unable to impersonate school admin';
+      notify.error('Impersonation failed', message);
+    },
+  });
+
   const planUpdateMutation = useMutation({
     mutationFn: async (payload: { schoolId: string; planId: string }) => {
       const plan = plans?.find((item) => item.id === payload.planId);
@@ -216,7 +228,9 @@ export default function SchoolsPage() {
     return Array.from({ length: end - start + 1 }, (_, index) => start + index);
   }, [page, totalPages]);
   const loaderLabel =
-    toolbarAction === 'export'
+    impersonateMutation.isPending
+      ? 'Preparing school impersonation...'
+      : toolbarAction === 'export'
       ? 'Preparing school export...'
       : toolbarAction === 'refresh'
         ? 'Refreshing schools...'
@@ -224,6 +238,7 @@ export default function SchoolsPage() {
   const isBusy =
     isLoading ||
     actionMutation.isPending ||
+    impersonateMutation.isPending ||
     planUpdateMutation.isPending ||
     testExpiryMutation.isPending ||
     toolbarAction === 'refresh' ||
@@ -708,6 +723,18 @@ export default function SchoolsPage() {
                           >
                             Review
                           </Link>
+                          <button
+                            type="button"
+                            className="inline-flex items-center gap-1.5 rounded-md border border-indigo-300 bg-indigo-50 px-3 py-1.5 text-xs font-medium text-indigo-700 hover:bg-indigo-100 disabled:cursor-not-allowed disabled:opacity-50"
+                            disabled={Boolean(school.deletedAt) || school.status !== 'ACTIVE' || impersonateMutation.isPending}
+                            title={school.status !== 'ACTIVE' ? 'Only active schools can be impersonated' : 'Impersonate school admin'}
+                            onClick={() => impersonateMutation.mutate(school.id)}
+                          >
+                            <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 7a4 4 0 11-7.9 1M14 14.5V17l2 1M21 17a5 5 0 11-10 0 5 5 0 0110 0ZM5 21a7 7 0 016.1-6.9" />
+                            </svg>
+                            Impersonate
+                          </button>
                           {school.deletedAt ? (
                             <button
                               className="inline-flex items-center gap-1.5 rounded-md border border-emerald-300 bg-emerald-50 px-3 py-1.5 text-xs font-medium text-emerald-700 hover:bg-emerald-100"

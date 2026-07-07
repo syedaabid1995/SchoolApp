@@ -110,6 +110,27 @@ export const restoreSchool = async (id: string) => {
   return data;
 };
 
+export const impersonateSchool = async (id: string) => {
+  const res = await fetch(`/api/schools/${id}/impersonate`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({}),
+  });
+  const data = await res.json().catch(() => null);
+  if (!res.ok) {
+    const message =
+      data?.error?.message ||
+      data?.message ||
+      'Unable to impersonate school admin';
+    throw new Error(message);
+  }
+  return data as Promise<{
+    targetUrl: string;
+    school: { id: string; name: string; code: string; domainUrl: string };
+    user: { id: string; email: string; role: string; schoolId: string };
+  }>;
+};
+
 export const createSchoolAdmin = async (schoolId: string, adminEmail: string) => {
   const { data } = await api.post<{
     adminUser: SchoolAdminUser;

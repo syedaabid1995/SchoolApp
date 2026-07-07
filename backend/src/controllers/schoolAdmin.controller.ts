@@ -10,6 +10,7 @@ import {
   setSchoolStatus,
   softDeleteSchool,
   restoreSchool,
+  createSchoolImpersonationSession,
 } from '../services/schoolAdmin.service';
 import { logAudit } from '../utils/audit';
 import { buildQueryFingerprint, cacheKeys } from '../services/cache/cache.keys';
@@ -249,4 +250,22 @@ export const setSchoolAdminStatusApi = async (req: Request, res: Response) => {
     afterState: { status: updated.status },
   });
   res.status(200).json(updated);
+};
+
+export const impersonateSchoolApi = async (req: Request, res: Response) => {
+  const result = await createSchoolImpersonationSession(req, req.params.id);
+  await logAudit(req, {
+    schoolId: result.school.id,
+    entityType: 'USER',
+    entityId: result.user.id,
+    action: 'SCHOOL_ADMIN_IMPERSONATED',
+    afterState: {
+      schoolId: result.school.id,
+      schoolName: result.school.name,
+      schoolCode: result.school.code,
+      impersonatedUserId: result.user.id,
+      impersonatedUserEmail: result.user.email,
+    },
+  });
+  res.status(200).json(result);
 };
