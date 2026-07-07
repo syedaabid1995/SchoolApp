@@ -1,5 +1,6 @@
 import Link from 'next/link';
 import type { CSSProperties, ReactNode } from 'react';
+import { AppIcon, type AppIconName } from '../AppIcon';
 
 type Tone = 'blue' | 'emerald' | 'amber' | 'violet' | 'rose' | 'slate';
 
@@ -93,7 +94,7 @@ export function MetricCard({
   label: string;
   value: ReactNode;
   helper?: string;
-  icon: string;
+  icon: AppIconName;
   tone?: Tone;
   meta?: string;
 }) {
@@ -101,8 +102,8 @@ export function MetricCard({
   return (
     <article className="rounded-xl border border-[var(--shell-border)] bg-[var(--shell-card)] p-4 shadow-sm">
       <div className="flex items-start justify-between gap-3">
-        <span className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-lg text-xs font-bold ${toneClasses.icon}`}>
-          {icon}
+        <span className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-lg ${toneClasses.icon}`}>
+          <AppIcon name={icon} className="h-5 w-5" />
         </span>
         {meta ? (
           <span className={`rounded-full px-2 py-1 text-[11px] font-bold ${toneClasses.soft} ${toneClasses.text} ring-1 ${toneClasses.ring}`}>
@@ -152,7 +153,7 @@ export function QuickActionTile({
   href: string;
   title: string;
   description: string;
-  icon: string;
+  icon: AppIconName;
   tone?: Tone;
 }) {
   const toneClasses = toneClassMap[tone];
@@ -162,8 +163,8 @@ export function QuickActionTile({
       prefetch={false}
       className="group flex min-h-24 items-center gap-3 rounded-xl border border-[var(--shell-border)] bg-[var(--shell-card)] p-4 shadow-sm transition hover:-translate-y-0.5 hover:border-blue-200 hover:shadow-md"
     >
-      <span className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-lg text-xs font-bold ${toneClasses.icon}`}>
-        {icon}
+      <span className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-lg ${toneClasses.icon}`}>
+        <AppIcon name={icon} className="h-5 w-5" />
       </span>
       <span className="min-w-0">
         <span className="block font-bold text-[var(--shell-text)] group-hover:text-blue-700">{title}</span>

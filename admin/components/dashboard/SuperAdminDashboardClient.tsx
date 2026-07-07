@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import Button from '../Button';
+import { AppIcon, type AppIconName } from '../AppIcon';
 import {
   DashboardRange,
   PlatformStatusValue,
@@ -143,7 +144,7 @@ type KpiCardProps = {
   label: string;
   value: string;
   helper: string;
-  icon: string;
+  icon: AppIconName;
   tone: string;
   isLoading: boolean;
 };
@@ -160,8 +161,8 @@ function KpiCard({ label, value, helper, icon, tone, isLoading }: KpiCardProps) 
             <p className="mt-2 text-2xl font-bold tracking-tight text-slate-950">{value}</p>
           )}
         </div>
-        <div className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-sm font-bold ring-1 ${cardToneClass(tone)}`}>
-          {icon}
+        <div className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl ring-1 ${cardToneClass(tone)}`}>
+          <AppIcon name={icon} className="h-5 w-5" />
         </div>
       </div>
       <p className="mt-3 text-xs leading-5 text-slate-500">{helper}</p>
@@ -497,70 +498,70 @@ export default function SuperAdminDashboardClient() {
         label: 'Total Schools',
         value: formatNumber(summary?.schools.total),
         helper: 'All schools registered on the platform.',
-        icon: 'SC',
+        icon: 'school' as const,
         tone: 'blue',
       },
       {
         label: 'Active Schools',
         value: formatNumber(summary?.schools.active),
         helper: 'Schools currently marked active.',
-        icon: 'AC',
+        icon: 'checkCircle' as const,
         tone: 'green',
       },
       {
         label: 'Trial Schools',
         value: formatNumber(summary?.schools.trial),
         helper: 'Trial lifecycle is reported when available.',
-        icon: 'TR',
+        icon: 'clock' as const,
         tone: 'amber',
       },
       {
         label: 'Suspended Schools',
         value: formatNumber(summary?.schools.suspended),
         helper: 'Schools blocked from normal access.',
-        icon: 'SU',
+        icon: 'ban' as const,
         tone: 'red',
       },
       {
         label: 'Total Users',
         value: formatNumber(summary?.users.total),
         helper: 'All user accounts across tenants.',
-        icon: 'US',
+        icon: 'users' as const,
         tone: 'violet',
       },
       {
         label: 'Active Subscriptions',
         value: formatNumber(summary?.subscriptions.activeSubscriptions),
         helper: 'Subscriptions with active status.',
-        icon: 'PL',
+        icon: 'refresh' as const,
         tone: 'green',
       },
       {
         label: 'Open Support Tickets',
         value: formatNumber(summary?.support.openTickets),
         helper: 'Open platform support requests.',
-        icon: 'SP',
+        icon: 'ticket' as const,
         tone: 'amber',
       },
       {
         label: 'Failed Logins Today',
         value: formatNumber(summary?.security.failedLoginsToday),
         helper: 'Failed login audit events since midnight.',
-        icon: 'FL',
+        icon: 'warning' as const,
         tone: summary?.security.failedLoginsToday ? 'red' : 'slate',
       },
       {
         label: 'Active Sessions',
         value: formatNumber(summary?.security.activeSessions),
         helper: 'Refresh sessions that are not revoked.',
-        icon: 'SE',
+        icon: 'monitor' as const,
         tone: 'blue',
       },
       {
         label: 'Pending Compliance',
         value: formatNumber(summary?.system.pendingComplianceRequests),
         helper: 'Pending data export or deletion requests.',
-        icon: 'CP',
+        icon: 'scale' as const,
         tone: 'red',
       },
     ],

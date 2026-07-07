@@ -5,12 +5,13 @@ import { usePathname, useSearchParams } from 'next/navigation';
 import { useContext, useEffect, useMemo, useState } from 'react';
 import { getRequiredPermissionForPath } from '../config/employee-permissions';
 import { isSuperAdmin } from '../utils/roles';
+import { AppIcon, type AppIconName } from './AppIcon';
 import { ThemeContext } from './ThemeProvider';
 
 type NavItem = {
   href: string;
   label: string;
-  icon?: string;
+  icon?: AppIconName;
   permissionPath?: string;
 };
 
@@ -20,108 +21,10 @@ type NavSection = {
   items: NavItem[];
 };
 
-type IconName =
-  | 'activity'
-  | 'backup'
-  | 'book'
-  | 'brand'
-  | 'briefcase'
-  | 'building'
-  | 'calendar'
-  | 'card'
-  | 'chart'
-  | 'check'
-  | 'chevron'
-  | 'clipboard'
-  | 'close'
-  | 'file'
-  | 'grid'
-  | 'id'
-  | 'lock'
-  | 'message'
-  | 'palette'
-  | 'portal'
-  | 'scale'
-  | 'settings'
-  | 'shield'
-  | 'support'
-  | 'transfer'
-  | 'users';
-
-const Icon = ({ name, className = 'h-4 w-4' }: { name: IconName; className?: string }) => {
-  const common = {
-    className,
-    viewBox: '0 0 24 24',
-    fill: 'none',
-    stroke: 'currentColor',
-    strokeWidth: 1.9,
-    strokeLinecap: 'round' as const,
-    strokeLinejoin: 'round' as const,
-    'aria-hidden': true,
-  };
-
-  switch (name) {
-    case 'activity':
-      return <svg {...common}><path d="M4 13h4l2-7 4 12 2-5h4" /></svg>;
-    case 'backup':
-      return <svg {...common}><path d="M7 19h10a4 4 0 0 0 .6-7.95A6 6 0 0 0 6 9.5 4.5 4.5 0 0 0 7 19Z" /><path d="M12 13v4" /><path d="m9.5 15.5 2.5 2.5 2.5-2.5" /></svg>;
-    case 'book':
-      return <svg {...common}><path d="M5 4.5h10a3 3 0 0 1 3 3v12H8a3 3 0 0 0-3 3v-18Z" /><path d="M5 18.5A3 3 0 0 1 8 16h10" /></svg>;
-    case 'brand':
-      return <svg {...common}><path d="M12 3 4.5 7v10L12 21l7.5-4V7L12 3Z" /><path d="M12 8v8" /><path d="m8.5 10 3.5-2 3.5 2" /></svg>;
-    case 'briefcase':
-      return <svg {...common}><path d="M9 7V5.5A1.5 1.5 0 0 1 10.5 4h3A1.5 1.5 0 0 1 15 5.5V7" /><path d="M4 8.5A1.5 1.5 0 0 1 5.5 7h13A1.5 1.5 0 0 1 20 8.5v8A2.5 2.5 0 0 1 17.5 19h-11A2.5 2.5 0 0 1 4 16.5v-8Z" /><path d="M9 12h6" /></svg>;
-    case 'building':
-      return <svg {...common}><path d="M5 21V5a2 2 0 0 1 2-2h7a2 2 0 0 1 2 2v16" /><path d="M3 21h18" /><path d="M9 7h3" /><path d="M9 11h3" /><path d="M9 15h3" /></svg>;
-    case 'calendar':
-      return <svg {...common}><path d="M7 3v3" /><path d="M17 3v3" /><path d="M4 8h16" /><path d="M5.5 5h13A1.5 1.5 0 0 1 20 6.5v12A1.5 1.5 0 0 1 18.5 20h-13A1.5 1.5 0 0 1 4 18.5v-12A1.5 1.5 0 0 1 5.5 5Z" /></svg>;
-    case 'card':
-      return <svg {...common}><path d="M4 7.5A2.5 2.5 0 0 1 6.5 5h11A2.5 2.5 0 0 1 20 7.5v9a2.5 2.5 0 0 1-2.5 2.5h-11A2.5 2.5 0 0 1 4 16.5v-9Z" /><path d="M4 10h16" /><path d="M7 15h4" /></svg>;
-    case 'chart':
-      return <svg {...common}><path d="M5 19V5" /><path d="M5 19h14" /><path d="m8 14 3-3 3 2 4-6" /></svg>;
-    case 'check':
-      return <svg {...common}><path d="m5 12 4 4L19 6" /></svg>;
-    case 'chevron':
-      return <svg {...common}><path d="m9 6 6 6-6 6" /></svg>;
-    case 'clipboard':
-      return <svg {...common}><path d="M9 5h6" /><path d="M9 3.5h6A1.5 1.5 0 0 1 16.5 5v1A1.5 1.5 0 0 1 15 7.5H9A1.5 1.5 0 0 1 7.5 6V5A1.5 1.5 0 0 1 9 3.5Z" /><path d="M7.5 5H6a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-1.5" /></svg>;
-    case 'close':
-      return <svg {...common}><path d="M6 6l12 12" /><path d="M18 6 6 18" /></svg>;
-    case 'file':
-      return <svg {...common}><path d="M7 3.5h7l4 4V19a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V5.5a2 2 0 0 1 2-2Z" /><path d="M14 3.5V8h4" /><path d="M8 13h8" /><path d="M8 17h5" /></svg>;
-    case 'grid':
-      return <svg {...common}><path d="M4 4h7v7H4z" /><path d="M13 4h7v7h-7z" /><path d="M4 13h7v7H4z" /><path d="M13 13h7v7h-7z" /></svg>;
-    case 'id':
-      return <svg {...common}><path d="M5.5 6h13A1.5 1.5 0 0 1 20 7.5v9A1.5 1.5 0 0 1 18.5 18h-13A1.5 1.5 0 0 1 4 16.5v-9A1.5 1.5 0 0 1 5.5 6Z" /><path d="M8 10h4" /><path d="M8 14h3" /><path d="M15.5 14a2 2 0 1 0 0-4 2 2 0 0 0 0 4Z" /></svg>;
-    case 'lock':
-      return <svg {...common}><path d="M7 10V8a5 5 0 0 1 10 0v2" /><path d="M6.5 10h11A1.5 1.5 0 0 1 19 11.5v7A1.5 1.5 0 0 1 17.5 20h-11A1.5 1.5 0 0 1 5 18.5v-7A1.5 1.5 0 0 1 6.5 10Z" /></svg>;
-    case 'message':
-      return <svg {...common}><path d="M5 5.5h14v9H8l-3 3v-12Z" /><path d="M8 9h8" /><path d="M8 12h5" /></svg>;
-    case 'palette':
-      return <svg {...common}><path d="M12 4a8 8 0 0 0 0 16h1.2a1.8 1.8 0 0 0 1.2-3.15 1.8 1.8 0 0 1 1.2-3.15H17a3 3 0 0 0 3-3A6.7 6.7 0 0 0 12 4Z" /><path d="M7.8 11h.1" /><path d="M10.3 8h.1" /><path d="M14 8h.1" /></svg>;
-    case 'portal':
-      return <svg {...common}><path d="M4 5.5A1.5 1.5 0 0 1 5.5 4h13A1.5 1.5 0 0 1 20 5.5v13a1.5 1.5 0 0 1-1.5 1.5h-13A1.5 1.5 0 0 1 4 18.5v-13Z" /><path d="M9 12h6" /><path d="m13 9 3 3-3 3" /></svg>;
-    case 'scale':
-      return <svg {...common}><path d="M12 3v18" /><path d="M6 6h12" /><path d="m6 6-3 7h6L6 6Z" /><path d="m18 6-3 7h6l-3-7Z" /></svg>;
-    case 'settings':
-      return <svg {...common}><path d="M12 15.5a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7Z" /><path d="M19 12a7 7 0 0 0-.1-1.2l2-1.5-2-3.4-2.4 1a7 7 0 0 0-2-1.2L14.2 3h-4.4l-.3 2.7a7 7 0 0 0-2 1.2l-2.4-1-2 3.4 2 1.5A7 7 0 0 0 5 12c0 .4 0 .8.1 1.2l-2 1.5 2 3.4 2.4-1a7 7 0 0 0 2 1.2l.3 2.7h4.4l.3-2.7a7 7 0 0 0 2-1.2l2.4 1 2-3.4-2-1.5c.1-.4.1-.8.1-1.2Z" /></svg>;
-    case 'shield':
-      return <svg {...common}><path d="M12 3.5 5.5 6v5.5c0 4.1 2.6 7.5 6.5 9 3.9-1.5 6.5-4.9 6.5-9V6L12 3.5Z" /><path d="m9 12 2 2 4-5" /></svg>;
-    case 'support':
-      return <svg {...common}><path d="M5 12a7 7 0 0 1 14 0" /><path d="M5 12v3a2 2 0 0 0 2 2h1v-6H7a2 2 0 0 0-2 2Z" /><path d="M19 12v3a2 2 0 0 1-2 2h-1v-6h1a2 2 0 0 1 2 2Z" /><path d="M12 19h3" /></svg>;
-    case 'transfer':
-      return <svg {...common}><path d="M7 7h12" /><path d="m16 4 3 3-3 3" /><path d="M17 17H5" /><path d="m8 14-3 3 3 3" /></svg>;
-    case 'users':
-      return <svg {...common}><path d="M9 11a3 3 0 1 0 0-6 3 3 0 0 0 0 6Z" /><path d="M15.5 10a2.5 2.5 0 1 0 0-5" /><path d="M4 19a5 5 0 0 1 10 0" /><path d="M14 17.5a4 4 0 0 1 6 1.5" /></svg>;
-    default:
-      return <svg {...common}><path d="M4 4h16v16H4z" /></svg>;
-  }
-};
-
-const iconForSection = (label: string): IconName => {
+const iconForSection = (label: string): AppIconName => {
   const key = label.toLowerCase();
-  if (key.includes('overview')) return 'grid';
-  if (key === 'dashboard') return 'grid';
+  if (key.includes('overview')) return 'layoutDashboard';
+  if (key === 'dashboard') return 'layoutDashboard';
   if (key.includes('admin')) return 'briefcase';
   if (key.includes('management')) return 'briefcase';
   if (key.includes('system')) return 'shield';
@@ -137,27 +40,31 @@ const iconForSection = (label: string): IconName => {
   if (key.includes('library') || key.includes('homework')) return 'book';
   if (key.includes('transport')) return 'transfer';
   if (key.includes('inventory') || key.includes('dormitory')) return 'building';
-  if (key.includes('report')) return 'file';
+  if (key.includes('report')) return 'chart';
   if (key.includes('operation')) return 'clipboard';
   if (key.includes('setting')) return 'settings';
   return 'grid';
 };
 
-const iconForItem = (item: NavItem): IconName => {
-  const key = `${item.label} ${item.href}`.toLowerCase();
-  if (key.includes('dashboard')) return 'grid';
+const iconForItem = (item: NavItem): AppIconName => {
+  if (item.icon) return item.icon;
+
+  const label = item.label.toLowerCase();
+  const path = item.href.split('?')[0].toLowerCase();
+  const key = `${label} ${path}`.toLowerCase();
+  if (label === 'dashboard' || path === '/dashboard') return 'layoutDashboard';
   if (key.includes('system requirement') || key.includes('getting started') || key.includes('installation')) return 'activity';
   if (key.includes('admission') || key.includes('visitor') || key.includes('postal') || key.includes('phone call')) return 'clipboard';
-  if (key.includes('complaint')) return 'support';
+  if (key.includes('complaint')) return 'headset';
   if (key.includes('certificate')) return 'file';
-  if (key.includes('report')) return 'file';
-  if (key.includes('school')) return 'building';
+  if (key.includes('report')) return 'chart';
+  if (key.includes('school')) return 'school';
   if (key.includes('user') || key.includes('teacher') || key.includes('parent') || key.includes('student')) return 'users';
-  if (key.includes('billing')) return 'card';
-  if (key.includes('catalog')) return 'clipboard';
-  if (key.includes('subscription') || key.includes('plan')) return 'card';
-  if (key.includes('support')) return 'support';
-  if (key.includes('audit') || key.includes('log')) return 'shield';
+  if (key.includes('billing')) return 'invoice';
+  if (key.includes('catalog')) return 'package';
+  if (key.includes('subscription') || key.includes('plan')) return 'refresh';
+  if (key.includes('support')) return 'ticket';
+  if (key.includes('audit') || key.includes('log')) return 'history';
   if (key.includes('theme')) return 'palette';
   if (key.includes('brand')) return 'brand';
   if (key.includes('health')) return 'activity';
@@ -165,7 +72,7 @@ const iconForItem = (item: NavItem): IconName => {
   if (key.includes('compliance')) return 'scale';
   if (key.includes('security') || key.includes('access') || key.includes('password')) return 'lock';
   if (key.includes('leave')) return 'calendar';
-  if (key.includes('fee')) return 'card';
+  if (key.includes('fee')) return 'wallet';
   if (key.includes('sms')) return 'message';
   if (key.includes('academic')) return 'book';
   if (key.includes('class room')) return 'building';
@@ -175,7 +82,7 @@ const iconForItem = (item: NavItem): IconName => {
   if (key.includes('exam') || key.includes('marks')) return 'clipboard';
   if (key.includes('id card')) return 'id';
   if (key.includes('transfer')) return 'transfer';
-  if (key.includes('attendance')) return 'check';
+  if (key.includes('attendance')) return 'checkCircle';
   if (key.includes('assign')) return 'transfer';
   if (key.includes('portal')) return 'portal';
   if (key.includes('setting')) return 'settings';
@@ -183,13 +90,13 @@ const iconForItem = (item: NavItem): IconName => {
 };
 
 const feeNavItems: NavItem[] = [
-  { href: '/dashboard/fees/overview', label: 'Fee Overview', icon: 'FO' },
-  { href: '/dashboard/fees/groups', label: 'Fee Groups', icon: 'FG' },
-  { href: '/dashboard/fees/types', label: 'Fee Types', icon: 'FT' },
-  { href: '/dashboard/fees/masters', label: 'Fee Masters', icon: 'FM' },
-  { href: '/dashboard/fees/collection', label: 'Fee Collection', icon: 'FC' },
-  { href: '/dashboard/fees/discounts', label: 'Fee Discounts', icon: 'FD' },
-  { href: '/dashboard/fees/reports', label: 'Fee Reports', icon: 'FR' },
+  { href: '/dashboard/fees/overview', label: 'Fee Overview', icon: 'chart' },
+  { href: '/dashboard/fees/groups', label: 'Fee Groups', icon: 'folder' },
+  { href: '/dashboard/fees/types', label: 'Fee Types', icon: 'tag' },
+  { href: '/dashboard/fees/masters', label: 'Fee Masters', icon: 'clipboard' },
+  { href: '/dashboard/fees/collection', label: 'Fee Collection', icon: 'wallet' },
+  { href: '/dashboard/fees/discounts', label: 'Fee Discounts', icon: 'percent' },
+  { href: '/dashboard/fees/reports', label: 'Fee Reports', icon: 'chart' },
 ];
 
 const platformSections: NavSection[] = [
@@ -197,51 +104,51 @@ const platformSections: NavSection[] = [
     id: 'platform-overview',
     label: 'Overview',
     items: [
-      { href: '/dashboard', label: 'Dashboard', icon: 'DB' },
-      { href: '/dashboard/reports', label: 'Reports', icon: 'RP' },
+      { href: '/dashboard', label: 'Dashboard', icon: 'layoutDashboard' },
+      { href: '/dashboard/reports', label: 'Reports', icon: 'chart' },
     ],
   },
   {
     id: 'platform-schools',
     label: 'Schools & Users',
     items: [
-      { href: '/dashboard/schools', label: 'Schools', icon: 'SC' },
-      { href: '/dashboard/users', label: 'Users', icon: 'US' },
+      { href: '/dashboard/schools', label: 'Schools', icon: 'school' },
+      { href: '/dashboard/users', label: 'Users', icon: 'users' },
     ],
   },
   {
     id: 'platform-subscriptions',
     label: 'Subscriptions',
     items: [
-      { href: '/dashboard/subscriptions', label: 'Subscriptions', icon: 'SB' },
-      { href: '/dashboard/billing', label: 'Billing', icon: 'BL' },
-      { href: '/dashboard/catalog', label: 'Catalog', icon: 'CT' },
+      { href: '/dashboard/subscriptions', label: 'Subscriptions', icon: 'refresh' },
+      { href: '/dashboard/billing', label: 'Billing', icon: 'invoice' },
+      { href: '/dashboard/catalog', label: 'Catalog', icon: 'package' },
     ],
   },
   {
     id: 'platform-operations',
     label: 'Operations',
     items: [
-      { href: '/dashboard/demo-requests', label: 'Demo Requests', icon: 'DR' },
-      { href: '/dashboard/support', label: 'Support Tickets', icon: 'SP' },
-      { href: '/dashboard/logs', label: 'Audit Logs', icon: 'LG' },
-      { href: '/dashboard/system-health', label: 'System Health', icon: 'SH' },
+      { href: '/dashboard/demo-requests', label: 'Demo Requests', icon: 'calendar' },
+      { href: '/dashboard/support', label: 'Support Tickets', icon: 'ticket' },
+      { href: '/dashboard/logs', label: 'Audit Logs', icon: 'history' },
+      { href: '/dashboard/system-health', label: 'System Health', icon: 'monitor' },
     ],
   },
   {
     id: 'platform-settings',
     label: 'System Setup',
     items: [
-      { href: '/dashboard/settings?tab=brand', label: 'Branding & Theme', icon: 'BR' },
-      { href: '/dashboard/settings?tab=security', label: 'Security', icon: 'SE' },
-      { href: '/dashboard/settings?tab=messaging', label: 'Messaging', icon: 'MS' },
-      // { href: '/dashboard/settings?tab=features', label: 'Feature Flags', icon: 'FF' },
-      // { href: '/dashboard/settings?tab=modules', label: 'Modules', icon: 'MD' },
-      { href: '/dashboard/settings?tab=access', label: 'Access', icon: 'AC' },
-      { href: '/dashboard/settings?tab=compliance', label: 'Compliance', icon: 'CP' },
-      { href: '/dashboard/backups', label: 'Backups', icon: 'BK' },
-      // { href: '/dashboard/settings?tab=advanced', label: 'Advanced', icon: 'AD' },
-      { href: '/change-password', label: 'Change Password', icon: 'PW' },
+      { href: '/dashboard/settings?tab=brand', label: 'Branding & Theme', icon: 'palette' },
+      { href: '/dashboard/settings?tab=security', label: 'Security', icon: 'shield' },
+      { href: '/dashboard/settings?tab=messaging', label: 'Messaging', icon: 'message' },
+      // { href: '/dashboard/settings?tab=features', label: 'Feature Flags', icon: 'activity' },
+      // { href: '/dashboard/settings?tab=modules', label: 'Modules', icon: 'package' },
+      { href: '/dashboard/settings?tab=access', label: 'Access', icon: 'lock' },
+      { href: '/dashboard/settings?tab=compliance', label: 'Compliance', icon: 'scale' },
+      { href: '/dashboard/backups', label: 'Backups', icon: 'backup' },
+      // { href: '/dashboard/settings?tab=advanced', label: 'Advanced', icon: 'settings' },
+      { href: '/change-password', label: 'Change Password', icon: 'lock' },
     ],
   },
 ];
@@ -315,65 +222,65 @@ export const Sidebar = ({
         id: 'dashboard',
         label: 'Dashboard',
         items: [
-          { href: '/dashboard', label: 'Dashboard', icon: 'DB' },
-          { href: '/dashboard/onboarding', label: 'Onboarding Readiness', icon: 'OR' },
-          { href: '/dashboard/assistant', label: 'AI Assistant', icon: 'AI' },
+          { href: '/dashboard', label: 'Dashboard', icon: 'layoutDashboard' },
+          { href: '/dashboard/onboarding', label: 'Onboarding Readiness', icon: 'checkCircle' },
+          { href: '/dashboard/assistant', label: 'AI Assistant', icon: 'sparkles' },
         ],
       },
       {
         id: 'academic-setup',
         label: 'Academic Setup',
         items: [
-          { href: '/dashboard/academics', label: 'Setup', icon: 'AC' },
-          { href: '/dashboard/timetable', label: 'Timetable', icon: 'TT' },
-          { href: '/dashboard/attendance/settings', label: 'Attendance Settings', icon: 'AS' },
+          { href: '/dashboard/academics', label: 'Setup', icon: 'book' },
+          { href: '/dashboard/timetable', label: 'Timetable', icon: 'calendar' },
+          { href: '/dashboard/attendance/settings', label: 'Attendance Settings', icon: 'checkCircle' },
         ],
       },
       {
         id: 'students',
         label: 'Students',
         items: [
-          { href: '/dashboard/students', label: 'Student List', icon: 'SL' },
-          { href: '/dashboard/students/add', label: 'Add Student', icon: 'AD' },
-          // { href: '/dashboard/students/groups', label: 'Groups & Categories', icon: 'GR' },
-          { href: '/dashboard/students/promotion', label: 'Promotion', icon: 'PR' },
-          // { href: '/dashboard/students/disabled', label: 'Disabled Students', icon: 'DS' },
-          // { href: '/dashboard/students/transfers', label: 'Transfer Requests', icon: 'TR' },
-          { href: '/dashboard/id-cards', label: 'ID Cards', icon: 'ID' },
-          // { href: '/dashboard/id-cards/editor', label: 'Generate ID Card', icon: 'GI' },
+          { href: '/dashboard/students', label: 'Student List', icon: 'users' },
+          { href: '/dashboard/students/add', label: 'Add Student', icon: 'userPlus' },
+          // { href: '/dashboard/students/groups', label: 'Groups & Categories', icon: 'folder' },
+          { href: '/dashboard/students/promotion', label: 'Promotion', icon: 'transfer' },
+          // { href: '/dashboard/students/disabled', label: 'Disabled Students', icon: 'ban' },
+          // { href: '/dashboard/students/transfers', label: 'Transfer Requests', icon: 'transfer' },
+          { href: '/dashboard/id-cards', label: 'ID Cards', icon: 'id' },
+          // { href: '/dashboard/id-cards/editor', label: 'Generate ID Card', icon: 'id' },
         ],
       },
       {
         id: 'staff',
         label: 'Staff',
         items: [
-          { href: '/dashboard/staff', label: 'Employee List', icon: 'SD' },
-          { href: '/dashboard/teachers/onboarding', label: 'Teacher Onboarding', icon: 'TO' },
-          { href: '/dashboard/staff/add?type=teacher', label: 'Add Teacher', icon: 'AU' },
+          { href: '/dashboard/staff', label: 'Employee List', icon: 'briefcase' },
+          { href: '/dashboard/teachers/onboarding', label: 'Teacher Onboarding', icon: 'userCheck' },
+          { href: '/dashboard/staff/add?type=teacher', label: 'Add Teacher', icon: 'userPlus' },
         ],
       },
       {
         id: 'attendance',
         label: 'Attendance',
         items: [
-          { href: '/dashboard/attendance/my', label: 'Mark Attendance', icon: 'MA' },
-          { href: '/dashboard/attendance/students/mark', label: 'Student Attendance', icon: 'SA' },
-          { href: '/dashboard/staff/attendance', label: 'Staff Attendance', icon: 'EA' },
-          { href: '/dashboard/leave/my', label: 'Apply Leave', icon: 'LV' },
-          { href: '/dashboard/leave/requests', label: 'Leave Management', icon: 'LM' },
+          { href: '/dashboard/attendance/my', label: 'Mark Attendance', icon: 'check' },
+          { href: '/dashboard/attendance/students/mark', label: 'Student Attendance', icon: 'userCheck' },
+          { href: '/dashboard/staff/attendance', label: 'Staff Attendance', icon: 'briefcase' },
+          { href: '/dashboard/leave/my', label: 'Apply Leave', icon: 'calendar' },
+          { href: '/dashboard/leave/requests', label: 'Leave Management', icon: 'clipboard' },
         ],
       },
       {
         id: 'examinations',
         label: 'Examinations',
         items: [
-          { href: '/dashboard/academics/exams', label: 'Exams', icon: 'EX' },
-          { href: '/dashboard/academics/marks', label: 'Marks', icon: 'MK' },
-          { href: '/dashboard/academics/exams/centers', label: 'Centers', icon: 'EC' },
-          { href: '/dashboard/academics/exams/rooms', label: 'Rooms', icon: 'ER' },
-          { href: '/dashboard/academics/exams/seating', label: 'Seating', icon: 'ST' },
-          { href: '/dashboard/academics/exams/invigilators', label: 'Invigilators', icon: 'IN' },
-          { href: '/dashboard/academics/exams/hall-tickets', label: 'Hall Tickets', icon: 'HT' },
+          { href: '/dashboard/academics/exams', label: 'Exams', icon: 'clipboard' },
+          { href: '/dashboard/academics/marks', label: 'Marks', icon: 'chart' },
+          { href: '/dashboard/academics/exams/centers', label: 'Centers', icon: 'building' },
+          { href: '/dashboard/academics/exams/rooms', label: 'Rooms', icon: 'building' },
+          { href: '/dashboard/academics/exams/seating', label: 'Seating', icon: 'grid' },
+          { href: '/dashboard/academics/exams/invigilators', label: 'Invigilators', icon: 'users' },
+          { href: '/dashboard/academics/exams/hall-tickets', label: 'Hall Tickets', icon: 'ticket' },
         ],
       },
       {
@@ -387,85 +294,85 @@ export const Sidebar = ({
         id: 'homework',
         label: 'Homework',
         items: [
-          { href: '/dashboard/homework', label: 'Homework', icon: 'HW' },
+          { href: '/dashboard/homework', label: 'Homework', icon: 'book' },
         ],
       },
       {
         id: 'communication',
         label: 'Communicate',
         items: [
-          { href: '/dashboard/communication/notice-board', label: 'Notice Board', icon: 'NB' },
-          { href: '/dashboard/communication/send-email', label: 'Send Email', icon: 'EM' },
-          { href: '/dashboard/communication/send-sms', label: 'Send SMS', icon: 'SM' },
-          { href: '/dashboard/communication/logs', label: 'Email / SMS Log', icon: 'LG' },
-          { href: '/dashboard/communication/scheduled-logs', label: 'Schedule Email SMS Log', icon: 'SL' },
-          { href: '/dashboard/communication/login-credentials', label: 'Login Credentials Send', icon: 'LC' },
-          { href: '/dashboard/communication/email-templates', label: 'Email Template', icon: 'ET' },
-          { href: '/dashboard/communication/sms-templates', label: 'SMS Template', icon: 'ST' },
+          { href: '/dashboard/communication/notice-board', label: 'Notice Board', icon: 'clipboard' },
+          { href: '/dashboard/communication/send-email', label: 'Send Email', icon: 'mail' },
+          { href: '/dashboard/communication/send-sms', label: 'Send SMS', icon: 'message' },
+          { href: '/dashboard/communication/logs', label: 'Email / SMS Log', icon: 'history' },
+          { href: '/dashboard/communication/scheduled-logs', label: 'Schedule Email SMS Log', icon: 'calendar' },
+          { href: '/dashboard/communication/login-credentials', label: 'Login Credentials Send', icon: 'lock' },
+          { href: '/dashboard/communication/email-templates', label: 'Email Template', icon: 'fileText' },
+          { href: '/dashboard/communication/sms-templates', label: 'SMS Template', icon: 'message' },
         ],
       },
       {
         id: 'transport',
         label: 'Transport',
         items: [
-          { href: '/dashboard/transport', label: 'Transport', icon: 'TR' },
+          { href: '/dashboard/transport', label: 'Transport', icon: 'bus' },
         ],
       },
       {
         id: 'library',
         label: 'Library',
         items: [
-          { href: '/dashboard/library', label: 'Library', icon: 'LB' },
+          { href: '/dashboard/library', label: 'Library', icon: 'book' },
         ],
       },
       {
         id: 'inventory',
         label: 'Inventory',
         items: [
-          { href: '/dashboard/dormitory', label: 'Dormitory', icon: 'DR' },
+          { href: '/dashboard/dormitory', label: 'Dormitory', icon: 'bed' },
         ],
       },
       {
         id: 'accounts',
         label: 'Accounts',
         items: [
-          { href: '/dashboard/payroll', label: 'Payroll', icon: 'PY' },
-          { href: '/dashboard/payroll/report', label: 'Payroll Report', icon: 'PR' },
-          { href: '/dashboard/payment-methods', label: 'Payment Methods', icon: 'PM' },
-          { href: '/dashboard/fee-challan-details', label: 'Fee Challan', icon: 'FC' },
+          { href: '/dashboard/payroll', label: 'Payroll', icon: 'wallet' },
+          { href: '/dashboard/payroll/report', label: 'Payroll Report', icon: 'chart' },
+          { href: '/dashboard/payment-methods', label: 'Payment Methods', icon: 'card' },
+          { href: '/dashboard/fee-challan-details', label: 'Fee Challan', icon: 'invoice' },
         ],
       },
       {
         id: 'reports',
         label: 'Reports',
         items: [
-          { href: '/dashboard/reports', label: 'Reports', icon: 'RP' },
-          { href: '/dashboard/audit', label: 'Audit Logs', icon: 'LG' },
+          { href: '/dashboard/reports', label: 'Reports', icon: 'chart' },
+          { href: '/dashboard/audit', label: 'Audit Logs', icon: 'history' },
         ],
       },
       {
         id: 'users-roles',
         label: 'Users & Roles',
         items: [
-          { href: '/dashboard/users', label: 'Users', icon: 'US' },
-          { href: '/dashboard/role-permissions', label: 'Role Permissions', icon: 'RP' },
+          { href: '/dashboard/users', label: 'Users', icon: 'users' },
+          { href: '/dashboard/role-permissions', label: 'Role Permissions', icon: 'shield' },
         ],
       },
       {
         id: 'subscription',
         label: 'Subscription',
         items: [
-          { href: '/dashboard/plans', label: 'Plans', icon: 'PL' },
+          { href: '/dashboard/plans', label: 'Plans', icon: 'package' },
         ],
       },
       {
         id: 'settings',
         label: 'Settings',
         items: [
-          { href: '/dashboard/settings/branding', label: 'Branding', icon: 'BR' },
-          { href: '/dashboard/settings?tab=messaging', label: 'Messaging Providers', icon: 'MP' },
-          { href: '/dashboard/base-setup', label: 'Base Setup', icon: 'BS' },
-          { href: '/change-password', label: 'Change Password', icon: 'PW' },
+          { href: '/dashboard/settings/branding', label: 'Branding', icon: 'brand' },
+          { href: '/dashboard/settings?tab=messaging', label: 'Messaging Providers', icon: 'message' },
+          { href: '/dashboard/base-setup', label: 'Base Setup', icon: 'settings' },
+          { href: '/change-password', label: 'Change Password', icon: 'lock' },
         ],
       },
     ];
@@ -523,7 +430,7 @@ export const Sidebar = ({
               : 'bg-[var(--shell-sidebar-icon)] text-[var(--shell-sidebar-muted)] group-hover:text-[var(--shell-sidebar-text)]'
           }`}
         >
-          <Icon name={iconForItem(item)} className="h-4 w-4" />
+          <AppIcon name={iconForItem(item)} className="h-4 w-4" />
         </span>
         <span className="min-w-0 truncate">{item.label}</span>
       </Link>
@@ -564,7 +471,7 @@ export const Sidebar = ({
             className="ml-auto rounded-lg p-2 text-[var(--shell-sidebar-muted)] hover:bg-[var(--shell-sidebar-hover)] hover:text-[var(--shell-sidebar-text)] lg:hidden"
             aria-label="Close navigation"
           >
-            <Icon name="close" className="h-4 w-4" />
+            <AppIcon name="close" className="h-4 w-4" />
           </button>
         </div>
 
@@ -598,14 +505,14 @@ export const Sidebar = ({
                         : 'bg-[var(--shell-sidebar-icon)] text-[var(--shell-sidebar-muted)]'
                     }`}
                   >
-                    <Icon name={iconForSection(section.label)} className="h-4 w-4" />
+                    <AppIcon name={iconForSection(section.label)} className="h-4 w-4" />
                   </span>
                   <span className="min-w-0 flex-1 truncate text-left">{section.label}</span>
                   <span className="rounded-md border border-[var(--shell-sidebar-border)] px-2 py-0.5 text-[10px] font-medium text-[var(--shell-sidebar-muted)]">
                     {section.items.length}
                   </span>
                   <span className={`transition-transform ${isOpenSection ? 'rotate-90' : ''}`}>
-                    <Icon name="chevron" className="h-4 w-4" />
+                    <AppIcon name="chevron" className="h-4 w-4" />
                   </span>
                 </button>
                 <div className={`overflow-hidden transition-all duration-200 ${isOpenSection ? 'max-h-[720px] opacity-100' : 'max-h-0 opacity-0'}`}>

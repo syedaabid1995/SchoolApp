@@ -96,28 +96,28 @@ export default function DashboardPage() {
         label: 'Students',
         value: metricsQuery.isError ? 'N/A' : formatNumber(metricsQuery.data?.totalStudents),
         helper: 'Total active student records.',
-        icon: 'ST',
+        icon: 'users' as const,
         tone: 'blue' as const,
       },
       {
         label: 'Teachers',
         value: metricsQuery.isError ? 'N/A' : formatNumber(metricsQuery.data?.totalTeachers),
         helper: 'Teaching staff in this school.',
-        icon: 'TC',
+        icon: 'graduationCap' as const,
         tone: 'emerald' as const,
       },
       {
         label: 'Attendance Today',
         value: metricsQuery.isError ? 'N/A' : formatPercent(metricsQuery.data?.attendanceRateToday),
         helper: 'Today attendance rate.',
-        icon: 'AT',
+        icon: 'checkCircle' as const,
         tone: 'violet' as const,
       },
       {
         label: 'Active Classes',
         value: metricsQuery.isError ? 'N/A' : formatNumber(metricsQuery.data?.activeClasses),
         helper: 'Classes available for academics.',
-        icon: 'CL',
+        icon: 'book' as const,
         tone: 'amber' as const,
       },
     ],
@@ -127,10 +127,10 @@ export default function DashboardPage() {
   const quickActions = useMemo(() => {
     if (isTeacher) {
       return [
-        { title: 'Timetable', href: '/dashboard/timetable', icon: 'TT', description: 'Open class schedule', tone: 'blue' as const },
-        { title: 'Mark Attendance', href: '/dashboard/attendance/my', icon: 'AT', description: 'Mark your own attendance', tone: 'emerald' as const },
-        { title: 'Upload Marks', href: '/dashboard/academics/marks', icon: 'MK', description: 'Update assessment records', tone: 'violet' as const },
-        { title: 'Reports', href: '/dashboard/reports', icon: 'RP', description: 'Review assigned reports', tone: 'slate' as const },
+        { title: 'Timetable', href: '/dashboard/timetable', icon: 'calendar' as const, description: 'Open class schedule', tone: 'blue' as const },
+        { title: 'Mark Attendance', href: '/dashboard/attendance/my', icon: 'check' as const, description: 'Mark your own attendance', tone: 'emerald' as const },
+        { title: 'Upload Marks', href: '/dashboard/academics/marks', icon: 'chart' as const, description: 'Update assessment records', tone: 'violet' as const },
+        { title: 'Reports', href: '/dashboard/reports', icon: 'fileText' as const, description: 'Review assigned reports', tone: 'slate' as const },
       ].filter((action) => {
         if (action.href === '/dashboard/timetable') return hasPermission('academics.setup');
         if (action.href === '/dashboard/attendance/my') return hasPermission('attendance.view');
@@ -141,10 +141,10 @@ export default function DashboardPage() {
     }
 
     return [
-      { title: 'Add Student', href: '/dashboard/students/add', icon: 'AD', description: 'Register a new admission', tone: 'blue' as const },
-      { title: 'Classes', href: '/dashboard/academics', icon: 'CL', description: 'Manage classes and sections', tone: 'emerald' as const },
-      { title: 'Homework', href: '/dashboard/homework', icon: 'HW', description: 'Create and evaluate homework', tone: 'violet' as const },
-      { title: 'Reports', href: '/dashboard/reports', icon: 'RP', description: 'Open school reports center', tone: 'slate' as const },
+      { title: 'Add Student', href: '/dashboard/students/add', icon: 'userPlus' as const, description: 'Register a new admission', tone: 'blue' as const },
+      { title: 'Classes', href: '/dashboard/academics', icon: 'book' as const, description: 'Manage classes and sections', tone: 'emerald' as const },
+      { title: 'Homework', href: '/dashboard/homework', icon: 'clipboard' as const, description: 'Create and evaluate homework', tone: 'violet' as const },
+      { title: 'Reports', href: '/dashboard/reports', icon: 'chart' as const, description: 'Open school reports center', tone: 'slate' as const },
     ].filter((action) => {
       if (action.href === '/dashboard/students/add') return hasPermission('students.add');
       if (action.href === '/dashboard/academics') return hasPermission('academics.setup');
@@ -215,9 +215,9 @@ export default function DashboardPage() {
           action={<Link href="/dashboard/plans" prefetch={false} className="text-sm font-bold text-blue-700 hover:underline">Manage Plans</Link>}
         >
           <div className="grid gap-4 md:grid-cols-3">
-            <MetricCard label="Plan" value={subscription?.planName ?? '-'} helper={subscription?.status ?? 'Status unavailable'} icon="PL" tone="blue" />
-            <MetricCard label="Student Limit" value={formatNumber(subscription?.studentLimit)} helper="Maximum students allowed." icon="ST" tone="emerald" />
-            <MetricCard label="Teacher Limit" value={formatNumber(subscription?.teacherLimit)} helper="Maximum teachers allowed." icon="TC" tone="amber" />
+            <MetricCard label="Plan" value={subscription?.planName ?? '-'} helper={subscription?.status ?? 'Status unavailable'} icon="package" tone="blue" />
+            <MetricCard label="Student Limit" value={formatNumber(subscription?.studentLimit)} helper="Maximum students allowed." icon="users" tone="emerald" />
+            <MetricCard label="Teacher Limit" value={formatNumber(subscription?.teacherLimit)} helper="Maximum teachers allowed." icon="graduationCap" tone="amber" />
           </div>
         </SectionPanel>
       ) : null}
