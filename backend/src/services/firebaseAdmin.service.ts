@@ -10,15 +10,24 @@ type FirebaseServiceAccount = {
   private_key?: string;
 };
 
+const resolveServiceAccountPath = (configuredPath: string) => {
+  if (path.isAbsolute(configuredPath)) return configuredPath;
+
+  const candidates = [
+    path.resolve(process.cwd(), configuredPath),
+    path.resolve(process.cwd(), '..', configuredPath),
+  ];
+
+  return candidates.find((candidate) => fs.existsSync(candidate)) ?? candidates[0];
+};
+
 const parseServiceAccount = () => {
   if (env.FIREBASE_SERVICE_ACCOUNT_JSON) {
     return JSON.parse(env.FIREBASE_SERVICE_ACCOUNT_JSON) as FirebaseServiceAccount;
   }
 
   if (env.FIREBASE_SERVICE_ACCOUNT_PATH) {
-    const keyPath = path.isAbsolute(env.FIREBASE_SERVICE_ACCOUNT_PATH)
-      ? env.FIREBASE_SERVICE_ACCOUNT_PATH
-      : path.resolve(process.cwd(), env.FIREBASE_SERVICE_ACCOUNT_PATH);
+    const keyPath = resolveServiceAccountPath(env.FIREBASE_SERVICE_ACCOUNT_PATH);
     return JSON.parse(fs.readFileSync(keyPath, 'utf8')) as FirebaseServiceAccount;
   }
 
