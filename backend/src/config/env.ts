@@ -36,7 +36,7 @@ const envSchema = z.object({
   AUTH_TWO_STEP_ENABLED: boolEnv(false).default(false),
   OTP_EXPOSE_CODE_IN_DEV: boolEnv(false).default(false),
   REDIS_URL: z.string().min(1),
-  OPENAI_API_KEY: z.string().min(1).optional(),
+  OPENAI_API_KEY: optionalEnvString(),
   OPENAI_MODEL: z.string().min(1).default('gpt-4o-mini'),
   AI_ASSISTANT_ENABLED: boolEnv(false).default(false),
   AI_ASSISTANT_REQUIRE_CONFIRMATION: boolEnv(true).default(true),
