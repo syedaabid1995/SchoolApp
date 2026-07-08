@@ -146,6 +146,7 @@ const platformSections: NavSection[] = [
       // { href: '/dashboard/settings?tab=modules', label: 'Modules', icon: 'package' },
       { href: '/dashboard/settings?tab=access', label: 'Access', icon: 'lock' },
       { href: '/dashboard/settings?tab=compliance', label: 'Compliance', icon: 'scale' },
+      { href: '/dashboard/communication/send-push', label: 'Send Push', icon: 'message' },
       { href: '/dashboard/communication/push-templates', label: 'Push Templates', icon: 'message' },
       { href: '/dashboard/communication/push-logs', label: 'Push Logs', icon: 'history' },
       { href: '/dashboard/backups', label: 'Backups', icon: 'backup' },
