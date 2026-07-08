@@ -96,6 +96,12 @@ export const processDueScheduledNotifications = async (params?: { now?: Date; ba
                 subject,
                 body: body ?? '',
                 html,
+                data: {
+                  route: typeof payload.route === 'string' ? payload.route : undefined,
+                  module: typeof payload.module === 'string' ? payload.module : undefined,
+                  category: typeof payload.category === 'string' ? payload.category : undefined,
+                  logId: log.id,
+                },
               },
             });
 

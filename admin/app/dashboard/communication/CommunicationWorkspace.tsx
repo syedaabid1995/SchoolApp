@@ -15,7 +15,9 @@ import {
   listCommunicationNotices,
   listCommunicationScheduledLogs,
   listCommunicationTemplates,
+  listPushNotificationLogs,
   sendCommunicationEmail,
+  sendCommunicationPush,
   sendCommunicationSms,
   sendLoginCredentialInstructions,
   updateCommunicationNotice,
@@ -25,6 +27,7 @@ import {
   type CommunicationNotice,
   type CommunicationTargetMode,
   type CommunicationTemplate,
+  type PushNotificationLog,
   type RecipientGroup,
 } from '../../../services/communication.service';
 import { getSession } from '../../../services/auth.service';
@@ -34,11 +37,14 @@ type CommunicationView =
   | 'notice-board'
   | 'send-email'
   | 'send-sms'
+  | 'send-push'
   | 'logs'
+  | 'push-logs'
   | 'scheduled-logs'
   | 'login-credentials'
   | 'email-templates'
-  | 'sms-templates';
+  | 'sms-templates'
+  | 'push-templates';
 
 type AcademicOption = { id: string; name: string };
 
@@ -253,10 +259,12 @@ function SchoolScopeSelect({
   isSuperAdmin,
   selectedSchoolId,
   setSelectedSchoolId,
+  includePlatform = false,
 }: {
   isSuperAdmin: boolean;
   selectedSchoolId: string;
   setSelectedSchoolId: (value: string) => void;
+  includePlatform?: boolean;
 }) {
   const schoolsQuery = useQuery({
     queryKey: ['schools', 'communication'],
@@ -265,15 +273,20 @@ function SchoolScopeSelect({
   });
 
   useEffect(() => {
+    if (includePlatform && isSuperAdmin && !selectedSchoolId) {
+      setSelectedSchoolId('__platform__');
+      return;
+    }
     if (isSuperAdmin && !selectedSchoolId && schoolsQuery.data?.items?.length) {
       setSelectedSchoolId(schoolsQuery.data.items[0].id);
     }
-  }, [isSuperAdmin, schoolsQuery.data?.items, selectedSchoolId, setSelectedSchoolId]);
+  }, [includePlatform, isSuperAdmin, schoolsQuery.data?.items, selectedSchoolId, setSelectedSchoolId]);
 
   if (!isSuperAdmin) return null;
   return (
     <select className={inputClass} value={selectedSchoolId} onChange={(event) => setSelectedSchoolId(event.target.value)}>
       <option value="">Select school</option>
+      {includePlatform ? <option value="__platform__">Platform default templates</option> : null}
       {(schoolsQuery.data?.items ?? []).map((school) => (
         <option key={school.id} value={school.id}>
           {school.name}
@@ -477,44 +490,54 @@ function NoticeBoard({
 function TemplateManager({
   channel,
   effectiveSchoolId,
+  platformScope = false,
   can,
 }: {
   channel: CommunicationChannel;
   effectiveSchoolId: string;
+  platformScope?: boolean;
   can: (code: string) => boolean;
 }) {
   const notify = useNotify();
   const queryClient = useQueryClient();
   const isEmail = channel === 'EMAIL';
+  const isPush = channel === 'PUSH';
   const [form, setForm] = useState({ id: '', name: '', subject: '', body: '' });
   const templatesQuery = useQuery({
-    queryKey: ['communication-templates', channel, effectiveSchoolId],
-    queryFn: () => listCommunicationTemplates(channel, effectiveSchoolId),
-    enabled: Boolean(effectiveSchoolId),
+    queryKey: ['communication-templates', channel, effectiveSchoolId, platformScope],
+    queryFn: () => listCommunicationTemplates(channel, effectiveSchoolId, platformScope),
+    enabled: Boolean(effectiveSchoolId || platformScope),
   });
   const resetForm = () => setForm({ id: '', name: '', subject: '', body: '' });
-  const createCode = isEmail ? P.communicationEmailTemplateCreate : P.communicationSmsTemplateCreate;
-  const editCode = isEmail ? P.communicationEmailTemplateEdit : P.communicationSmsTemplateEdit;
-  const deleteCode = isEmail ? P.communicationEmailTemplateDelete : P.communicationSmsTemplateDelete;
+  const createCode = isEmail ? P.communicationEmailTemplateCreate : isPush ? P.communicationPushTemplateCreate : P.communicationSmsTemplateCreate;
+  const editCode = isEmail ? P.communicationEmailTemplateEdit : isPush ? P.communicationPushTemplateEdit : P.communicationSmsTemplateEdit;
+  const deleteCode = isEmail ? P.communicationEmailTemplateDelete : isPush ? P.communicationPushTemplateDelete : P.communicationSmsTemplateDelete;
 
   const saveMutation = useMutation({
     mutationFn: () => {
-      const payload = { schoolId: effectiveSchoolId, channel, name: form.name, subject: isEmail ? form.subject : null, body: form.body };
+      const payload = {
+        schoolId: platformScope ? undefined : effectiveSchoolId,
+        platform: platformScope,
+        channel,
+        name: form.name,
+        subject: isEmail || isPush ? form.subject : null,
+        body: form.body,
+      };
       return form.id ? updateCommunicationTemplate(form.id, payload) : createCommunicationTemplate(payload);
     },
     onSuccess: async () => {
       notify.success(form.id ? 'Template updated' : 'Template created');
       resetForm();
-      await queryClient.invalidateQueries({ queryKey: ['communication-templates', channel, effectiveSchoolId] });
+      await queryClient.invalidateQueries({ queryKey: ['communication-templates', channel, effectiveSchoolId, platformScope] });
     },
     onError: (error) => notify.error('Unable to save template', errorMessage(error)),
   });
 
   const deleteMutation = useMutation({
-    mutationFn: (id: string) => deleteCommunicationTemplate(id, channel, effectiveSchoolId),
+    mutationFn: (id: string) => deleteCommunicationTemplate(id, channel, effectiveSchoolId, platformScope),
     onSuccess: async () => {
       notify.success('Template deleted');
-      await queryClient.invalidateQueries({ queryKey: ['communication-templates', channel, effectiveSchoolId] });
+      await queryClient.invalidateQueries({ queryKey: ['communication-templates', channel, effectiveSchoolId, platformScope] });
     },
     onError: (error) => notify.error('Unable to delete template', errorMessage(error)),
   });
@@ -527,8 +550,8 @@ function TemplateManager({
           <Field label="Template Name">
             <input className={inputClass} value={form.name} onChange={(event) => setForm((current) => ({ ...current, name: event.target.value }))} />
           </Field>
-          {isEmail ? (
-            <Field label="Subject">
+          {isEmail || isPush ? (
+            <Field label={isPush ? 'Title' : 'Subject'}>
               <input className={inputClass} value={form.subject} onChange={(event) => setForm((current) => ({ ...current, subject: event.target.value }))} />
             </Field>
           ) : null}
@@ -571,7 +594,7 @@ function TemplateManager({
             <thead className="bg-slate-50 text-left text-xs font-bold uppercase tracking-wide text-slate-500">
               <tr>
                 <th className="px-4 py-3">Name</th>
-                {isEmail ? <th className="px-4 py-3">Subject</th> : null}
+                {isEmail || isPush ? <th className="px-4 py-3">{isPush ? 'Title' : 'Subject'}</th> : null}
                 <th className="px-4 py-3">Updated</th>
                 <th className="px-4 py-3 text-right">Actions</th>
               </tr>
@@ -583,14 +606,14 @@ function TemplateManager({
                     {template.name}
                     {template.isSystem ? <span className="ml-2 rounded-full bg-slate-100 px-2 py-0.5 text-xs text-slate-500">System</span> : null}
                   </td>
-                  {isEmail ? <td className="px-4 py-3 text-slate-600">{template.subject || '-'}</td> : null}
+                  {isEmail || isPush ? <td className="px-4 py-3 text-slate-600">{template.subject || '-'}</td> : null}
                   <td className="px-4 py-3 text-slate-500">{formatDateTime(template.updatedAt)}</td>
                   <td className="px-4 py-3">
                     <div className="flex justify-end gap-2">
                       <button
                         type="button"
                         className={compactButtonClass}
-                        disabled={template.isSystem || !can(editCode)}
+                        disabled={(!platformScope && template.isSystem) || !can(editCode)}
                         onClick={() => setForm({ id: template.id, name: template.name, subject: template.subject ?? '', body: template.body })}
                       >
                         Edit
@@ -598,7 +621,7 @@ function TemplateManager({
                       <button
                         type="button"
                         className={dangerButtonClass}
-                        disabled={template.isSystem || !can(deleteCode) || deleteMutation.isPending}
+                        disabled={(!platformScope && template.isSystem) || !can(deleteCode) || deleteMutation.isPending}
                         onClick={() => deleteMutation.mutate(template.id)}
                       >
                         Delete
@@ -609,7 +632,7 @@ function TemplateManager({
               ))}
               {!templatesQuery.data?.length ? (
                 <tr>
-                  <td colSpan={isEmail ? 4 : 3} className="px-4 py-8 text-center text-slate-500">
+                  <td colSpan={isEmail || isPush ? 4 : 3} className="px-4 py-8 text-center text-slate-500">
                     No templates found.
                   </td>
                 </tr>
@@ -659,6 +682,7 @@ function SendMessage({
 }) {
   const notify = useNotify();
   const isEmail = channel === 'EMAIL';
+  const isPush = channel === 'PUSH';
   const [targetMode, setTargetMode] = useState<CommunicationTargetMode>('GROUP');
   const [recipientGroups, setRecipientGroups] = useState<RecipientGroup[]>(['STUDENTS', 'GUARDIANS']);
   const [templateId, setTemplateId] = useState('');
@@ -669,6 +693,9 @@ function SendMessage({
   const [individualRecipient, setIndividualRecipient] = useState('');
   const [sendMode, setSendMode] = useState<'now' | 'schedule'>('now');
   const [scheduledAt, setScheduledAt] = useState(nowLocalInput());
+  const [route, setRoute] = useState('/dashboard');
+  const [moduleName, setModuleName] = useState('notifications');
+  const [category, setCategory] = useState('general');
   const scopedParams = effectiveSchoolId ? { schoolId: effectiveSchoolId } : undefined;
 
   const templatesQuery = useQuery({
@@ -709,7 +736,7 @@ function SendMessage({
       const payload = {
         schoolId: effectiveSchoolId,
         templateId: templateId || null,
-        subject: isEmail ? subject : null,
+        subject: isEmail || isPush ? subject : null,
         body,
         recipientGroups,
         targetMode,
@@ -717,8 +744,11 @@ function SendMessage({
         sectionId: sectionId || null,
         individualRecipient: individualRecipient || null,
         scheduledAt: sendMode === 'schedule' ? scheduledAt : null,
+        route: isPush ? route : null,
+        module: isPush ? moduleName : null,
+        category: isPush ? category : null,
       };
-      return isEmail ? sendCommunicationEmail(payload) : sendCommunicationSms(payload);
+      return isEmail ? sendCommunicationEmail(payload) : isPush ? sendCommunicationPush(payload) : sendCommunicationSms(payload);
     },
     onSuccess: (result) => {
       notify.success(result.scheduled ? 'Message scheduled' : 'Message processed', `${result.recipientCount} recipient${result.recipientCount === 1 ? '' : 's'}`);
@@ -780,12 +810,12 @@ function SendMessage({
             </div>
           ) : null}
           {targetMode === 'INDIVIDUAL' ? (
-            <Field label={isEmail ? 'Recipient Email' : 'Recipient Mobile'}>
+            <Field label={isEmail ? 'Recipient Email' : isPush ? 'Recipient User ID' : 'Recipient Mobile'}>
               <input className={inputClass} value={individualRecipient} onChange={(event) => setIndividualRecipient(event.target.value)} />
             </Field>
           ) : null}
-          {isEmail ? (
-            <Field label="Title">
+          {isEmail || isPush ? (
+            <Field label={isPush ? 'Notification Title' : 'Title'}>
               <input className={inputClass} value={subject} onChange={(event) => setSubject(event.target.value)} />
             </Field>
           ) : null}
@@ -796,6 +826,19 @@ function SendMessage({
               <textarea className={`${inputClass} min-h-80 resize-y`} value={body} onChange={(event) => setBody(event.target.value)} />
             )}
           </Field>
+          {isPush ? (
+            <div className="grid gap-4 sm:grid-cols-3">
+              <Field label="Route">
+                <input className={inputClass} value={route} onChange={(event) => setRoute(event.target.value)} />
+              </Field>
+              <Field label="Module">
+                <input className={inputClass} value={moduleName} onChange={(event) => setModuleName(event.target.value)} />
+              </Field>
+              <Field label="Category">
+                <input className={inputClass} value={category} onChange={(event) => setCategory(event.target.value)} />
+              </Field>
+            </div>
+          ) : null}
           <div className="flex flex-col gap-3 border-t border-slate-200 pt-4 sm:flex-row sm:items-center sm:justify-between">
             <div className="flex flex-wrap gap-4 text-sm font-semibold text-slate-700">
               <label className="flex items-center gap-2">
@@ -1001,15 +1044,73 @@ function LogsTable({ scheduled, effectiveSchoolId }: { scheduled: boolean; effec
   );
 }
 
+function PushLogsTable({ effectiveSchoolId }: { effectiveSchoolId: string }) {
+  const logsQuery = useQuery({
+    queryKey: ['push-notification-logs', effectiveSchoolId],
+    queryFn: () => listPushNotificationLogs({ schoolId: effectiveSchoolId }),
+    enabled: Boolean(effectiveSchoolId),
+  });
+
+  return (
+    <section className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+      <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <h2 className="text-lg font-bold text-slate-950">Push Logs</h2>
+      </div>
+      <div className="overflow-x-auto rounded-xl border border-slate-200">
+        <table className="min-w-full divide-y divide-slate-200 text-sm">
+          <thead className="bg-slate-50 text-left text-xs font-bold uppercase tracking-wide text-slate-500">
+            <tr>
+              <th className="px-4 py-3">Recipient</th>
+              <th className="px-4 py-3">Message</th>
+              <th className="px-4 py-3">Route</th>
+              <th className="px-4 py-3">Status</th>
+              <th className="px-4 py-3">Sent / Created</th>
+              <th className="px-4 py-3">Error</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-slate-100 bg-white">
+            {(logsQuery.data ?? []).map((log: PushNotificationLog) => (
+              <tr key={log.id}>
+                <td className="px-4 py-3">
+                  <p className="font-semibold text-slate-900">{log.recipientName || '-'}</p>
+                  <p className="text-xs text-slate-500">{log.recipientType || log.recipientUserId}</p>
+                </td>
+                <td className="max-w-md px-4 py-3">
+                  <p className="font-semibold text-slate-900">{log.subject || log.templateName || '-'}</p>
+                  <p className="line-clamp-2 text-slate-600">{log.message}</p>
+                </td>
+                <td className="px-4 py-3 text-xs text-slate-500">{log.route || log.module || '-'}</td>
+                <td className="px-4 py-3"><StatusBadge status={log.status} /></td>
+                <td className="px-4 py-3 text-slate-500">{formatDateTime(log.sentAt || log.createdAt)}</td>
+                <td className="px-4 py-3 text-xs text-red-600">{log.error || '-'}</td>
+              </tr>
+            ))}
+            {!logsQuery.data?.length ? (
+              <tr>
+                <td colSpan={6} className="px-4 py-8 text-center text-slate-500">
+                  No push logs found.
+                </td>
+              </tr>
+            ) : null}
+          </tbody>
+        </table>
+      </div>
+    </section>
+  );
+}
+
 const viewConfig: Record<CommunicationView, { title: string; subtitle: string }> = {
   'notice-board': { title: 'Notice Board', subtitle: 'Create and manage school notices for students, guardians, and staff.' },
   'send-email': { title: 'Send Email', subtitle: 'Send email immediately or schedule it for selected school audiences.' },
   'send-sms': { title: 'Send SMS', subtitle: 'Send SMS immediately or schedule it for selected school audiences.' },
+  'send-push': { title: 'Send Push', subtitle: 'Send Firebase push notifications to registered web and mobile devices.' },
   logs: { title: 'Email / SMS Log', subtitle: 'Review sent and failed communication delivery records.' },
+  'push-logs': { title: 'Push Logs', subtitle: 'Review Firebase push notification delivery records.' },
   'scheduled-logs': { title: 'Schedule Email SMS Log', subtitle: 'Review queued scheduled email and SMS records.' },
   'login-credentials': { title: 'Login Credentials Send', subtitle: 'Send secure login instructions without exposing passwords.' },
   'email-templates': { title: 'Email Template', subtitle: 'Create reusable email templates for school communication.' },
   'sms-templates': { title: 'SMS Template', subtitle: 'Create reusable SMS templates for school communication.' },
+  'push-templates': { title: 'Push Template', subtitle: 'Create reusable Firebase push notification templates.' },
 };
 
 export default function CommunicationWorkspace({ view }: { view: CommunicationView }) {
@@ -1017,7 +1118,8 @@ export default function CommunicationWorkspace({ view }: { view: CommunicationVi
   const { data: session } = useQuery({ queryKey: ['session'], queryFn: getSession });
   const isSuperAdmin = session?.role === 'SUPER_ADMIN';
   const permissionCodes = session?.permissionCodes ?? [];
-  const effectiveSchoolId = isSuperAdmin ? selectedSchoolId : session?.schoolId ?? '';
+  const platformScope = isSuperAdmin && view === 'push-templates' && selectedSchoolId === '__platform__';
+  const effectiveSchoolId = isSuperAdmin ? (platformScope ? '' : selectedSchoolId) : session?.schoolId ?? '';
   const config = viewConfig[view];
   const can = useMemo(() => {
     const allowed = new Set(permissionCodes);
@@ -1030,10 +1132,10 @@ export default function CommunicationWorkspace({ view }: { view: CommunicationVi
         title={config.title}
         subtitle={config.subtitle}
         breadcrumbs={[{ label: 'Dashboard', href: '/dashboard' }, { label: 'Communicate' }, { label: config.title }]}
-        actions={<SchoolScopeSelect isSuperAdmin={Boolean(isSuperAdmin)} selectedSchoolId={selectedSchoolId} setSelectedSchoolId={setSelectedSchoolId} />}
+        actions={<SchoolScopeSelect isSuperAdmin={Boolean(isSuperAdmin)} selectedSchoolId={selectedSchoolId} setSelectedSchoolId={setSelectedSchoolId} includePlatform={view === 'push-templates'} />}
       />
 
-      {!effectiveSchoolId ? (
+      {!effectiveSchoolId && !platformScope ? (
         <EmptyState message="Select a school to continue." />
       ) : view === 'notice-board' ? (
         <NoticeBoard effectiveSchoolId={effectiveSchoolId} can={can} />
@@ -1041,14 +1143,20 @@ export default function CommunicationWorkspace({ view }: { view: CommunicationVi
         <SendMessage channel="EMAIL" effectiveSchoolId={effectiveSchoolId} />
       ) : view === 'send-sms' ? (
         <SendMessage channel="SMS" effectiveSchoolId={effectiveSchoolId} />
+      ) : view === 'send-push' ? (
+        <SendMessage channel="PUSH" effectiveSchoolId={effectiveSchoolId} />
       ) : view === 'logs' ? (
         <LogsTable scheduled={false} effectiveSchoolId={effectiveSchoolId} />
+      ) : view === 'push-logs' ? (
+        <PushLogsTable effectiveSchoolId={effectiveSchoolId} />
       ) : view === 'scheduled-logs' ? (
         <LogsTable scheduled effectiveSchoolId={effectiveSchoolId} />
       ) : view === 'login-credentials' ? (
         <LoginCredentials effectiveSchoolId={effectiveSchoolId} />
       ) : view === 'email-templates' ? (
         <TemplateManager channel="EMAIL" effectiveSchoolId={effectiveSchoolId} can={can} />
+      ) : view === 'push-templates' ? (
+        <TemplateManager channel="PUSH" effectiveSchoolId={effectiveSchoolId} platformScope={platformScope} can={can} />
       ) : (
         <TemplateManager channel="SMS" effectiveSchoolId={effectiveSchoolId} can={can} />
       )}

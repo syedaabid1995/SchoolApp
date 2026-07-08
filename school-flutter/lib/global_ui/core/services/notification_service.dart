@@ -1,8 +1,12 @@
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:dio/dio.dart';
+import 'package:flutter/foundation.dart';
 
 import '../../app/routes/app_routes.dart';
+import '../constants/api_endpoints.dart';
+import '../network/dio_client.dart';
 import '../storage/hive_cache_service.dart';
 
 final notificationServiceProvider = Provider<NotificationService>((ref) {
@@ -10,6 +14,7 @@ final notificationServiceProvider = Provider<NotificationService>((ref) {
     messaging: FirebaseMessaging.instance,
     localNotifications: FlutterLocalNotificationsPlugin(),
     cache: ref.watch(hiveCacheServiceProvider),
+    dio: ref.watch(dioProvider),
   );
 });
 
@@ -18,13 +23,16 @@ class NotificationService {
     required FirebaseMessaging messaging,
     required FlutterLocalNotificationsPlugin localNotifications,
     required HiveCacheService cache,
+    required Dio dio,
   }) : _messaging = messaging,
        _localNotifications = localNotifications,
-       _cache = cache;
+       _cache = cache,
+       _dio = dio;
 
   final FirebaseMessaging _messaging;
   final FlutterLocalNotificationsPlugin _localNotifications;
   final HiveCacheService _cache;
+  final Dio _dio;
 
   Future<void> initialize() async {
     await _messaging.requestPermission();
@@ -44,6 +52,14 @@ class NotificationService {
         }
       },
     );
+
+    final token = await _messaging.getToken();
+    if (token != null) {
+      await _registerToken(token);
+    }
+    _messaging.onTokenRefresh.listen((token) {
+      _registerToken(token);
+    });
 
     FirebaseMessaging.onMessage.listen((message) {
       final notification = message.notification;
@@ -67,6 +83,25 @@ class NotificationService {
         _cache.write('notifications.pendingRoute', route);
       }
     });
+  }
+
+  Future<void> _registerToken(String token) async {
+    final platform = switch (defaultTargetPlatform) {
+      TargetPlatform.iOS || TargetPlatform.macOS => 'IOS',
+      _ => 'ANDROID',
+    };
+    try {
+      await _dio.post<Map<String, dynamic>>(
+        ApiEndpoints.pushDevices,
+        data: {
+          'token': token,
+          'platform': platform,
+          'app': 'school-flutter',
+        },
+      );
+    } catch (_) {
+      _cache.write('notifications.pendingFcmToken', token);
+    }
   }
 
   static String? routeFromData(Map<String, dynamic> data) {

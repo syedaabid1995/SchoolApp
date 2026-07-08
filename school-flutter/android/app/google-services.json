@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "589116200518",
+    "project_id": "akademifyy-schoolapp",
+    "storage_bucket": "akademifyy-schoolapp.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:589116200518:android:2267b0e648d6acb13e9c47",
+        "android_client_info": {
+          "package_name": "com.akademifyy"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDvgkb1CZ116ofGo6nqUd4OgupWYJ377ck"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

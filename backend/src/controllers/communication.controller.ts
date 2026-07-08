@@ -8,7 +8,7 @@ import { AuthorizationService } from '../services/authorization.service';
 import { sendNotification } from '../services/notification.service';
 import { resolveSchoolId } from '../utils/tenant';
 
-const channelSchema = z.enum(['EMAIL', 'SMS']);
+const channelSchema = z.enum(['EMAIL', 'SMS', 'PUSH']);
 const audienceSchema = z.array(z.string().trim().min(1)).default(['Students', 'Guardians']);
 const noticeStatusSchema = z.enum(['DRAFT', 'PUBLISHED', 'ARCHIVED']).default('PUBLISHED');
 const recipientGroupSchema = z.enum([
@@ -34,6 +34,7 @@ const noticePayloadSchema = z.object({
 
 const templatePayloadSchema = z.object({
   schoolId: z.string().uuid().optional(),
+  platform: z.boolean().optional(),
   channel: channelSchema,
   name: z.string().trim().min(1),
   subject: z.string().trim().optional().nullable(),
@@ -51,6 +52,9 @@ const sendPayloadBaseSchema = z.object({
   sectionId: z.string().uuid().optional().nullable(),
   individualRecipient: z.string().trim().optional().nullable(),
   scheduledAt: z.coerce.date().optional().nullable(),
+  route: z.string().trim().optional().nullable(),
+  module: z.string().trim().optional().nullable(),
+  category: z.string().trim().optional().nullable(),
 });
 
 const sendPayloadSchema = sendPayloadBaseSchema
@@ -87,6 +91,14 @@ const templatePermissions = (channel: CommunicationChannel, action: 'view' | 'cr
       create: P.communicationEmailTemplateCreate,
       edit: P.communicationEmailTemplateEdit,
       delete: P.communicationEmailTemplateDelete,
+    }[action];
+  }
+  if (channel === 'PUSH') {
+    return {
+      view: P.communicationPushTemplateView,
+      create: P.communicationPushTemplateCreate,
+      edit: P.communicationPushTemplateEdit,
+      delete: P.communicationPushTemplateDelete,
     }[action];
   }
   return {
@@ -158,7 +170,7 @@ type ResolvedRecipient = {
 const addRecipient = (map: Map<string, ResolvedRecipient>, recipient: ResolvedRecipient, channel: CommunicationChannel) => {
   const to = normalizeRecipient(recipient.to);
   if (!to) return;
-  const key = channel === 'EMAIL' ? to.toLowerCase() : to.replace(/\D/g, '') || to;
+  const key = channel === 'EMAIL' ? to.toLowerCase() : channel === 'SMS' ? to.replace(/\D/g, '') || to : to;
   if (!key) return;
   if (!map.has(key)) {
     map.set(key, { ...recipient, to });
@@ -180,6 +192,11 @@ const getStudentsForTarget = async (params: {
     },
     include: {
       guardians: { select: { name: true, email: true, phone: true } },
+      parentLinks: {
+        select: {
+          parent: { select: { firstName: true, lastName: true, email: true, phone: true, userId: true } },
+        },
+      },
     },
     orderBy: { fullName: 'asc' },
   });
@@ -223,7 +240,7 @@ const resolveRecipients = async (params: {
     });
 
     for (const student of students) {
-      if (wantsStudents) {
+      if (wantsStudents && params.channel !== 'PUSH') {
         addRecipient(
           recipients,
           {
@@ -236,26 +253,41 @@ const resolveRecipients = async (params: {
       }
 
       if (wantsGuardians) {
-        addRecipient(
-          recipients,
-          {
-            to: params.channel === 'EMAIL' ? student.parentEmail : student.parentPhone,
-            name: student.guardianName || student.fatherName || student.motherName || `${student.fullName} Guardian`,
-            type: 'GUARDIAN',
-          },
-          params.channel,
-        );
-        student.guardians.forEach((guardian) =>
+        if (params.channel === 'PUSH') {
+          student.parentLinks.forEach((link) => {
+            if (!link.parent.userId) return;
+            addRecipient(
+              recipients,
+              {
+                to: link.parent.userId,
+                name: `${link.parent.firstName ?? ''} ${link.parent.lastName ?? ''}`.trim() || link.parent.email || `${student.fullName} Guardian`,
+                type: 'GUARDIAN',
+              },
+              params.channel,
+            );
+          });
+        } else {
           addRecipient(
             recipients,
             {
-              to: params.channel === 'EMAIL' ? guardian.email : guardian.phone,
-              name: guardian.name || `${student.fullName} Guardian`,
+              to: params.channel === 'EMAIL' ? student.parentEmail : student.parentPhone,
+              name: student.guardianName || student.fatherName || student.motherName || `${student.fullName} Guardian`,
               type: 'GUARDIAN',
             },
             params.channel,
-          ),
-        );
+          );
+          student.guardians.forEach((guardian) =>
+            addRecipient(
+              recipients,
+              {
+                to: params.channel === 'EMAIL' ? guardian.email : guardian.phone,
+                name: guardian.name || `${student.fullName} Guardian`,
+                type: 'GUARDIAN',
+              },
+              params.channel,
+            ),
+          );
+        }
       }
     }
   }
@@ -289,7 +321,7 @@ const resolveRecipients = async (params: {
       addRecipient(
         recipients,
         {
-          to: params.channel === 'EMAIL' ? user.email : user.teacherProfile?.phone,
+          to: params.channel === 'EMAIL' ? user.email : params.channel === 'SMS' ? user.teacherProfile?.phone : user.id,
           name: profileName || user.email,
           type: user.teacherProfile?.roleName ?? user.roles[0]?.role.name ?? 'STAFF',
         },
@@ -314,8 +346,61 @@ const getTemplateForSend = async (schoolId: string, channel: CommunicationChanne
   return template;
 };
 
+const noticeAudienceToRecipientGroups = (audience: string[]): RecipientGroup[] => {
+  const groups = new Set<RecipientGroup>();
+  for (const item of audience) {
+    const normalized = item.trim().toLowerCase();
+    if (normalized.includes('student')) groups.add('STUDENTS');
+    if (normalized.includes('guardian') || normalized.includes('parent')) groups.add('GUARDIANS');
+    if (normalized.includes('admin')) groups.add('ADMIN');
+    if (normalized.includes('teacher')) groups.add('TEACHER');
+    if (normalized.includes('accountant')) groups.add('ACCOUNTANT');
+    if (normalized.includes('librarian')) groups.add('LIBRARIAN');
+    if (normalized.includes('staff')) groups.add('STAFF');
+  }
+  return Array.from(groups);
+};
+
+const sendNoticePushNotifications = async (params: {
+  req: Request;
+  schoolId: string;
+  title: string;
+  message: string;
+  audience: string[];
+}) => {
+  const recipientGroups = noticeAudienceToRecipientGroups(params.audience);
+  if (!recipientGroups.length) return;
+  const recipients = await resolveRecipients({
+    schoolId: params.schoolId,
+    channel: 'PUSH',
+    recipientGroups,
+    targetMode: 'GROUP',
+  });
+  await Promise.all(
+    recipients.map((recipient) =>
+      sendNotification({
+        schoolId: params.schoolId,
+        userId: params.req.auth?.userId ?? null,
+        channel: 'PUSH',
+        data: {
+          to: recipient.to,
+          subject: params.title,
+          body: params.message,
+          recipientName: recipient.name,
+          recipientType: recipient.type,
+          targetMode: 'GROUP',
+          recipientGroups,
+          route: '/parent/notices',
+          module: 'notices',
+          category: 'notice',
+        },
+      }),
+    ),
+  );
+};
+
 const sendCommunication = async (req: Request, res: Response, channel: CommunicationChannel) => {
-  await assertPermission(req, channel === 'EMAIL' ? P.communicationEmailSend : P.communicationSmsSend);
+  await assertPermission(req, channel === 'EMAIL' ? P.communicationEmailSend : channel === 'SMS' ? P.communicationSmsSend : P.communicationPushSend);
   const payload = sendPayloadSchema.parse(req.body);
   const schoolId = resolveSchoolId(req, payload.schoolId);
   const template = await getTemplateForSend(schoolId, channel, payload.templateId);
@@ -330,10 +415,10 @@ const sendCommunication = async (req: Request, res: Response, channel: Communica
   });
 
   if (!recipients.length) {
-    throw new HttpError(400, `No ${channel === 'EMAIL' ? 'email' : 'SMS'} recipients found for the selected audience`);
+    throw new HttpError(400, `No ${channel === 'EMAIL' ? 'email' : channel === 'SMS' ? 'SMS' : 'push'} recipients found for the selected audience`);
   }
 
-  const subject = channel === 'EMAIL' ? (payload.subject || template?.subject || 'School Communication') : undefined;
+  const subject = channel === 'EMAIL' || channel === 'PUSH' ? (payload.subject || template?.subject || 'School Communication') : undefined;
   const body = payload.body || template?.body;
   const textBody = channel === 'EMAIL' ? stripHtml(body ?? '') : body;
   const htmlBody = channel === 'EMAIL' ? body : undefined;
@@ -357,6 +442,9 @@ const sendCommunication = async (req: Request, res: Response, channel: Communica
         recipientType: recipient.type,
         targetMode: payload.targetMode,
         recipientGroups: payload.recipientGroups,
+        route: payload.route,
+        module: payload.module,
+        category: payload.category,
       },
     });
     results.push(result);
@@ -401,6 +489,15 @@ export const createCommunicationNoticeApi = async (req: Request, res: Response) 
     },
     include: { createdBy: { select: { email: true } } },
   });
+  if (notice.status === 'PUBLISHED') {
+    await sendNoticePushNotifications({
+      req,
+      schoolId,
+      title: notice.title,
+      message: notice.message,
+      audience: Array.isArray(notice.audience) ? notice.audience.map(String) : [],
+    });
+  }
   res.status(201).json(noticeDto(notice));
 };
 
@@ -423,6 +520,15 @@ export const updateCommunicationNoticeApi = async (req: Request, res: Response) 
     },
     include: { createdBy: { select: { email: true } } },
   });
+  if (existing.status !== 'PUBLISHED' && notice.status === 'PUBLISHED') {
+    await sendNoticePushNotifications({
+      req,
+      schoolId,
+      title: notice.title,
+      message: notice.message,
+      audience: Array.isArray(notice.audience) ? notice.audience.map(String) : [],
+    });
+  }
   res.status(200).json(noticeDto(notice));
 };
 
@@ -439,11 +545,12 @@ export const listCommunicationTemplatesApi = async (req: Request, res: Response)
   const channel = channelSchema.parse((req.query.channel as string | undefined) ?? 'EMAIL');
   await assertPermission(req, [
     templatePermissions(channel, 'view'),
-    channel === 'EMAIL' ? P.communicationEmailSend : P.communicationSmsSend,
+    channel === 'EMAIL' ? P.communicationEmailSend : channel === 'SMS' ? P.communicationSmsSend : P.communicationPushSend,
   ]);
-  const schoolId = resolveSchoolId(req, req.query.schoolId as string | undefined);
+  const platformScope = req.auth?.role === 'SUPER_ADMIN' && req.query.platform === 'true';
+  const schoolId = platformScope ? null : resolveSchoolId(req, req.query.schoolId as string | undefined);
   const templates = await prisma.notificationTemplate.findMany({
-    where: { channel, OR: [{ schoolId }, { schoolId: null }] },
+    where: platformScope ? { channel, schoolId: null } : { channel, OR: [{ schoolId }, { schoolId: null }] },
     orderBy: [{ schoolId: 'desc' }, { updatedAt: 'desc' }],
   });
   res.status(200).json({ items: templates.map(templateDto) });
@@ -452,14 +559,15 @@ export const listCommunicationTemplatesApi = async (req: Request, res: Response)
 export const createCommunicationTemplateApi = async (req: Request, res: Response) => {
   const payload = templatePayloadSchema.parse(req.body);
   await assertPermission(req, templatePermissions(payload.channel, 'create'));
-  const schoolId = resolveSchoolId(req, payload.schoolId);
+  const platformScope = req.auth?.role === 'SUPER_ADMIN' && payload.platform === true;
+  const schoolId = platformScope ? null : resolveSchoolId(req, payload.schoolId);
   const template = await prisma.notificationTemplate.create({
     data: {
       schoolId,
-      key: `school:${schoolId}:${payload.channel}:${crypto.randomUUID()}`,
+      key: `${platformScope ? 'platform' : `school:${schoolId}`}:${payload.channel}:${crypto.randomUUID()}`,
       name: payload.name,
       channel: payload.channel,
-      subject: payload.channel === 'EMAIL' ? payload.subject ?? null : null,
+      subject: payload.channel === 'EMAIL' || payload.channel === 'PUSH' ? payload.subject ?? null : null,
       body: payload.body,
     },
   });
@@ -469,7 +577,8 @@ export const createCommunicationTemplateApi = async (req: Request, res: Response
 export const updateCommunicationTemplateApi = async (req: Request, res: Response) => {
   const payload = templatePayloadSchema.partial().extend({ channel: channelSchema }).parse(req.body);
   await assertPermission(req, templatePermissions(payload.channel, 'edit'));
-  const schoolId = resolveSchoolId(req, payload.schoolId);
+  const platformScope = req.auth?.role === 'SUPER_ADMIN' && payload.platform === true;
+  const schoolId = platformScope ? null : resolveSchoolId(req, payload.schoolId);
   const existing = await prisma.notificationTemplate.findFirst({
     where: { id: req.params.id, schoolId, channel: payload.channel },
   });
@@ -479,7 +588,7 @@ export const updateCommunicationTemplateApi = async (req: Request, res: Response
     where: { id: existing.id },
     data: {
       name: payload.name,
-      subject: payload.channel === 'EMAIL' ? payload.subject : null,
+      subject: payload.channel === 'EMAIL' || payload.channel === 'PUSH' ? payload.subject : null,
       body: payload.body,
     },
   });
@@ -489,7 +598,8 @@ export const updateCommunicationTemplateApi = async (req: Request, res: Response
 export const deleteCommunicationTemplateApi = async (req: Request, res: Response) => {
   const channel = channelSchema.parse((req.query.channel as string | undefined) ?? 'EMAIL');
   await assertPermission(req, templatePermissions(channel, 'delete'));
-  const schoolId = resolveSchoolId(req, req.query.schoolId as string | undefined);
+  const platformScope = req.auth?.role === 'SUPER_ADMIN' && req.query.platform === 'true';
+  const schoolId = platformScope ? null : resolveSchoolId(req, req.query.schoolId as string | undefined);
   const existing = await prisma.notificationTemplate.findFirst({ where: { id: req.params.id, schoolId, channel } });
   if (!existing) throw new HttpError(404, 'Template not found');
   await prisma.notificationTemplate.delete({ where: { id: existing.id } });
@@ -572,11 +682,15 @@ export const sendSmsCommunicationApi = async (req: Request, res: Response) => {
   await sendCommunication(req, res, 'SMS');
 };
 
+export const sendPushCommunicationApi = async (req: Request, res: Response) => {
+  await sendCommunication(req, res, 'PUSH');
+};
+
 export const sendLoginCredentialInstructionsApi = async (req: Request, res: Response) => {
   await assertPermission(req, P.communicationLoginCredentialsSend);
   const payload = sendPayloadBaseSchema
     .omit({ templateId: true, subject: true, body: true })
-    .extend({ channel: channelSchema.default('EMAIL') })
+    .extend({ channel: z.enum(['EMAIL', 'SMS']).default('EMAIL') })
     .parse(req.body);
   const schoolId = resolveSchoolId(req, payload.schoolId);
   const school = await prisma.school.findUnique({ where: { id: schoolId }, select: { name: true, code: true, domainUrl: true } });

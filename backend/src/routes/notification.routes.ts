@@ -8,6 +8,11 @@ import {
   sendNotificationApi,
   listNotificationLogs,
   listNotificationSummary,
+  registerPushDevice,
+  unregisterPushDevice,
+  getPushPreference,
+  updatePushPreference,
+  listPushNotificationLogs,
 } from '../controllers/notification.controller';
 
 export const notificationRouter = Router();
@@ -19,3 +24,8 @@ notificationRouter.get('/templates', requirePermission(P.settingsAccess), listTe
 notificationRouter.post('/send', requirePermission(P.settingsAccess), sendNotificationApi);
 notificationRouter.get('/logs', requirePermission(P.settingsAccess), listNotificationLogs);
 notificationRouter.get('/summary', requirePermission(P.dashboardOverview, P.supportView, P.plansView), listNotificationSummary);
+notificationRouter.post('/push/devices', registerPushDevice);
+notificationRouter.post('/push/devices/unregister', unregisterPushDevice);
+notificationRouter.get('/push/preferences/me', getPushPreference);
+notificationRouter.patch('/push/preferences/me', updatePushPreference);
+notificationRouter.get('/push/logs', requirePermission(P.communicationPushLogView, P.settingsAccess), listPushNotificationLogs);

@@ -377,10 +377,24 @@ export const PLAN_PERMISSION_MODULES: PlanPermissionModuleDefinition[] = [
   },
   {
     parent: 'Communication',
+    module: 'Send Push',
+    path: '/dashboard/communication/send-push',
+    description: 'Compose push notifications and send immediately or schedule.',
+    codes: [P.communicationPushSend],
+  },
+  {
+    parent: 'Communication',
     module: 'Email / SMS Logs',
     path: '/dashboard/communication/logs',
     description: 'Review sent and failed email/SMS delivery records.',
     codes: [P.communicationEmailLogView],
+  },
+  {
+    parent: 'Communication',
+    module: 'Push Logs',
+    path: '/dashboard/communication/push-logs',
+    description: 'Review sent and failed push notification records.',
+    codes: [P.communicationPushLogView],
   },
   {
     parent: 'Communication',
@@ -418,6 +432,18 @@ export const PLAN_PERMISSION_MODULES: PlanPermissionModuleDefinition[] = [
       P.communicationSmsTemplateCreate,
       P.communicationSmsTemplateEdit,
       P.communicationSmsTemplateDelete,
+    ],
+  },
+  {
+    parent: 'Communication',
+    module: 'Push Templates',
+    path: '/dashboard/communication/push-templates',
+    description: 'Create and maintain reusable school push notification templates.',
+    codes: [
+      P.communicationPushTemplateView,
+      P.communicationPushTemplateCreate,
+      P.communicationPushTemplateEdit,
+      P.communicationPushTemplateDelete,
     ],
   },
   {

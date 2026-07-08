@@ -49,6 +49,7 @@ export default function DashboardClientLayout({
     '/dashboard/support',
     '/dashboard/audit',
     '/dashboard/logs',
+    '/dashboard/communication',
     '/dashboard/themes',
     '/dashboard/system-health',
     '/dashboard/backups',

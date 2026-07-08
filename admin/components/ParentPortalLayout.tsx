@@ -7,6 +7,7 @@ import { useQuery } from '@tanstack/react-query';
 import { ThemeContext } from './ThemeProvider';
 import { listParentChildren, getParentProfile, type ParentChild } from '../services/parentPortal.service';
 import { logout } from '../services/auth.service';
+import PushNotificationToggle from './PushNotificationToggle';
 
 export const ParentChildContext = createContext<{
   activeChildId: string;
@@ -156,6 +157,9 @@ export default function ParentPortalLayout({ children }: { children: React.React
             >
               Logout
             </button>
+            <div className="min-w-36 rounded-md border border-white/30 bg-white px-1 text-ink">
+              <PushNotificationToggle compact />
+            </div>
           </div>
         </header>
 

@@ -589,6 +589,7 @@ export const resolvePermissionForPath = (path: string, method = 'GET') => {
   if (pathOnly.startsWith('/api/v1/notifications/templates')) return P.settingsAccess;
   if (pathOnly.startsWith('/api/v1/notifications/send')) return P.settingsAccess;
   if (pathOnly.startsWith('/api/v1/notifications/logs')) return P.settingsAccess;
+  if (pathOnly.startsWith('/api/v1/notifications/push/logs')) return P.communicationPushLogView;
   if (pathOnly.startsWith('/api/v1/notifications/summary')) return [P.dashboardOverview, P.supportView, P.plansView];
   if (pathOnly.startsWith('/api/v1/attendance/substitutions')) return P.attendanceSubstituteManage;
   if (pathOnly.startsWith('/api/v1/attendance/evidence')) {

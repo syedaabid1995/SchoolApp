@@ -110,7 +110,18 @@ export const sendNotification = async (payload: NotificationPayload) => {
         to: payload.data.to ? String(payload.data.to) : '',
         channel: payload.channel,
         schoolId: payload.schoolId ?? null,
-        payload: { to: payload.data.to ? String(payload.data.to) : '', subject, body: body ?? '', html },
+        payload: {
+          to: payload.data.to ? String(payload.data.to) : '',
+          subject,
+          body: body ?? '',
+          html,
+          data: {
+            route: payload.data.route ? String(payload.data.route) : undefined,
+            module: payload.data.module ? String(payload.data.module) : undefined,
+            category: payload.data.category ? String(payload.data.category) : undefined,
+            logId: log.id,
+          },
+        },
       });
     }
   }

@@ -22,6 +22,8 @@ class ApiEndpoints {
   static const studentAttendance = '/students/attendance';
   static const studentAttendanceOptions = '/students/attendance/options';
   static const notificationSummary = '/notifications/summary';
+  static const pushDevices = '/notifications/push/devices';
+  static const pushPreferencesMe = '/notifications/push/preferences/me';
   static const leaveBalancesMe = '/leave/balances/me';
   static const leaveTypes = '/leave/types';
   static const leaveApplications = '/leave/applications';

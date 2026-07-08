@@ -104,6 +104,8 @@ model School {
   configOverrides                TenantConfigOverride[]
   notificationLogs               NotificationLog[]
   notificationTemplates           NotificationTemplate[]
+  pushDeviceTokens                PushDeviceToken[]
+  notificationPreferences         UserNotificationPreference[]
   communicationNotices            CommunicationNotice[]
   backupJobs                     BackupJob[]
   subscription                   Subscription?
@@ -214,6 +216,8 @@ model User {
   markRevaluations                       MarkRevaluation[]
   featureFlagOverrides                   FeatureFlagOverride[]
   notificationLogs                       NotificationLog[]
+  pushDeviceTokens                       PushDeviceToken[]
+  notificationPreference                 UserNotificationPreference?
   communicationNoticesCreated            CommunicationNotice[]             @relation("CommunicationNoticeCreatedBy")
   backupRequests                         BackupJob[]
   restoreApprovals                       RestoreJob[]                    @relation("RestoreApprovedBy")
@@ -4068,6 +4072,12 @@ enum NotificationChannel {
   EMAIL
 }
 
+enum PushDevicePlatform {
+  WEB
+  ANDROID
+  IOS
+}
+
 enum NotificationStatus {
   QUEUED
   SENT
@@ -4126,6 +4136,46 @@ model NotificationLog {
   @@index([userId, createdAt])
   @@index([templateId])
   @@map("notification_logs")
+}
+
+model PushDeviceToken {
+  id         String             @id @default(uuid()) @db.Uuid
+  userId     String             @map("user_id") @db.Uuid
+  schoolId   String?            @map("school_id") @db.Uuid
+  token      String             @unique
+  platform   PushDevicePlatform
+  app        String?
+  deviceId   String?            @map("device_id")
+  userAgent  String?            @map("user_agent")
+  isEnabled  Boolean            @default(true) @map("is_enabled")
+  lastSeenAt DateTime           @default(now()) @map("last_seen_at")
+  disabledAt DateTime?          @map("disabled_at")
+  createdAt  DateTime           @default(now()) @map("created_at")
+  updatedAt  DateTime           @updatedAt @map("updated_at")
+
+  user   User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  school School? @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([schoolId])
+  @@index([schoolId, platform])
+  @@index([userId, isEnabled])
+  @@map("push_device_tokens")
+}
+
+model UserNotificationPreference {
+  id          String   @id @default(uuid()) @db.Uuid
+  userId      String   @unique @map("user_id") @db.Uuid
+  schoolId    String?  @map("school_id") @db.Uuid
+  pushEnabled Boolean  @default(true) @map("push_enabled")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  user   User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  school School? @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+
+  @@index([schoolId])
+  @@map("user_notification_preferences")
 }
 
 model CommunicationNotice {

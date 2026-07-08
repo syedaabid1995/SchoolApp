@@ -36,7 +36,9 @@ export const EMPLOYEE_PERMISSION_CATALOG: PermissionCatalogItem[] = [
   { code: P.communicationNoticeBoardDelete, label: 'Notice Board - Delete', path: '/dashboard/communication/notice-board', group: 'Communication' },
   { code: P.communicationEmailSend, label: 'Send Email', path: '/dashboard/communication/send-email', group: 'Communication' },
   { code: P.communicationSmsSend, label: 'Send SMS', path: '/dashboard/communication/send-sms', group: 'Communication' },
+  { code: P.communicationPushSend, label: 'Send Push', path: '/dashboard/communication/send-push', group: 'Communication' },
   { code: P.communicationEmailLogView, label: 'Email / SMS Logs', path: '/dashboard/communication/logs', group: 'Communication' },
+  { code: P.communicationPushLogView, label: 'Push Logs', path: '/dashboard/communication/push-logs', group: 'Communication' },
   { code: P.communicationScheduledLogView, label: 'Scheduled Email / SMS Logs', path: '/dashboard/communication/scheduled-logs', group: 'Communication' },
   { code: P.communicationLoginCredentialsSend, label: 'Login Credentials Send', path: '/dashboard/communication/login-credentials', group: 'Communication' },
   { code: P.communicationEmailTemplateView, label: 'Email Templates - View', path: '/dashboard/communication/email-templates', group: 'Communication' },
@@ -47,6 +49,10 @@ export const EMPLOYEE_PERMISSION_CATALOG: PermissionCatalogItem[] = [
   { code: P.communicationSmsTemplateCreate, label: 'SMS Templates - Create', path: '/dashboard/communication/sms-templates', group: 'Communication' },
   { code: P.communicationSmsTemplateEdit, label: 'SMS Templates - Edit', path: '/dashboard/communication/sms-templates', group: 'Communication' },
   { code: P.communicationSmsTemplateDelete, label: 'SMS Templates - Delete', path: '/dashboard/communication/sms-templates', group: 'Communication' },
+  { code: P.communicationPushTemplateView, label: 'Push Templates - View', path: '/dashboard/communication/push-templates', group: 'Communication' },
+  { code: P.communicationPushTemplateCreate, label: 'Push Templates - Create', path: '/dashboard/communication/push-templates', group: 'Communication' },
+  { code: P.communicationPushTemplateEdit, label: 'Push Templates - Edit', path: '/dashboard/communication/push-templates', group: 'Communication' },
+  { code: P.communicationPushTemplateDelete, label: 'Push Templates - Delete', path: '/dashboard/communication/push-templates', group: 'Communication' },
   { code: P.plansView, label: 'Plans', path: '/dashboard/plans', group: 'Plans' },
   { code: P.aiAssistantView, label: 'AI Assistant - View', path: '/dashboard/assistant', group: 'AI Assistant' },
   { code: P.aiAssistantUse, label: 'AI Assistant - Chat', path: '/dashboard/assistant', group: 'AI Assistant' },
@@ -222,11 +228,14 @@ export const getRequiredPermissionForPath = (pathname: string) => {
   if (pathname.startsWith('/dashboard/communication/notice-board')) return P.communicationNoticeBoardView;
   if (pathname.startsWith('/dashboard/communication/send-email')) return P.communicationEmailSend;
   if (pathname.startsWith('/dashboard/communication/send-sms')) return P.communicationSmsSend;
+  if (pathname.startsWith('/dashboard/communication/send-push')) return P.communicationPushSend;
   if (pathname.startsWith('/dashboard/communication/logs')) return P.communicationEmailLogView;
+  if (pathname.startsWith('/dashboard/communication/push-logs')) return P.communicationPushLogView;
   if (pathname.startsWith('/dashboard/communication/scheduled-logs')) return P.communicationScheduledLogView;
   if (pathname.startsWith('/dashboard/communication/login-credentials')) return P.communicationLoginCredentialsSend;
   if (pathname.startsWith('/dashboard/communication/email-templates')) return P.communicationEmailTemplateView;
   if (pathname.startsWith('/dashboard/communication/sms-templates')) return P.communicationSmsTemplateView;
+  if (pathname.startsWith('/dashboard/communication/push-templates')) return P.communicationPushTemplateView;
 
   if (pathname.startsWith('/dashboard/teachers/add')) return P.teachersAdd;
   if (pathname.startsWith('/dashboard/teachers/onboarding')) return P.teacherOnboardingView;

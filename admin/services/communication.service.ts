@@ -1,6 +1,6 @@
 import { api } from '../lib/api';
 
-export type CommunicationChannel = 'EMAIL' | 'SMS';
+export type CommunicationChannel = 'EMAIL' | 'SMS' | 'PUSH';
 export type RecipientGroup =
   | 'STUDENTS'
   | 'GUARDIANS'
@@ -56,6 +56,25 @@ export type CommunicationLog = {
   createdAt: string;
 };
 
+export type PushNotificationLog = {
+  id: string;
+  schoolId?: string | null;
+  status: 'QUEUED' | 'SENT' | 'FAILED' | string;
+  recipientUserId: string;
+  subject?: string | null;
+  message: string;
+  recipientName: string;
+  recipientType: string;
+  route?: string | null;
+  module?: string | null;
+  templateName?: string | null;
+  providerId?: string | null;
+  error?: string | null;
+  scheduledAt?: string | null;
+  sentAt?: string | null;
+  createdAt: string;
+};
+
 export type CommunicationSendPayload = {
   schoolId?: string;
   templateId?: string | null;
@@ -67,6 +86,9 @@ export type CommunicationSendPayload = {
   sectionId?: string | null;
   individualRecipient?: string | null;
   scheduledAt?: string | null;
+  route?: string | null;
+  module?: string | null;
+  category?: string | null;
 };
 
 export type CommunicationSendResult = {
@@ -123,15 +145,16 @@ export const deleteCommunicationNotice = async (id: string, schoolId?: string) =
   return data;
 };
 
-export const listCommunicationTemplates = async (channel: CommunicationChannel, schoolId?: string) => {
+export const listCommunicationTemplates = async (channel: CommunicationChannel, schoolId?: string, platform = false) => {
   const { data } = await api.get<{ items: CommunicationTemplate[] }>('/communication/templates', {
-    params: { channel, ...(schoolId ? { schoolId } : {}) },
+    params: { channel, ...(platform ? { platform: true } : schoolId ? { schoolId } : {}) },
   });
   return data.items;
 };
 
 export const createCommunicationTemplate = async (payload: {
   schoolId?: string;
+  platform?: boolean;
   channel: CommunicationChannel;
   name: string;
   subject?: string | null;
@@ -145,6 +168,7 @@ export const updateCommunicationTemplate = async (
   id: string,
   payload: Partial<{
     schoolId: string;
+    platform: boolean;
     channel: CommunicationChannel;
     name: string;
     subject: string | null;
@@ -155,9 +179,9 @@ export const updateCommunicationTemplate = async (
   return data;
 };
 
-export const deleteCommunicationTemplate = async (id: string, channel: CommunicationChannel, schoolId?: string) => {
+export const deleteCommunicationTemplate = async (id: string, channel: CommunicationChannel, schoolId?: string, platform = false) => {
   const { data } = await api.delete<{ success: boolean }>(`/communication/templates/${id}`, {
-    params: { channel, ...(schoolId ? { schoolId } : {}) },
+    params: { channel, ...(platform ? { platform: true } : schoolId ? { schoolId } : {}) },
   });
   return data;
 };
@@ -169,6 +193,11 @@ export const sendCommunicationEmail = async (payload: CommunicationSendPayload) 
 
 export const sendCommunicationSms = async (payload: CommunicationSendPayload) => {
   const { data } = await api.post<CommunicationSendResult>('/communication/send-sms', payload);
+  return data;
+};
+
+export const sendCommunicationPush = async (payload: CommunicationSendPayload) => {
+  const { data } = await api.post<CommunicationSendResult>('/communication/send-push', payload);
   return data;
 };
 
@@ -186,5 +215,10 @@ export const listCommunicationLogs = async (params?: { channel?: CommunicationCh
 
 export const listCommunicationScheduledLogs = async (params?: { channel?: CommunicationChannel; schoolId?: string }) => {
   const { data } = await api.get<{ items: CommunicationLog[] }>('/communication/scheduled-logs', { params });
+  return data.items;
+};
+
+export const listPushNotificationLogs = async (params?: { schoolId?: string }) => {
+  const { data } = await api.get<{ items: PushNotificationLog[] }>('/notifications/push/logs', { params });
   return data.items;
 };

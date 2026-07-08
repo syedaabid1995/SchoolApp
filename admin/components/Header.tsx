@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation';
 import { useQuery } from '@tanstack/react-query';
 import { logout, stopImpersonation } from '../services/auth.service';
 import { listNotificationSummary } from '../services/notificationSummary.service';
+import PushNotificationToggle from './PushNotificationToggle';
 
 export type DashboardThemeMode = 'light' | 'dark' | 'system';
 export type DashboardResolvedThemeMode = 'light' | 'dark';
@@ -640,6 +641,7 @@ export const Header = ({
                   >
                     Change Password
                   </Link>
+                  <PushNotificationToggle compact />
                   <button
                     type="button"
                     onClick={handleLogout}

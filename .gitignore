@@ -57,6 +57,7 @@ backend/tmp/
 backend/temp/
 backend/imports/
 backend/storage/
+backend/secrets/
 backend/*.log
 backend/**/*.log
 

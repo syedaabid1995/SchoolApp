@@ -3,6 +3,7 @@ export type NotificationDispatch = {
   subject?: string;
   body: string;
   html?: string;
+  data?: Record<string, string | undefined | null>;
 };
 
 export type DeliveryResult = {

@@ -1,4 +1,4 @@
-package com.techstageit.school_flutter
+package com.akademifyy
 
 import io.flutter.embedding.android.FlutterActivity
 

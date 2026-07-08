@@ -10,6 +10,7 @@ import {
   listCommunicationTemplatesApi,
   sendEmailCommunicationApi,
   sendLoginCredentialInstructionsApi,
+  sendPushCommunicationApi,
   sendSmsCommunicationApi,
   updateCommunicationNoticeApi,
   updateCommunicationTemplateApi,
@@ -32,6 +33,7 @@ communicationRouter.delete('/templates/:id', deleteCommunicationTemplateApi);
 
 communicationRouter.post('/send-email', sendEmailCommunicationApi);
 communicationRouter.post('/send-sms', sendSmsCommunicationApi);
+communicationRouter.post('/send-push', sendPushCommunicationApi);
 communicationRouter.post('/login-credentials', sendLoginCredentialInstructionsApi);
 
 communicationRouter.get('/logs', listCommunicationLogsApi);

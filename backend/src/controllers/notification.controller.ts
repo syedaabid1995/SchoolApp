@@ -30,6 +30,50 @@ const sendSchema = z.object({
   data: z.record(z.unknown()),
 });
 
+const pushDeviceSchema = z.object({
+  token: z.string().trim().min(20),
+  platform: z.enum(['WEB', 'ANDROID', 'IOS']),
+  app: z.string().trim().max(80).optional().nullable(),
+  deviceId: z.string().trim().max(160).optional().nullable(),
+});
+
+const pushPreferenceSchema = z.object({
+  pushEnabled: z.boolean(),
+});
+
+const pushLogDto = (log: {
+  id: string;
+  schoolId: string | null;
+  payload: unknown;
+  status: string;
+  providerId: string | null;
+  error: string | null;
+  scheduledAt: Date | null;
+  sentAt: Date | null;
+  createdAt: Date;
+  template?: { id: string; name: string | null; key: string; subject: string | null } | null;
+}) => {
+  const payload = log.payload && typeof log.payload === 'object' ? (log.payload as Record<string, unknown>) : {};
+  return {
+    id: log.id,
+    schoolId: log.schoolId,
+    status: log.status,
+    recipientUserId: typeof payload.to === 'string' ? payload.to : '',
+    subject: typeof payload.subject === 'string' ? payload.subject : log.template?.subject ?? null,
+    message: typeof payload.body === 'string' ? payload.body : '',
+    recipientName: typeof payload.recipientName === 'string' ? payload.recipientName : '',
+    recipientType: typeof payload.recipientType === 'string' ? payload.recipientType : '',
+    route: typeof payload.route === 'string' ? payload.route : '',
+    module: typeof payload.module === 'string' ? payload.module : '',
+    templateName: log.template?.name ?? log.template?.key ?? null,
+    providerId: log.providerId,
+    error: log.error,
+    scheduledAt: log.scheduledAt,
+    sentAt: log.sentAt,
+    createdAt: log.createdAt,
+  };
+};
+
 export const createTemplate = async (req: Request, res: Response) => {
   const payload = templateSchema.parse(req.body);
 
@@ -74,6 +118,100 @@ export const sendNotificationApi = async (req: Request, res: Response) => {
   await invalidateNotificationCache(schoolId);
 
   res.status(202).json(result);
+};
+
+export const registerPushDevice = async (req: Request, res: Response) => {
+  if (!req.auth) throw new HttpError(401, 'Unauthorized');
+  const payload = pushDeviceSchema.parse(req.body);
+  const device = await prisma.pushDeviceToken.upsert({
+    where: { token: payload.token },
+    create: {
+      userId: req.auth.userId,
+      schoolId: req.auth.schoolId ?? null,
+      token: payload.token,
+      platform: payload.platform,
+      app: payload.app ?? null,
+      deviceId: payload.deviceId ?? null,
+      userAgent: req.headers['user-agent'] ?? null,
+      isEnabled: true,
+      lastSeenAt: new Date(),
+    },
+    update: {
+      userId: req.auth.userId,
+      schoolId: req.auth.schoolId ?? null,
+      platform: payload.platform,
+      app: payload.app ?? null,
+      deviceId: payload.deviceId ?? null,
+      userAgent: req.headers['user-agent'] ?? null,
+      isEnabled: true,
+      disabledAt: null,
+      lastSeenAt: new Date(),
+    },
+  });
+  await prisma.userNotificationPreference.upsert({
+    where: { userId: req.auth.userId },
+    create: { userId: req.auth.userId, schoolId: req.auth.schoolId ?? null, pushEnabled: true },
+    update: {},
+  });
+  res.status(200).json({ id: device.id, platform: device.platform, app: device.app, isEnabled: device.isEnabled });
+};
+
+export const unregisterPushDevice = async (req: Request, res: Response) => {
+  if (!req.auth) throw new HttpError(401, 'Unauthorized');
+  const payload = z.object({ token: z.string().trim().min(1) }).parse(req.body);
+  await prisma.pushDeviceToken.updateMany({
+    where: { token: payload.token, userId: req.auth.userId },
+    data: { isEnabled: false, disabledAt: new Date() },
+  });
+  res.status(200).json({ success: true });
+};
+
+export const getPushPreference = async (req: Request, res: Response) => {
+  if (!req.auth) throw new HttpError(401, 'Unauthorized');
+  const preference = await prisma.userNotificationPreference.upsert({
+    where: { userId: req.auth.userId },
+    create: { userId: req.auth.userId, schoolId: req.auth.schoolId ?? null, pushEnabled: true },
+    update: {},
+  });
+  res.status(200).json({ pushEnabled: preference.pushEnabled });
+};
+
+export const updatePushPreference = async (req: Request, res: Response) => {
+  if (!req.auth) throw new HttpError(401, 'Unauthorized');
+  const payload = pushPreferenceSchema.parse(req.body);
+  const preference = await prisma.userNotificationPreference.upsert({
+    where: { userId: req.auth.userId },
+    create: { userId: req.auth.userId, schoolId: req.auth.schoolId ?? null, pushEnabled: payload.pushEnabled },
+    update: { pushEnabled: payload.pushEnabled },
+  });
+  if (!payload.pushEnabled) {
+    await prisma.pushDeviceToken.updateMany({
+      where: { userId: req.auth.userId },
+      data: { isEnabled: false, disabledAt: new Date() },
+    });
+  }
+  res.status(200).json({ pushEnabled: preference.pushEnabled });
+};
+
+export const listPushNotificationLogs = async (req: Request, res: Response) => {
+  if (!req.auth) throw new HttpError(401, 'Unauthorized');
+  const pagination = parseCursorPagination(req.query, { defaultLimit: 50, maxLimit: 100 });
+  const requestedSchoolId = req.query.schoolId as string | undefined;
+  const schoolId = req.auth.role === 'SUPER_ADMIN'
+    ? requestedSchoolId || undefined
+    : resolveSchoolId(req, requestedSchoolId);
+  const rows = await prisma.notificationLog.findMany({
+    where: {
+      channel: 'PUSH',
+      ...(schoolId ? { schoolId } : {}),
+    },
+    include: { template: { select: { id: true, name: true, key: true, subject: true } } },
+    orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+    ...cursorPrismaArgs(pagination),
+  });
+  const { data: logs, pageInfo } = toCursorPage(rows, pagination.limit);
+  setCursorPaginationHeaders(res, pageInfo);
+  res.status(200).json({ items: logs.map(pushLogDto), pageInfo });
 };
 
 export const listNotificationLogs = async (req: Request, res: Response) => {
