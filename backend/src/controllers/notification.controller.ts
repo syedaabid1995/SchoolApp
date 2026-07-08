@@ -151,7 +151,7 @@ export const registerPushDevice = async (req: Request, res: Response) => {
   await prisma.userNotificationPreference.upsert({
     where: { userId: req.auth.userId },
     create: { userId: req.auth.userId, schoolId: req.auth.schoolId ?? null, pushEnabled: true },
-    update: {},
+    update: { pushEnabled: true },
   });
   res.status(200).json({ id: device.id, platform: device.platform, app: device.app, isEnabled: device.isEnabled });
 };
@@ -170,7 +170,7 @@ export const getPushPreference = async (req: Request, res: Response) => {
   if (!req.auth) throw new HttpError(401, 'Unauthorized');
   const preference = await prisma.userNotificationPreference.upsert({
     where: { userId: req.auth.userId },
-    create: { userId: req.auth.userId, schoolId: req.auth.schoolId ?? null, pushEnabled: true },
+    create: { userId: req.auth.userId, schoolId: req.auth.schoolId ?? null, pushEnabled: false },
     update: {},
   });
   res.status(200).json({ pushEnabled: preference.pushEnabled });

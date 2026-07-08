@@ -24,6 +24,8 @@ const getDeviceId = () => {
 export default function PushNotificationToggle({ compact = false }: { compact?: boolean }) {
   const queryClient = useQueryClient();
   const [status, setStatus] = useState<string>('');
+  const [hasRegisteredDevice, setHasRegisteredDevice] = useState(false);
+  const [notificationPermission, setNotificationPermission] = useState<NotificationPermission>('default');
   const configured = isFirebaseWebPushConfigured();
   const preferenceQuery = useQuery({
     queryKey: ['push-preference'],
@@ -38,6 +40,8 @@ export default function PushNotificationToggle({ compact = false }: { compact?: 
       if (!token) throw new Error('Browser notification permission was not granted.');
       await registerPushDevice({ token, platform: 'WEB', app: 'admin-web', deviceId: getDeviceId() });
       window.localStorage.setItem(TOKEN_STORAGE_KEY, token);
+      setHasRegisteredDevice(true);
+      setNotificationPermission('granted');
       return updatePushPreference(true);
     },
     onSuccess: async () => {
@@ -52,6 +56,7 @@ export default function PushNotificationToggle({ compact = false }: { compact?: 
       const token = window.localStorage.getItem(TOKEN_STORAGE_KEY);
       if (token) await unregisterPushDevice(token);
       window.localStorage.removeItem(TOKEN_STORAGE_KEY);
+      setHasRegisteredDevice(false);
       return updatePushPreference(false);
     },
     onSuccess: async () => {
@@ -60,6 +65,14 @@ export default function PushNotificationToggle({ compact = false }: { compact?: 
     },
     onError: (error) => setStatus(error instanceof Error ? error.message : 'Unable to disable push'),
   });
+
+  useEffect(() => {
+    if (!configured || typeof window === 'undefined') return;
+    setHasRegisteredDevice(Boolean(window.localStorage.getItem(TOKEN_STORAGE_KEY)));
+    if ('Notification' in window) {
+      setNotificationPermission(Notification.permission);
+    }
+  }, [configured]);
 
   useEffect(() => {
     if (!configured || typeof window === 'undefined' || !preferenceQuery.data?.pushEnabled) return;
@@ -71,7 +84,7 @@ export default function PushNotificationToggle({ compact = false }: { compact?: 
 
   if (!configured) return null;
 
-  const enabled = preferenceQuery.data?.pushEnabled !== false;
+  const enabled = preferenceQuery.data?.pushEnabled === true && hasRegisteredDevice && notificationPermission === 'granted';
   const pending = enableMutation.isPending || disableMutation.isPending || preferenceQuery.isLoading;
   const label = enabled ? 'Disable Push' : 'Enable Push';
 
