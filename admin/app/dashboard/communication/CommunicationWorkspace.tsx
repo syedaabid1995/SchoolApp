@@ -941,6 +941,26 @@ function MultiSelectField<T extends string>({
       onChange(Array.from(selectRef.current.selectedOptions).map((option) => option.value as T));
     };
 
+    const removeDropdownActions = () => {
+      if (!activeSelect) return;
+      const parent = activeSelect.next('.ms-parent');
+      parent.find('.communication-ms-ok').off('click.communicationMultiSelectOk');
+      parent.find('.communication-ms-actions').remove();
+    };
+
+    const addDropdownActions = ($: any) => {
+      if (!activeSelect) return;
+      removeDropdownActions();
+      const dropdown = activeSelect.next('.ms-parent').find('.ms-drop');
+      if (!dropdown.length) return;
+
+      const actions = $('<div class="communication-ms-actions"><button type="button" class="communication-ms-ok">OK</button></div>');
+      actions.find('.communication-ms-ok').on('click.communicationMultiSelectOk', () => {
+        activeSelect.multipleSelect('close');
+      });
+      dropdown.append(actions);
+    };
+
     import('jquery').then(async (jqueryModule) => {
       if (disposed || !selectRef.current) return;
       const jqueryFactory = (jqueryModule as any).default ?? jqueryModule;
@@ -970,6 +990,7 @@ function MultiSelectField<T extends string>({
         formatCountSelected: (count: number) => `${count} selected`,
         formatNoMatchesFound: () => 'No options found',
       });
+      addDropdownActions($);
       activeSelect.multipleSelect('setSelects', selectedRef.current, 'value', true);
       pluginRef.current = { select: activeSelect, loaded: true };
     });
@@ -977,6 +998,7 @@ function MultiSelectField<T extends string>({
     return () => {
       disposed = true;
       if (activeSelect?.multipleSelect) {
+        removeDropdownActions();
         activeSelect.off('change.communicationMultiSelect');
         activeSelect.multipleSelect('destroy');
       }

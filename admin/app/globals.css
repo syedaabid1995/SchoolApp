@@ -24,6 +24,48 @@ body {
   overflow-x: hidden;
 }
 
+.communication-multiple-select .ms-parent {
+  width: 100% !important;
+}
+
+.communication-multiple-select .ms-drop {
+  border-color: #cbd5e1;
+  border-radius: 0.75rem;
+  box-shadow: 0 18px 40px rgba(15, 23, 42, 0.14);
+  overflow: hidden;
+  z-index: 50;
+}
+
+.communication-multiple-select .ms-drop ul {
+  padding-bottom: 0;
+}
+
+.communication-ms-actions {
+  position: sticky;
+  bottom: 0;
+  display: flex;
+  justify-content: flex-end;
+  padding: 0.5rem;
+  border-top: 1px solid #e2e8f0;
+  background: #ffffff;
+}
+
+.communication-ms-ok {
+  border: 0;
+  border-radius: 0.5rem;
+  background: #2563eb;
+  color: #ffffff;
+  cursor: pointer;
+  font-size: 0.75rem;
+  font-weight: 800;
+  line-height: 1;
+  padding: 0.5rem 0.875rem;
+}
+
+.communication-ms-ok:hover {
+  background: #1d4ed8;
+}
+
 .dashboard-shell {
   color-scheme: light;
   background: var(--shell-bg);
