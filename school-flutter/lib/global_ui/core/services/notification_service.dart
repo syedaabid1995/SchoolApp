@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -34,6 +36,14 @@ class NotificationService {
   final HiveCacheService _cache;
   final Dio _dio;
 
+  static const _pendingTokenKey = 'notifications.pendingFcmToken';
+  static const _androidChannel = AndroidNotificationChannel(
+    'akademifyy_push',
+    'Push notifications',
+    description: 'Akademifyy push notifications',
+    importance: Importance.high,
+  );
+
   Future<void> initialize() async {
     await _messaging.requestPermission();
     const android = AndroidInitializationSettings('@mipmap/ic_launcher');
@@ -53,18 +63,21 @@ class NotificationService {
       },
     );
 
-    final token = await _messaging.getToken();
-    if (token != null) {
-      await _registerToken(token);
-    }
+    await _localNotifications
+        .resolvePlatformSpecificImplementation<
+          AndroidFlutterLocalNotificationsPlugin
+        >()
+        ?.createNotificationChannel(_androidChannel);
+
+    await syncDeviceToken();
     _messaging.onTokenRefresh.listen((token) {
-      _registerToken(token);
+      unawaited(_registerToken(token));
     });
 
-    FirebaseMessaging.onMessage.listen((message) {
+    FirebaseMessaging.onMessage.listen((message) async {
       final notification = message.notification;
       if (notification != null) {
-        _cache.write(
+        await _cache.write(
           'notification:${message.messageId ?? DateTime.now().microsecondsSinceEpoch}',
           {
             'title': notification.title,
@@ -75,6 +88,7 @@ class NotificationService {
           },
         );
       }
+      await _showForegroundNotification(message);
     });
 
     FirebaseMessaging.onMessageOpenedApp.listen((message) {
@@ -85,7 +99,20 @@ class NotificationService {
     });
   }
 
-  Future<void> _registerToken(String token) async {
+  Future<void> syncDeviceToken() async {
+    final pendingToken = _cache.read<String>(_pendingTokenKey);
+    if (pendingToken != null && pendingToken.isNotEmpty) {
+      final registered = await _registerToken(pendingToken);
+      if (!registered) return;
+    }
+
+    final token = await _messaging.getToken();
+    if (token != null && token.isNotEmpty) {
+      await _registerToken(token);
+    }
+  }
+
+  Future<bool> _registerToken(String token) async {
     final platform = switch (defaultTargetPlatform) {
       TargetPlatform.iOS || TargetPlatform.macOS => 'IOS',
       _ => 'ANDROID',
@@ -93,15 +120,46 @@ class NotificationService {
     try {
       await _dio.post<Map<String, dynamic>>(
         ApiEndpoints.pushDevices,
-        data: {
-          'token': token,
-          'platform': platform,
-          'app': 'school-flutter',
-        },
+        data: {'token': token, 'platform': platform, 'app': 'school-flutter'},
       );
+      await _cache.remove(_pendingTokenKey);
+      return true;
     } catch (_) {
-      _cache.write('notifications.pendingFcmToken', token);
+      await _cache.write(_pendingTokenKey, token);
+      return false;
     }
+  }
+
+  Future<void> _showForegroundNotification(RemoteMessage message) async {
+    final notification = message.notification;
+    final title = notification?.title ?? message.data['title']?.toString();
+    final body = notification?.body ?? message.data['body']?.toString();
+    if ((title == null || title.isEmpty) && (body == null || body.isEmpty)) {
+      return;
+    }
+
+    final details = NotificationDetails(
+      android: AndroidNotificationDetails(
+        _androidChannel.id,
+        _androidChannel.name,
+        channelDescription: _androidChannel.description,
+        importance: Importance.high,
+        priority: Priority.high,
+      ),
+      iOS: const DarwinNotificationDetails(
+        presentAlert: true,
+        presentBadge: true,
+        presentSound: true,
+      ),
+    );
+
+    await _localNotifications.show(
+      id: message.messageId.hashCode,
+      title: title,
+      body: body,
+      notificationDetails: details,
+      payload: routeFromData(message.data),
+    );
   }
 
   static String? routeFromData(Map<String, dynamic> data) {

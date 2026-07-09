@@ -1,6 +1,9 @@
+import 'dart:async';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../core/network/auth_session_events.dart';
+import '../../../../core/services/notification_service.dart';
 import '../../domain/entities/auth_session.dart';
 import 'auth_providers.dart';
 
@@ -9,12 +12,14 @@ final authControllerProvider =
 
 class AuthController extends AsyncNotifier<AuthSession> {
   @override
-  Future<AuthSession> build() {
+  Future<AuthSession> build() async {
     ref.listen<int>(authSessionExpiredProvider, (previous, next) {
       if (previous == next) return;
       state = const AsyncData(AuthSession.unauthenticated());
     });
-    return ref.watch(authRepositoryProvider).restoreSession();
+    final session = await ref.watch(authRepositoryProvider).restoreSession();
+    _syncPushIfAuthenticated(session);
+    return session;
   }
 
   Future<void> login({
@@ -34,6 +39,7 @@ class AuthController extends AsyncNotifier<AuthSession> {
             rememberMe: rememberMe,
           ),
     );
+    _syncPushIfAuthenticated(_currentSession());
   }
 
   Future<void> verifyMfa({
@@ -51,11 +57,23 @@ class AuthController extends AsyncNotifier<AuthSession> {
             rememberMe: rememberMe,
           ),
     );
+    _syncPushIfAuthenticated(_currentSession());
   }
 
   Future<void> logout() async {
     state = const AsyncLoading();
     await ref.read(authRepositoryProvider).logout();
     state = const AsyncData(AuthSession.unauthenticated());
+  }
+
+  AuthSession? _currentSession() {
+    final current = state;
+    return current is AsyncData<AuthSession> ? current.value : null;
+  }
+
+  void _syncPushIfAuthenticated(AuthSession? session) {
+    if (session?.isAuthenticated ?? false) {
+      unawaited(ref.read(notificationServiceProvider).syncDeviceToken());
+    }
   }
 }

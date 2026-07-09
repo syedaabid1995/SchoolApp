@@ -9,6 +9,7 @@ import { sendNotification } from '../services/notification.service';
 import { resolveSchoolId } from '../utils/tenant';
 
 const channelSchema = z.enum(['EMAIL', 'SMS', 'PUSH']);
+const pushPrioritySchema = z.enum(['normal', 'high', 'urgent']);
 const audienceSchema = z.array(z.string().trim().min(1)).default(['Students', 'Guardians']);
 const noticeStatusSchema = z.enum(['DRAFT', 'PUBLISHED', 'ARCHIVED']).default('PUBLISHED');
 const recipientGroupSchema = z.enum([
@@ -55,6 +56,7 @@ const sendPayloadBaseSchema = z.object({
   route: z.string().trim().optional().nullable(),
   module: z.string().trim().optional().nullable(),
   category: z.string().trim().optional().nullable(),
+  priority: pushPrioritySchema.optional().nullable(),
 });
 
 const sendPayloadSchema = sendPayloadBaseSchema
@@ -445,6 +447,7 @@ const sendCommunication = async (req: Request, res: Response, channel: Communica
         route: payload.route,
         module: payload.module,
         category: payload.category,
+        priority: channel === 'PUSH' ? payload.priority ?? 'normal' : undefined,
       },
     });
     results.push(result);

@@ -65,6 +65,7 @@ const pushLogDto = (log: {
     recipientType: typeof payload.recipientType === 'string' ? payload.recipientType : '',
     route: typeof payload.route === 'string' ? payload.route : '',
     module: typeof payload.module === 'string' ? payload.module : '',
+    priority: typeof payload.priority === 'string' ? payload.priority : '',
     templateName: log.template?.name ?? log.template?.key ?? null,
     providerId: log.providerId,
     error: log.error,

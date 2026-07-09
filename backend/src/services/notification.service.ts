@@ -119,6 +119,7 @@ export const sendNotification = async (payload: NotificationPayload) => {
             route: payload.data.route ? String(payload.data.route) : undefined,
             module: payload.data.module ? String(payload.data.module) : undefined,
             category: payload.data.category ? String(payload.data.category) : undefined,
+            priority: payload.data.priority ? String(payload.data.priority) : undefined,
             logId: log.id,
           },
         },

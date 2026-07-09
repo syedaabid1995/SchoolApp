@@ -143,7 +143,7 @@ export const dispatchPushToUser = async (params: {
   const adapter = await resolveAdapter({ channel: 'PUSH', schoolId: params.schoolId ?? null });
   const results = [];
   for (const device of tokens) {
-    const result = await adapter.send({ ...params.payload, to: device.token });
+    const result = await adapter.send({ ...params.payload, to: device.token, platform: device.platform });
     results.push({ device, result });
     if (result.status === 'FAILED' && isInvalidFirebaseTokenError(result.error)) {
       await prisma.pushDeviceToken.update({

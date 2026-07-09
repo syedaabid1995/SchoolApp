@@ -16,10 +16,16 @@ const messaging = firebase.messaging();
 messaging.onBackgroundMessage((payload) => {
   const notification = payload.notification || {};
   const data = payload.data || {};
-  const title = notification.title || 'Akademifyy';
+  const priority = data.priority || 'normal';
+  const title = data.title || notification.title || 'Akademifyy';
   const options = {
-    body: notification.body || '',
+    body: data.body || notification.body || '',
     icon: '/branding/demo-school-favicon.svg',
+    badge: '/branding/demo-school-favicon.svg',
+    tag: data.logId ? `akademifyy-${data.logId}` : undefined,
+    renotify: priority === 'high' || priority === 'urgent',
+    requireInteraction: priority === 'urgent',
+    silent: false,
     data: {
       route: data.route || data.link || '/',
     },

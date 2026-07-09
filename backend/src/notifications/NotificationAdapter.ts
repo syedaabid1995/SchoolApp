@@ -4,6 +4,7 @@ export type NotificationDispatch = {
   body: string;
   html?: string;
   data?: Record<string, string | undefined | null>;
+  platform?: 'WEB' | 'ANDROID' | 'IOS';
 };
 
 export type DeliveryResult = {

@@ -1,6 +1,7 @@
 import { api } from '../lib/api';
 
 export type CommunicationChannel = 'EMAIL' | 'SMS' | 'PUSH';
+export type PushPriority = 'normal' | 'high' | 'urgent';
 export type RecipientGroup =
   | 'STUDENTS'
   | 'GUARDIANS'
@@ -89,6 +90,7 @@ export type CommunicationSendPayload = {
   route?: string | null;
   module?: string | null;
   category?: string | null;
+  priority?: PushPriority | null;
 };
 
 export type CommunicationSendResult = {

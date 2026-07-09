@@ -27,6 +27,7 @@ import {
   type CommunicationNotice,
   type CommunicationTargetMode,
   type CommunicationTemplate,
+  type PushPriority,
   type PushNotificationLog,
   type RecipientGroup,
 } from '../../../services/communication.service';
@@ -66,6 +67,11 @@ const targetTabs: Array<{ id: CommunicationTargetMode; label: string }> = [
   { id: 'INDIVIDUAL', label: 'Individual' },
   { id: 'CLASS', label: 'Class' },
   { id: 'BIRTHDAY', label: "Today's Birthday" },
+];
+const pushPriorityOptions: Array<{ id: PushPriority; label: string }> = [
+  { id: 'normal', label: 'Normal' },
+  { id: 'high', label: 'High' },
+  { id: 'urgent', label: 'Urgent' },
 ];
 
 const inputClass =
@@ -696,6 +702,7 @@ function SendMessage({
   const [route, setRoute] = useState('/dashboard');
   const [moduleName, setModuleName] = useState('notifications');
   const [category, setCategory] = useState('general');
+  const [priority, setPriority] = useState<PushPriority>('normal');
   const scopedParams = effectiveSchoolId ? { schoolId: effectiveSchoolId } : undefined;
 
   const templatesQuery = useQuery({
@@ -747,6 +754,7 @@ function SendMessage({
         route: isPush ? route : null,
         module: isPush ? moduleName : null,
         category: isPush ? category : null,
+        priority: isPush ? priority : null,
       };
       return isEmail ? sendCommunicationEmail(payload) : isPush ? sendCommunicationPush(payload) : sendCommunicationSms(payload);
     },
@@ -827,7 +835,7 @@ function SendMessage({
             )}
           </Field>
           {isPush ? (
-            <div className="grid gap-4 sm:grid-cols-3">
+            <div className="grid gap-4 sm:grid-cols-4">
               <Field label="Route">
                 <input className={inputClass} value={route} onChange={(event) => setRoute(event.target.value)} />
               </Field>
@@ -836,6 +844,15 @@ function SendMessage({
               </Field>
               <Field label="Category">
                 <input className={inputClass} value={category} onChange={(event) => setCategory(event.target.value)} />
+              </Field>
+              <Field label="Priority">
+                <select className={inputClass} value={priority} onChange={(event) => setPriority(event.target.value as PushPriority)}>
+                  {pushPriorityOptions.map((option) => (
+                    <option key={option.id} value={option.id}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
               </Field>
             </div>
           ) : null}

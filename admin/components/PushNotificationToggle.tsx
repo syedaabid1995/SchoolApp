@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { getWebPushToken, isFirebaseWebPushConfigured } from '../lib/firebasePush';
+import { getWebPushToken, isFirebaseWebPushConfigured, startForegroundPushListener } from '../lib/firebasePush';
 import {
   getPushPreference,
   registerPushDevice,
@@ -39,6 +39,7 @@ export default function PushNotificationToggle({ compact = false }: { compact?: 
       const token = await getWebPushToken();
       if (!token) throw new Error('Browser notification permission was not granted.');
       await registerPushDevice({ token, platform: 'WEB', app: 'admin-web', deviceId: getDeviceId() });
+      await startForegroundPushListener();
       window.localStorage.setItem(TOKEN_STORAGE_KEY, token);
       setHasRegisteredDevice(true);
       setNotificationPermission('granted');
@@ -71,6 +72,9 @@ export default function PushNotificationToggle({ compact = false }: { compact?: 
     setHasRegisteredDevice(Boolean(window.localStorage.getItem(TOKEN_STORAGE_KEY)));
     if ('Notification' in window) {
       setNotificationPermission(Notification.permission);
+      if (Notification.permission === 'granted') {
+        void startForegroundPushListener();
+      }
     }
   }, [configured]);
 
