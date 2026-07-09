@@ -660,7 +660,7 @@ export const listCommunicationRecipientsApi = async (req: Request, res: Response
     schoolId,
     channel,
     recipientGroups,
-    targetMode,
+    targetMode: targetMode === 'INDIVIDUAL' ? 'GROUP' : targetMode,
     classId: typeof req.query.classId === 'string' ? req.query.classId : null,
     sectionId: typeof req.query.sectionId === 'string' ? req.query.sectionId : null,
   });

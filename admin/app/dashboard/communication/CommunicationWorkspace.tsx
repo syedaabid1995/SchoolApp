@@ -904,7 +904,7 @@ function RecipientSelector({
   );
 }
 
-function MultiSelectDropdown<T extends string>({
+function MultiSelectField<T extends string>({
   label,
   options,
   selected,
@@ -923,47 +923,35 @@ function MultiSelectDropdown<T extends string>({
   getOptionLabel?: (option: { id: T; label?: string } & Record<string, unknown>) => string;
   getOptionDescription?: (option: { id: T; label?: string } & Record<string, unknown>) => string | null | undefined;
 }) {
-  const [open, setOpen] = useState(false);
-  const selectedLabels = options
-    .filter((option) => selected.includes(option.id))
-    .map((option) => getOptionLabel?.(option) ?? option.label ?? option.id);
-
   return (
     <Field label={label}>
-      <div className="relative">
-        <button
-          type="button"
-          className={`${inputClass} flex min-h-[42px] items-center justify-between gap-3 text-left disabled:cursor-not-allowed`}
+      <div className="space-y-2">
+        <select
+          multiple
+          className={`${inputClass} min-h-32 resize-y`}
+          value={selected}
           disabled={disabled}
-          onClick={() => setOpen((current) => !current)}
+          onChange={(event) =>
+            onChange(Array.from(event.currentTarget.selectedOptions).map((option) => option.value as T))
+          }
         >
-          <span className="min-w-0 truncate">{selectedLabels.length ? selectedLabels.join(', ') : placeholder}</span>
-          <span className="shrink-0 text-xs text-slate-400">v</span>
-        </button>
-        {open && !disabled ? (
-          <div className="absolute z-30 mt-2 max-h-72 w-full overflow-auto rounded-xl border border-slate-200 bg-white p-2 shadow-xl">
-            {options.map((option) => {
-              const isChecked = selected.includes(option.id);
+          {options.length ? (
+            options.map((option) => {
+              const description = getOptionDescription?.(option);
+              const text = getOptionLabel?.(option) ?? option.label ?? option.id;
               return (
-                <label key={option.id} className="flex cursor-pointer items-start gap-3 rounded-lg px-3 py-2 text-sm hover:bg-slate-50">
-                  <input
-                    type="checkbox"
-                    className="mt-1"
-                    checked={isChecked}
-                    onChange={(event) => {
-                      onChange(event.target.checked ? Array.from(new Set([...selected, option.id])) : selected.filter((id) => id !== option.id));
-                    }}
-                  />
-                  <span className="min-w-0">
-                    <span className="block truncate font-semibold text-slate-800">{getOptionLabel?.(option) ?? option.label ?? option.id}</span>
-                    {getOptionDescription?.(option) ? <span className="block truncate text-xs text-slate-500">{getOptionDescription(option)}</span> : null}
-                  </span>
-                </label>
+                <option key={option.id} value={option.id}>
+                  {description ? `${text} - ${description}` : text}
+                </option>
               );
-            })}
-            {!options.length ? <div className="px-3 py-4 text-sm text-slate-500">No options found.</div> : null}
-          </div>
-        ) : null}
+            })
+          ) : (
+            <option value="" disabled>
+              {placeholder}
+            </option>
+          )}
+        </select>
+        <p className="text-xs font-semibold text-slate-500">Use Cmd/Ctrl or Shift to select multiple.</p>
       </div>
     </Field>
   );
@@ -977,7 +965,7 @@ function AudienceGroupDropdown({
   setGroups: (groups: RecipientGroup[]) => void;
 }) {
   return (
-    <MultiSelectDropdown
+    <MultiSelectField
       label="Message To"
       options={recipientOptions}
       selected={groups}
@@ -999,7 +987,7 @@ function RecipientOptionDropdown({
   loading: boolean;
 }) {
   return (
-    <MultiSelectDropdown
+    <MultiSelectField
       label="Recipient Name / Contact"
       options={options.map((option) => ({ ...option, id: option.value }))}
       selected={selected}
