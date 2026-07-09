@@ -156,8 +156,8 @@ const platformSections: NavSection[] = [
     items: [
       { href: '/dashboard/settings?tab=messaging', label: 'Messaging', icon: 'message' },
       { href: '/dashboard/communication/send-push', label: 'Send Push', icon: 'message' },
+      { href: '/dashboard/communication/logs', label: 'Logs', icon: 'history' },
       { href: '/dashboard/communication/push-templates', label: 'Push Templates', icon: 'message' },
-      { href: '/dashboard/communication/push-logs', label: 'Push Logs', icon: 'history' },
     ],
   },
 ];
@@ -315,9 +315,7 @@ export const Sidebar = ({
           { href: '/dashboard/communication/send-email', label: 'Send Email', icon: 'mail' },
           { href: '/dashboard/communication/send-sms', label: 'Send SMS', icon: 'message' },
           { href: '/dashboard/communication/send-push', label: 'Send Push', icon: 'message' },
-          { href: '/dashboard/communication/logs', label: 'Email / SMS Log', icon: 'history' },
-          { href: '/dashboard/communication/push-logs', label: 'Push Log', icon: 'history' },
-          { href: '/dashboard/communication/scheduled-logs', label: 'Schedule Email SMS Log', icon: 'calendar' },
+          { href: '/dashboard/communication/logs', label: 'Logs', icon: 'history' },
           { href: '/dashboard/communication/login-credentials', label: 'Login Credentials Send', icon: 'lock' },
           { href: '/dashboard/communication/email-templates', label: 'Email Template', icon: 'fileText' },
           { href: '/dashboard/communication/sms-templates', label: 'SMS Template', icon: 'message' },

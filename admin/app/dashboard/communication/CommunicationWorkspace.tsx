@@ -46,6 +46,7 @@ type CommunicationView =
   | 'email-templates'
   | 'sms-templates'
   | 'push-templates';
+type LogsTab = 'delivery' | 'scheduled' | 'push';
 
 type AcademicOption = { id: string; name: string };
 
@@ -67,6 +68,11 @@ const targetTabs: Array<{ id: CommunicationTargetMode; label: string }> = [
   { id: 'INDIVIDUAL', label: 'Individual' },
   { id: 'CLASS', label: 'Class' },
   { id: 'BIRTHDAY', label: "Today's Birthday" },
+];
+const logsTabs: Array<{ id: LogsTab; label: string }> = [
+  { id: 'delivery', label: 'Email / SMS' },
+  { id: 'scheduled', label: 'Scheduled Email / SMS' },
+  { id: 'push', label: 'Push Notifications' },
 ];
 const pushPriorityOptions: Array<{ id: PushPriority; label: string }> = [
   { id: 'normal', label: 'Normal' },
@@ -1116,14 +1122,54 @@ function PushLogsTable({ effectiveSchoolId }: { effectiveSchoolId: string }) {
   );
 }
 
+function LogsHub({
+  effectiveSchoolId,
+  initialTab = 'delivery',
+}: {
+  effectiveSchoolId: string;
+  initialTab?: LogsTab;
+}) {
+  const [activeTab, setActiveTab] = useState<LogsTab>(initialTab);
+
+  useEffect(() => {
+    setActiveTab(initialTab);
+  }, [initialTab]);
+
+  return (
+    <div className="space-y-4">
+      <div className="flex flex-wrap gap-2 rounded-xl border border-slate-200 bg-white p-2 shadow-sm">
+        {logsTabs.map((tab) => (
+          <button
+            key={tab.id}
+            type="button"
+            onClick={() => setActiveTab(tab.id)}
+            className={`rounded-lg px-4 py-2 text-sm font-bold transition ${
+              activeTab === tab.id ? 'bg-blue-600 text-white shadow-sm' : 'text-slate-600 hover:bg-slate-100 hover:text-slate-950'
+            }`}
+          >
+            {tab.label}
+          </button>
+        ))}
+      </div>
+      {activeTab === 'delivery' ? (
+        <LogsTable scheduled={false} effectiveSchoolId={effectiveSchoolId} />
+      ) : activeTab === 'scheduled' ? (
+        <LogsTable scheduled effectiveSchoolId={effectiveSchoolId} />
+      ) : (
+        <PushLogsTable effectiveSchoolId={effectiveSchoolId} />
+      )}
+    </div>
+  );
+}
+
 const viewConfig: Record<CommunicationView, { title: string; subtitle: string }> = {
   'notice-board': { title: 'Notice Board', subtitle: 'Create and manage school notices for students, guardians, and staff.' },
   'send-email': { title: 'Send Email', subtitle: 'Send email immediately or schedule it for selected school audiences.' },
   'send-sms': { title: 'Send SMS', subtitle: 'Send SMS immediately or schedule it for selected school audiences.' },
   'send-push': { title: 'Send Push', subtitle: 'Send Firebase push notifications to registered web and mobile devices.' },
-  logs: { title: 'Email / SMS Log', subtitle: 'Review sent and failed communication delivery records.' },
-  'push-logs': { title: 'Push Logs', subtitle: 'Review Firebase push notification delivery records.' },
-  'scheduled-logs': { title: 'Schedule Email SMS Log', subtitle: 'Review queued scheduled email and SMS records.' },
+  logs: { title: 'Logs', subtitle: 'Review Email, SMS, scheduled, and push notification delivery records.' },
+  'push-logs': { title: 'Logs', subtitle: 'Review Email, SMS, scheduled, and push notification delivery records.' },
+  'scheduled-logs': { title: 'Logs', subtitle: 'Review Email, SMS, scheduled, and push notification delivery records.' },
   'login-credentials': { title: 'Login Credentials Send', subtitle: 'Send secure login instructions without exposing passwords.' },
   'email-templates': { title: 'Email Template', subtitle: 'Create reusable email templates for school communication.' },
   'sms-templates': { title: 'SMS Template', subtitle: 'Create reusable SMS templates for school communication.' },
@@ -1163,11 +1209,11 @@ export default function CommunicationWorkspace({ view }: { view: CommunicationVi
       ) : view === 'send-push' ? (
         <SendMessage channel="PUSH" effectiveSchoolId={effectiveSchoolId} />
       ) : view === 'logs' ? (
-        <LogsTable scheduled={false} effectiveSchoolId={effectiveSchoolId} />
+        <LogsHub effectiveSchoolId={effectiveSchoolId} />
       ) : view === 'push-logs' ? (
-        <PushLogsTable effectiveSchoolId={effectiveSchoolId} />
+        <LogsHub effectiveSchoolId={effectiveSchoolId} initialTab="push" />
       ) : view === 'scheduled-logs' ? (
-        <LogsTable scheduled effectiveSchoolId={effectiveSchoolId} />
+        <LogsHub effectiveSchoolId={effectiveSchoolId} initialTab="scheduled" />
       ) : view === 'login-credentials' ? (
         <LoginCredentials effectiveSchoolId={effectiveSchoolId} />
       ) : view === 'email-templates' ? (
