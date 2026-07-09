@@ -22,6 +22,13 @@ export const isFirebaseWebPushConfigured = () =>
       process.env.NEXT_PUBLIC_FIREBASE_VAPID_KEY,
   );
 
+export const requestWebPushPermission = async () => {
+  if (typeof window === 'undefined' || !isFirebaseWebPushConfigured()) return null;
+  if (!('serviceWorker' in navigator) || !('Notification' in window)) return null;
+  if (Notification.permission !== 'default') return Notification.permission;
+  return Notification.requestPermission();
+};
+
 export const getWebPushToken = async (options: { requestPermission?: boolean } = {}) => {
   if (typeof window === 'undefined' || !isFirebaseWebPushConfigured()) return null;
   if (!('serviceWorker' in navigator) || !('Notification' in window)) return null;
@@ -29,7 +36,7 @@ export const getWebPushToken = async (options: { requestPermission?: boolean } =
 
   let permission = Notification.permission;
   if (permission === 'default' && options.requestPermission !== false) {
-    permission = await Notification.requestPermission();
+    permission = (await requestWebPushPermission()) ?? permission;
   }
   if (permission !== 'granted') return null;
 

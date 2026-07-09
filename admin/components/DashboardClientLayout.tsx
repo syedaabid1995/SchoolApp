@@ -208,13 +208,16 @@ export default function DashboardClientLayout({
     const canPromptNow = Notification.permission === 'default' && !window.sessionStorage.getItem(promptKey);
     if (Notification.permission === 'default' && !canPromptNow) return;
     if (Notification.permission === 'denied') return;
-    if (canPromptNow) {
-      window.sessionStorage.setItem(promptKey, '1');
-    }
     void registerCurrentWebPushDevice({
       app: 'admin-web',
       requestPermission: canPromptNow,
-    }).catch(() => undefined);
+    })
+      .finally(() => {
+        if (canPromptNow) {
+          window.sessionStorage.setItem(promptKey, '1');
+        }
+      })
+      .catch(() => undefined);
   }, [email, isSessionLoading, session?.email, session?.role, session?.schoolId]);
 
   if (isSessionLoading) {

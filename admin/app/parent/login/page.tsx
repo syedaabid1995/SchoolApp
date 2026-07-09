@@ -2,10 +2,13 @@
 
 import { useState } from 'react';
 import FullPageLoader from '../../../components/FullPageLoader';
-import { useRouter } from 'next/navigation';
+import {
+  canAutoRequestWebPushPermission,
+  registerWebPushAfterLogin,
+  requestAutomaticWebPushPermission,
+} from '../../../lib/webPushRegistration';
 
 export default function ParentLoginPage() {
-  const router = useRouter();
   const [mode, setMode] = useState<'otp' | 'password'>('otp');
   const [form, setForm] = useState({ phone: '', email: '', password: '', otp: '' });
   const [error, setError] = useState('');
@@ -65,6 +68,9 @@ export default function ParentLoginPage() {
     setError('');
     setMessage('');
     setLoading(true);
+    const pushPermissionPromise = canAutoRequestWebPushPermission()
+      ? requestAutomaticWebPushPermission().catch(() => null)
+      : Promise.resolve(null);
     
     try {
       if (mode === 'otp') {
@@ -102,7 +108,9 @@ export default function ParentLoginPage() {
           throw new Error(message);
         }
       }
-      router.replace('/parent/dashboard');
+      const pushPermission = await pushPermissionPromise;
+      await registerWebPushAfterLogin({ app: 'parent-web', permission: pushPermission }).catch(() => undefined);
+      window.location.replace('/parent/dashboard');
     } catch (err) {
       const message = (err as Error).message || 'Invalid credentials';
       const lower = message.toLowerCase();

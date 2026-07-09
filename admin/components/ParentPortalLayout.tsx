@@ -65,13 +65,16 @@ export default function ParentPortalLayout({ children }: { children: React.React
     const canPromptNow = Notification.permission === 'default' && !window.sessionStorage.getItem(promptKey);
     if (Notification.permission === 'default' && !canPromptNow) return;
     if (Notification.permission === 'denied') return;
-    if (canPromptNow) {
-      window.sessionStorage.setItem(promptKey, '1');
-    }
     void registerCurrentWebPushDevice({
       app: 'parent-web',
       requestPermission: canPromptNow,
-    }).catch(() => undefined);
+    })
+      .finally(() => {
+        if (canPromptNow) {
+          window.sessionStorage.setItem(promptKey, '1');
+        }
+      })
+      .catch(() => undefined);
   }, [profile?.email]);
 
   const activeChild = useMemo(

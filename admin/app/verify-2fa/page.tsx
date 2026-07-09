@@ -9,6 +9,11 @@ import {
   getLoginBranding,
   type LoginBranding,
 } from '../../services/branding.service';
+import {
+  canAutoRequestWebPushPermission,
+  registerWebPushAfterLogin,
+  requestAutomaticWebPushPermission,
+} from '../../lib/webPushRegistration';
 
 type BrandStyle = CSSProperties & Record<`--brand-${string}`, string>;
 type RememberedLogin = {
@@ -204,6 +209,9 @@ export default function VerifyTwoFactorPage() {
     setSubmitting(true);
     setError('');
     setStatus('');
+    const pushPermissionPromise = canAutoRequestWebPushPermission()
+      ? requestAutomaticWebPushPermission().catch(() => null)
+      : Promise.resolve(null);
     try {
       const result = mfaMethod === 'totp'
         ? await verifyTotpLogin({
@@ -218,6 +226,11 @@ export default function VerifyTwoFactorPage() {
           });
       setOtp('');
       clearMfaSession();
+      const pushPermission = await pushPermissionPromise;
+      await registerWebPushAfterLogin({
+        app: result.user?.role === 'PARENT' ? 'parent-web' : 'admin-web',
+        permission: pushPermission,
+      }).catch(() => undefined);
       window.location.replace(redirectForRole(result.user?.role));
     } catch {
       setOtp('');

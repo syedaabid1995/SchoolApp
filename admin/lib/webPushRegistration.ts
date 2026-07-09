@@ -1,6 +1,6 @@
 'use client';
 
-import { getWebPushToken, isFirebaseWebPushConfigured, startForegroundPushListener } from './firebasePush';
+import { getWebPushToken, isFirebaseWebPushConfigured, requestWebPushPermission, startForegroundPushListener } from './firebasePush';
 import {
   getPushPreference,
   registerPushDevice,
@@ -34,6 +34,20 @@ export const clearWebPushManualDisable = () => {
 export const isWebPushManuallyDisabled = () => {
   if (typeof window === 'undefined') return false;
   return window.localStorage.getItem(WEB_PUSH_MANUAL_DISABLED_STORAGE_KEY) === '1';
+};
+
+export const canAutoRequestWebPushPermission = () =>
+  typeof window !== 'undefined' &&
+  isFirebaseWebPushConfigured() &&
+  'Notification' in window &&
+  Notification.permission === 'default' &&
+  !isWebPushManuallyDisabled();
+
+export const requestAutomaticWebPushPermission = async () => {
+  if (!canAutoRequestWebPushPermission()) {
+    return typeof window !== 'undefined' && 'Notification' in window ? Notification.permission : null;
+  }
+  return requestWebPushPermission();
 };
 
 export const registerCurrentWebPushDevice = async ({
@@ -70,6 +84,26 @@ export const registerCurrentWebPushDevice = async ({
   window.localStorage.setItem(WEB_PUSH_TOKEN_STORAGE_KEY, token);
   clearWebPushManualDisable();
   return { registered: true, reason: 'registered' as const, token };
+};
+
+export const registerWebPushAfterLogin = async ({
+  app = 'admin-web',
+  permission,
+}: {
+  app?: string;
+  permission?: NotificationPermission | null;
+} = {}) => {
+  const resolvedPermission =
+    permission ?? (typeof window !== 'undefined' && 'Notification' in window ? Notification.permission : null);
+  if (resolvedPermission !== 'granted') {
+    return { registered: false, reason: 'permission_not_granted' as const, token: null };
+  }
+  return registerCurrentWebPushDevice({
+    app,
+    requestPermission: false,
+    respectServerPreference: true,
+    respectManualDisable: true,
+  });
 };
 
 export const enableCurrentWebPushDevice = async (app = 'admin-web') => {

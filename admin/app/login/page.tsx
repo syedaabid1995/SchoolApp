@@ -10,6 +10,11 @@ import {
   type LoginBranding,
 } from '../../services/branding.service';
 import { resolveSchoolSubdomainFromHost } from '../../lib/school-domain';
+import {
+  canAutoRequestWebPushPermission,
+  registerWebPushAfterLogin,
+  requestAutomaticWebPushPermission,
+} from '../../lib/webPushRegistration';
 
 type FieldErrors = Partial<Record<'schoolCode' | 'identifier' | 'password' | 'forgotEmail' | 'forgotSchoolCode' | 'form', string>>;
 type RememberedLogin = {
@@ -404,6 +409,9 @@ export default function LoginPage() {
     if (Object.keys(nextErrors).length) return;
 
     setSubmitting(true);
+    const pushPermissionPromise = canAutoRequestWebPushPermission()
+      ? requestAutomaticWebPushPermission().catch(() => null)
+      : Promise.resolve(null);
     try {
       const trimmedIdentifier = identifier.trim();
       const trimmedSchool = schoolCode.trim();
@@ -416,6 +424,7 @@ export default function LoginPage() {
 
       persistRememberedLogin();
       if (result.mfaRequired) {
+        void pushPermissionPromise;
         if (!result.challengeId) {
           throw new Error(genericLoginError);
         }
@@ -434,6 +443,11 @@ export default function LoginPage() {
             : result.subscriptionRestricted
               ? '/dashboard/plans'
               : '/dashboard';
+      const pushPermission = await pushPermissionPromise;
+      await registerWebPushAfterLogin({
+        app: result.user?.role === 'PARENT' ? 'parent-web' : 'admin-web',
+        permission: pushPermission,
+      }).catch(() => undefined);
       window.location.replace(target);
     } catch (error) {
       setErrors({ form: error instanceof Error ? error.message : genericLoginError });
