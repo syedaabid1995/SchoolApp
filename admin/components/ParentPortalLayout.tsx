@@ -8,6 +8,7 @@ import { ThemeContext } from './ThemeProvider';
 import { listParentChildren, getParentProfile, type ParentChild } from '../services/parentPortal.service';
 import { logout } from '../services/auth.service';
 import PushNotificationToggle from './PushNotificationToggle';
+import { registerCurrentWebPushDevice } from '../lib/webPushRegistration';
 
 export const ParentChildContext = createContext<{
   activeChildId: string;
@@ -56,6 +57,22 @@ export default function ParentPortalLayout({ children }: { children: React.React
       setActiveChildId(childrenData[0].id);
     }
   }, [activeChildId, childrenData]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined' || !('Notification' in window)) return;
+    const userKey = profile?.email ?? 'parent';
+    const promptKey = `akademifyy.webPushAutoPrompted.parent.${userKey}`;
+    const canPromptNow = Notification.permission === 'default' && !window.sessionStorage.getItem(promptKey);
+    if (Notification.permission === 'default' && !canPromptNow) return;
+    if (Notification.permission === 'denied') return;
+    if (canPromptNow) {
+      window.sessionStorage.setItem(promptKey, '1');
+    }
+    void registerCurrentWebPushDevice({
+      app: 'parent-web',
+      requestPermission: canPromptNow,
+    }).catch(() => undefined);
+  }, [profile?.email]);
 
   const activeChild = useMemo(
     () => (childrenData ?? []).find((child) => child.id === activeChildId),
@@ -158,7 +175,7 @@ export default function ParentPortalLayout({ children }: { children: React.React
               Logout
             </button>
             <div className="min-w-36 rounded-md border border-white/30 bg-white px-1 text-ink">
-              <PushNotificationToggle compact />
+              <PushNotificationToggle compact app="parent-web" />
             </div>
           </div>
         </header>

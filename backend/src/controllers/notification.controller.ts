@@ -171,7 +171,7 @@ export const getPushPreference = async (req: Request, res: Response) => {
   if (!req.auth) throw new HttpError(401, 'Unauthorized');
   const preference = await prisma.userNotificationPreference.upsert({
     where: { userId: req.auth.userId },
-    create: { userId: req.auth.userId, schoolId: req.auth.schoolId ?? null, pushEnabled: false },
+    create: { userId: req.auth.userId, schoolId: req.auth.schoolId ?? null, pushEnabled: true },
     update: {},
   });
   res.status(200).json({ pushEnabled: preference.pushEnabled });

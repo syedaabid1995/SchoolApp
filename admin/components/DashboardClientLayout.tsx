@@ -13,6 +13,7 @@ import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { getRequiredPermissionForPath } from '../config/employee-permissions';
 import AccessDeniedPanel from './AccessDeniedPanel';
 import FullPageLoader from './FullPageLoader';
+import { registerCurrentWebPushDevice } from '../lib/webPushRegistration';
 
 export default function DashboardClientLayout({ 
   children, 
@@ -199,6 +200,22 @@ export default function DashboardClientLayout({
       router.replace('/login');
     }
   }, [isSessionLoading, router, session]);
+
+  useEffect(() => {
+    if (isSessionLoading || !session?.role || typeof window === 'undefined' || !('Notification' in window)) return;
+    const userKey = [session.email ?? email ?? 'user', session.schoolId ?? 'platform', session.role].join(':');
+    const promptKey = `akademifyy.webPushAutoPrompted.${userKey}`;
+    const canPromptNow = Notification.permission === 'default' && !window.sessionStorage.getItem(promptKey);
+    if (Notification.permission === 'default' && !canPromptNow) return;
+    if (Notification.permission === 'denied') return;
+    if (canPromptNow) {
+      window.sessionStorage.setItem(promptKey, '1');
+    }
+    void registerCurrentWebPushDevice({
+      app: 'admin-web',
+      requestPermission: canPromptNow,
+    }).catch(() => undefined);
+  }, [email, isSessionLoading, session?.email, session?.role, session?.schoolId]);
 
   if (isSessionLoading) {
     return <FullPageLoader label="Checking access..." />;

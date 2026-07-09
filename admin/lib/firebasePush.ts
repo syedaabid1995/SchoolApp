@@ -22,12 +22,15 @@ export const isFirebaseWebPushConfigured = () =>
       process.env.NEXT_PUBLIC_FIREBASE_VAPID_KEY,
   );
 
-export const getWebPushToken = async () => {
+export const getWebPushToken = async (options: { requestPermission?: boolean } = {}) => {
   if (typeof window === 'undefined' || !isFirebaseWebPushConfigured()) return null;
   if (!('serviceWorker' in navigator) || !('Notification' in window)) return null;
   if (!(await isSupported())) return null;
 
-  const permission = await Notification.requestPermission();
+  let permission = Notification.permission;
+  if (permission === 'default' && options.requestPermission !== false) {
+    permission = await Notification.requestPermission();
+  }
   if (permission !== 'granted') return null;
 
   const registration = await navigator.serviceWorker.register('/firebase-messaging-sw.js');

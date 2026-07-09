@@ -2,26 +2,26 @@
 
 import { useEffect, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { getWebPushToken, isFirebaseWebPushConfigured, startForegroundPushListener } from '../lib/firebasePush';
+import { isFirebaseWebPushConfigured, startForegroundPushListener } from '../lib/firebasePush';
+import {
+  enableCurrentWebPushDevice,
+  markWebPushManuallyDisabled,
+  registerCurrentWebPushDevice,
+  WEB_PUSH_TOKEN_STORAGE_KEY,
+} from '../lib/webPushRegistration';
 import {
   getPushPreference,
-  registerPushDevice,
   unregisterPushDevice,
   updatePushPreference,
 } from '../services/push-notifications.service';
 
-const TOKEN_STORAGE_KEY = 'akademifyy.webPushToken';
-const DEVICE_ID_STORAGE_KEY = 'akademifyy.webPushDeviceId';
-
-const getDeviceId = () => {
-  const existing = window.localStorage.getItem(DEVICE_ID_STORAGE_KEY);
-  if (existing) return existing;
-  const id = crypto.randomUUID();
-  window.localStorage.setItem(DEVICE_ID_STORAGE_KEY, id);
-  return id;
-};
-
-export default function PushNotificationToggle({ compact = false }: { compact?: boolean }) {
+export default function PushNotificationToggle({
+  compact = false,
+  app = 'admin-web',
+}: {
+  compact?: boolean;
+  app?: string;
+}) {
   const queryClient = useQueryClient();
   const [status, setStatus] = useState<string>('');
   const [hasRegisteredDevice, setHasRegisteredDevice] = useState(false);
@@ -36,14 +36,10 @@ export default function PushNotificationToggle({ compact = false }: { compact?: 
 
   const enableMutation = useMutation({
     mutationFn: async () => {
-      const token = await getWebPushToken();
-      if (!token) throw new Error('Browser notification permission was not granted.');
-      await registerPushDevice({ token, platform: 'WEB', app: 'admin-web', deviceId: getDeviceId() });
-      await startForegroundPushListener();
-      window.localStorage.setItem(TOKEN_STORAGE_KEY, token);
+      await enableCurrentWebPushDevice(app);
       setHasRegisteredDevice(true);
       setNotificationPermission('granted');
-      return updatePushPreference(true);
+      return getPushPreference();
     },
     onSuccess: async () => {
       setStatus('Enabled');
@@ -54,9 +50,10 @@ export default function PushNotificationToggle({ compact = false }: { compact?: 
 
   const disableMutation = useMutation({
     mutationFn: async () => {
-      const token = window.localStorage.getItem(TOKEN_STORAGE_KEY);
+      const token = window.localStorage.getItem(WEB_PUSH_TOKEN_STORAGE_KEY);
       if (token) await unregisterPushDevice(token);
-      window.localStorage.removeItem(TOKEN_STORAGE_KEY);
+      window.localStorage.removeItem(WEB_PUSH_TOKEN_STORAGE_KEY);
+      markWebPushManuallyDisabled();
       setHasRegisteredDevice(false);
       return updatePushPreference(false);
     },
@@ -69,7 +66,7 @@ export default function PushNotificationToggle({ compact = false }: { compact?: 
 
   useEffect(() => {
     if (!configured || typeof window === 'undefined') return;
-    setHasRegisteredDevice(Boolean(window.localStorage.getItem(TOKEN_STORAGE_KEY)));
+    setHasRegisteredDevice(Boolean(window.localStorage.getItem(WEB_PUSH_TOKEN_STORAGE_KEY)));
     if ('Notification' in window) {
       setNotificationPermission(Notification.permission);
       if (Notification.permission === 'granted') {
@@ -81,10 +78,15 @@ export default function PushNotificationToggle({ compact = false }: { compact?: 
   useEffect(() => {
     if (!configured || typeof window === 'undefined' || !preferenceQuery.data?.pushEnabled) return;
     if (!('Notification' in window) || Notification.permission !== 'granted') return;
-    if (window.localStorage.getItem(TOKEN_STORAGE_KEY)) return;
-    void enableMutation.mutateAsync().catch(() => undefined);
+    if (window.localStorage.getItem(WEB_PUSH_TOKEN_STORAGE_KEY)) return;
+    void registerCurrentWebPushDevice({ app, requestPermission: false }).then((result) => {
+      if (result.registered) {
+        setHasRegisteredDevice(true);
+        setNotificationPermission('granted');
+      }
+    }).catch(() => undefined);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [configured, preferenceQuery.data?.pushEnabled]);
+  }, [app, configured, preferenceQuery.data?.pushEnabled]);
 
   if (!configured) return null;
 
