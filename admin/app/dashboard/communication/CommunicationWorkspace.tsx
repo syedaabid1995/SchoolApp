@@ -953,6 +953,8 @@ function MultiSelectField<T extends string>({
 
       activeSelect = $(selectRef.current);
       activeSelect.multipleSelect('destroy');
+      activeSelect.off('change.communicationMultiSelect');
+      activeSelect.on('change.communicationMultiSelect', syncSelected);
       activeSelect.multipleSelect({
         placeholder,
         filter: true,
@@ -967,9 +969,6 @@ function MultiSelectField<T extends string>({
         formatAllSelected: () => 'All selected',
         formatCountSelected: (count: number) => `${count} selected`,
         formatNoMatchesFound: () => 'No options found',
-        onClick: syncSelected,
-        onCheckAll: syncSelected,
-        onUncheckAll: syncSelected,
       });
       activeSelect.multipleSelect('setSelects', selectedRef.current, 'value', true);
       pluginRef.current = { select: activeSelect, loaded: true };
@@ -978,6 +977,7 @@ function MultiSelectField<T extends string>({
     return () => {
       disposed = true;
       if (activeSelect?.multipleSelect) {
+        activeSelect.off('change.communicationMultiSelect');
         activeSelect.multipleSelect('destroy');
       }
       if (pluginRef.current?.select === activeSelect) {
