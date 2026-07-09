@@ -243,7 +243,7 @@ export const changePassword = async (payload: {
 };
 
 export const getSession = async () => {
-  const res = await fetch('/api/auth/session');
+  const res = await fetch('/api/auth/session', { cache: 'no-store' });
   if (!res.ok) {
     return {
       role: null,

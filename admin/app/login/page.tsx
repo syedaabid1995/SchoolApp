@@ -426,10 +426,15 @@ export default function LoginPage() {
         router.replace('/verify-2fa');
         return;
       }
-      if (result.user?.role === 'PARENT') router.replace('/parent/dashboard');
-      else if (result.mustChangePassword) router.replace('/change-password');
-      else if (result.subscriptionRestricted) router.replace('/dashboard/plans');
-      else router.replace('/dashboard');
+      const target =
+        result.user?.role === 'PARENT'
+          ? '/parent/dashboard'
+          : result.mustChangePassword
+            ? '/change-password'
+            : result.subscriptionRestricted
+              ? '/dashboard/plans'
+              : '/dashboard';
+      window.location.replace(target);
     } catch (error) {
       setErrors({ form: error instanceof Error ? error.message : genericLoginError });
     } finally {

@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { logout, stopImpersonation } from '../services/auth.service';
 import { listNotificationSummary } from '../services/notificationSummary.service';
 import PushNotificationToggle from './PushNotificationToggle';
@@ -286,6 +286,7 @@ export const Header = ({
   impersonatedByEmail?: string | null;
 }) => {
   const router = useRouter();
+  const queryClient = useQueryClient();
   const [showNotifications, setShowNotifications] = useState(false);
   const [showProfile, setShowProfile] = useState(false);
   const [showGlobalSearch, setShowGlobalSearch] = useState(false);
@@ -382,7 +383,8 @@ export const Header = ({
 
   const handleLogout = async () => {
     await logout();
-    router.replace('/login');
+    queryClient.clear();
+    window.location.replace('/login');
   };
 
   const handleStopImpersonation = async () => {

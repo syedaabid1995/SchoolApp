@@ -3,7 +3,6 @@
 import type { CSSProperties, FormEvent } from 'react';
 import Link from 'next/link';
 import { useEffect, useMemo, useState } from 'react';
-import { useRouter } from 'next/navigation';
 import { resendTwoFactor, verifyTotpLogin, verifyTwoFactor } from '../../services/auth.service';
 import {
   defaultLoginBranding,
@@ -117,7 +116,6 @@ function BrandLogo({ branding }: { branding: LoginBranding }) {
 }
 
 export default function VerifyTwoFactorPage() {
-  const router = useRouter();
   const [branding, setBranding] = useState<LoginBranding>(defaultLoginBranding);
   const [challengeId, setChallengeId] = useState('');
   const [mfaMethod, setMfaMethod] = useState<MfaMethod>('email');
@@ -220,7 +218,7 @@ export default function VerifyTwoFactorPage() {
           });
       setOtp('');
       clearMfaSession();
-      router.replace(redirectForRole(result.user?.role));
+      window.location.replace(redirectForRole(result.user?.role));
     } catch {
       setOtp('');
       setError(invalidCodeMessage);
