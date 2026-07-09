@@ -141,17 +141,23 @@ const platformSections: NavSection[] = [
     items: [
       { href: '/dashboard/settings?tab=brand', label: 'Branding & Theme', icon: 'palette' },
       { href: '/dashboard/settings?tab=security', label: 'Security', icon: 'shield' },
-      { href: '/dashboard/settings?tab=messaging', label: 'Messaging', icon: 'message' },
       // { href: '/dashboard/settings?tab=features', label: 'Feature Flags', icon: 'activity' },
       // { href: '/dashboard/settings?tab=modules', label: 'Modules', icon: 'package' },
       { href: '/dashboard/settings?tab=access', label: 'Access', icon: 'lock' },
       { href: '/dashboard/settings?tab=compliance', label: 'Compliance', icon: 'scale' },
-      { href: '/dashboard/communication/send-push', label: 'Send Push', icon: 'message' },
-      { href: '/dashboard/communication/push-templates', label: 'Push Templates', icon: 'message' },
-      { href: '/dashboard/communication/push-logs', label: 'Push Logs', icon: 'history' },
       { href: '/dashboard/backups', label: 'Backups', icon: 'backup' },
       // { href: '/dashboard/settings?tab=advanced', label: 'Advanced', icon: 'settings' },
       { href: '/change-password', label: 'Change Password', icon: 'lock' },
+    ],
+  },
+  {
+    id: 'platform-communication',
+    label: 'Communicate',
+    items: [
+      { href: '/dashboard/settings?tab=messaging', label: 'Messaging', icon: 'message' },
+      { href: '/dashboard/communication/send-push', label: 'Send Push', icon: 'message' },
+      { href: '/dashboard/communication/push-templates', label: 'Push Templates', icon: 'message' },
+      { href: '/dashboard/communication/push-logs', label: 'Push Logs', icon: 'history' },
     ],
   },
 ];
@@ -305,6 +311,7 @@ export const Sidebar = ({
         label: 'Communicate',
         items: [
           { href: '/dashboard/communication/notice-board', label: 'Notice Board', icon: 'clipboard' },
+          { href: '/dashboard/settings?tab=messaging', label: 'Messaging Providers', icon: 'message' },
           { href: '/dashboard/communication/send-email', label: 'Send Email', icon: 'mail' },
           { href: '/dashboard/communication/send-sms', label: 'Send SMS', icon: 'message' },
           { href: '/dashboard/communication/send-push', label: 'Send Push', icon: 'message' },
@@ -376,7 +383,6 @@ export const Sidebar = ({
         label: 'Settings',
         items: [
           { href: '/dashboard/settings/branding', label: 'Branding', icon: 'brand' },
-          { href: '/dashboard/settings?tab=messaging', label: 'Messaging Providers', icon: 'message' },
           { href: '/dashboard/base-setup', label: 'Base Setup', icon: 'settings' },
           { href: '/change-password', label: 'Change Password', icon: 'lock' },
         ],
