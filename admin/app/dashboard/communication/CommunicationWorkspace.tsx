@@ -923,18 +923,77 @@ function MultiSelectField<T extends string>({
   getOptionLabel?: (option: { id: T; label?: string } & Record<string, unknown>) => string;
   getOptionDescription?: (option: { id: T; label?: string } & Record<string, unknown>) => string | null | undefined;
 }) {
+  const selectRef = useRef<HTMLSelectElement | null>(null);
+  const pluginRef = useRef<{ select: any; loaded: boolean } | null>(null);
+  const selectedRef = useRef(selected);
+  selectedRef.current = selected;
+  const optionSignature = useMemo(
+    () => options.map((option) => `${option.id}:${String(option.label ?? '')}:${String(option.name ?? '')}:${String(option.type ?? '')}:${String(option.contact ?? '')}`).join('|'),
+    [options],
+  );
+
+  useEffect(() => {
+    let disposed = false;
+    let activeSelect: any = null;
+
+    const syncSelected = () => {
+      if (!selectRef.current || disposed) return;
+      onChange(Array.from(selectRef.current.selectedOptions).map((option) => option.value as T));
+    };
+
+    Promise.all([
+      import('jquery'),
+      import('multiple-select/dist/multiple-select.min.js'),
+    ]).then(([jqueryModule]) => {
+      if (disposed || !selectRef.current) return;
+      const jqueryFactory = (jqueryModule as any).default ?? jqueryModule;
+      const $ = typeof jqueryFactory === 'function' ? jqueryFactory : (window as any).jQuery;
+      if (!$?.fn?.multipleSelect) return;
+
+      activeSelect = $(selectRef.current);
+      activeSelect.multipleSelect('destroy');
+      activeSelect.multipleSelect({
+        placeholder,
+        filter: true,
+        filterPlaceholder: 'Search',
+        selectAll: true,
+        showClear: true,
+        minimumCountSelected: 2,
+        maxHeight: 260,
+        width: '100%',
+        disabled,
+        formatSelectAll: () => 'Select all',
+        formatAllSelected: () => 'All selected',
+        formatCountSelected: (count: number) => `${count} selected`,
+        formatNoMatchesFound: () => 'No options found',
+        onClick: syncSelected,
+        onCheckAll: syncSelected,
+        onUncheckAll: syncSelected,
+      });
+      activeSelect.multipleSelect('setSelects', selectedRef.current, 'value', true);
+      pluginRef.current = { select: activeSelect, loaded: true };
+    });
+
+    return () => {
+      disposed = true;
+      if (activeSelect?.multipleSelect) {
+        activeSelect.multipleSelect('destroy');
+      }
+      if (pluginRef.current?.select === activeSelect) {
+        pluginRef.current = null;
+      }
+    };
+  }, [disabled, onChange, optionSignature, placeholder]);
+
+  useEffect(() => {
+    if (!pluginRef.current?.loaded) return;
+    pluginRef.current.select.multipleSelect('setSelects', selected, 'value', true);
+  }, [selected]);
+
   return (
     <Field label={label}>
-      <div className="space-y-2">
-        <select
-          multiple
-          className={`${inputClass} min-h-32 resize-y`}
-          value={selected}
-          disabled={disabled}
-          onChange={(event) =>
-            onChange(Array.from(event.currentTarget.selectedOptions).map((option) => option.value as T))
-          }
-        >
+      <div className="communication-multiple-select">
+        <select ref={selectRef} multiple value={selected} disabled={disabled} onChange={() => undefined}>
           {options.length ? (
             options.map((option) => {
               const description = getOptionDescription?.(option);
@@ -951,7 +1010,6 @@ function MultiSelectField<T extends string>({
             </option>
           )}
         </select>
-        <p className="text-xs font-semibold text-slate-500">Use Cmd/Ctrl or Shift to select multiple.</p>
       </div>
     </Field>
   );
