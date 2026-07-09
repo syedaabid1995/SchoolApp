@@ -2,6 +2,27 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { $generateHtmlFromNodes, $generateNodesFromDOM } from '@lexical/html';
+import { LinkNode, TOGGLE_LINK_COMMAND } from '@lexical/link';
+import { LinkPlugin } from '@lexical/react/LexicalLinkPlugin';
+import { ListPlugin } from '@lexical/react/LexicalListPlugin';
+import { INSERT_UNORDERED_LIST_COMMAND, ListItemNode, ListNode } from '@lexical/list';
+import { LexicalComposer } from '@lexical/react/LexicalComposer';
+import { useLexicalComposerContext } from '@lexical/react/LexicalComposerContext';
+import { ContentEditable } from '@lexical/react/LexicalContentEditable';
+import { LexicalErrorBoundary } from '@lexical/react/LexicalErrorBoundary';
+import { HistoryPlugin } from '@lexical/react/LexicalHistoryPlugin';
+import { OnChangePlugin } from '@lexical/react/LexicalOnChangePlugin';
+import { RichTextPlugin } from '@lexical/react/LexicalRichTextPlugin';
+import { $createHeadingNode, HeadingNode, QuoteNode } from '@lexical/rich-text';
+import { $setBlocksType } from '@lexical/selection';
+import {
+  $getRoot,
+  $getSelection,
+  $isRangeSelection,
+  FORMAT_TEXT_COMMAND,
+  type LexicalEditor,
+} from 'lexical';
 import PageHeader from '../../../components/PageHeader';
 import { useNotify } from '../../../components/NotificationProvider';
 import { PermissionCodes as P } from '../../../config/permission-manifest';
@@ -111,46 +132,168 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
   );
 }
 
-function RichHtmlEditor({
-  value,
-  onChange,
-  minHeightClass = 'min-h-80',
-}: {
-  value: string;
-  onChange: (value: string) => void;
-  minHeightClass?: string;
-}) {
-  const editorRef = useRef<HTMLDivElement | null>(null);
-  const fileInputRef = useRef<HTMLInputElement | null>(null);
-  const [mode, setMode] = useState<'visual' | 'html' | 'preview'>('visual');
+type EditorToolIconName = 'bold' | 'italic' | 'underline' | 'list' | 'heading' | 'link' | 'image' | 'download';
+
+function EditorToolIcon({ name }: { name: EditorToolIconName }) {
+  const common = { fill: 'none', stroke: 'currentColor', strokeLinecap: 'round' as const, strokeLinejoin: 'round' as const, strokeWidth: 2 };
+  if (name === 'bold') {
+    return (
+      <svg viewBox="0 0 24 24" aria-hidden="true" className="h-4 w-4">
+        <path {...common} d="M7 5h6.5a3.5 3.5 0 0 1 0 7H7zM7 12h7a3.5 3.5 0 0 1 0 7H7zM7 5v14" />
+      </svg>
+    );
+  }
+  if (name === 'italic') {
+    return (
+      <svg viewBox="0 0 24 24" aria-hidden="true" className="h-4 w-4">
+        <path {...common} d="M10 5h8M6 19h8M14 5l-4 14" />
+      </svg>
+    );
+  }
+  if (name === 'underline') {
+    return (
+      <svg viewBox="0 0 24 24" aria-hidden="true" className="h-4 w-4">
+        <path {...common} d="M7 5v6a5 5 0 0 0 10 0V5M6 20h12" />
+      </svg>
+    );
+  }
+  if (name === 'list') {
+    return (
+      <svg viewBox="0 0 24 24" aria-hidden="true" className="h-4 w-4">
+        <path {...common} d="M9 6h11M9 12h11M9 18h11M4 6h.01M4 12h.01M4 18h.01" />
+      </svg>
+    );
+  }
+  if (name === 'heading') {
+    return (
+      <svg viewBox="0 0 24 24" aria-hidden="true" className="h-4 w-4">
+        <path {...common} d="M5 19V5M19 19V5M5 12h14M14 19h6" />
+      </svg>
+    );
+  }
+  if (name === 'link') {
+    return (
+      <svg viewBox="0 0 24 24" aria-hidden="true" className="h-4 w-4">
+        <path {...common} d="M10 13a5 5 0 0 0 7.1 0l2-2a5 5 0 0 0-7.1-7.1l-1.1 1.1M14 11a5 5 0 0 0-7.1 0l-2 2A5 5 0 0 0 12 20.1l1.1-1.1" />
+      </svg>
+    );
+  }
+  if (name === 'image') {
+    return (
+      <svg viewBox="0 0 24 24" aria-hidden="true" className="h-4 w-4">
+        <path {...common} d="M5 5h14v14H5zM8 14l2.5-2.5L14 15l2-2 3 3M9 9h.01" />
+      </svg>
+    );
+  }
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden="true" className="h-4 w-4">
+      <path {...common} d="M12 5v10M8 11l4 4 4-4M5 19h14" />
+    </svg>
+  );
+}
+
+function LexicalHtmlSyncPlugin({ enabled, value, onChange }: { enabled: boolean; value: string; onChange: (value: string) => void }) {
+  const [editor] = useLexicalComposerContext();
+  const lastHtmlRef = useRef<string>('');
 
   useEffect(() => {
-    if (!editorRef.current || mode !== 'visual') return;
-    if (editorRef.current.innerHTML !== value) {
-      editorRef.current.innerHTML = value;
-    }
-  }, [mode, value]);
+    if (!enabled) return;
+    if (value === lastHtmlRef.current) return;
+    lastHtmlRef.current = value;
+    editor.update(() => {
+      const parser = new DOMParser();
+      const dom = parser.parseFromString(value || '<p></p>', 'text/html');
+      const nodes = $generateNodesFromDOM(editor, dom);
+      const root = $getRoot();
+      root.clear();
+      if (nodes.length) {
+        root.append(...nodes);
+      }
+    });
+  }, [editor, enabled, value]);
 
-  const runCommand = (command: string, commandValue?: string) => {
+  if (!enabled) return null;
+
+  return (
+    <OnChangePlugin
+      ignoreSelectionChange
+      onChange={(editorState, activeEditor) => {
+        editorState.read(() => {
+          const html = $generateHtmlFromNodes(activeEditor);
+          lastHtmlRef.current = html;
+          onChange(html);
+        });
+      }}
+    />
+  );
+}
+
+function HtmlEditorToolbar({
+  mode,
+  setMode,
+  value,
+  onChange,
+}: {
+  mode: 'visual' | 'html' | 'preview';
+  setMode: (mode: 'visual' | 'html' | 'preview') => void;
+  value: string;
+  onChange: (value: string) => void;
+}) {
+  const [editor] = useLexicalComposerContext();
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const [formats, setFormats] = useState({ bold: false, italic: false, underline: false });
+
+  useEffect(
+    () =>
+      editor.registerUpdateListener(({ editorState }) => {
+        editorState.read(() => {
+          const selection = $getSelection();
+          if (!$isRangeSelection(selection)) {
+            setFormats({ bold: false, italic: false, underline: false });
+            return;
+          }
+          setFormats({
+            bold: selection.hasFormat('bold'),
+            italic: selection.hasFormat('italic'),
+            underline: selection.hasFormat('underline'),
+          });
+        });
+      }),
+    [editor],
+  );
+
+  const runVisualCommand = (callback: (activeEditor: LexicalEditor) => void) => {
     if (mode !== 'visual') setMode('visual');
     requestAnimationFrame(() => {
-      editorRef.current?.focus();
-      document.execCommand(command, false, commandValue);
-      onChange(editorRef.current?.innerHTML ?? '');
+      editor.focus();
+      callback(editor);
     });
   };
 
-  const uploadImage = (file: File) => {
+  const insertImage = (file: File) => {
     const reader = new FileReader();
     reader.onload = () => {
       const src = String(reader.result ?? '');
       if (!src) return;
-      const imageHtml = `<img src="${src}" alt="${file.name.replace(/"/g, '&quot;')}" style="max-width:100%;height:auto;" />`;
+      const alt = file.name.replace(/"/g, '&quot;');
+      const imageHtml = `<img src="${src}" alt="${alt}" style="max-width:100%;height:auto;" />`;
       if (mode === 'html') {
         onChange(`${value}${imageHtml}`);
         return;
       }
-      runCommand('insertHTML', imageHtml);
+      runVisualCommand((activeEditor) => {
+        activeEditor.update(() => {
+          const parser = new DOMParser();
+          const dom = parser.parseFromString(imageHtml, 'text/html');
+          const nodes = $generateNodesFromDOM(activeEditor, dom);
+          const selection = $getSelection();
+          if ($isRangeSelection(selection)) {
+            selection.insertNodes(nodes);
+          } else {
+            $getRoot().append(...nodes);
+          }
+        });
+      });
     };
     reader.readAsDataURL(file);
   };
@@ -167,85 +310,159 @@ function RichHtmlEditor({
     URL.revokeObjectURL(url);
   };
 
-  return (
-    <div className="overflow-hidden rounded-xl border border-slate-200 bg-white">
-      <div className="flex flex-wrap items-center gap-1 border-b border-slate-200 bg-slate-50 p-2">
-        <button type="button" className={compactButtonClass} onClick={() => runCommand('bold')} title="Bold">
-          B
-        </button>
-        <button type="button" className={compactButtonClass} onClick={() => runCommand('italic')} title="Italic">
-          I
-        </button>
-        <button type="button" className={compactButtonClass} onClick={() => runCommand('underline')} title="Underline">
-          U
-        </button>
-        <button type="button" className={compactButtonClass} onClick={() => runCommand('insertUnorderedList')} title="Bullet list">
-          List
-        </button>
-        <button type="button" className={compactButtonClass} onClick={() => runCommand('formatBlock', 'h2')} title="Heading">
-          H2
-        </button>
-        <button type="button" className={compactButtonClass} onClick={() => runCommand('createLink', window.prompt('URL') || '')} title="Link">
-          Link
-        </button>
-        <button type="button" className={compactButtonClass} onClick={() => fileInputRef.current?.click()} title="Insert image">
-          Image
-        </button>
-        <button type="button" className={compactButtonClass} onClick={downloadHtml} title="Download HTML">
-          Download HTML
-        </button>
-        <input
-          ref={fileInputRef}
-          type="file"
-          accept="image/*"
-          className="hidden"
-          onChange={(event) => {
-            const file = event.target.files?.[0];
-            event.target.value = '';
-            if (file) uploadImage(file);
-          }}
-        />
-        <div className="ml-auto flex rounded-lg border border-slate-200 bg-white p-1">
-          {(['visual', 'html', 'preview'] as const).map((item) => (
-            <button
-              key={item}
-              type="button"
-              onClick={() => setMode(item)}
-              className={`rounded-md px-3 py-1.5 text-xs font-bold capitalize ${
-                mode === item ? 'bg-blue-600 text-white' : 'text-slate-600 hover:bg-slate-50'
-              }`}
-            >
-              {item === 'html' ? 'HTML' : item}
-            </button>
-          ))}
-        </div>
-      </div>
+  const toolClass = (active = false) =>
+    `inline-flex h-9 w-9 items-center justify-center rounded-lg border text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50 ${
+      active ? 'border-blue-200 bg-blue-50 text-blue-700' : 'border-slate-200 bg-white'
+    }`;
 
-      {mode === 'html' ? (
-        <textarea
-          className={`w-full ${minHeightClass} resize-y border-0 bg-white p-4 font-mono text-sm text-slate-900 outline-none`}
-          value={value}
-          onChange={(event) => onChange(event.target.value)}
-          spellCheck={false}
-        />
-      ) : mode === 'preview' ? (
-        <iframe
-          title="Email HTML preview"
-          className={`w-full ${minHeightClass} bg-white`}
-          sandbox=""
-          srcDoc={value || '<p></p>'}
-        />
-      ) : (
-        <div
-          ref={editorRef}
-          contentEditable
-          className={`prose max-w-none ${minHeightClass} overflow-auto p-4 text-sm text-slate-900 outline-none focus:ring-2 focus:ring-blue-100`}
-          onInput={(event) => onChange(event.currentTarget.innerHTML)}
-          onBlur={(event) => onChange(event.currentTarget.innerHTML)}
-          suppressContentEditableWarning
-        />
-      )}
+  return (
+    <div className="flex flex-wrap items-center gap-1 border-b border-slate-200 bg-slate-50 p-2">
+      <button type="button" className={toolClass(formats.bold)} onClick={() => runVisualCommand((activeEditor) => activeEditor.dispatchCommand(FORMAT_TEXT_COMMAND, 'bold'))} title="Bold" aria-label="Bold">
+        <EditorToolIcon name="bold" />
+      </button>
+      <button type="button" className={toolClass(formats.italic)} onClick={() => runVisualCommand((activeEditor) => activeEditor.dispatchCommand(FORMAT_TEXT_COMMAND, 'italic'))} title="Italic" aria-label="Italic">
+        <EditorToolIcon name="italic" />
+      </button>
+      <button type="button" className={toolClass(formats.underline)} onClick={() => runVisualCommand((activeEditor) => activeEditor.dispatchCommand(FORMAT_TEXT_COMMAND, 'underline'))} title="Underline" aria-label="Underline">
+        <EditorToolIcon name="underline" />
+      </button>
+      <button type="button" className={toolClass()} onClick={() => runVisualCommand((activeEditor) => activeEditor.dispatchCommand(INSERT_UNORDERED_LIST_COMMAND, undefined))} title="Bullet list" aria-label="Bullet list">
+        <EditorToolIcon name="list" />
+      </button>
+      <button
+        type="button"
+        className={toolClass()}
+        onClick={() =>
+          runVisualCommand((activeEditor) => {
+            activeEditor.update(() => {
+              const selection = $getSelection();
+              if ($isRangeSelection(selection)) {
+                $setBlocksType(selection, () => $createHeadingNode('h2'));
+              }
+            });
+          })
+        }
+        title="Heading"
+        aria-label="Heading"
+      >
+        <EditorToolIcon name="heading" />
+      </button>
+      <button
+        type="button"
+        className={toolClass()}
+        onClick={() =>
+          runVisualCommand((activeEditor) => {
+            const url = window.prompt('URL');
+            if (url !== null) {
+              activeEditor.dispatchCommand(TOGGLE_LINK_COMMAND, url.trim() || null);
+            }
+          })
+        }
+        title="Link"
+        aria-label="Link"
+      >
+        <EditorToolIcon name="link" />
+      </button>
+      <button type="button" className={toolClass()} onClick={() => fileInputRef.current?.click()} title="Insert image" aria-label="Insert image">
+        <EditorToolIcon name="image" />
+      </button>
+      <button type="button" className={toolClass()} onClick={downloadHtml} title="Download HTML" aria-label="Download HTML">
+        <EditorToolIcon name="download" />
+      </button>
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept="image/*"
+        className="hidden"
+        onChange={(event) => {
+          const file = event.target.files?.[0];
+          event.target.value = '';
+          if (file) insertImage(file);
+        }}
+      />
+      <div className="ml-auto flex rounded-lg border border-slate-200 bg-white p-1">
+        {(['visual', 'html', 'preview'] as const).map((item) => (
+          <button
+            key={item}
+            type="button"
+            onClick={() => setMode(item)}
+            className={`rounded-md px-3 py-1.5 text-xs font-bold capitalize ${
+              mode === item ? 'bg-blue-600 text-white' : 'text-slate-600 hover:bg-slate-50'
+            }`}
+          >
+            {item === 'html' ? 'HTML' : item}
+          </button>
+        ))}
+      </div>
     </div>
+  );
+}
+
+function RichHtmlEditor({
+  value,
+  onChange,
+  minHeightClass = 'min-h-80',
+}: {
+  value: string;
+  onChange: (value: string) => void;
+  minHeightClass?: string;
+}) {
+  const [mode, setMode] = useState<'visual' | 'html' | 'preview'>('visual');
+  const initialConfig = useMemo(
+    () => ({
+      namespace: 'EmailTemplateEditor',
+      nodes: [HeadingNode, QuoteNode, ListNode, ListItemNode, LinkNode],
+      onError(error: Error) {
+        throw error;
+      },
+      theme: {
+        link: 'text-blue-700 underline',
+        text: {
+          bold: 'font-bold',
+          italic: 'italic',
+          underline: 'underline',
+        },
+      },
+    }),
+    [],
+  );
+
+  return (
+    <LexicalComposer initialConfig={initialConfig}>
+      <div className="overflow-hidden rounded-xl border border-slate-200 bg-white">
+        <HtmlEditorToolbar mode={mode} setMode={setMode} value={value} onChange={onChange} />
+        <LexicalHtmlSyncPlugin enabled={mode === 'visual'} value={value} onChange={onChange} />
+        <HistoryPlugin />
+        <ListPlugin />
+        <LinkPlugin />
+        {mode === 'html' ? (
+          <textarea
+            className={`w-full ${minHeightClass} resize-y border-0 bg-white p-4 font-mono text-sm text-slate-900 outline-none`}
+            value={value}
+            onChange={(event) => onChange(event.target.value)}
+            spellCheck={false}
+          />
+        ) : mode === 'preview' ? (
+          <iframe
+            title="Email HTML preview"
+            className={`w-full ${minHeightClass} bg-white`}
+            sandbox=""
+            srcDoc={value || '<p></p>'}
+          />
+        ) : (
+          <RichTextPlugin
+            contentEditable={
+              <ContentEditable
+                className={`email-template-editor ${minHeightClass} overflow-auto p-4 text-sm text-slate-900 outline-none focus:ring-2 focus:ring-blue-100`}
+                aria-placeholder="Write email content"
+                placeholder={<span />}
+              />
+            }
+            ErrorBoundary={LexicalErrorBoundary}
+          />
+        )}
+      </div>
+    </LexicalComposer>
   );
 }
 
@@ -1180,14 +1397,13 @@ export default function CommunicationWorkspace({ view }: { view: CommunicationVi
   const [selectedSchoolId, setSelectedSchoolId] = useState('');
   const { data: session } = useQuery({ queryKey: ['session'], queryFn: getSession });
   const isSuperAdmin = session?.role === 'SUPER_ADMIN';
-  const permissionCodes = session?.permissionCodes ?? [];
   const platformScope = isSuperAdmin && view === 'push-templates' && selectedSchoolId === '__platform__';
   const effectiveSchoolId = isSuperAdmin ? (platformScope ? '' : selectedSchoolId) : session?.schoolId ?? '';
   const config = viewConfig[view];
   const can = useMemo(() => {
-    const allowed = new Set(permissionCodes);
+    const allowed = new Set(session?.permissionCodes ?? []);
     return (code: string) => session?.role === 'SUPER_ADMIN' || allowed.has(code);
-  }, [permissionCodes, session?.role]);
+  }, [session?.permissionCodes, session?.role]);
 
   return (
     <div className="space-y-5">

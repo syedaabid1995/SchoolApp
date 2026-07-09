@@ -140,6 +140,37 @@ body {
   background: var(--shell-subtle);
 }
 
+.email-template-editor h2 {
+  margin: 0.75rem 0 0.5rem;
+  font-size: 1.25rem;
+  font-weight: 700;
+  line-height: 1.35;
+}
+
+.email-template-editor p {
+  margin: 0.5rem 0;
+}
+
+.email-template-editor ul {
+  margin: 0.5rem 0;
+  padding-left: 1.5rem;
+  list-style: disc;
+}
+
+.email-template-editor li {
+  margin: 0.25rem 0;
+}
+
+.email-template-editor a {
+  color: #2563eb;
+  text-decoration: underline;
+}
+
+.email-template-editor img {
+  max-width: 100%;
+  height: auto;
+}
+
 .theme-navbar {
   background: var(--theme-navbar-bg);
   backdrop-filter: blur(10px);
