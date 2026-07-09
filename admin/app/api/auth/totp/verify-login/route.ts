@@ -4,6 +4,43 @@ import { getApiBase } from '../../../../../lib/getApiBase';
 
 const VERIFICATION_ERROR = 'Invalid or expired verification code.';
 const RATE_LIMIT_ERROR = 'Too many attempts. Please try again later.';
+const DEFAULT_ROOT_DOMAIN = 'app.akademifyy.in';
+
+const cookieRootDomain = () => {
+  const root = (process.env.NEXT_PUBLIC_SCHOOL_ROOT_DOMAIN || DEFAULT_ROOT_DOMAIN)
+    .trim()
+    .toLowerCase()
+    .replace(/^https?:\/\//, '')
+    .replace(/\/+$/, '');
+
+  if (!root || root === 'localhost' || root === '127.0.0.1') return undefined;
+  return root.startsWith('.') ? root : `.${root}`;
+};
+
+const clearCookieOptions = {
+  httpOnly: true,
+  sameSite: 'lax' as const,
+  secure: process.env.NODE_ENV === 'production',
+  path: '/',
+  maxAge: 0,
+};
+
+const clearCookie = (response: NextResponse, name: string) => {
+  response.cookies.set(name, '', clearCookieOptions);
+  response.cookies.set(name, '', { ...clearCookieOptions, domain: cookieRootDomain() });
+};
+
+const clearAuthCookies = (response: NextResponse) => {
+  [
+    'access_token',
+    'refresh_token',
+    'accessToken',
+    'refreshToken',
+    'super_admin_access_token',
+    'super_admin_refresh_token',
+    'must_change_password',
+  ].forEach((name) => clearCookie(response, name));
+};
 
 const appendSetCookies = (response: NextResponse, value: string | string[] | undefined) => {
   if (!value) return;
@@ -52,6 +89,7 @@ export async function POST(req: Request) {
     }
 
     const response = NextResponse.json(backendResponse.data);
+    clearAuthCookies(response);
     appendSetCookies(response, backendResponse.headers['set-cookie']);
     return response;
   } catch {

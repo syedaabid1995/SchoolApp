@@ -4,6 +4,43 @@ import axios from 'axios';
 import { resolveSchoolSubdomainFromHost } from '../../../../lib/school-domain';
 
 const GENERIC_LOGIN_ERROR = 'Invalid login details. Please try again.';
+const DEFAULT_ROOT_DOMAIN = 'app.akademifyy.in';
+
+const cookieRootDomain = () => {
+  const root = (process.env.NEXT_PUBLIC_SCHOOL_ROOT_DOMAIN || DEFAULT_ROOT_DOMAIN)
+    .trim()
+    .toLowerCase()
+    .replace(/^https?:\/\//, '')
+    .replace(/\/+$/, '');
+
+  if (!root || root === 'localhost' || root === '127.0.0.1') return undefined;
+  return root.startsWith('.') ? root : `.${root}`;
+};
+
+const clearCookieOptions = {
+  httpOnly: true,
+  sameSite: 'lax' as const,
+  secure: process.env.NODE_ENV === 'production',
+  path: '/',
+  maxAge: 0,
+};
+
+const clearCookie = (response: NextResponse, name: string) => {
+  response.cookies.set(name, '', clearCookieOptions);
+  response.cookies.set(name, '', { ...clearCookieOptions, domain: cookieRootDomain() });
+};
+
+const clearAuthCookies = (response: NextResponse) => {
+  [
+    'access_token',
+    'refresh_token',
+    'accessToken',
+    'refreshToken',
+    'super_admin_access_token',
+    'super_admin_refresh_token',
+    'must_change_password',
+  ].forEach((name) => clearCookie(response, name));
+};
 
 const appendBackendSetCookies = (
   response: NextResponse,
@@ -77,6 +114,7 @@ export async function POST(req: Request) {
       subscriptionRestricted: Boolean(data.subscriptionRestricted),
       user: data.user ?? null,
     });
+    clearAuthCookies(nextResponse);
     if (data.mustChangePassword) {
       nextResponse.cookies.set('must_change_password', '1', {
         httpOnly: true,
