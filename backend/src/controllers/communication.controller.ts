@@ -52,6 +52,7 @@ const sendPayloadBaseSchema = z.object({
   classId: z.string().uuid().optional().nullable(),
   sectionId: z.string().uuid().optional().nullable(),
   individualRecipient: z.string().trim().optional().nullable(),
+  individualRecipients: z.array(z.string().trim().min(1)).optional().default([]),
   scheduledAt: z.coerce.date().optional().nullable(),
   route: z.string().trim().optional().nullable(),
   module: z.string().trim().optional().nullable(),
@@ -169,15 +170,38 @@ type ResolvedRecipient = {
   type: string;
 };
 
+const recipientKey = (channel: CommunicationChannel, value: string | null | undefined) => {
+  const normalized = normalizeRecipient(value);
+  if (!normalized) return '';
+  if (channel === 'EMAIL') return normalized.toLowerCase();
+  if (channel === 'SMS') return normalized.replace(/\D/g, '') || normalized;
+  return normalized;
+};
+
 const addRecipient = (map: Map<string, ResolvedRecipient>, recipient: ResolvedRecipient, channel: CommunicationChannel) => {
   const to = normalizeRecipient(recipient.to);
   if (!to) return;
-  const key = channel === 'EMAIL' ? to.toLowerCase() : channel === 'SMS' ? to.replace(/\D/g, '') || to : to;
+  const key = recipientKey(channel, to);
   if (!key) return;
   if (!map.has(key)) {
     map.set(key, { ...recipient, to });
   }
 };
+
+const isBirthdayToday = (value: Date | null | undefined) => {
+  if (!value) return false;
+  const today = new Date();
+  return value.getMonth() === today.getMonth() && value.getDate() === today.getDate();
+};
+
+const recipientDto = (channel: CommunicationChannel, recipient: ResolvedRecipient) => ({
+  value: recipient.to,
+  name: recipient.name,
+  type: recipient.type,
+  contact: recipient.to,
+  label: `${recipient.name} (${recipient.type}) - ${recipient.to}`,
+  key: recipientKey(channel, recipient.to),
+});
 
 const getStudentsForTarget = async (params: {
   schoolId: string;
@@ -204,11 +228,7 @@ const getStudentsForTarget = async (params: {
   });
 
   if (!params.birthdayOnly) return students;
-  const today = new Date();
-  return students.filter((student) => {
-    if (!student.dob) return false;
-    return student.dob.getMonth() === today.getMonth() && student.dob.getDate() === today.getDate();
-  });
+  return students.filter((student) => isBirthdayToday(student.dob));
 };
 
 const resolveRecipients = async (params: {
@@ -219,6 +239,7 @@ const resolveRecipients = async (params: {
   classId?: string | null;
   sectionId?: string | null;
   individualRecipient?: string | null;
+  individualRecipients?: string[];
 }) => {
   const recipients = new Map<string, ResolvedRecipient>();
   const wantsStudents = params.recipientGroups.includes('STUDENTS');
@@ -306,10 +327,11 @@ const resolveRecipients = async (params: {
         schoolId: params.schoolId,
         status: 'ACTIVE',
         roles: { some: { role: { name: { in: roleNames as any[] } } } },
+        ...(birthdayOnly ? { teacherProfile: { is: { dateOfBirth: { not: null } } } } : {}),
       },
       include: {
         teacherProfile: {
-          select: { firstName: true, lastName: true, phone: true, roleName: true },
+          select: { firstName: true, lastName: true, phone: true, roleName: true, dateOfBirth: true },
         },
         roles: { select: { role: { select: { name: true } } } },
       },
@@ -317,6 +339,7 @@ const resolveRecipients = async (params: {
     });
 
     for (const user of users) {
+      if (birthdayOnly && !isBirthdayToday(user.teacherProfile?.dateOfBirth)) continue;
       const profileName = user.teacherProfile
         ? `${user.teacherProfile.firstName} ${user.teacherProfile.lastName}`.trim()
         : '';
@@ -330,6 +353,18 @@ const resolveRecipients = async (params: {
         params.channel,
       );
     }
+  }
+
+  const selectedKeys = new Set((params.individualRecipients ?? []).map((value) => recipientKey(params.channel, value)).filter(Boolean));
+  if (params.targetMode === 'INDIVIDUAL') {
+    if (selectedKeys.size) {
+      return Array.from(recipients.entries()).filter(([key]) => selectedKeys.has(key)).map(([, recipient]) => recipient);
+    }
+    const freeformKey = recipientKey(params.channel, params.individualRecipient);
+    return freeformKey && recipients.has(freeformKey) ? [recipients.get(freeformKey)!] : [];
+  }
+  if (selectedKeys.size && params.targetMode === 'BIRTHDAY') {
+    return Array.from(recipients.entries()).filter(([key]) => selectedKeys.has(key)).map(([, recipient]) => recipient);
   }
 
   return Array.from(recipients.values());
@@ -414,6 +449,7 @@ const sendCommunication = async (req: Request, res: Response, channel: Communica
     classId: payload.classId,
     sectionId: payload.sectionId,
     individualRecipient: payload.individualRecipient,
+    individualRecipients: payload.individualRecipients,
   });
 
   if (!recipients.length) {
@@ -609,6 +645,84 @@ export const deleteCommunicationTemplateApi = async (req: Request, res: Response
   res.status(200).json({ success: true });
 };
 
+const parseRecipientGroupsQuery = (value: unknown) => {
+  const raw = Array.isArray(value) ? value : typeof value === 'string' ? value.split(',') : ['STUDENTS', 'GUARDIANS'];
+  return z.array(recipientGroupSchema).min(1).parse(raw.map((item) => String(item).trim()).filter(Boolean));
+};
+
+export const listCommunicationRecipientsApi = async (req: Request, res: Response) => {
+  await assertPermission(req, [P.communicationEmailSend, P.communicationSmsSend, P.communicationPushSend]);
+  const channel = channelSchema.parse((req.query.channel as string | undefined) ?? 'EMAIL');
+  const targetMode = z.enum(['GROUP', 'CLASS', 'INDIVIDUAL', 'BIRTHDAY']).parse((req.query.targetMode as string | undefined) ?? 'GROUP');
+  const schoolId = resolveSchoolId(req, req.query.schoolId as string | undefined);
+  const recipientGroups = parseRecipientGroupsQuery(req.query.recipientGroups);
+  const recipients = await resolveRecipients({
+    schoolId,
+    channel,
+    recipientGroups,
+    targetMode,
+    classId: typeof req.query.classId === 'string' ? req.query.classId : null,
+    sectionId: typeof req.query.sectionId === 'string' ? req.query.sectionId : null,
+  });
+
+  res.status(200).json({ items: recipients.map((recipient) => recipientDto(channel, recipient)) });
+};
+
+export const listTodayBirthdaysApi = async (req: Request, res: Response) => {
+  await assertPermission(req, [P.dashboardOverview, P.communicationEmailSend, P.communicationSmsSend, P.communicationPushSend]);
+  const schoolId = resolveSchoolId(req, req.query.schoolId as string | undefined);
+  const [students, employees] = await Promise.all([
+    prisma.student.findMany({
+      where: { schoolId, status: 'ENROLLED', dob: { not: null } },
+      select: {
+        id: true,
+        fullName: true,
+        dob: true,
+        photoUrl: true,
+        admissionNo: true,
+        class: { select: { name: true } },
+        section: { select: { name: true } },
+      },
+      orderBy: { fullName: 'asc' },
+    }),
+    prisma.teacherProfile.findMany({
+      where: { schoolId, isActive: true, dateOfBirth: { not: null } },
+      select: {
+        id: true,
+        firstName: true,
+        lastName: true,
+        roleName: true,
+        dateOfBirth: true,
+        photoUrl: true,
+      },
+      orderBy: [{ firstName: 'asc' }, { lastName: 'asc' }],
+    }),
+  ]);
+
+  const studentItems = students
+    .filter((student) => isBirthdayToday(student.dob))
+    .map((student) => ({
+      id: student.id,
+      name: student.fullName,
+      type: 'STUDENT',
+      dateOfBirth: student.dob,
+      photoUrl: student.photoUrl,
+      subtitle: [student.class?.name, student.section?.name].filter(Boolean).join(' ') || `Admission ${student.admissionNo}`,
+    }));
+  const employeeItems = employees
+    .filter((employee) => isBirthdayToday(employee.dateOfBirth))
+    .map((employee) => ({
+      id: employee.id,
+      name: `${employee.firstName} ${employee.lastName}`.trim(),
+      type: employee.roleName,
+      dateOfBirth: employee.dateOfBirth,
+      photoUrl: employee.photoUrl,
+      subtitle: String(employee.roleName).replace(/_/g, ' '),
+    }));
+
+  res.status(200).json({ items: [...studentItems, ...employeeItems] });
+};
+
 const logDto = (log: {
   id: string;
   channel: string;
@@ -706,6 +820,7 @@ export const sendLoginCredentialInstructionsApi = async (req: Request, res: Resp
     classId: payload.classId,
     sectionId: payload.sectionId,
     individualRecipient: payload.individualRecipient,
+    individualRecipients: payload.individualRecipients,
   });
 
   if (!recipients.length) {

@@ -86,6 +86,7 @@ export type CommunicationSendPayload = {
   classId?: string | null;
   sectionId?: string | null;
   individualRecipient?: string | null;
+  individualRecipients?: string[];
   scheduledAt?: string | null;
   route?: string | null;
   module?: string | null;
@@ -100,6 +101,24 @@ export type CommunicationSendResult = {
   logIds: string[];
   sentCount?: number;
   failedCount?: number;
+};
+
+export type CommunicationRecipientOption = {
+  value: string;
+  name: string;
+  type: string;
+  contact: string;
+  label: string;
+  key: string;
+};
+
+export type TodayBirthdayItem = {
+  id: string;
+  name: string;
+  type: string;
+  dateOfBirth: string;
+  photoUrl?: string | null;
+  subtitle?: string | null;
 };
 
 const withSchool = (schoolId?: string) => (schoolId ? { schoolId } : undefined);
@@ -201,6 +220,34 @@ export const sendCommunicationSms = async (payload: CommunicationSendPayload) =>
 export const sendCommunicationPush = async (payload: CommunicationSendPayload) => {
   const { data } = await api.post<CommunicationSendResult>('/communication/send-push', payload);
   return data;
+};
+
+export const listCommunicationRecipients = async (params: {
+  schoolId?: string;
+  channel: CommunicationChannel;
+  targetMode: CommunicationTargetMode;
+  recipientGroups: RecipientGroup[];
+  classId?: string | null;
+  sectionId?: string | null;
+}) => {
+  const { data } = await api.get<{ items: CommunicationRecipientOption[] }>('/communication/recipients', {
+    params: {
+      schoolId: params.schoolId,
+      channel: params.channel,
+      targetMode: params.targetMode,
+      recipientGroups: params.recipientGroups.join(','),
+      classId: params.classId || undefined,
+      sectionId: params.sectionId || undefined,
+    },
+  });
+  return data.items;
+};
+
+export const listTodayBirthdays = async (schoolId?: string) => {
+  const { data } = await api.get<{ items: TodayBirthdayItem[] }>('/communication/birthdays/today', {
+    params: withSchool(schoolId),
+  });
+  return data.items;
 };
 
 export const sendLoginCredentialInstructions = async (

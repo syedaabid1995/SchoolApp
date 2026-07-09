@@ -32,6 +32,7 @@ import {
   createCommunicationTemplate,
   deleteCommunicationNotice,
   deleteCommunicationTemplate,
+  listCommunicationRecipients,
   listCommunicationLogs,
   listCommunicationNotices,
   listCommunicationScheduledLogs,
@@ -46,6 +47,7 @@ import {
   type CommunicationChannel,
   type CommunicationLog,
   type CommunicationNotice,
+  type CommunicationRecipientOption,
   type CommunicationTargetMode,
   type CommunicationTemplate,
   type PushPriority,
@@ -902,6 +904,114 @@ function RecipientSelector({
   );
 }
 
+function MultiSelectDropdown<T extends string>({
+  label,
+  options,
+  selected,
+  onChange,
+  placeholder = 'Select',
+  disabled = false,
+  getOptionLabel,
+  getOptionDescription,
+}: {
+  label: string;
+  options: Array<{ id: T; label?: string } & Record<string, unknown>>;
+  selected: T[];
+  onChange: (selected: T[]) => void;
+  placeholder?: string;
+  disabled?: boolean;
+  getOptionLabel?: (option: { id: T; label?: string } & Record<string, unknown>) => string;
+  getOptionDescription?: (option: { id: T; label?: string } & Record<string, unknown>) => string | null | undefined;
+}) {
+  const [open, setOpen] = useState(false);
+  const selectedLabels = options
+    .filter((option) => selected.includes(option.id))
+    .map((option) => getOptionLabel?.(option) ?? option.label ?? option.id);
+
+  return (
+    <Field label={label}>
+      <div className="relative">
+        <button
+          type="button"
+          className={`${inputClass} flex min-h-[42px] items-center justify-between gap-3 text-left disabled:cursor-not-allowed`}
+          disabled={disabled}
+          onClick={() => setOpen((current) => !current)}
+        >
+          <span className="min-w-0 truncate">{selectedLabels.length ? selectedLabels.join(', ') : placeholder}</span>
+          <span className="shrink-0 text-xs text-slate-400">v</span>
+        </button>
+        {open && !disabled ? (
+          <div className="absolute z-30 mt-2 max-h-72 w-full overflow-auto rounded-xl border border-slate-200 bg-white p-2 shadow-xl">
+            {options.map((option) => {
+              const isChecked = selected.includes(option.id);
+              return (
+                <label key={option.id} className="flex cursor-pointer items-start gap-3 rounded-lg px-3 py-2 text-sm hover:bg-slate-50">
+                  <input
+                    type="checkbox"
+                    className="mt-1"
+                    checked={isChecked}
+                    onChange={(event) => {
+                      onChange(event.target.checked ? Array.from(new Set([...selected, option.id])) : selected.filter((id) => id !== option.id));
+                    }}
+                  />
+                  <span className="min-w-0">
+                    <span className="block truncate font-semibold text-slate-800">{getOptionLabel?.(option) ?? option.label ?? option.id}</span>
+                    {getOptionDescription?.(option) ? <span className="block truncate text-xs text-slate-500">{getOptionDescription(option)}</span> : null}
+                  </span>
+                </label>
+              );
+            })}
+            {!options.length ? <div className="px-3 py-4 text-sm text-slate-500">No options found.</div> : null}
+          </div>
+        ) : null}
+      </div>
+    </Field>
+  );
+}
+
+function AudienceGroupDropdown({
+  groups,
+  setGroups,
+}: {
+  groups: RecipientGroup[];
+  setGroups: (groups: RecipientGroup[]) => void;
+}) {
+  return (
+    <MultiSelectDropdown
+      label="Message To"
+      options={recipientOptions}
+      selected={groups}
+      onChange={setGroups}
+      placeholder="Select recipients"
+    />
+  );
+}
+
+function RecipientOptionDropdown({
+  options,
+  selected,
+  setSelected,
+  loading,
+}: {
+  options: CommunicationRecipientOption[];
+  selected: string[];
+  setSelected: (selected: string[]) => void;
+  loading: boolean;
+}) {
+  return (
+    <MultiSelectDropdown
+      label="Recipient Name / Contact"
+      options={options.map((option) => ({ ...option, id: option.value }))}
+      selected={selected}
+      onChange={setSelected}
+      placeholder={loading ? 'Loading recipients...' : 'Select recipients'}
+      getOptionLabel={(option) => String(option.name ?? option.label ?? option.id)}
+      getOptionDescription={(option) => `${String(option.type ?? '')} - ${String(option.contact ?? option.id)}`}
+      disabled={loading}
+    />
+  );
+}
+
 function SendMessage({
   channel,
   effectiveSchoolId,
@@ -919,13 +1029,14 @@ function SendMessage({
   const [body, setBody] = useState('');
   const [classId, setClassId] = useState('');
   const [sectionId, setSectionId] = useState('');
-  const [individualRecipient, setIndividualRecipient] = useState('');
+  const [selectedRecipients, setSelectedRecipients] = useState<string[]>([]);
   const [sendMode, setSendMode] = useState<'now' | 'schedule'>('now');
   const [scheduledAt, setScheduledAt] = useState(nowLocalInput());
   const [route, setRoute] = useState('/dashboard');
   const [moduleName, setModuleName] = useState('notifications');
   const [category, setCategory] = useState('general');
   const [priority, setPriority] = useState<PushPriority>('normal');
+  const birthdayAutoSelectRef = useRef('');
   const scopedParams = effectiveSchoolId ? { schoolId: effectiveSchoolId } : undefined;
 
   const templatesQuery = useQuery({
@@ -943,6 +1054,24 @@ function SendMessage({
     queryFn: () => listSections({ ...scopedParams, classId }),
     enabled: Boolean(effectiveSchoolId && targetMode === 'CLASS' && classId),
   });
+  const recipientsQuery = useQuery({
+    queryKey: ['communication-recipient-options', effectiveSchoolId, channel, targetMode, recipientGroups, classId, sectionId],
+    queryFn: () =>
+      listCommunicationRecipients({
+        schoolId: effectiveSchoolId,
+        channel,
+        targetMode,
+        recipientGroups,
+        classId: classId || null,
+        sectionId: sectionId || null,
+      }),
+    enabled: Boolean(
+      effectiveSchoolId &&
+        templateId &&
+        recipientGroups.length &&
+        (targetMode === 'INDIVIDUAL' || targetMode === 'BIRTHDAY'),
+    ),
+  });
   const selectedTemplate = templatesQuery.data?.find((template) => template.id === templateId);
 
   useEffect(() => {
@@ -956,10 +1085,23 @@ function SendMessage({
       setClassId('');
       setSectionId('');
     }
-    if (targetMode !== 'INDIVIDUAL') {
-      setIndividualRecipient('');
-    }
+    setSelectedRecipients([]);
+    birthdayAutoSelectRef.current = '';
   }, [targetMode]);
+
+  useEffect(() => {
+    setSelectedRecipients([]);
+    birthdayAutoSelectRef.current = '';
+  }, [channel, recipientGroups, classId, sectionId, templateId]);
+
+  useEffect(() => {
+    if (targetMode !== 'BIRTHDAY') return;
+    const recipients = recipientsQuery.data ?? [];
+    const autoKey = recipients.map((recipient) => recipient.value).join('|');
+    if (!autoKey || birthdayAutoSelectRef.current === autoKey) return;
+    birthdayAutoSelectRef.current = autoKey;
+    setSelectedRecipients(recipients.map((recipient) => recipient.value));
+  }, [recipientsQuery.data, targetMode]);
 
   const sendMutation = useMutation({
     mutationFn: () => {
@@ -972,7 +1114,8 @@ function SendMessage({
         targetMode,
         classId: classId || null,
         sectionId: sectionId || null,
-        individualRecipient: individualRecipient || null,
+        individualRecipient: null,
+        individualRecipients: selectedRecipients,
         scheduledAt: sendMode === 'schedule' ? scheduledAt : null,
         route: isPush ? route : null,
         module: isPush ? moduleName : null,
@@ -989,7 +1132,7 @@ function SendMessage({
   });
 
   return (
-    <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_18rem]">
+    <div className="grid gap-5">
       <section className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
         <div className="mb-4 grid gap-2 sm:grid-cols-4">
           {targetTabs.map((tab) => (
@@ -1016,6 +1159,7 @@ function SendMessage({
               ))}
             </select>
           </Field>
+          {templateId ? <AudienceGroupDropdown groups={recipientGroups} setGroups={setRecipientGroups} /> : null}
           {targetMode === 'CLASS' ? (
             <div className="grid gap-4 sm:grid-cols-2">
               <Field label="Class">
@@ -1040,10 +1184,13 @@ function SendMessage({
               </Field>
             </div>
           ) : null}
-          {targetMode === 'INDIVIDUAL' ? (
-            <Field label={isEmail ? 'Recipient Email' : isPush ? 'Recipient User ID' : 'Recipient Mobile'}>
-              <input className={inputClass} value={individualRecipient} onChange={(event) => setIndividualRecipient(event.target.value)} />
-            </Field>
+          {templateId && (targetMode === 'INDIVIDUAL' || targetMode === 'BIRTHDAY') ? (
+            <RecipientOptionDropdown
+              options={recipientsQuery.data ?? []}
+              selected={selectedRecipients}
+              setSelected={setSelectedRecipients}
+              loading={recipientsQuery.isFetching}
+            />
           ) : null}
           {isEmail || isPush ? (
             <Field label={isPush ? 'Notification Title' : 'Title'}>
@@ -1093,13 +1240,22 @@ function SendMessage({
             {sendMode === 'schedule' ? (
               <input className={`${inputClass} sm:max-w-xs`} type="datetime-local" value={scheduledAt} onChange={(event) => setScheduledAt(event.target.value)} />
             ) : null}
-            <button type="button" className={primaryButtonClass} disabled={sendMutation.isPending} onClick={() => sendMutation.mutate()}>
+            <button
+              type="button"
+              className={primaryButtonClass}
+              disabled={
+                sendMutation.isPending ||
+                !templateId ||
+                !recipientGroups.length ||
+                ((targetMode === 'INDIVIDUAL' || targetMode === 'BIRTHDAY') && !selectedRecipients.length)
+              }
+              onClick={() => sendMutation.mutate()}
+            >
               Submit
             </button>
           </div>
         </div>
       </section>
-      <RecipientSelector groups={recipientGroups} setGroups={setRecipientGroups} />
     </div>
   );
 }

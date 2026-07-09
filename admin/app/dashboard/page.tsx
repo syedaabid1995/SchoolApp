@@ -1,12 +1,13 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import Link from 'next/link';
 import {
   getAdminDashboardMetrics,
   getPerformanceMetrics,
 } from '../../services/adminDashboard.service';
+import { listTodayBirthdays } from '../../services/communication.service';
 import { listAuditLogs } from '../../services/audit.service';
 import FullPageLoader from '../../components/FullPageLoader';
 import { getSession } from '../../services/auth.service';
@@ -30,12 +31,64 @@ const formatNumber = (value: unknown) => {
 
 const formatPercent = (value: unknown) => `${formatNumber(value)}%`;
 
+function BirthdayBanner({
+  items,
+  loading,
+}: {
+  items: Array<{ id: string; name: string; type: string; subtitle?: string | null; photoUrl?: string | null }>;
+  loading: boolean;
+}) {
+  if (loading) {
+    return (
+      <div className="rounded-xl border border-[var(--shell-border)] bg-[var(--shell-card)] px-4 py-3 text-sm font-semibold text-[var(--shell-muted)]">
+        Loading birthdays...
+      </div>
+    );
+  }
+
+  if (!items.length) return null;
+
+  return (
+    <div className="rounded-xl border border-pink-100 bg-pink-50 px-4 py-3">
+      <div className="flex flex-col gap-3 lg:flex-row lg:items-center">
+        <div className="shrink-0">
+          <p className="text-xs font-bold uppercase tracking-wide text-pink-700">Today Birthdays</p>
+          <p className="text-sm font-semibold text-pink-950">{items.length} celebration{items.length === 1 ? '' : 's'} today</p>
+        </div>
+        <div className="flex min-w-0 flex-1 gap-2 overflow-x-auto pb-1">
+          {items.map((item) => {
+            const initials = item.name
+              .split(' ')
+              .filter(Boolean)
+              .slice(0, 2)
+              .map((part) => part[0]?.toUpperCase())
+              .join('') || 'B';
+            return (
+              <div key={`${item.type}-${item.id}`} className="flex min-w-[220px] items-center gap-3 rounded-lg border border-pink-100 bg-white px-3 py-2">
+                {item.photoUrl ? (
+                  <span className="h-10 w-10 rounded-full bg-cover bg-center" style={{ backgroundImage: `url(${item.photoUrl})` }} aria-hidden="true" />
+                ) : (
+                  <span className="flex h-10 w-10 items-center justify-center rounded-full bg-pink-100 text-sm font-bold text-pink-700">{initials}</span>
+                )}
+                <span className="min-w-0">
+                  <span className="block truncate text-sm font-bold text-slate-950">{item.name}</span>
+                  <span className="block truncate text-xs font-semibold text-slate-500">{item.subtitle || item.type.replace(/_/g, ' ')}</span>
+                </span>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function DashboardPage() {
   const { data: session, isLoading: isSessionLoading } = useQuery({ queryKey: ['session'], queryFn: getSession });
   const isSuperAdmin = session?.role === 'SUPER_ADMIN';
   const isTeacher = session?.role === 'TEACHER';
-  const permissionCodes = session?.permissionCodes ?? [];
-  const hasPermission = (code: string) => permissionCodes.includes(code);
+  const permissionCodes = useMemo(() => session?.permissionCodes ?? [], [session?.permissionCodes]);
+  const hasPermission = useCallback((code: string) => permissionCodes.includes(code), [permissionCodes]);
   const canViewDashboard = Boolean(isSuperAdmin || hasPermission('dashboard.overview'));
   const schoolId = session?.schoolId ?? undefined;
   const [loadHeavy, setLoadHeavy] = useState(false);
@@ -76,6 +129,14 @@ export default function DashboardPage() {
     queryKey: ['teacher-timetable-home', schoolId],
     queryFn: () => getTeacherTimetable({ schoolId }),
     enabled: Boolean(schoolId && isTeacher && canViewDashboard && hasPermission('academics.setup')),
+    refetchOnWindowFocus: false,
+    staleTime: 60_000,
+  });
+
+  const birthdayQuery = useQuery({
+    queryKey: ['today-birthdays', schoolId],
+    queryFn: () => listTodayBirthdays(schoolId),
+    enabled: Boolean(schoolId && canViewDashboard && !isSuperAdmin),
     refetchOnWindowFocus: false,
     staleTime: 60_000,
   });
@@ -152,7 +213,7 @@ export default function DashboardPage() {
       if (action.href === '/dashboard/reports') return hasPermission('reports.view');
       return true;
     });
-  }, [isTeacher, permissionCodes]);
+  }, [hasPermission, isTeacher]);
 
   if (isSessionLoading) {
     return <FullPageLoader label="Loading dashboard..." />;
@@ -195,6 +256,7 @@ export default function DashboardPage() {
           </>
         )}
       >
+        <BirthdayBanner items={birthdayQuery.data ?? []} loading={birthdayQuery.isLoading} />
         <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
           {stats.map((stat) => (
             <MetricCard key={stat.label} {...stat} />

@@ -6,8 +6,10 @@ import {
   deleteCommunicationTemplateApi,
   listCommunicationLogsApi,
   listCommunicationNoticesApi,
+  listCommunicationRecipientsApi,
   listCommunicationScheduledLogsApi,
   listCommunicationTemplatesApi,
+  listTodayBirthdaysApi,
   sendEmailCommunicationApi,
   sendLoginCredentialInstructionsApi,
   sendPushCommunicationApi,
@@ -30,6 +32,9 @@ communicationRouter.get('/templates', listCommunicationTemplatesApi);
 communicationRouter.post('/templates', createCommunicationTemplateApi);
 communicationRouter.patch('/templates/:id', updateCommunicationTemplateApi);
 communicationRouter.delete('/templates/:id', deleteCommunicationTemplateApi);
+
+communicationRouter.get('/recipients', listCommunicationRecipientsApi);
+communicationRouter.get('/birthdays/today', listTodayBirthdaysApi);
 
 communicationRouter.post('/send-email', sendEmailCommunicationApi);
 communicationRouter.post('/send-sms', sendSmsCommunicationApi);
