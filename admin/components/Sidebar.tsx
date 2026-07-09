@@ -106,6 +106,7 @@ const platformSections: NavSection[] = [
     items: [
       { href: '/dashboard', label: 'Dashboard', icon: 'layoutDashboard' },
       { href: '/dashboard/reports', label: 'Reports', icon: 'chart' },
+      { href: '/dashboard/accounts/expenses', label: 'Expense Reports', icon: 'wallet' },
     ],
   },
   {
@@ -349,6 +350,7 @@ export const Sidebar = ({
         items: [
           { href: '/dashboard/payroll', label: 'Payroll', icon: 'wallet' },
           { href: '/dashboard/payroll/report', label: 'Payroll Report', icon: 'chart' },
+          { href: '/dashboard/accounts/expenses', label: 'Expenses', icon: 'wallet' },
           { href: '/dashboard/payment-methods', label: 'Payment Methods', icon: 'card' },
           { href: '/dashboard/fee-challan-details', label: 'Fee Challan', icon: 'invoice' },
         ],

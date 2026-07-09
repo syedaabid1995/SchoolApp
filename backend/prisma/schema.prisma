@@ -103,10 +103,10 @@ model School {
   featureFlagOverrides           FeatureFlagOverride[]
   configOverrides                TenantConfigOverride[]
   notificationLogs               NotificationLog[]
-  notificationTemplates           NotificationTemplate[]
-  pushDeviceTokens                PushDeviceToken[]
-  notificationPreferences         UserNotificationPreference[]
-  communicationNotices            CommunicationNotice[]
+  notificationTemplates          NotificationTemplate[]
+  pushDeviceTokens               PushDeviceToken[]
+  notificationPreferences        UserNotificationPreference[]
+  communicationNotices           CommunicationNotice[]
   backupJobs                     BackupJob[]
   subscription                   Subscription?
   subscriptionInvoices           SubscriptionInvoice[]
@@ -165,6 +165,9 @@ model School {
   feeCarryForwards               FeeCarryForward[]
   feeInvoiceGenerationJobs       FeeInvoiceGenerationJob[]
   feeNotifications               FeeNotification[]
+  expenseCategories              ExpenseCategory[]
+  expenses                       Expense[]
+  expenseChangeRequests          ExpenseChangeRequest[]
   numberSequences                NumberSequence[]
   onboardingChecklist            SchoolOnboardingChecklist[]
   aiConversations                AiConversation[]
@@ -218,7 +221,7 @@ model User {
   notificationLogs                       NotificationLog[]
   pushDeviceTokens                       PushDeviceToken[]
   notificationPreference                 UserNotificationPreference?
-  communicationNoticesCreated            CommunicationNotice[]             @relation("CommunicationNoticeCreatedBy")
+  communicationNoticesCreated            CommunicationNotice[]           @relation("CommunicationNoticeCreatedBy")
   backupRequests                         BackupJob[]
   restoreApprovals                       RestoreJob[]                    @relation("RestoreApprovedBy")
   restoreRequests                        RestoreJob[]                    @relation("RestoreRequestedBy")
@@ -252,7 +255,7 @@ model User {
   mfaChallenges                          MfaChallenge[]
   totpCredential                         TotpCredential?
   totpBackupCodes                        TotpBackupCode[]
-  demoRequestsApproved                   DemoRequest[]                  @relation("DemoRequestApprovedBy")
+  demoRequestsApproved                   DemoRequest[]                   @relation("DemoRequestApprovedBy")
   studentDocumentsUploaded               StudentDocument[]               @relation("StudentDocumentUploadedBy")
   studentTimelinesCreated                StudentTimeline[]               @relation("StudentTimelineCreatedBy")
   studentImportLogsCreated               StudentImportLog[]              @relation("StudentImportLogCreatedBy")
@@ -260,8 +263,8 @@ model User {
   staffTimelinesCreated                  StaffTimeline[]                 @relation("StaffTimelineCreatedBy")
   staffAttendancesMarked                 StaffAttendance[]               @relation("StaffAttendanceMarkedBy")
   staffAttendanceHolidaysCreated         StaffAttendanceHoliday[]        @relation("StaffAttendanceHolidayCreatedBy")
-  staffAttendanceConfigurationsCreated   StaffAttendanceConfiguration[]   @relation("StaffAttendanceConfigurationCreatedBy")
-  staffAttendanceConfigurationsUpdated   StaffAttendanceConfiguration[]   @relation("StaffAttendanceConfigurationUpdatedBy")
+  staffAttendanceConfigurationsCreated   StaffAttendanceConfiguration[]  @relation("StaffAttendanceConfigurationCreatedBy")
+  staffAttendanceConfigurationsUpdated   StaffAttendanceConfiguration[]  @relation("StaffAttendanceConfigurationUpdatedBy")
   schoolOnboardingChecklistCompletions   SchoolOnboardingChecklist[]     @relation("SchoolOnboardingChecklistCompletedBy")
   payrollsGenerated                      Payroll[]                       @relation("PayrollGeneratedBy")
   payrollPaymentsRecorded                PayrollPayment[]                @relation("PayrollPaymentRecordedBy")
@@ -3246,6 +3249,26 @@ enum NumberSequenceType {
   REVERSAL
 }
 
+enum ExpensePaymentMode {
+  CASH
+  BANK_TRANSFER
+  CHEQUE
+  UPI
+  CARD
+  OTHER
+}
+
+enum ExpenseChangeRequestType {
+  UPDATE
+  DELETE
+}
+
+enum ExpenseChangeRequestStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
 enum FeeFineRuleType {
   PERCENTAGE
   FIXED_AMOUNT
@@ -3349,14 +3372,14 @@ model FeeStructure {
   createdAt         DateTime           @default(now()) @map("created_at")
   updatedAt         DateTime           @updatedAt @map("updated_at")
 
-  school          School                 @relation(fields: [schoolId], references: [id], onDelete: Cascade)
-  academicSession AcademicYear           @relation(fields: [academicSessionId], references: [id], onDelete: Cascade)
-  class           Class                  @relation(fields: [classId], references: [id], onDelete: Cascade)
-  section         Section?               @relation(fields: [sectionId], references: [id], onDelete: SetNull)
-  feeType         FeeType                @relation(fields: [feeTypeId], references: [id], onDelete: Restrict)
-  items           FeeStructureItem[]
-  assignments     StudentFeeAssignment[]
-  invoices        FeeInvoice[]
+  school           School                 @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  academicSession  AcademicYear           @relation(fields: [academicSessionId], references: [id], onDelete: Cascade)
+  class            Class                  @relation(fields: [classId], references: [id], onDelete: Cascade)
+  section          Section?               @relation(fields: [sectionId], references: [id], onDelete: SetNull)
+  feeType          FeeType                @relation(fields: [feeTypeId], references: [id], onDelete: Restrict)
+  items            FeeStructureItem[]
+  assignments      StudentFeeAssignment[]
+  invoices         FeeInvoice[]
   legacyFeeMasters FeeMaster[]
 
   @@unique([schoolId, academicSessionId, classId, sectionId, feeTypeId])
@@ -3465,23 +3488,23 @@ model FeeInvoice {
   createdAt         DateTime         @default(now()) @map("created_at")
   updatedAt         DateTime         @updatedAt @map("updated_at")
 
-  school             School                 @relation(fields: [schoolId], references: [id], onDelete: Cascade)
-  academicSession    AcademicYear           @relation(fields: [academicSessionId], references: [id], onDelete: Cascade)
-  student            Student                @relation(fields: [studentId], references: [id], onDelete: Cascade)
-  class              Class?                 @relation(fields: [classId], references: [id], onDelete: SetNull)
-  section            Section?               @relation(fields: [sectionId], references: [id], onDelete: SetNull)
-  feeStructure       FeeStructure?          @relation(fields: [feeStructureId], references: [id], onDelete: SetNull)
-  feeType            FeeType?               @relation(fields: [feeTypeId], references: [id], onDelete: SetNull)
-  feeGroup           FeeGroup?              @relation(fields: [feeGroupId], references: [id], onDelete: SetNull)
-  items              FeeInvoiceItem[]
-  payments           FeePayment[]
-  receipts           FeeReceipt[]
-  paymentAllocations FeePaymentAllocation[]
-  ledgers            FeeLedger[]
-  fines              FeeFine[]
-  notifications      FeeNotification[]
-  generatedCarryForwards FeeCarryForward[]  @relation("GeneratedCarryForwardInvoice")
-  carryForwardSourceItems FeeCarryForwardItem[] @relation("CarryForwardSourceInvoice")
+  school                  School                 @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  academicSession         AcademicYear           @relation(fields: [academicSessionId], references: [id], onDelete: Cascade)
+  student                 Student                @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  class                   Class?                 @relation(fields: [classId], references: [id], onDelete: SetNull)
+  section                 Section?               @relation(fields: [sectionId], references: [id], onDelete: SetNull)
+  feeStructure            FeeStructure?          @relation(fields: [feeStructureId], references: [id], onDelete: SetNull)
+  feeType                 FeeType?               @relation(fields: [feeTypeId], references: [id], onDelete: SetNull)
+  feeGroup                FeeGroup?              @relation(fields: [feeGroupId], references: [id], onDelete: SetNull)
+  items                   FeeInvoiceItem[]
+  payments                FeePayment[]
+  receipts                FeeReceipt[]
+  paymentAllocations      FeePaymentAllocation[]
+  ledgers                 FeeLedger[]
+  fines                   FeeFine[]
+  notifications           FeeNotification[]
+  generatedCarryForwards  FeeCarryForward[]      @relation("GeneratedCarryForwardInvoice")
+  carryForwardSourceItems FeeCarryForwardItem[]  @relation("CarryForwardSourceInvoice")
 
   @@unique([schoolId, invoiceNumber])
   @@unique([schoolId, academicSessionId, studentId, feeStructureId, feeTypeId, feeMonth], name: "unique_student_fee_invoice_period")
@@ -3650,16 +3673,16 @@ model FeeDiscount {
   createdAt         DateTime              @default(now()) @map("created_at")
   updatedAt         DateTime              @updatedAt @map("updated_at")
 
-  school          School           @relation(fields: [schoolId], references: [id], onDelete: Cascade)
-  academicSession AcademicYear     @relation(fields: [academicSessionId], references: [id], onDelete: Cascade)
-  student         Student?         @relation(fields: [studentId], references: [id], onDelete: Cascade)
-  class           Class?           @relation(fields: [classId], references: [id], onDelete: SetNull)
-  section         Section?         @relation(fields: [sectionId], references: [id], onDelete: SetNull)
-  category        StudentCategory? @relation(fields: [categoryId], references: [id], onDelete: SetNull)
-  feeType         FeeType?         @relation(fields: [feeTypeId], references: [id], onDelete: SetNull)
-  feeGroup        FeeGroup?        @relation(fields: [feeGroupId], references: [id], onDelete: SetNull)
-  feeMaster       FeeMaster?       @relation(fields: [feeMasterId], references: [id], onDelete: SetNull)
-  particular      FeeParticular?   @relation(fields: [particularId], references: [id], onDelete: SetNull)
+  school          School                   @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  academicSession AcademicYear             @relation(fields: [academicSessionId], references: [id], onDelete: Cascade)
+  student         Student?                 @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  class           Class?                   @relation(fields: [classId], references: [id], onDelete: SetNull)
+  section         Section?                 @relation(fields: [sectionId], references: [id], onDelete: SetNull)
+  category        StudentCategory?         @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  feeType         FeeType?                 @relation(fields: [feeTypeId], references: [id], onDelete: SetNull)
+  feeGroup        FeeGroup?                @relation(fields: [feeGroupId], references: [id], onDelete: SetNull)
+  feeMaster       FeeMaster?               @relation(fields: [feeMasterId], references: [id], onDelete: SetNull)
+  particular      FeeParticular?           @relation(fields: [particularId], references: [id], onDelete: SetNull)
   installments    FeeDiscountInstallment[]
   ledgers         FeeLedger[]
 
@@ -3881,14 +3904,14 @@ model FeeLedger {
   createdById       String?            @map("created_by_id") @db.Uuid
   createdAt         DateTime           @default(now()) @map("created_at")
 
-  school          School       @relation(fields: [schoolId], references: [id], onDelete: Cascade)
-  academicSession AcademicYear @relation(fields: [academicSessionId], references: [id], onDelete: Cascade)
-  student         Student      @relation(fields: [studentId], references: [id], onDelete: Cascade)
-  invoice         FeeInvoice?  @relation(fields: [invoiceId], references: [id], onDelete: SetNull)
-  payment         FeePayment?  @relation(fields: [paymentId], references: [id], onDelete: SetNull)
-  receipt         FeeReceipt?  @relation(fields: [receiptId], references: [id], onDelete: SetNull)
-  discount        FeeDiscount? @relation(fields: [discountId], references: [id], onDelete: SetNull)
-  fine            FeeFine?     @relation(fields: [fineId], references: [id], onDelete: SetNull)
+  school          School              @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  academicSession AcademicYear        @relation(fields: [academicSessionId], references: [id], onDelete: Cascade)
+  student         Student             @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  invoice         FeeInvoice?         @relation(fields: [invoiceId], references: [id], onDelete: SetNull)
+  payment         FeePayment?         @relation(fields: [paymentId], references: [id], onDelete: SetNull)
+  receipt         FeeReceipt?         @relation(fields: [receiptId], references: [id], onDelete: SetNull)
+  discount        FeeDiscount?        @relation(fields: [discountId], references: [id], onDelete: SetNull)
+  fine            FeeFine?            @relation(fields: [fineId], references: [id], onDelete: SetNull)
   paymentReversal FeePaymentReversal? @relation(fields: [paymentReversalId], references: [id], onDelete: SetNull)
   carryForward    FeeCarryForward?    @relation(fields: [carryForwardId], references: [id], onDelete: SetNull)
 
@@ -3942,11 +3965,11 @@ model FeeCarryForward {
   createdAt             DateTime              @default(now()) @map("created_at")
   updatedAt             DateTime              @updatedAt @map("updated_at")
 
-  school              School                  @relation(fields: [schoolId], references: [id], onDelete: Cascade)
-  fromAcademicSession AcademicYear            @relation("FeeCarryForwardFromSession", fields: [fromAcademicSessionId], references: [id], onDelete: Restrict)
-  toAcademicSession   AcademicYear            @relation("FeeCarryForwardToSession", fields: [toAcademicSessionId], references: [id], onDelete: Restrict)
-  student             Student                 @relation(fields: [studentId], references: [id], onDelete: Cascade)
-  generatedInvoice    FeeInvoice?             @relation("GeneratedCarryForwardInvoice", fields: [generatedInvoiceId], references: [id], onDelete: SetNull)
+  school              School                @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  fromAcademicSession AcademicYear          @relation("FeeCarryForwardFromSession", fields: [fromAcademicSessionId], references: [id], onDelete: Restrict)
+  toAcademicSession   AcademicYear          @relation("FeeCarryForwardToSession", fields: [toAcademicSessionId], references: [id], onDelete: Restrict)
+  student             Student               @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  generatedInvoice    FeeInvoice?           @relation("GeneratedCarryForwardInvoice", fields: [generatedInvoiceId], references: [id], onDelete: SetNull)
   items               FeeCarryForwardItem[]
   ledgers             FeeLedger[]
 
@@ -3966,8 +3989,8 @@ model FeeCarryForwardItem {
   amount          Decimal  @db.Decimal(12, 2)
   createdAt       DateTime @default(now()) @map("created_at")
 
-  carryForward FeeCarryForward @relation(fields: [carryForwardId], references: [id], onDelete: Cascade)
-  sourceInvoice FeeInvoice     @relation("CarryForwardSourceInvoice", fields: [sourceInvoiceId], references: [id], onDelete: Restrict)
+  carryForward  FeeCarryForward @relation(fields: [carryForwardId], references: [id], onDelete: Cascade)
+  sourceInvoice FeeInvoice      @relation("CarryForwardSourceInvoice", fields: [sourceInvoiceId], references: [id], onDelete: Restrict)
 
   @@index([carryForwardId])
   @@index([sourceInvoiceId])
@@ -4025,6 +4048,88 @@ model FeeNotification {
   @@index([invoiceId])
   @@index([status])
   @@map("fee_notifications")
+}
+
+model ExpenseCategory {
+  id             String          @id @default(uuid()) @db.Uuid
+  schoolId       String          @map("school_id") @db.Uuid
+  name           String
+  normalizedName String          @map("normalized_name")
+  description    String?
+  status         FeeRecordStatus @default(ACTIVE)
+  isDefault      Boolean         @default(false) @map("is_default")
+  sortOrder      Int             @default(0) @map("sort_order")
+  deletedAt      DateTime?       @map("deleted_at")
+  createdAt      DateTime        @default(now()) @map("created_at")
+  updatedAt      DateTime        @updatedAt @map("updated_at")
+
+  school   School    @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  expenses Expense[]
+
+  @@unique([schoolId, normalizedName], name: "unique_expense_category_normalized_name")
+  @@index([schoolId])
+  @@index([status])
+  @@index([deletedAt])
+  @@map("expense_categories")
+}
+
+model Expense {
+  id                 String             @id @default(uuid()) @db.Uuid
+  schoolId           String             @map("school_id") @db.Uuid
+  categoryId         String             @map("category_id") @db.Uuid
+  title              String
+  amount             Decimal            @db.Decimal(12, 2)
+  expenseDate        DateTime           @map("expense_date")
+  paymentMode        ExpensePaymentMode @map("payment_mode")
+  paidTo             String?            @map("paid_to")
+  referenceNumber    String?            @map("reference_number")
+  description        String?
+  receiptUrl         String?            @map("receipt_url")
+  receiptKey         String?            @map("receipt_key")
+  receiptFileName    String?            @map("receipt_file_name")
+  receiptContentType String?            @map("receipt_content_type")
+  createdById        String?            @map("created_by_id") @db.Uuid
+  updatedById        String?            @map("updated_by_id") @db.Uuid
+  deletedAt          DateTime?          @map("deleted_at")
+  deletedById        String?            @map("deleted_by_id") @db.Uuid
+  createdAt          DateTime           @default(now()) @map("created_at")
+  updatedAt          DateTime           @updatedAt @map("updated_at")
+
+  school         School                 @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  category       ExpenseCategory        @relation(fields: [categoryId], references: [id], onDelete: Restrict)
+  changeRequests ExpenseChangeRequest[]
+
+  @@index([schoolId, expenseDate])
+  @@index([categoryId])
+  @@index([paymentMode])
+  @@index([createdById])
+  @@index([deletedAt])
+  @@map("expenses")
+}
+
+model ExpenseChangeRequest {
+  id            String                     @id @default(uuid()) @db.Uuid
+  schoolId      String                     @map("school_id") @db.Uuid
+  expenseId     String                     @map("expense_id") @db.Uuid
+  requestType   ExpenseChangeRequestType   @map("request_type")
+  proposedData  Json?                      @map("proposed_data")
+  reason        String?
+  status        ExpenseChangeRequestStatus @default(PENDING)
+  requestedById String?                    @map("requested_by_id") @db.Uuid
+  reviewedById  String?                    @map("reviewed_by_id") @db.Uuid
+  reviewedAt    DateTime?                  @map("reviewed_at")
+  reviewNote    String?                    @map("review_note")
+  createdAt     DateTime                   @default(now()) @map("created_at")
+  updatedAt     DateTime                   @updatedAt @map("updated_at")
+
+  school  School  @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  expense Expense @relation(fields: [expenseId], references: [id], onDelete: Cascade)
+
+  @@index([schoolId, status])
+  @@index([expenseId])
+  @@index([requestedById])
+  @@index([reviewedById])
+  @@map("expense_change_requests")
 }
 
 model NumberSequence {
@@ -4100,8 +4205,8 @@ model NotificationTemplate {
   createdAt DateTime            @default(now()) @map("created_at")
   updatedAt DateTime            @updatedAt @map("updated_at")
 
-  school School? @relation(fields: [schoolId], references: [id], onDelete: Cascade)
-  logs NotificationLog[]
+  school School?           @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  logs   NotificationLog[]
 
   @@index([schoolId])
   @@index([schoolId, channel])
@@ -4109,19 +4214,19 @@ model NotificationTemplate {
 }
 
 model NotificationLog {
-  id         String              @id @default(uuid()) @db.Uuid
-  schoolId   String?             @map("school_id") @db.Uuid
-  userId     String?             @map("user_id") @db.Uuid
-  channel    NotificationChannel
-  templateId String?             @map("template_id") @db.Uuid
-  payload    Json
-  status     NotificationStatus  @default(QUEUED)
-  providerId String?             @map("provider_id")
-  error      String?
-  scheduledAt DateTime?          @map("scheduled_at")
-  sentAt     DateTime?           @map("sent_at")
-  createdAt  DateTime            @default(now()) @map("created_at")
-  updatedAt  DateTime            @updatedAt @map("updated_at")
+  id          String              @id @default(uuid()) @db.Uuid
+  schoolId    String?             @map("school_id") @db.Uuid
+  userId      String?             @map("user_id") @db.Uuid
+  channel     NotificationChannel
+  templateId  String?             @map("template_id") @db.Uuid
+  payload     Json
+  status      NotificationStatus  @default(QUEUED)
+  providerId  String?             @map("provider_id")
+  error       String?
+  scheduledAt DateTime?           @map("scheduled_at")
+  sentAt      DateTime?           @map("sent_at")
+  createdAt   DateTime            @default(now()) @map("created_at")
+  updatedAt   DateTime            @updatedAt @map("updated_at")
 
   template NotificationTemplate? @relation(fields: [templateId], references: [id], onDelete: SetNull)
   school   School?               @relation(fields: [schoolId], references: [id], onDelete: SetNull)
@@ -4179,17 +4284,17 @@ model UserNotificationPreference {
 }
 
 model CommunicationNotice {
-  id          String   @id @default(uuid()) @db.Uuid
-  schoolId    String   @map("school_id") @db.Uuid
+  id          String    @id @default(uuid()) @db.Uuid
+  schoolId    String    @map("school_id") @db.Uuid
   title       String
   message     String
   audience    Json
-  status      String   @default("PUBLISHED")
-  publishedAt DateTime @default(now()) @map("published_at")
+  status      String    @default("PUBLISHED")
+  publishedAt DateTime  @default(now()) @map("published_at")
   expiresAt   DateTime? @map("expires_at")
-  createdById String?  @map("created_by_id") @db.Uuid
-  createdAt   DateTime @default(now()) @map("created_at")
-  updatedAt   DateTime @updatedAt @map("updated_at")
+  createdById String?   @map("created_by_id") @db.Uuid
+  createdAt   DateTime  @default(now()) @map("created_at")
+  updatedAt   DateTime  @updatedAt @map("updated_at")
 
   school    School @relation(fields: [schoolId], references: [id], onDelete: Cascade)
   createdBy User?  @relation("CommunicationNoticeCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)

@@ -183,7 +183,19 @@ export const EMPLOYEE_PERMISSION_CATALOG: PermissionCatalogItem[] = [
   { code: P.feesDiscountsDelete, label: 'Fee Discounts - Delete', path: '/dashboard/fees/discounts', group: 'Fees' },
   { code: P.feesDiscountsApprove, label: 'Fee Discounts - Approve/Reject', path: '/dashboard/fees/discounts', group: 'Fees' },
   { code: P.feesReportsView, label: 'Fee Reports - View', path: '/dashboard/fees/reports', group: 'Fees' },
-  { code: P.feesReportsExport, label: 'Fee Reports - Export', path: '/dashboard/fees/reports', group: 'Fees' },  { code: P.payrollView, label: 'Payroll - View', path: '/dashboard/payroll', group: 'Payroll' },
+  { code: P.feesReportsExport, label: 'Fee Reports - Export', path: '/dashboard/fees/reports', group: 'Fees' },
+  { code: P.expensesView, label: 'Expenses - View', path: '/dashboard/accounts/expenses', group: 'Payroll' },
+  { code: P.expensesCreate, label: 'Expenses - Create', path: '/dashboard/accounts/expenses', group: 'Payroll' },
+  { code: P.expensesEdit, label: 'Expenses - Edit / Request Edit', path: '/dashboard/accounts/expenses', group: 'Payroll' },
+  { code: P.expensesDelete, label: 'Expenses - Delete / Request Delete', path: '/dashboard/accounts/expenses', group: 'Payroll' },
+  { code: P.expensesApprove, label: 'Expenses - Approve Changes', path: '/dashboard/accounts/expenses', group: 'Payroll' },
+  { code: P.expensesCategoriesView, label: 'Expense Categories - View', path: '/dashboard/accounts/expenses', group: 'Payroll' },
+  { code: P.expensesCategoriesCreate, label: 'Expense Categories - Create', path: '/dashboard/accounts/expenses', group: 'Payroll' },
+  { code: P.expensesCategoriesEdit, label: 'Expense Categories - Edit', path: '/dashboard/accounts/expenses', group: 'Payroll' },
+  { code: P.expensesCategoriesDelete, label: 'Expense Categories - Delete', path: '/dashboard/accounts/expenses', group: 'Payroll' },
+  { code: P.expensesReportsView, label: 'Expense Reports - View', path: '/dashboard/accounts/expenses', group: 'Payroll' },
+  { code: P.expensesReportsExport, label: 'Expense Reports - Export', path: '/dashboard/accounts/expenses', group: 'Payroll' },
+  { code: P.payrollView, label: 'Payroll - View', path: '/dashboard/payroll', group: 'Payroll' },
   { code: P.payrollGenerate, label: 'Payroll - Generate', path: '/dashboard/payroll', group: 'Payroll' },
   { code: P.payrollPay, label: 'Payroll - Pay', path: '/dashboard/payroll', group: 'Payroll' },
   { code: P.payrollReport, label: 'Payroll Report', path: '/dashboard/payroll/report', group: 'Payroll' },
@@ -253,6 +265,7 @@ export const getRequiredPermissionForPath = (pathname: string) => {
   if (pathname.startsWith('/dashboard/fees/discounts')) return P.feesDiscountsView;
   if (pathname.startsWith('/dashboard/fees/reports')) return P.feesReportsView;
   if (pathname.startsWith('/dashboard/fees')) return P.feesOverviewView;
+  if (pathname.startsWith('/dashboard/accounts/expenses')) return P.expensesView;
   if (pathname.startsWith('/dashboard/payroll/report')) return P.payrollReport;
   if (pathname.startsWith('/dashboard/payroll')) return P.payrollView;
 

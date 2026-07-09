@@ -526,6 +526,24 @@ export const resolvePermissionForPath = (path: string, method = 'GET') => {
     }
     return P.feesOverviewView;
   }
+  if (pathOnly.startsWith('/api/v1/expenses')) {
+    if (pathOnly.startsWith('/api/v1/expenses/categories')) {
+      if (verb === 'POST') return P.expensesCategoriesCreate;
+      if (verb === 'PATCH' || verb === 'PUT') return P.expensesCategoriesEdit;
+      if (verb === 'DELETE') return P.expensesCategoriesDelete;
+      return P.expensesCategoriesView;
+    }
+    if (pathOnly.startsWith('/api/v1/expenses/change-requests')) {
+      if (/\/(approve|reject)$/.test(pathOnly) && ['POST', 'PATCH', 'PUT'].includes(verb)) return P.expensesApprove;
+      return P.expensesApprove;
+    }
+    if (pathOnly.startsWith('/api/v1/expenses/export')) return P.expensesReportsExport;
+    if (pathOnly.startsWith('/api/v1/expenses/summary')) return P.expensesReportsView;
+    if (verb === 'POST') return P.expensesCreate;
+    if (verb === 'PATCH' || verb === 'PUT') return P.expensesEdit;
+    if (verb === 'DELETE') return P.expensesDelete;
+    return P.expensesView;
+  }
   if (pathOnly.startsWith('/api/v1/leave/types')) {
     if (verb === 'POST') return P.leaveTypeCreate;
     if (verb === 'PATCH' || verb === 'PUT') return P.leaveTypeEdit;
