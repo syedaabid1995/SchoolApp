@@ -7,9 +7,12 @@ const RATE_LIMIT_ERROR = 'Too many attempts. Please try again later.';
 
 const appendSetCookies = (response: NextResponse, value: string | string[] | undefined) => {
   if (!value) return;
-  const cookies = Array.isArray(value) ? value : [value];
+  const cookies = (Array.isArray(value) ? value : [value]).flatMap((cookie) =>
+    cookie.split(/,(?=\s*(?:access_token|refresh_token|accessToken|refreshToken)=)/),
+  );
   for (const cookie of cookies) {
-    response.headers.append('set-cookie', cookie);
+    const trimmed = cookie.trim();
+    if (trimmed) response.headers.append('set-cookie', trimmed);
   }
 };
 

@@ -5,7 +5,9 @@ const getBackendSetCookies = (headers: Headers) => {
   const getSetCookie = (headers as Headers & { getSetCookie?: () => string[] }).getSetCookie;
   if (typeof getSetCookie === 'function') return getSetCookie.call(headers);
   const setCookie = headers.get('set-cookie');
-  return setCookie ? [setCookie] : [];
+  return setCookie
+    ? setCookie.split(/,(?=\s*(?:access_token|refresh_token|accessToken|refreshToken)=)/).map((cookie) => cookie.trim())
+    : [];
 };
 
 export async function POST(req: Request) {

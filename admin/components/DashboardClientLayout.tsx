@@ -12,6 +12,7 @@ import {
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { getRequiredPermissionForPath } from '../config/employee-permissions';
 import AccessDeniedPanel from './AccessDeniedPanel';
+import FullPageLoader from './FullPageLoader';
 
 export default function DashboardClientLayout({ 
   children, 
@@ -25,7 +26,7 @@ export default function DashboardClientLayout({
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [themeMode, setThemeMode] = useState<DashboardThemeMode>('light');
   const [systemThemeMode, setSystemThemeMode] = useState<DashboardResolvedThemeMode>('light');
-  const { data: session } = useQuery({
+  const { data: session, isLoading: isSessionLoading } = useQuery({
     queryKey: ['session'],
     queryFn: getSession,
     refetchOnWindowFocus: false,
@@ -192,6 +193,20 @@ export default function DashboardClientLayout({
       router.replace('/dashboard');
     }
   }, [isSuperAdmin, canAccessSuperAdminRoute, router]);
+
+  useEffect(() => {
+    if (!isSessionLoading && session && !session.role) {
+      router.replace('/login');
+    }
+  }, [isSessionLoading, router, session]);
+
+  if (isSessionLoading) {
+    return <FullPageLoader label="Checking access..." />;
+  }
+
+  if (session && !session.role) {
+    return <FullPageLoader label="Redirecting to login..." />;
+  }
 
   if (isSubscriptionRestricted && !isAccountRoute) {
     return (

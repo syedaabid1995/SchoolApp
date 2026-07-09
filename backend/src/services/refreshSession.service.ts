@@ -3,6 +3,8 @@ import { prisma } from '../config/db';
 import { HttpError } from '../middlewares/error.middleware';
 import { hashToken } from '../utils/token';
 
+const RECENT_ROTATION_REUSE_GRACE_MS = 30_000;
+
 const firstHeaderValue = (value: string | string[] | undefined) =>
   Array.isArray(value) ? value[0] : value;
 
@@ -95,6 +97,9 @@ export const validateRefreshSession = async (params: {
   }
 
   if (session.revokedAt) {
+    if (now.getTime() - session.revokedAt.getTime() <= RECENT_ROTATION_REUSE_GRACE_MS) {
+      throw new HttpError(401, 'Invalid refresh token');
+    }
     await revokeAllRefreshSessionsForUser(session.userId);
     throw new HttpError(401, 'Invalid refresh token');
   }
