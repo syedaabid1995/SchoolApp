@@ -4,10 +4,19 @@ import multer from 'multer';
 import { prisma } from '../config/db';
 import { resolveSchoolId } from '../utils/tenant';
 import { HttpError } from '../middlewares/error.middleware';
+import { PermissionCodes as P, type PermissionCode } from '../permissions/permission-manifest';
 import { importRequestSchema } from '../validations/import.validation';
 import { importQueue } from '../queues';
 import { enforceLimits } from '../services/subscription.service';
+import { AuthorizationService } from '../services/authorization.service';
 import { buildRuntimeObjectKey, putRuntimeObject, sanitizeFilename } from '../services/runtimeStorage.service';
+import {
+  buildImportTemplateCsv,
+  importDefinitions,
+  loadBufferRows,
+  processImportRows,
+  type BulkImportType,
+} from '../services/import.service';
 import {
   DEFAULT_NESTED_LIST_LIMIT,
   cursorPrismaArgs,
@@ -16,12 +25,29 @@ import {
   toCursorPage,
 } from '../utils/pagination';
 
-const requireSchoolAdmin = (req: Request) => {
+const requireImportUser = (req: Request) => {
   if (!req.auth?.userId) throw new HttpError(401, 'Unauthorized');
-  if (!req.auth.schoolId) {
-    throw new HttpError(403, 'School scope is required to manage imports');
-  }
   return req.auth;
+};
+
+const permissionForImportType = (type: BulkImportType): PermissionCode => {
+  switch (type) {
+    case 'CLASS': return P.academicClassCreate;
+    case 'SECTION': return P.academicSectionCreate;
+    case 'SUBJECT': return P.academicSubjectCreate;
+    case 'STUDENT': return P.studentImport;
+    case 'TEACHER': return P.teachersAdd;
+    case 'EXPENSE_CATEGORY': return P.expensesCategoriesCreate;
+    case 'EXPENSE': return P.expensesCreate;
+    default: return P.studentImport;
+  }
+};
+
+const assertImportPermission = async (req: Request, type: BulkImportType) => {
+  const auth = requireImportUser(req);
+  await AuthorizationService.assertPermission(auth, permissionForImportType(type), {
+    message: 'You do not have permission to import this module',
+  });
 };
 
 const fileFilter: multer.Options['fileFilter'] = (_req, file, cb) => {
@@ -51,8 +77,9 @@ const safeImportJob = <T extends { filePath?: string | null }>(job: T) => {
 };
 
 export const createImport = async (req: Request, res: Response) => {
-  requireSchoolAdmin(req);
+  requireImportUser(req);
   const payload = importRequestSchema.parse(req.body);
+  await assertImportPermission(req, payload.type as BulkImportType);
   if (!req.file) {
     throw new HttpError(400, 'file is required');
   }
@@ -90,7 +117,7 @@ export const createImport = async (req: Request, res: Response) => {
     data: {
       schoolId,
       createdById: auth.userId,
-      type: payload.type,
+      type: payload.type as any,
       status: 'QUEUED',
       filePath: uploaded.storageRef,
       originalName: req.file.originalname,
@@ -108,7 +135,7 @@ export const createImport = async (req: Request, res: Response) => {
 };
 
 export const listImports = async (req: Request, res: Response) => {
-  requireSchoolAdmin(req);
+  requireImportUser(req);
   const schoolId = resolveSchoolId(req, req.query.schoolId as string | undefined);
   const pagination = parseCursorPagination(req.query, { defaultLimit: 50, maxLimit: 100 });
 
@@ -124,7 +151,7 @@ export const listImports = async (req: Request, res: Response) => {
 };
 
 export const getImport = async (req: Request, res: Response) => {
-  requireSchoolAdmin(req);
+  requireImportUser(req);
   const schoolId = resolveSchoolId(req, req.query.schoolId as string | undefined);
   const { id } = req.params;
 
@@ -153,7 +180,7 @@ export const getImport = async (req: Request, res: Response) => {
 };
 
 export const listImportErrors = async (req: Request, res: Response) => {
-  requireSchoolAdmin(req);
+  requireImportUser(req);
   const schoolId = resolveSchoolId(req, req.query.schoolId as string | undefined);
   const { id } = req.params;
 
@@ -176,4 +203,114 @@ export const listImportErrors = async (req: Request, res: Response) => {
   setCursorPaginationHeaders(res, pageInfo);
 
   res.status(200).json(errors);
+};
+
+export const listImportTypes = async (_req: Request, res: Response) => {
+  res.status(200).json(importDefinitions);
+};
+
+export const downloadImportTemplate = async (req: Request, res: Response) => {
+  requireImportUser(req);
+  const type = importRequestSchema.shape.type.parse(req.params.type) as BulkImportType;
+  await assertImportPermission(req, type);
+  const csv = buildImportTemplateCsv(type);
+  res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+  res.setHeader('Content-Disposition', `attachment; filename="${type.toLowerCase()}-import-template.csv"`);
+  res.status(200).send(csv);
+};
+
+export const previewImport = async (req: Request, res: Response) => {
+  requireImportUser(req);
+  const payload = importRequestSchema.pick({ type: true, schoolId: true }).parse(req.body);
+  await assertImportPermission(req, payload.type as BulkImportType);
+  if (!req.file) throw new HttpError(400, 'file is required');
+  const schoolId = resolveSchoolId(req, payload.schoolId);
+  const rows = await loadBufferRows(req.file);
+  const result = await processImportRows({
+    schoolId,
+    userId: req.auth?.userId,
+    type: payload.type as BulkImportType,
+    rows,
+    dryRun: true,
+  });
+  res.status(200).json({ ...result, type: payload.type, dryRun: true });
+};
+
+export const commitImport = async (req: Request, res: Response) => {
+  const auth = requireImportUser(req);
+  const payload = importRequestSchema.pick({ type: true, schoolId: true }).parse(req.body);
+  await assertImportPermission(req, payload.type as BulkImportType);
+  if (!req.file) throw new HttpError(400, 'file is required');
+  const schoolId = resolveSchoolId(req, payload.schoolId);
+  const rows = await loadBufferRows(req.file);
+
+  const key = buildRuntimeObjectKey({
+    schoolId,
+    category: 'imports',
+    filename: req.file.originalname,
+  });
+  const uploaded = await putRuntimeObject({
+    key,
+    body: req.file.buffer,
+    contentType: req.file.mimetype,
+    metadata: {
+      originalName: sanitizeFilename(req.file.originalname),
+      importType: payload.type,
+    },
+  });
+
+  const importJob = await prisma.importJob.create({
+    data: {
+      schoolId,
+      createdById: auth.userId,
+      type: payload.type as any,
+      status: 'PROCESSING',
+      filePath: uploaded.storageRef,
+      originalName: req.file.originalname,
+      dryRun: false,
+      startedAt: new Date(),
+    },
+  });
+
+  try {
+    const result = await processImportRows({
+      schoolId,
+      userId: auth.userId,
+      type: payload.type as BulkImportType,
+      rows,
+      dryRun: false,
+    });
+
+    if (result.errors.length) {
+      await prisma.importRowError.createMany({
+        data: result.errors.map((err) => ({
+          importJobId: importJob.id,
+          rowNumber: err.rowNumber,
+          field: err.field ?? null,
+          message: err.message,
+          rawData: (err.rawData ?? null) as any,
+        })),
+      });
+    }
+
+    const updated = await prisma.importJob.update({
+      where: { id: importJob.id },
+      data: {
+        status: 'COMPLETED',
+        totalRows: result.totalRows,
+        processedRows: result.processedRows,
+        successCount: result.successCount,
+        errorCount: result.failedCount,
+        finishedAt: new Date(),
+      },
+    });
+
+    res.status(200).json({ job: safeImportJob(updated), ...result, type: payload.type });
+  } catch (err) {
+    await prisma.importJob.update({
+      where: { id: importJob.id },
+      data: { status: 'FAILED', finishedAt: new Date() },
+    });
+    throw err;
+  }
 };

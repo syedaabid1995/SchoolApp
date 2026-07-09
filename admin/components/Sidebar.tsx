@@ -107,6 +107,7 @@ const platformSections: NavSection[] = [
       { href: '/dashboard', label: 'Dashboard', icon: 'layoutDashboard' },
       { href: '/dashboard/reports', label: 'Reports', icon: 'chart' },
       { href: '/dashboard/accounts/expenses', label: 'Expense Reports', icon: 'wallet' },
+      { href: '/dashboard/imports', label: 'Bulk Imports', icon: 'file' },
     ],
   },
   {
@@ -235,6 +236,7 @@ export const Sidebar = ({
           { href: '/dashboard', label: 'Dashboard', icon: 'layoutDashboard' },
           { href: '/dashboard/onboarding', label: 'Onboarding Readiness', icon: 'checkCircle' },
           { href: '/dashboard/assistant', label: 'AI Assistant', icon: 'sparkles' },
+          { href: '/dashboard/imports', label: 'Bulk Imports', icon: 'file' },
         ],
       },
       {

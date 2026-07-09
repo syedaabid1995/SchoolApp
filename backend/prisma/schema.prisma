@@ -1846,8 +1846,13 @@ model StudentStatusHistory {
 }
 
 enum ImportType {
+  CLASS
+  SECTION
+  SUBJECT
   STUDENT
   TEACHER
+  EXPENSE_CATEGORY
+  EXPENSE
 }
 
 enum ImportStatus {

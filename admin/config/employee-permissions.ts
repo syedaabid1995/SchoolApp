@@ -234,6 +234,7 @@ export const getRequiredPermissionForPath = (pathname: string) => {
   if (pathname.startsWith('/dashboard/compliance')) return P.complianceView;
   if (pathname === '/dashboard') return P.dashboardOverview;
   if (pathname.startsWith('/dashboard/plans')) return P.plansView;
+  if (pathname.startsWith('/dashboard/imports')) return P.studentImport;
   if (pathname.startsWith('/dashboard/assistant')) return P.aiAssistantView;
   if (pathname.startsWith('/dashboard/onboarding')) return P.schoolOnboardingView;
   if (/^\/dashboard\/schools\/[^/]+\/onboarding/.test(pathname)) return P.schoolOnboardingReview;

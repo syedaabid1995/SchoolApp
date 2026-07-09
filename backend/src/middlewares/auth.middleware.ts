@@ -187,6 +187,16 @@ const studentLookupPermissions = [
   P.reportsFeesView,
 ];
 
+const bulkImportPermissions = [
+  P.academicClassCreate,
+  P.academicSectionCreate,
+  P.academicSubjectCreate,
+  P.studentImport,
+  P.teachersAdd,
+  P.expensesCategoriesCreate,
+  P.expensesCreate,
+];
+
 const academicReadPermissions = [
   P.academicClassView,
   P.academicSectionView,
@@ -436,7 +446,7 @@ export const resolvePermissionForPath = (path: string, method = 'GET') => {
     if (verb === 'DELETE') return P.studentDelete;
     return studentLookupPermissions;
   }
-  if (pathOnly.startsWith('/api/v1/imports')) return P.studentImport;
+  if (pathOnly.startsWith('/api/v1/imports')) return bulkImportPermissions;
 
   if (pathOnly.startsWith('/api/v1/staff/attendance/report')) return P.staffAttendanceReport;
   if (pathOnly.startsWith('/api/v1/staff/attendance')) return verb === 'POST' ? P.staffAttendanceCreate : P.staffAttendanceView;
