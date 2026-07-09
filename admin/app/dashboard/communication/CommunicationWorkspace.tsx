@@ -941,13 +941,14 @@ function MultiSelectField<T extends string>({
       onChange(Array.from(selectRef.current.selectedOptions).map((option) => option.value as T));
     };
 
-    Promise.all([
-      import('jquery'),
-      import('multiple-select/dist/multiple-select.min.js'),
-    ]).then(([jqueryModule]) => {
+    import('jquery').then(async (jqueryModule) => {
       if (disposed || !selectRef.current) return;
       const jqueryFactory = (jqueryModule as any).default ?? jqueryModule;
       const $ = typeof jqueryFactory === 'function' ? jqueryFactory : (window as any).jQuery;
+      (window as any).jQuery = $;
+      (window as any).$ = $;
+      await import('multiple-select/dist/multiple-select.min.js');
+      if (disposed || !selectRef.current) return;
       if (!$?.fn?.multipleSelect) return;
 
       activeSelect = $(selectRef.current);
