@@ -5,7 +5,13 @@ import 'package:intl/intl.dart';
 import '../../../../../global_ui/features/attendance/domain/entities/attendance_summary.dart';
 import '../../../../../global_ui/features/attendance/presentation/providers/attendance_providers.dart';
 import '../../../../../global_ui/features/auth/presentation/providers/auth_controller.dart';
+import '../../../../../global_ui/features/notices/domain/entities/notice.dart';
+import '../../../../../global_ui/features/notices/presentation/providers/notice_providers.dart';
+import '../../../../../global_ui/features/notifications/domain/entities/staff_notification.dart';
+import '../../../../../global_ui/features/notifications/presentation/providers/notification_providers.dart';
 import '../../../../app/theme/saapt_theme.dart';
+import '../../../notices/presentation/screens/saapt_notice_board_screen.dart';
+import '../../../notifications/presentation/screens/saapt_push_notifications_screen.dart';
 
 class MyAttendanceScreen extends ConsumerWidget {
   const MyAttendanceScreen({super.key});
@@ -16,6 +22,8 @@ class MyAttendanceScreen extends ConsumerWidget {
     final today = DateTime(now.year, now.month, now.day);
     final options = ref.watch(selfAttendanceOptionsProvider(today));
     final history = ref.watch(teacherAttendanceHistoryProvider);
+    final notices = ref.watch(noticeBoardProvider);
+    final pushNotifications = ref.watch(pushNotificationCenterProvider);
     final user = ref.watch(authControllerProvider).value?.user;
 
     return Scaffold(
@@ -23,11 +31,17 @@ class MyAttendanceScreen extends ConsumerWidget {
         onRefresh: () async {
           ref.invalidate(selfAttendanceOptionsProvider(today));
           ref.invalidate(teacherAttendanceHistoryProvider);
+          ref.invalidate(noticeBoardProvider);
+          ref.invalidate(pushNotificationCenterProvider);
         },
         child: CustomScrollView(
           slivers: [
             SliverToBoxAdapter(
-              child: _Header(name: user?.displayName ?? 'Teacher'),
+              child: _Header(
+                name: user?.displayName ?? 'Teacher',
+                notices: notices,
+                pushNotifications: pushNotifications,
+              ),
             ),
             SliverPadding(
               padding: const EdgeInsets.fromLTRB(20, 20, 20, 28),
@@ -77,42 +91,81 @@ class MyAttendanceScreen extends ConsumerWidget {
 }
 
 class _Header extends StatelessWidget {
-  const _Header({required this.name});
+  const _Header({
+    required this.name,
+    required this.notices,
+    required this.pushNotifications,
+  });
   final String name;
+  final AsyncValue<NoticeBoardState> notices;
+  final AsyncValue<NotificationCenterState> pushNotifications;
 
   @override
   Widget build(BuildContext context) {
+    final unreadNotices = notices.maybeWhen(
+      data: (state) =>
+          _adminNotices(state).where((notice) => !notice.isRead).length,
+      orElse: () => 0,
+    );
+    final unreadPushNotifications = pushNotifications.maybeWhen(
+      data: (state) => _pushNotifications(
+        state,
+      ).where((notification) => !notification.isRead).length,
+      orElse: () => 0,
+    );
     return Container(
       color: SaaptTheme.primary,
       padding: const EdgeInsets.fromLTRB(24, 54, 24, 28),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
-            decoration: BoxDecoration(
-              color: Colors.white.withValues(alpha: 0.14),
-              border: Border.all(color: Colors.white.withValues(alpha: 0.35)),
-              borderRadius: BorderRadius.circular(20),
-            ),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                const Icon(
-                  Icons.school_outlined,
-                  size: 18,
-                  color: Colors.white,
-                ),
-                const SizedBox(width: 7),
-                Text(
-                  name,
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontWeight: FontWeight.w700,
+          Row(
+            children: [
+              Expanded(
+                child: Align(
+                  alignment: Alignment.centerLeft,
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 7,
+                    ),
+                    decoration: BoxDecoration(
+                      color: Colors.white.withValues(alpha: 0.14),
+                      border: Border.all(
+                        color: Colors.white.withValues(alpha: 0.35),
+                      ),
+                      borderRadius: BorderRadius.circular(20),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Icon(
+                          Icons.school_outlined,
+                          size: 18,
+                          color: Colors.white,
+                        ),
+                        const SizedBox(width: 7),
+                        Flexible(
+                          child: Text(
+                            name,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
                 ),
-              ],
-            ),
+              ),
+              const SizedBox(width: 8),
+              _PushNotificationAction(unreadCount: unreadPushNotifications),
+              const SizedBox(width: 8),
+              _NoticeAction(unreadCount: unreadNotices),
+            ],
           ),
           const SizedBox(height: 18),
           const Text(
@@ -135,6 +188,112 @@ class _Header extends StatelessWidget {
       ),
     );
   }
+}
+
+class _PushNotificationAction extends StatelessWidget {
+  const _PushNotificationAction({required this.unreadCount});
+
+  final int unreadCount;
+
+  @override
+  Widget build(BuildContext context) => Stack(
+    clipBehavior: Clip.none,
+    children: [
+      IconButton(
+        style: IconButton.styleFrom(
+          backgroundColor: Colors.white.withValues(alpha: 0.14),
+          foregroundColor: Colors.white,
+          fixedSize: const Size(46, 46),
+        ),
+        tooltip: 'Push Notifications',
+        onPressed: () => Navigator.of(context, rootNavigator: true).push(
+          MaterialPageRoute(
+            builder: (_) => const SaaptPushNotificationsScreen(),
+          ),
+        ),
+        icon: const Icon(Icons.notifications_active_rounded),
+      ),
+      if (unreadCount > 0)
+        Positioned(
+          right: -2,
+          top: -4,
+          child: Container(
+            constraints: const BoxConstraints(minWidth: 20, minHeight: 20),
+            padding: const EdgeInsets.symmetric(horizontal: 5),
+            alignment: Alignment.center,
+            decoration: BoxDecoration(
+              color: const Color(0xFFE94D4D),
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(color: Colors.white, width: 1.5),
+            ),
+            child: Text(
+              unreadCount > 9 ? '9+' : unreadCount.toString(),
+              style: const TextStyle(
+                color: Colors.white,
+                fontSize: 11,
+                fontWeight: FontWeight.w900,
+              ),
+            ),
+          ),
+        ),
+    ],
+  );
+}
+
+class _NoticeAction extends StatelessWidget {
+  const _NoticeAction({required this.unreadCount});
+
+  final int unreadCount;
+
+  @override
+  Widget build(BuildContext context) => Stack(
+    clipBehavior: Clip.none,
+    children: [
+      IconButton(
+        style: IconButton.styleFrom(
+          backgroundColor: Colors.white.withValues(alpha: 0.14),
+          foregroundColor: Colors.white,
+          fixedSize: const Size(46, 46),
+        ),
+        tooltip: 'Notice Board',
+        onPressed: () => Navigator.of(context, rootNavigator: true).push(
+          MaterialPageRoute(builder: (_) => const SaaptNoticeBoardScreen()),
+        ),
+        icon: const Icon(Icons.campaign_rounded),
+      ),
+      if (unreadCount > 0)
+        Positioned(
+          right: -2,
+          top: -4,
+          child: Container(
+            constraints: const BoxConstraints(minWidth: 20, minHeight: 20),
+            padding: const EdgeInsets.symmetric(horizontal: 5),
+            alignment: Alignment.center,
+            decoration: BoxDecoration(
+              color: const Color(0xFFE94D4D),
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(color: Colors.white, width: 1.5),
+            ),
+            child: Text(
+              unreadCount > 9 ? '9+' : unreadCount.toString(),
+              style: const TextStyle(
+                color: Colors.white,
+                fontSize: 11,
+                fontWeight: FontWeight.w900,
+              ),
+            ),
+          ),
+        ),
+    ],
+  );
+}
+
+List<Notice> _adminNotices(NoticeBoardState state) {
+  return state.notices;
+}
+
+List<StaffNotification> _pushNotifications(NotificationCenterState state) {
+  return state.items;
 }
 
 class _AttendanceContent extends ConsumerWidget {

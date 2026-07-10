@@ -280,6 +280,119 @@ class StudentAttendanceSaveRequest extends Equatable {
   List<Object?> get props => [query, markHoliday, holidayReason, records];
 }
 
+class StudentAttendanceReportQuery extends Equatable {
+  const StudentAttendanceReportQuery({
+    required this.academicSessionId,
+    required this.classId,
+    required this.sectionId,
+    required this.month,
+    required this.year,
+  });
+
+  final String academicSessionId;
+  final String classId;
+  final String sectionId;
+  final int month;
+  final int year;
+
+  @override
+  List<Object?> get props => [
+    academicSessionId,
+    classId,
+    sectionId,
+    month,
+    year,
+  ];
+}
+
+class StudentAttendanceReportHoliday extends Equatable {
+  const StudentAttendanceReportHoliday({
+    required this.id,
+    required this.holidayDate,
+    this.reason,
+  });
+
+  final String id;
+  final DateTime holidayDate;
+  final String? reason;
+
+  @override
+  List<Object?> get props => [id, holidayDate, reason];
+}
+
+class StudentAttendanceDailyStatus extends Equatable {
+  const StudentAttendanceDailyStatus({
+    required this.day,
+    required this.status,
+    this.note,
+  });
+
+  final int day;
+  final String status;
+  final String? note;
+
+  @override
+  List<Object?> get props => [day, status, note];
+}
+
+class StudentAttendanceReportRow extends Equatable {
+  const StudentAttendanceReportRow({
+    required this.studentId,
+    required this.admissionNo,
+    required this.studentName,
+    required this.present,
+    required this.late,
+    required this.absent,
+    required this.holiday,
+    required this.halfDay,
+    required this.percentage,
+    required this.daily,
+    this.rollNo,
+  });
+
+  final String studentId;
+  final String admissionNo;
+  final String? rollNo;
+  final String studentName;
+  final int present;
+  final int late;
+  final int absent;
+  final int holiday;
+  final int halfDay;
+  final double percentage;
+  final List<StudentAttendanceDailyStatus> daily;
+
+  @override
+  List<Object?> get props => [
+    studentId,
+    admissionNo,
+    rollNo,
+    studentName,
+    present,
+    late,
+    absent,
+    holiday,
+    halfDay,
+    percentage,
+    daily,
+  ];
+}
+
+class StudentAttendanceReport extends Equatable {
+  const StudentAttendanceReport({
+    required this.daysInMonth,
+    required this.holidays,
+    required this.rows,
+  });
+
+  final int daysInMonth;
+  final List<StudentAttendanceReportHoliday> holidays;
+  final List<StudentAttendanceReportRow> rows;
+
+  @override
+  List<Object?> get props => [daysInMonth, holidays, rows];
+}
+
 enum AttendanceMode {
   daily('DAILY'),
   twiceDaily('TWICE_DAILY'),

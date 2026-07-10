@@ -19,6 +19,7 @@ class AttendanceRepositoryImpl implements AttendanceRepository {
   static const _historyCacheKey = 'attendance.teacher.history';
   static const _studentOptionsCacheKey = 'attendance.student.options';
   static const _studentSheetCachePrefix = 'attendance.student.sheet.';
+  static const _studentReportCachePrefix = 'attendance.student.report.';
   static const _attendanceV2ConfigCachePrefix = 'attendance.v2.config.';
   static const _attendanceV2UnitsCachePrefix = 'attendance.v2.units.';
   static const _attendanceV2SheetCachePrefix = 'attendance.v2.sheet.';
@@ -215,9 +216,33 @@ class AttendanceRepositoryImpl implements AttendanceRepository {
     }
   }
 
+  @override
+  Future<StudentAttendanceReport> getStudentAttendanceReport(
+    StudentAttendanceReportQuery query,
+  ) async {
+    final cacheKey = _studentReportCacheKey(query);
+    try {
+      final report = await _remote.getStudentAttendanceReport(query);
+      await _cache?.writeCached(cacheKey, report.toJson());
+      return report;
+    } catch (error) {
+      final cached = _cache?.read<Map<dynamic, dynamic>>(cacheKey);
+      if (cached != null) {
+        return StudentAttendanceReportModel.fromJson(
+          cached.map((key, value) => MapEntry(key.toString(), value)),
+        );
+      }
+      throw ErrorHandler.toFailure(error);
+    }
+  }
+
   String _studentSheetCacheKey(StudentAttendanceQuery query) {
     final date = query.date.toIso8601String().split('T').first;
     return '$_studentSheetCachePrefix${query.academicSessionId}.${query.classId}.${query.sectionId}.$date';
+  }
+
+  String _studentReportCacheKey(StudentAttendanceReportQuery query) {
+    return '$_studentReportCachePrefix${query.academicSessionId}.${query.classId}.${query.sectionId}.${query.year}.${query.month}';
   }
 
   @override

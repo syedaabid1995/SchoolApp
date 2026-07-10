@@ -284,6 +284,139 @@ class StudentAttendanceHolidayModel extends StudentAttendanceHoliday {
   }
 }
 
+class StudentAttendanceReportModel extends StudentAttendanceReport {
+  const StudentAttendanceReportModel({
+    required super.daysInMonth,
+    required super.holidays,
+    required super.rows,
+  });
+
+  factory StudentAttendanceReportModel.fromJson(Map<String, dynamic> json) {
+    final holidays = json['holidays'] is List
+        ? json['holidays'] as List
+        : const [];
+    final rows = json['rows'] is List ? json['rows'] as List : const [];
+    return StudentAttendanceReportModel(
+      daysInMonth: _toInt(json['daysInMonth']),
+      holidays: [
+        for (final item in holidays)
+          if (item is Map)
+            StudentAttendanceReportHolidayModel.fromJson(_stringMap(item)),
+      ],
+      rows: [
+        for (final item in rows)
+          if (item is Map)
+            StudentAttendanceReportRowModel.fromJson(_stringMap(item)),
+      ],
+    );
+  }
+
+  Map<String, dynamic> toJson() => {
+    'daysInMonth': daysInMonth,
+    'holidays': [
+      for (final holiday in holidays)
+        {
+          'id': holiday.id,
+          'holidayDate': holiday.holidayDate.toIso8601String(),
+          'reason': holiday.reason,
+        },
+    ],
+    'rows': [
+      for (final row in rows)
+        {
+          'studentId': row.studentId,
+          'admissionNo': row.admissionNo,
+          'rollNo': row.rollNo,
+          'studentName': row.studentName,
+          'present': row.present,
+          'late': row.late,
+          'absent': row.absent,
+          'holiday': row.holiday,
+          'halfDay': row.halfDay,
+          'percentage': row.percentage,
+          'daily': [
+            for (final day in row.daily)
+              {'day': day.day, 'status': day.status, 'note': day.note},
+          ],
+        },
+    ],
+  };
+}
+
+class StudentAttendanceReportHolidayModel
+    extends StudentAttendanceReportHoliday {
+  const StudentAttendanceReportHolidayModel({
+    required super.id,
+    required super.holidayDate,
+    super.reason,
+  });
+
+  factory StudentAttendanceReportHolidayModel.fromJson(
+    Map<String, dynamic> json,
+  ) {
+    return StudentAttendanceReportHolidayModel(
+      id: json['id']?.toString() ?? '',
+      holidayDate: _toDate(json['holidayDate']),
+      reason: json['reason']?.toString(),
+    );
+  }
+}
+
+class StudentAttendanceReportRowModel extends StudentAttendanceReportRow {
+  const StudentAttendanceReportRowModel({
+    required super.studentId,
+    required super.admissionNo,
+    required super.studentName,
+    required super.present,
+    required super.late,
+    required super.absent,
+    required super.holiday,
+    required super.halfDay,
+    required super.percentage,
+    required super.daily,
+    super.rollNo,
+  });
+
+  factory StudentAttendanceReportRowModel.fromJson(Map<String, dynamic> json) {
+    final daily = json['daily'] is List ? json['daily'] as List : const [];
+    return StudentAttendanceReportRowModel(
+      studentId: json['studentId']?.toString() ?? '',
+      admissionNo: json['admissionNo']?.toString() ?? '',
+      rollNo: json['rollNo']?.toString(),
+      studentName: json['studentName']?.toString() ?? '',
+      present: _toInt(json['present']),
+      late: _toInt(json['late']),
+      absent: _toInt(json['absent']),
+      holiday: _toInt(json['holiday']),
+      halfDay: _toInt(json['halfDay']),
+      percentage: _toDouble(json['percentage']),
+      daily: [
+        for (final item in daily)
+          if (item is Map)
+            StudentAttendanceDailyStatusModel.fromJson(_stringMap(item)),
+      ],
+    );
+  }
+}
+
+class StudentAttendanceDailyStatusModel extends StudentAttendanceDailyStatus {
+  const StudentAttendanceDailyStatusModel({
+    required super.day,
+    required super.status,
+    super.note,
+  });
+
+  factory StudentAttendanceDailyStatusModel.fromJson(
+    Map<String, dynamic> json,
+  ) {
+    return StudentAttendanceDailyStatusModel(
+      day: _toInt(json['day']),
+      status: json['status']?.toString() ?? 'UNMARKED',
+      note: json['note']?.toString(),
+    );
+  }
+}
+
 class AttendanceConfigurationModel extends AttendanceConfiguration {
   const AttendanceConfigurationModel({
     required super.id,

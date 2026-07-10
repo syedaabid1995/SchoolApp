@@ -61,6 +61,16 @@ final studentAttendanceSheetProvider = FutureProvider.autoDispose
           .loadStudentAttendance(query);
     });
 
+final studentAttendanceReportProvider = FutureProvider.autoDispose
+    .family<StudentAttendanceReport, StudentAttendanceReportQuery>((
+      ref,
+      query,
+    ) {
+      return ref
+          .watch(attendanceRepositoryProvider)
+          .getStudentAttendanceReport(query);
+    });
+
 final attendanceConfigProvider = FutureProvider.autoDispose
     .family<AttendanceConfiguration, AttendanceScopeQuery>((ref, query) {
       return ref

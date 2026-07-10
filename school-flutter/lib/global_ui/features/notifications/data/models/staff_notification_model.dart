@@ -14,9 +14,14 @@ class StaffNotificationModel extends StaffNotification {
     Map<String, dynamic> json, {
     required bool isRead,
   }) {
+    final title =
+        json['title']?.toString() ??
+        json['subject']?.toString() ??
+        json['templateName']?.toString() ??
+        'Push notification';
     return StaffNotificationModel(
       id: json['id']?.toString() ?? '',
-      title: json['title']?.toString() ?? '',
+      title: title.trim().isEmpty ? 'Push notification' : title,
       message: json['message']?.toString(),
       type: json['type']?.toString() ?? 'info',
       href: json['href']?.toString(),

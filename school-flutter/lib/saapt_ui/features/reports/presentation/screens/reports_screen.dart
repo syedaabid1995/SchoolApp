@@ -7,6 +7,7 @@ import '../../../../../global_ui/features/attendance/presentation/providers/atte
 import '../../../../../global_ui/features/classes/domain/entities/class_assignment.dart';
 import '../../../../../global_ui/features/classes/presentation/providers/class_assignment_providers.dart';
 import '../../../../app/theme/saapt_theme.dart';
+import 'attendance_report_screen.dart';
 import 'class_performance_screen.dart';
 
 final _attendanceSummaryForDateProvider = FutureProvider.autoDispose
@@ -102,6 +103,24 @@ class _ReportBody extends StatelessWidget {
         const SizedBox(height: 10),
         _WeeklyStudentAttendance(today: today),
         const SizedBox(height: 16),
+        FilledButton.icon(
+          style: FilledButton.styleFrom(
+            minimumSize: const Size.fromHeight(56),
+            backgroundColor: SaaptTheme.primary,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(8),
+            ),
+          ),
+          onPressed: () => Navigator.of(context, rootNavigator: true).push(
+            MaterialPageRoute(builder: (_) => const AttendanceReportScreen()),
+          ),
+          icon: const Icon(Icons.fact_check_rounded),
+          label: const Text(
+            'Show Attendance Report',
+            style: TextStyle(fontWeight: FontWeight.w800),
+          ),
+        ),
+        const SizedBox(height: 12),
         FilledButton.icon(
           style: FilledButton.styleFrom(
             minimumSize: const Size.fromHeight(56),

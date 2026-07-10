@@ -105,6 +105,24 @@ class AttendanceRemoteDatasource {
     );
   }
 
+  Future<StudentAttendanceReportModel> getStudentAttendanceReport(
+    StudentAttendanceReportQuery query,
+  ) async {
+    final response = await _dio.get<Map<String, dynamic>>(
+      ApiEndpoints.studentAttendanceReport,
+      queryParameters: {
+        'academicSessionId': query.academicSessionId,
+        'classId': query.classId,
+        'sectionId': query.sectionId,
+        'month': query.month,
+        'year': query.year,
+      },
+    );
+    return StudentAttendanceReportModel.fromJson(
+      response.data ?? const <String, dynamic>{},
+    );
+  }
+
   Future<AttendanceConfigurationModel> getResolvedAttendanceConfig(
     AttendanceScopeQuery query,
   ) async {

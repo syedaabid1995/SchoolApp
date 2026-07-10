@@ -26,4 +26,23 @@ class NotificationRemoteDatasource {
           ),
     ];
   }
+
+  Future<List<StaffNotificationModel>> getPushNotifications({
+    required Set<String> readIds,
+  }) async {
+    final response = await _dio.get<Map<String, dynamic>>(
+      ApiEndpoints.pushNotificationsMe,
+    );
+    final items = response.data?['items'] is List
+        ? response.data!['items'] as List
+        : const [];
+    return [
+      for (final item in items)
+        if (item is Map)
+          StaffNotificationModel.fromJson(
+            item.map((key, value) => MapEntry(key.toString(), value)),
+            isRead: readIds.contains(item['id']?.toString()),
+          ),
+    ];
+  }
 }

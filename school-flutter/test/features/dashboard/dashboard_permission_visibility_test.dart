@@ -256,6 +256,12 @@ class _CountingAttendanceRepository implements AttendanceRepository {
   ) async {}
 
   @override
+  Future<StudentAttendanceReport> getStudentAttendanceReport(
+    StudentAttendanceReportQuery query,
+  ) async =>
+      const StudentAttendanceReport(daysInMonth: 0, holidays: [], rows: []);
+
+  @override
   Future<AttendanceConfiguration> getResolvedAttendanceConfig(
     AttendanceScopeQuery query,
   ) async => const AttendanceConfiguration(

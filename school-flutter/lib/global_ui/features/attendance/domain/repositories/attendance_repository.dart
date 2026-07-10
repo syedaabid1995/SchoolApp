@@ -17,6 +17,9 @@ abstract class AttendanceRepository {
     StudentAttendanceQuery query,
   );
   Future<void> saveStudentAttendance(StudentAttendanceSaveRequest request);
+  Future<StudentAttendanceReport> getStudentAttendanceReport(
+    StudentAttendanceReportQuery query,
+  );
   Future<AttendanceConfiguration> getResolvedAttendanceConfig(
     AttendanceScopeQuery query,
   );

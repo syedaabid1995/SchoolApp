@@ -6,6 +6,7 @@ import { HttpError } from '../middlewares/error.middleware';
 import { PermissionCodes as P } from '../permissions/permission-manifest';
 import { AuthorizationService } from '../services/authorization.service';
 import { sendNotification } from '../services/notification.service';
+import { invalidateNotificationCache } from '../services/cache/cache.invalidation';
 import { resolveSchoolId } from '../utils/tenant';
 
 const channelSchema = z.enum(['EMAIL', 'SMS', 'PUSH']);
@@ -501,10 +502,23 @@ const sendCommunication = async (req: Request, res: Response, channel: Communica
 };
 
 export const listCommunicationNoticesApi = async (req: Request, res: Response) => {
-  await assertPermission(req, P.communicationNoticeBoardView);
+  if (!req.auth) throw new HttpError(401, 'Unauthorized');
+  const canManageNotices = await AuthorizationService.canAccessPermission(
+    req.auth,
+    P.communicationNoticeBoardView,
+  );
   const schoolId = resolveSchoolId(req, req.query.schoolId as string | undefined);
+  const publishedOnly = req.query.publishedOnly === 'true';
+  const now = new Date();
   const notices = await prisma.communicationNotice.findMany({
-    where: { schoolId },
+    where: canManageNotices && !publishedOnly
+      ? { schoolId }
+      : {
+          schoolId,
+          status: 'PUBLISHED',
+          publishedAt: { lte: now },
+          OR: [{ expiresAt: null }, { expiresAt: { gt: now } }],
+        },
     include: { createdBy: { select: { email: true } } },
     orderBy: [{ publishedAt: 'desc' }, { createdAt: 'desc' }],
   });
@@ -537,6 +551,7 @@ export const createCommunicationNoticeApi = async (req: Request, res: Response) 
       audience: Array.isArray(notice.audience) ? notice.audience.map(String) : [],
     });
   }
+  await invalidateNotificationCache(schoolId);
   res.status(201).json(noticeDto(notice));
 };
 
@@ -568,6 +583,7 @@ export const updateCommunicationNoticeApi = async (req: Request, res: Response) 
       audience: Array.isArray(notice.audience) ? notice.audience.map(String) : [],
     });
   }
+  await invalidateNotificationCache(schoolId);
   res.status(200).json(noticeDto(notice));
 };
 
@@ -577,6 +593,7 @@ export const deleteCommunicationNoticeApi = async (req: Request, res: Response) 
   const existing = await prisma.communicationNotice.findFirst({ where: { id: req.params.id, schoolId } });
   if (!existing) throw new HttpError(404, 'Notice not found');
   await prisma.communicationNotice.delete({ where: { id: existing.id } });
+  await invalidateNotificationCache(schoolId);
   res.status(200).json({ success: true });
 };
 

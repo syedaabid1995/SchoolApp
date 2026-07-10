@@ -13,6 +13,7 @@ import {
   getPushPreference,
   updatePushPreference,
   listPushNotificationLogs,
+  listMyPushNotifications,
 } from '../controllers/notification.controller';
 
 export const notificationRouter = Router();
@@ -28,4 +29,5 @@ notificationRouter.post('/push/devices', registerPushDevice);
 notificationRouter.post('/push/devices/unregister', unregisterPushDevice);
 notificationRouter.get('/push/preferences/me', getPushPreference);
 notificationRouter.patch('/push/preferences/me', updatePushPreference);
+notificationRouter.get('/push/me', listMyPushNotifications);
 notificationRouter.get('/push/logs', requirePermission(P.communicationPushLogView, P.settingsAccess), listPushNotificationLogs);

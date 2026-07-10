@@ -41,6 +41,29 @@ const pushPreferenceSchema = z.object({
   pushEnabled: z.boolean(),
 });
 
+const noticeAudienceMatchesRole = (audience: unknown, role: string | null | undefined) => {
+  if (!Array.isArray(audience)) return true;
+  if (audience.length === 0) return true;
+  const normalizedRole = (role ?? '').toLowerCase();
+  const labels = audience
+    .map((item) => item?.toString().trim().toLowerCase() ?? '')
+    .filter(Boolean);
+  if (labels.some((item) => item === 'all' || item.includes('everyone'))) return true;
+  if (normalizedRole === 'teacher') {
+    return labels.some((item) => item.includes('teacher') || item.includes('staff'));
+  }
+  if (normalizedRole === 'school_admin') {
+    return labels.some((item) => item.includes('admin') || item.includes('staff'));
+  }
+  if (normalizedRole === 'student') {
+    return labels.some((item) => item.includes('student'));
+  }
+  if (normalizedRole === 'parent' || normalizedRole === 'guardian') {
+    return labels.some((item) => item.includes('parent') || item.includes('guardian'));
+  }
+  return labels.some((item) => normalizedRole && item.includes(normalizedRole));
+};
+
 const pushLogDto = (log: {
   id: string;
   schoolId: string | null;
@@ -73,6 +96,12 @@ const pushLogDto = (log: {
     sentAt: log.sentAt,
     createdAt: log.createdAt,
   };
+};
+
+const pushLogRecipientUserId = (payload: unknown) => {
+  if (!payload || typeof payload !== 'object') return '';
+  const value = (payload as Record<string, unknown>).to;
+  return typeof value === 'string' ? value : '';
 };
 
 export const createTemplate = async (req: Request, res: Response) => {
@@ -215,6 +244,28 @@ export const listPushNotificationLogs = async (req: Request, res: Response) => {
   res.status(200).json({ items: logs.map(pushLogDto), pageInfo });
 };
 
+export const listMyPushNotifications = async (req: Request, res: Response) => {
+  if (!req.auth) throw new HttpError(401, 'Unauthorized');
+  const schoolId = resolveSchoolId(req, req.auth.schoolId ?? undefined);
+  const rows = await prisma.notificationLog.findMany({
+    where: {
+      schoolId,
+      channel: 'PUSH',
+      OR: [
+        { userId: req.auth.userId },
+        { payload: { path: ['to'], equals: req.auth.userId } },
+      ],
+    },
+    include: { template: { select: { id: true, name: true, key: true, subject: true } } },
+    orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+    take: 100,
+  });
+  const items = rows
+    .filter((log) => log.userId === req.auth?.userId || pushLogRecipientUserId(log.payload) === req.auth?.userId)
+    .map(pushLogDto);
+  res.status(200).json({ items });
+};
+
 export const listNotificationLogs = async (req: Request, res: Response) => {
   const schoolId = resolveSchoolId(req, req.query.schoolId as string | undefined);
   const pagination = parseCursorPagination(req.query, { defaultLimit: 50, maxLimit: 100 });
@@ -253,9 +304,9 @@ export const listNotificationSummary = async (req: Request, res: Response) => {
     cacheKey,
     cacheTTL.NOTIFICATIONS,
     async () => {
-      const items: Array<{ id: string; title: string; message?: string; type: 'info' | 'warning' | 'danger' | 'success'; href?: string }> = [];
+      const items: Array<{ id: string; title: string; message?: string; type: 'info' | 'warning' | 'danger' | 'success'; category?: string; href?: string }> = [];
 
-      const addItem = (payload: { id: string; title: string; message?: string; type: 'info' | 'warning' | 'danger' | 'success'; href?: string }) => {
+      const addItem = (payload: { id: string; title: string; message?: string; type: 'info' | 'warning' | 'danger' | 'success'; category?: string; href?: string }) => {
         items.push(payload);
       };
 
@@ -301,7 +352,7 @@ export const listNotificationSummary = async (req: Request, res: Response) => {
     }
       } else {
         const resolvedSchoolId = resolveSchoolId(req, schoolId ?? undefined);
-        const [pendingAttendance, transferRequests, openTickets] = await Promise.all([
+        const [pendingAttendance, transferRequests, openTickets, notices] = await Promise.all([
           prisma.attendanceSession.count({
             where: role === 'TEACHER'
               ? { schoolId: resolvedSchoolId, startedById: userId, approvalStatus: 'PENDING' }
@@ -314,6 +365,16 @@ export const listNotificationSummary = async (req: Request, res: Response) => {
             where: role === 'TEACHER'
               ? { createdById: userId, status: { in: ['IN_PROGRESS', 'RESOLVED', 'CLOSED'] } }
               : { schoolId: resolvedSchoolId, status: { in: ['OPEN', 'IN_PROGRESS'] } },
+          }),
+          prisma.communicationNotice.findMany({
+            where: {
+              schoolId: resolvedSchoolId,
+              status: 'PUBLISHED',
+              publishedAt: { lte: now },
+              OR: [{ expiresAt: null }, { expiresAt: { gt: now } }],
+            },
+            orderBy: [{ publishedAt: 'desc' }, { createdAt: 'desc' }],
+            take: 25,
           }),
         ]);
 
@@ -369,6 +430,18 @@ export const listNotificationSummary = async (req: Request, res: Response) => {
           : `${openTickets} tickets awaiting response.`,
         type: 'info',
         href: '/dashboard/support',
+      });
+    }
+
+    for (const notice of notices) {
+      if (!noticeAudienceMatchesRole(notice.audience, role)) continue;
+      addItem({
+        id: `notice-${notice.id}`,
+        title: notice.title,
+        message: notice.message,
+        type: 'info',
+        category: 'notice',
+        href: '/notices',
       });
     }
       }

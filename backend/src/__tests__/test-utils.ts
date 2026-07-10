@@ -29,6 +29,8 @@ export const TEST_STAFF_DOCUMENT_A_ID = '15151515-1515-4151-8151-151515151515';
 export const TEST_STUDENT_PHOTO_A_ID = '16161616-1616-4161-8161-161616161616';
 export const TEST_ATTENDANCE_EVIDENCE_A_ID = '17171717-1717-4171-8171-171717171717';
 export const TEST_ATTENDANCE_RECORD_A_ID = '18181818-1818-4181-8181-181818181818';
+export const TEST_COMMUNICATION_NOTICE_A_ID = '19191919-1919-4191-8191-191919191919';
+export const TEST_PUSH_NOTIFICATION_A_ID = '20202020-2020-4202-8202-202020202020';
 export const TEST_LEAVE_TYPE_ID = '34343434-3434-4343-8343-343434343434';
 export const TEST_LEAVE_APPLICATION_ID = '56565656-5656-4565-8565-565656565656';
 
@@ -430,6 +432,7 @@ export const patchSecurityTestDependencies = () => {
     'configEntry',
     'consentRecord',
     'complianceJobStatusHistory',
+    'communicationNotice',
     'dataDeletionJob',
     'dataExportJob',
     'department',
@@ -445,6 +448,7 @@ export const patchSecurityTestDependencies = () => {
     'leaveStatusHistory',
     'leaveType',
     'messagingService',
+    'notificationLog',
     'parentProfile',
     'refreshSession',
     'rolePermission',
@@ -660,6 +664,70 @@ export const patchSecurityTestDependencies = () => {
   patchMethod(prisma.rolePermission as any, 'findMany', async () =>
     defaultPermissionCodes.map((code) => ({ permission: { code } })),
   );
+  patchMethod(prisma.communicationNotice as any, 'findMany', async ({ where }: any = {}) => {
+    if (where?.schoolId && where.schoolId !== SCHOOL_A_ID) return [];
+    if (where?.status && where.status !== 'PUBLISHED') return [];
+    return [{
+      id: TEST_COMMUNICATION_NOTICE_A_ID,
+      schoolId: SCHOOL_A_ID,
+      title: 'Published notice',
+      message: 'Visible to teachers',
+      audience: ['Students', 'Guardians', 'Teachers'],
+      status: 'PUBLISHED',
+      publishedAt: new Date('2026-07-10T00:00:00.000Z'),
+      expiresAt: null,
+      createdAt: new Date('2026-07-10T00:00:00.000Z'),
+      updatedAt: new Date('2026-07-10T00:00:00.000Z'),
+      createdById: SCHOOL_ADMIN_A_ID,
+      createdBy: { email: 'school-admin@test.local' },
+    }];
+  });
+  patchMethod(prisma.notificationLog as any, 'findMany', async ({ where }: any = {}) => {
+    const logs = [
+      {
+        id: TEST_PUSH_NOTIFICATION_A_ID,
+        schoolId: SCHOOL_A_ID,
+        userId: SCHOOL_ADMIN_A_ID,
+        channel: 'PUSH',
+        payload: {
+          to: TEACHER_A_ID,
+          subject: 'Push title',
+          body: 'Push body',
+          recipientName: 'Teacher A',
+          recipientType: 'TEACHER',
+        },
+        status: 'SENT',
+        providerId: 'provider-1',
+        error: null,
+        scheduledAt: null,
+        sentAt: new Date('2026-07-10T01:00:00.000Z'),
+        createdAt: new Date('2026-07-10T01:00:00.000Z'),
+        updatedAt: new Date('2026-07-10T01:00:00.000Z'),
+        template: null,
+      },
+      {
+        id: '21212121-2121-4212-8212-212121212121',
+        schoolId: SCHOOL_A_ID,
+        userId: SCHOOL_ADMIN_A_ID,
+        channel: 'PUSH',
+        payload: { to: SCHOOL_ADMIN_A_ID, subject: 'Admin only', body: 'Hidden' },
+        status: 'SENT',
+        providerId: 'provider-2',
+        error: null,
+        scheduledAt: null,
+        sentAt: new Date('2026-07-10T01:01:00.000Z'),
+        createdAt: new Date('2026-07-10T01:01:00.000Z'),
+        updatedAt: new Date('2026-07-10T01:01:00.000Z'),
+        template: null,
+      },
+    ];
+    return logs.filter((log) => {
+      if (where?.schoolId && log.schoolId !== where.schoolId) return false;
+      if (where?.channel && log.channel !== where.channel) return false;
+      if (where?.userId && log.userId !== where.userId) return false;
+      return true;
+    });
+  });
   patchMethod(prisma.subscription as any, 'findUnique', async ({ where, select }: any = {}) => {
     if (where?.schoolId) {
       return {

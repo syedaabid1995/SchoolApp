@@ -5,6 +5,8 @@ import {
   SCHOOL_ADMIN_A_ID,
   SCHOOL_B_ID,
   TEST_ATTENDANCE_RECORD_A_ID,
+  TEST_COMMUNICATION_NOTICE_A_ID,
+  TEST_PUSH_NOTIFICATION_A_ID,
   closeBackgroundHandles,
   expectForbidden,
   expectSuccess,
@@ -98,6 +100,31 @@ test('Teacher can still access own user profile', async () => {
   });
 
   expectSuccess(response);
+});
+
+test('Teacher can read published communication notices for mobile notice board', async () => {
+  const response = await server.request('GET', '/api/v1/communication/notices?publishedOnly=true', {
+    user: getUser('TEACHER', SCHOOL_A_ID),
+  });
+
+  expectSuccess(response);
+  const body = response.body as { items?: Array<{ id: string; title: string; status: string }> };
+  assert.equal(body.items?.[0]?.id, TEST_COMMUNICATION_NOTICE_A_ID);
+  assert.equal(body.items?.[0]?.title, 'Published notice');
+  assert.equal(body.items?.[0]?.status, 'PUBLISHED');
+});
+
+test('Teacher can read own push notifications for mobile notification center', async () => {
+  const response = await server.request('GET', '/api/v1/notifications/push/me', {
+    user: getUser('TEACHER', SCHOOL_A_ID),
+  });
+
+  expectSuccess(response);
+  const body = response.body as { items?: Array<{ id: string; subject: string; message: string }> };
+  assert.equal(body.items?.length, 1);
+  assert.equal(body.items?.[0]?.id, TEST_PUSH_NOTIFICATION_A_ID);
+  assert.equal(body.items?.[0]?.subject, 'Push title');
+  assert.equal(body.items?.[0]?.message, 'Push body');
 });
 
 test('Super Admin can still access school user profiles', async () => {
