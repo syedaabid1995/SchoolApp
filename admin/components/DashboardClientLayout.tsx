@@ -9,6 +9,7 @@ import {
   defaultLoginBranding,
   getLoginBrandingSettings,
 } from '../services/branding.service';
+import { akademifyyBrand, getCurrentPlatformBrand } from '../lib/platform-brand';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { getRequiredPermissionForPath } from '../config/employee-permissions';
 import AccessDeniedPanel from './AccessDeniedPanel';
@@ -27,6 +28,7 @@ export default function DashboardClientLayout({
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [themeMode, setThemeMode] = useState<DashboardThemeMode>('light');
   const [systemThemeMode, setSystemThemeMode] = useState<DashboardResolvedThemeMode>('light');
+  const [hostBrand, setHostBrand] = useState(akademifyyBrand);
   const { data: session, isLoading: isSessionLoading } = useQuery({
     queryKey: ['session'],
     queryFn: getSession,
@@ -90,9 +92,12 @@ export default function DashboardClientLayout({
     staleTime: 5 * 60_000,
   });
   const platformSettings = {
-    platformName: shellBranding?.appName || defaultLoginBranding.appName,
-    consoleName: shellBranding?.schoolName || defaultLoginBranding.schoolName || 'School Management Console',
-    footerText: shellBranding?.footerText || defaultLoginBranding.footerText,
+    platformName: hostBrand.key === 'saapt' ? hostBrand.appName : shellBranding?.appName || defaultLoginBranding.appName,
+    consoleName: hostBrand.key === 'saapt'
+      ? hostBrand.consoleName
+      : shellBranding?.schoolName || defaultLoginBranding.schoolName || 'School Management Console',
+    footerText: hostBrand.key === 'saapt' ? hostBrand.footerText : shellBranding?.footerText || defaultLoginBranding.footerText,
+    logoUrl: hostBrand.key === 'saapt' ? hostBrand.logoUrl : shellBranding?.logoUrl || defaultLoginBranding.logoUrl || '',
     defaultThemeMode: 'light' as DashboardThemeMode,
   };
   const canAccessRoute =
@@ -153,6 +158,10 @@ export default function DashboardClientLayout({
           '--shell-sidebar-icon': '#f1f5f9',
           '--shell-sidebar-icon-active': '#dbeafe',
         } as CSSProperties);
+
+  useEffect(() => {
+    setHostBrand(getCurrentPlatformBrand());
+  }, []);
 
   useEffect(() => {
     const stored = window.localStorage.getItem('dashboard-theme-mode');
@@ -250,6 +259,7 @@ export default function DashboardClientLayout({
           permissionCodes={permissionCodes}
           platformName={platformSettings.platformName}
           platformSubtitle={platformSettings.consoleName}
+          platformLogoUrl={platformSettings.logoUrl}
         />
         <div className="flex h-screen min-w-0 flex-1 flex-col overflow-hidden">
           <Header
@@ -290,6 +300,7 @@ export default function DashboardClientLayout({
         permissionCodes={permissionCodes}
         platformName={platformSettings.platformName}
         platformSubtitle={platformSettings.consoleName}
+        platformLogoUrl={platformSettings.logoUrl}
       />
       <div className="flex h-screen min-w-0 flex-1 flex-col overflow-hidden">
         <Header

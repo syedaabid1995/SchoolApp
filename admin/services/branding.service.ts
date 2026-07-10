@@ -1,4 +1,5 @@
 import { api } from '../lib/api';
+import { getCurrentPlatformBrand } from '../lib/platform-brand';
 import { resolveSchoolSubdomainFromHost } from '../lib/school-domain';
 
 export type LoginBranding = {
@@ -182,6 +183,42 @@ const normalizeBranding = (value: unknown): LoginBranding => {
   };
 };
 
+const applyHostBranding = (branding: LoginBranding): LoginBranding => {
+  const brand = getCurrentPlatformBrand();
+  if (brand.key !== 'saapt') return branding;
+
+  return {
+    ...branding,
+    appName: brand.appName,
+    schoolName: brand.appName,
+    logoUrl: brand.logoUrl,
+    compactLogoUrl: brand.faviconUrl,
+    faviconUrl: brand.faviconUrl,
+    loginHeading: 'Welcome back',
+    loginSubtitle: 'Sign in to continue to your SAAPT workspace',
+    leftPanelTitle: 'Manage your school with SAAPT',
+    leftPanelDescription: 'Admissions, attendance, fees, exams, communication, and reports in one connected workspace.',
+    features: [
+      'School operations workspace',
+      'Attendance and academics',
+      'Fees and communication',
+      'Secure role-based access',
+    ],
+    securityNote: 'Your SAAPT session is protected with secure cookies.',
+    footerText: brand.footerText,
+    primaryColor: brand.primaryColor,
+    secondaryColor: brand.secondaryColor,
+    accentColor: brand.accentColor,
+    buttonBackgroundColor: brand.primaryColor,
+    linkColor: brand.primaryColor,
+    focusRingColor: brand.primaryColor,
+    gradientFrom: '#ecfdf5',
+    gradientTo: '#ffffff',
+  };
+};
+
+export const getDefaultLoginBranding = () => applyHostBranding(defaultLoginBranding);
+
 const schoolCodeFromHost = () => {
   if (typeof window === 'undefined') return undefined;
   return resolveSchoolSubdomainFromHost(window.location.host) ?? undefined;
@@ -196,10 +233,10 @@ export const getLoginBranding = async (schoolCode?: string): Promise<LoginBrandi
     const res = await fetch(`/api/proxy/public/branding/login${search.toString() ? `?${search.toString()}` : ''}`, {
       cache: 'no-store',
     });
-    if (!res.ok) return defaultLoginBranding;
-    return normalizeBranding(await res.json());
+    if (!res.ok) return getDefaultLoginBranding();
+    return applyHostBranding(normalizeBranding(await res.json()));
   } catch {
-    return defaultLoginBranding;
+    return getDefaultLoginBranding();
   }
 };
 

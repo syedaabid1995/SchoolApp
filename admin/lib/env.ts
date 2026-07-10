@@ -1,5 +1,7 @@
+import { getClientApiBaseUrl } from './platform-brand';
+
 export const env = {
-  apiBaseUrl:
-    process.env.NEXT_PUBLIC_API_BASE_URL ??
-    (process.env.NODE_ENV === 'production' ? '' : 'http://127.0.0.1:3000/api/v1'),
+  get apiBaseUrl() {
+    return getClientApiBaseUrl();
+  },
 };

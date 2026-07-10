@@ -172,6 +172,7 @@ export const Sidebar = ({
   permissionCodes = [],
   platformName = 'SAAPT',
   platformSubtitle = 'Platform Admin',
+  platformLogoUrl = '',
 }: {
   role: string | null;
   isOpen?: boolean;
@@ -180,11 +181,13 @@ export const Sidebar = ({
   permissionCodes?: string[];
   platformName?: string;
   platformSubtitle?: string;
+  platformLogoUrl?: string;
 }) => {
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const { logoUrl } = useContext(ThemeContext);
   const isPlatform = isSuperAdmin(role);
+  const displayLogoUrl = isPlatform ? platformLogoUrl : logoUrl;
   const hasAnyRole = Boolean(role);
   const allowedCodes = useMemo(() => new Set(permissionCodes), [permissionCodes]);
   const [openSections, setOpenSections] = useState<Record<string, boolean>>({});
@@ -466,9 +469,9 @@ export const Sidebar = ({
         }`}
       >
         <div className="mb-3 flex shrink-0 items-center gap-3 rounded-lg border border-[var(--shell-sidebar-border)] bg-[var(--shell-sidebar-card)] p-3">
-          {logoUrl ? (
+          {displayLogoUrl ? (
             // eslint-disable-next-line @next/next/no-img-element
-            <img src={logoUrl} alt="School logo" className="h-10 w-10 rounded-md object-cover" />
+            <img src={displayLogoUrl} alt={isPlatform ? `${platformName} logo` : 'School logo'} className="h-10 w-10 rounded-md object-cover" />
           ) : (
             // eslint-disable-next-line @next/next/no-img-element
             <img src="/icon.png" alt="SchoolApp" className="h-10 w-10 rounded-md object-cover" />

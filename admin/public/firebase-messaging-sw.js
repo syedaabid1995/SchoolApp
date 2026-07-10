@@ -14,15 +14,19 @@ firebase.initializeApp({
 const messaging = firebase.messaging();
 
 messaging.onBackgroundMessage((payload) => {
+  const isSaaptHost = self.location.hostname === 'saapttech.com' || self.location.hostname.endsWith('.saapttech.com');
+  const defaultTitle = isSaaptHost ? 'SAAPT' : 'Akademifyy';
+  const defaultIcon = isSaaptHost ? '/branding/saapt-favicon.svg' : '/branding/demo-school-favicon.svg';
+  const tagPrefix = isSaaptHost ? 'saapt' : 'akademifyy';
   const notification = payload.notification || {};
   const data = payload.data || {};
   const priority = data.priority || 'normal';
-  const title = data.title || notification.title || 'Akademifyy';
+  const title = data.title || notification.title || defaultTitle;
   const options = {
     body: data.body || notification.body || '',
-    icon: '/branding/demo-school-favicon.svg',
-    badge: '/branding/demo-school-favicon.svg',
-    tag: data.logId ? `akademifyy-${data.logId}` : undefined,
+    icon: defaultIcon,
+    badge: defaultIcon,
+    tag: data.logId ? `${tagPrefix}-${data.logId}` : undefined,
     renotify: priority === 'high' || priority === 'urgent',
     requireInteraction: priority === 'urgent',
     silent: false,

@@ -2,6 +2,7 @@
 
 import { initializeApp, getApps } from 'firebase/app';
 import { getMessaging, getToken, isSupported, onMessage, type MessagePayload } from 'firebase/messaging';
+import { getCurrentPlatformBrand } from './platform-brand';
 
 const firebaseConfig = {
   apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY,
@@ -61,17 +62,18 @@ export const startForegroundPushListener = async () => {
   const app = getApps().length ? getApps()[0] : initializeApp(firebaseConfig);
   const messaging = getMessaging(app);
   onMessage(messaging, (payload: MessagePayload) => {
+    const brand = getCurrentPlatformBrand();
     const data = payload.data ?? {};
     const notification = payload.notification ?? {};
-    const title = data.title || notification.title || 'Akademifyy';
+    const title = data.title || notification.title || brand.appName;
     const body = data.body || notification.body || '';
     const priority = data.priority || 'normal';
     if (!title && !body) return;
 
     const notificationOptions = {
       body,
-      icon: '/branding/demo-school-favicon.svg',
-      tag: data.logId ? `akademifyy-${data.logId}` : undefined,
+      icon: brand.faviconUrl,
+      tag: data.logId ? `${brand.key}-${data.logId}` : undefined,
       renotify: priority === 'high' || priority === 'urgent',
       requireInteraction: priority === 'urgent',
       silent: false,
