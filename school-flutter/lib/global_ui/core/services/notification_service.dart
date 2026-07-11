@@ -8,6 +8,7 @@ import 'package:flutter/foundation.dart';
 
 import '../../app/routes/app_routes.dart';
 import '../constants/api_endpoints.dart';
+import '../constants/app_config.dart';
 import '../network/dio_client.dart';
 import '../storage/hive_cache_service.dart';
 
@@ -37,12 +38,13 @@ class NotificationService {
   final Dio _dio;
 
   static const _pendingTokenKey = 'notifications.pendingFcmToken';
-  static const _androidChannel = AndroidNotificationChannel(
-    'akademifyy_push',
-    'Push notifications',
-    description: 'Akademifyy push notifications',
-    importance: Importance.high,
-  );
+  static AndroidNotificationChannel get _androidChannel =>
+      AndroidNotificationChannel(
+        'akademifyy_push',
+        'Push notifications',
+        description: AppConfig.notificationChannelDescription,
+        importance: Importance.high,
+      );
 
   Future<void> initialize() async {
     await _messaging.requestPermission();

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../core/constants/app_config.dart';
 import '../core/localization/app_localizations.dart';
 import '../core/sync/sync_manager.dart';
 import '../features/settings/presentation/providers/settings_providers.dart';
@@ -46,7 +47,7 @@ class _StaffErpAppState extends ConsumerState<StaffErpApp>
     final settings = settingsValue.hasValue ? settingsValue.value : null;
 
     return MaterialApp.router(
-      title: AppLocalizations(const Locale('en')).appTitle,
+      title: AppConfig.appName,
       debugShowCheckedModeBanner: false,
       theme: AppTheme.light,
       darkTheme: AppTheme.dark,

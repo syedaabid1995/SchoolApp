@@ -16,7 +16,7 @@ class SplashScreen extends StatelessWidget {
           children: [
             const FlutterLogo(size: 72),
             const SizedBox(height: 24),
-            const Text(AppConfig.appName),
+            Text(AppConfig.appName),
             const SizedBox(height: 24),
             Shimmer.fromColors(
               baseColor: colorScheme.surfaceContainerHighest,
