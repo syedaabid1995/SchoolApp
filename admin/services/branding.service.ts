@@ -183,9 +183,14 @@ const normalizeBranding = (value: unknown): LoginBranding => {
   };
 };
 
-const applyHostBranding = (branding: LoginBranding): LoginBranding => {
+const isCurrentSchoolHost = () => {
+  if (typeof window === 'undefined') return false;
+  return Boolean(resolveSchoolSubdomainFromHost(window.location.host));
+};
+
+const applyHostBranding = (branding: LoginBranding, options: { schoolScoped?: boolean } = {}): LoginBranding => {
   const brand = getCurrentPlatformBrand();
-  if (brand.key !== 'saapt') return branding;
+  if (brand.key !== 'saapt' || options.schoolScoped || isCurrentSchoolHost()) return branding;
 
   return {
     ...branding,
@@ -233,10 +238,10 @@ export const getLoginBranding = async (schoolCode?: string): Promise<LoginBrandi
     const res = await fetch(`/api/proxy/public/branding/login${search.toString() ? `?${search.toString()}` : ''}`, {
       cache: 'no-store',
     });
-    if (!res.ok) return getDefaultLoginBranding();
-    return applyHostBranding(normalizeBranding(await res.json()));
+    if (!res.ok) return applyHostBranding(defaultLoginBranding, { schoolScoped: Boolean(effectiveSchoolCode) });
+    return applyHostBranding(normalizeBranding(await res.json()), { schoolScoped: Boolean(effectiveSchoolCode) });
   } catch {
-    return getDefaultLoginBranding();
+    return applyHostBranding(defaultLoginBranding, { schoolScoped: Boolean(effectiveSchoolCode) });
   }
 };
 
