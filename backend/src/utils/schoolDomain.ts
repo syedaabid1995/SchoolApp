@@ -1,5 +1,6 @@
 const DEFAULT_ROOT_DOMAIN = 'app.akademifyy.in';
 const DEFAULT_LOCAL_HOST = 'localhost';
+const DEFAULT_ADDITIONAL_ROOT_DOMAINS = ['app.saapttech.com'];
 
 const RESERVED_SUBDOMAINS = new Set(['www', 'admin', 'app', 'api', 'assets', 'static']);
 
@@ -11,8 +12,26 @@ const cleanHost = (host?: string | null) => {
   return hostOnly.replace(/\.$/, '').split(':')[0] || null;
 };
 
-export const getSchoolRootDomain = () =>
-  (process.env.SCHOOL_PUBLIC_ROOT_DOMAIN || DEFAULT_ROOT_DOMAIN).trim().toLowerCase().replace(/^https?:\/\//, '').replace(/\/+$/, '');
+const normalizeRootDomain = (value?: string | null) => cleanHost(value)?.replace(/^www\./, '') ?? null;
+
+const parseRootDomains = (value?: string | null) =>
+  (value ?? '')
+    .split(/[,\s]+/)
+    .map((item) => normalizeRootDomain(item))
+    .filter((item): item is string => Boolean(item));
+
+export const getSchoolRootDomains = () => {
+  const roots = [
+    normalizeRootDomain(process.env.SCHOOL_PUBLIC_ROOT_DOMAIN || DEFAULT_ROOT_DOMAIN),
+    ...parseRootDomains(process.env.SCHOOL_PUBLIC_ROOT_DOMAINS),
+    ...parseRootDomains(process.env.ADDITIONAL_SCHOOL_PUBLIC_ROOT_DOMAINS),
+    ...DEFAULT_ADDITIONAL_ROOT_DOMAINS,
+  ].filter((item): item is string => Boolean(item));
+
+  return Array.from(new Set(roots));
+};
+
+export const getSchoolRootDomain = () => getSchoolRootDomains()[0] ?? DEFAULT_ROOT_DOMAIN;
 
 export const normalizeSchoolSubdomain = (value?: string | null) => {
   const normalized = (value ?? '')
@@ -38,12 +57,20 @@ export const buildSchoolDomainUrl = (subdomain: string) =>
 export const buildLocalSchoolDomainUrl = (subdomain: string, port = process.env.SCHOOL_LOCAL_PORT || '3001') =>
   `http://${subdomain}.${DEFAULT_LOCAL_HOST}:${port}`;
 
-export const resolveSchoolSubdomainFromHost = (host?: string | null) => {
+export const resolveSchoolRootDomainFromHost = (host?: string | null) => {
   const hostname = cleanHost(host);
   if (!hostname || hostname === DEFAULT_LOCAL_HOST || hostname === '127.0.0.1') return null;
 
-  const rootDomain = getSchoolRootDomain();
-  if (hostname === rootDomain || hostname === `www.${rootDomain}`) return null;
+  return (
+    getSchoolRootDomains()
+      .sort((a, b) => b.length - a.length)
+      .find((rootDomain) => hostname === rootDomain || hostname === `www.${rootDomain}` || hostname.endsWith(`.${rootDomain}`)) ?? null
+  );
+};
+
+export const resolveSchoolSubdomainFromHost = (host?: string | null) => {
+  const hostname = cleanHost(host);
+  if (!hostname || hostname === DEFAULT_LOCAL_HOST || hostname === '127.0.0.1') return null;
 
   const localhostSuffix = `.${DEFAULT_LOCAL_HOST}`;
   if (hostname.endsWith(localhostSuffix)) {
@@ -51,8 +78,10 @@ export const resolveSchoolSubdomainFromHost = (host?: string | null) => {
     return isValidSchoolSubdomain(localSubdomain) ? normalizeSchoolSubdomain(localSubdomain) : null;
   }
 
+  const rootDomain = resolveSchoolRootDomainFromHost(hostname);
+  if (!rootDomain || hostname === rootDomain || hostname === `www.${rootDomain}`) return null;
+
   const rootSuffix = `.${rootDomain}`;
-  if (!hostname.endsWith(rootSuffix)) return null;
 
   const subdomain = hostname.slice(0, -rootSuffix.length);
   if (!subdomain || subdomain.includes('.')) return null;

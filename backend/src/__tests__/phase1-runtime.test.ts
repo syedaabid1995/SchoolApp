@@ -4,6 +4,7 @@ import { assertSafeCorsConfig, createCorsOriginChecker } from '../config/cors';
 import { env } from '../config/env';
 import { redactSensitive } from '../config/logger';
 import { getSignedUrlForKey, verifyLocalSignedStorageUrl } from '../services/s3.service';
+import { getSchoolRootDomains, resolveSchoolSubdomainFromHost } from '../utils/schoolDomain';
 
 test('production CORS rejects wildcard or empty origins', () => {
   assert.throws(
@@ -26,6 +27,30 @@ test('development CORS can allow wildcard while production requires explicit ori
   });
   assert.equal(prodPolicy.isOriginAllowed('https://admin.example.com'), true);
   assert.equal(prodPolicy.isOriginAllowed('https://unknown.example.com'), false);
+});
+
+test('school subdomain resolver supports Akademifyy and SAAPT app roots', () => {
+  const previousRoot = process.env.SCHOOL_PUBLIC_ROOT_DOMAIN;
+  const previousRoots = process.env.SCHOOL_PUBLIC_ROOT_DOMAINS;
+  const previousAdditionalRoots = process.env.ADDITIONAL_SCHOOL_PUBLIC_ROOT_DOMAINS;
+  try {
+    delete process.env.SCHOOL_PUBLIC_ROOT_DOMAIN;
+    delete process.env.SCHOOL_PUBLIC_ROOT_DOMAINS;
+    delete process.env.ADDITIONAL_SCHOOL_PUBLIC_ROOT_DOMAINS;
+
+    assert.deepEqual(getSchoolRootDomains(), ['app.akademifyy.in', 'app.saapttech.com']);
+    assert.equal(resolveSchoolSubdomainFromHost('che-00003.app.akademifyy.in'), 'che-00003');
+    assert.equal(resolveSchoolSubdomainFromHost('che-00003.app.saapttech.com'), 'che-00003');
+    assert.equal(resolveSchoolSubdomainFromHost('app.saapttech.com'), null);
+    assert.equal(resolveSchoolSubdomainFromHost('api.saapttech.com'), null);
+  } finally {
+    if (previousRoot === undefined) delete process.env.SCHOOL_PUBLIC_ROOT_DOMAIN;
+    else process.env.SCHOOL_PUBLIC_ROOT_DOMAIN = previousRoot;
+    if (previousRoots === undefined) delete process.env.SCHOOL_PUBLIC_ROOT_DOMAINS;
+    else process.env.SCHOOL_PUBLIC_ROOT_DOMAINS = previousRoots;
+    if (previousAdditionalRoots === undefined) delete process.env.ADDITIONAL_SCHOOL_PUBLIC_ROOT_DOMAINS;
+    else process.env.ADDITIONAL_SCHOOL_PUBLIC_ROOT_DOMAINS = previousAdditionalRoots;
+  }
 });
 
 test('logger redaction masks nested sensitive values', () => {
