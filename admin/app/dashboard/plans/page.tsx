@@ -1,9 +1,10 @@
 'use client';
 
 import type { ReactNode } from 'react';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { getSession } from '../../../services/auth.service';
+import { getSession, refreshToken } from '../../../services/auth.service';
 import {
   createSubscriptionCheckout,
   getSubscription,
@@ -144,6 +145,8 @@ const openRazorpayCheckout = (
         receipt: checkout.checkout.receipt,
         planId: checkout.plan.id,
       },
+      callback_url: `${window.location.origin}/api/subscriptions/checkout/callback`,
+      redirect: true,
       theme: {
         color: '#2563eb',
       },
@@ -461,7 +464,10 @@ function EmptyPlans() {
 
 export default function PlansPage() {
   const notify = useNotify();
+  const router = useRouter();
+  const searchParams = useSearchParams();
   const queryClient = useQueryClient();
+  const handledCheckoutReturnRef = useRef('');
   const { data: session } = useQuery({
     queryKey: ['session'],
     queryFn: getSession,
@@ -500,6 +506,55 @@ export default function PlansPage() {
     mutationFn: verifySubscriptionCheckout,
   });
 
+  const refreshSubscriptionState = async () => {
+    await Promise.all([
+      queryClient.invalidateQueries({ queryKey: ['subscription'] }),
+      queryClient.invalidateQueries({ queryKey: ['subscription', schoolId] }),
+      queryClient.invalidateQueries({ queryKey: ['school-subscriptions'] }),
+      queryClient.invalidateQueries({ queryKey: ['subscription-lifecycle-summary'] }),
+    ]);
+    await refreshToken().catch(() => undefined);
+    await queryClient.invalidateQueries({ queryKey: ['session'] });
+  };
+
+  useEffect(() => {
+    const checkoutStatus = searchParams.get('checkout_status');
+    const orderId = searchParams.get('razorpay_order_id');
+    const paymentId = searchParams.get('razorpay_payment_id');
+    const signature = searchParams.get('razorpay_signature');
+    const returnKey = [checkoutStatus, orderId, paymentId, signature].filter(Boolean).join(':');
+
+    if (!checkoutStatus || handledCheckoutReturnRef.current === returnKey) return;
+    handledCheckoutReturnRef.current = returnKey;
+
+    if (checkoutStatus !== 'success' || !orderId || !paymentId || !signature) {
+      const errorDescription = searchParams.get('error_description') || 'Payment was not completed.';
+      notify.error('Payment failed', errorDescription);
+      router.replace('/dashboard/plans', { scroll: false });
+      return;
+    }
+
+    setPendingPlanId('__razorpay_return__');
+    void (async () => {
+      try {
+        const result = await verifyMutation.mutateAsync({
+          razorpay_order_id: orderId,
+          razorpay_payment_id: paymentId,
+          razorpay_signature: signature,
+        });
+        notify.success('Payment successful', result.message || 'Subscription renewed successfully.');
+        await refreshSubscriptionState();
+        window.location.replace('/dashboard');
+      } catch (error) {
+        notify.error('Payment verification failed', errorMessage(error, 'Payment succeeded, but subscription verification failed.'));
+        router.replace('/dashboard/plans', { scroll: false });
+      } finally {
+        setPendingPlanId(null);
+      }
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchParams, notify, router]);
+
   const requestPlanChange = async (planId: string) => {
     const plan = plans?.find((item) => item.id === planId);
     if (!schoolId) {
@@ -519,12 +574,8 @@ export default function PlansPage() {
       });
 
       notify.success('Payment successful', result.message || `${plan?.name ?? 'Selected plan'} is now active.`);
-      await Promise.all([
-        queryClient.invalidateQueries({ queryKey: ['subscription'] }),
-        queryClient.invalidateQueries({ queryKey: ['subscription', schoolId] }),
-        queryClient.invalidateQueries({ queryKey: ['school-subscriptions'] }),
-        queryClient.invalidateQueries({ queryKey: ['subscription-lifecycle-summary'] }),
-      ]);
+      await refreshSubscriptionState();
+      window.location.replace('/dashboard');
     } catch (error) {
       const message = errorMessage(error, 'Unable to complete payment.');
       if (message.toLowerCase().includes('cancelled')) {
