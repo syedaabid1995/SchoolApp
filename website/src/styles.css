@@ -698,6 +698,44 @@ textarea {
   }
 }
 
+.seo-links-section {
+  background: var(--white);
+}
+
+.seo-link-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 16px;
+}
+
+.seo-link-card {
+  min-height: 190px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--paper);
+  padding: 22px;
+  transition: border-color 0.18s ease, transform 0.18s ease;
+}
+
+.seo-link-card:hover {
+  border-color: var(--mint);
+  transform: translateY(-2px);
+}
+
+.seo-link-card h3 {
+  margin: 0;
+  color: var(--green);
+  font-family: "Bitter", Georgia, serif;
+  font-size: 1.15rem;
+}
+
+.seo-link-card p {
+  margin: 12px 0 0;
+  color: var(--muted);
+  font-size: 0.95rem;
+  line-height: 1.65;
+}
+
 .footer {
   background: #10261f;
   color: var(--paper);
@@ -720,7 +758,15 @@ textarea {
   color: rgba(247, 244, 235, 0.62);
 }
 
-.footer a:last-child {
+.footer-links {
+  display: flex;
+  max-width: 420px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 10px 16px;
+}
+
+.footer-links a {
   color: var(--gold);
   font-weight: 900;
 }
@@ -774,7 +820,8 @@ textarea {
 
   .feature-grid,
   .pricing-grid,
-  .faq-grid {
+  .faq-grid,
+  .seo-link-grid {
     grid-template-columns: 1fr 1fr;
   }
 
@@ -810,6 +857,7 @@ textarea {
   .workflow-grid,
   .pricing-grid,
   .faq-grid,
+  .seo-link-grid,
   .form-row,
   .footer-inner {
     grid-template-columns: 1fr;
@@ -822,5 +870,9 @@ textarea {
   .footer-inner {
     display: grid;
     justify-items: start;
+  }
+
+  .footer-links {
+    justify-content: flex-start;
   }
 }

@@ -158,6 +158,12 @@ function Header() {
             {label}
           </a>
         ))}
+        <a href="/school-management-system/" onClick={() => setOpen(false)}>
+          School management system
+        </a>
+        <a href="/school-erp/" onClick={() => setOpen(false)}>
+          School ERP
+        </a>
         <a href={LOGIN_URL} onClick={() => setOpen(false)}>
           Login
         </a>
@@ -540,6 +546,53 @@ function FaqSection() {
   );
 }
 
+function SeoLandingLinks() {
+  const links = [
+    {
+      href: '/school-management-system/',
+      title: 'School management system',
+      body: 'Learn how Akademifyy supports student records, attendance, fees, exams, communication, and reports.',
+    },
+    {
+      href: '/school-erp/',
+      title: 'School ERP',
+      body: 'Explore Akademifyy as a school ERP for academics, administration, accounts, and parent communication.',
+    },
+    {
+      href: '/school-management-software/',
+      title: 'School management software',
+      body: 'See the everyday school software workflows available for admins, teachers, accountants, and parents.',
+    },
+    {
+      href: '/academic-management-app/',
+      title: 'Academic management app',
+      body: 'Review academic workflows for timetable, attendance, homework, exams, marks, and results.',
+    },
+  ];
+
+  return (
+    <section className="section seo-links-section" aria-labelledby="seo-links-heading">
+      <div className="container">
+        <div className="section-head centered">
+          <span className="kicker">Explore Akademifyy</span>
+          <h2 id="seo-links-heading">School ERP and academic management resources.</h2>
+          <p>
+            Use these pages to understand how Akademifyy supports common school management software workflows.
+          </p>
+        </div>
+        <div className="seo-link-grid">
+          {links.map((link) => (
+            <a className="seo-link-card" href={link.href} key={link.href}>
+              <h3>{link.title}</h3>
+              <p>{link.body}</p>
+            </a>
+          ))}
+        </div>
+      </div>
+    </section>
+  );
+}
+
 function Footer() {
   return (
     <footer className="footer">
@@ -549,7 +602,13 @@ function Footer() {
           <span>Akademifyy</span>
         </a>
         <p>School management software for structured, visible, and accountable operations.</p>
-        <a href={LOGIN_URL}>Login to app</a>
+        <div className="footer-links">
+          <a href="/school-management-system/">School management system</a>
+          <a href="/school-erp/">School ERP</a>
+          <a href="/school-management-software/">School management software</a>
+          <a href="/academic-management-app/">Academic management app</a>
+          <a href={LOGIN_URL}>Login to app</a>
+        </div>
       </div>
     </footer>
   );
@@ -595,6 +654,7 @@ function App() {
           loading={plansLoading}
           error={plansError}
         />
+        <SeoLandingLinks />
         <FaqSection />
         <DemoFormSection />
       </main>
