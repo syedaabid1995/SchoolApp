@@ -18,6 +18,7 @@ import { useNotify } from '../../../components/NotificationProvider';
 import FullPageLoader from '../../../components/FullPageLoader';
 import PageHeader from '../../../components/PageHeader';
 import DashboardPageContainer from '../../../components/DashboardPageContainer';
+import { buildProductionSchoolUrl } from '../../../lib/school-domain';
 
 type BillingCycle = 'MONTHLY' | 'ANNUAL';
 type NoticeTone = 'blue' | 'emerald' | 'amber' | 'rose' | 'slate';
@@ -120,6 +121,37 @@ const loadRazorpayCheckout = () =>
     document.body.appendChild(script);
   });
 
+const absoluteOrigin = (value?: string | null) => {
+  if (!value) return null;
+  try {
+    const url = new URL(value);
+    return url.protocol === 'http:' || url.protocol === 'https:' ? url.origin : null;
+  } catch {
+    return null;
+  }
+};
+
+const isLocalHost = (host?: string | null) => {
+  const hostname = (host ?? '').trim().toLowerCase();
+  return hostname === 'localhost' || hostname === '127.0.0.1' || hostname.endsWith('.localhost');
+};
+
+const appendPath = (origin: string, path: string) => `${origin.replace(/\/+$/, '')}${path}`;
+
+const getCheckoutReturnOrigin = (checkout: SubscriptionCheckoutOrder) => {
+  if (typeof window === 'undefined') return null;
+
+  const currentOrigin = window.location.origin;
+  const currentHost = window.location.hostname;
+  const schoolOrigin =
+    absoluteOrigin(checkout.school.domainUrl) ??
+    (checkout.school.subdomain ? absoluteOrigin(buildProductionSchoolUrl(checkout.school.subdomain)) : null);
+
+  return isLocalHost(currentHost) && schoolOrigin ? schoolOrigin : currentOrigin;
+};
+
+const getSearchReturnOrigin = (searchParams: { get: (name: string) => string | null }) => absoluteOrigin(searchParams.get('return_origin'));
+
 const openRazorpayCheckout = (
   checkout: SubscriptionCheckoutOrder,
   session?: { email?: string | null; displayName?: string | null; schoolName?: string | null } | null,
@@ -129,6 +161,10 @@ const openRazorpayCheckout = (
       reject(new Error('Razorpay checkout is unavailable.'));
       return;
     }
+
+    const returnOrigin = getCheckoutReturnOrigin(checkout) ?? window.location.origin;
+    const callbackUrl = new URL('/api/subscriptions/checkout/callback', returnOrigin);
+    callbackUrl.searchParams.set('return_origin', returnOrigin);
 
     const instance = new window.Razorpay({
       key: checkout.keyId,
@@ -145,7 +181,7 @@ const openRazorpayCheckout = (
         receipt: checkout.checkout.receipt,
         planId: checkout.plan.id,
       },
-      callback_url: `${window.location.origin}/api/subscriptions/checkout/callback`,
+      callback_url: callbackUrl.toString(),
       redirect: true,
       theme: {
         color: '#2563eb',
@@ -537,6 +573,7 @@ export default function PlansPage() {
     setPendingPlanId('__razorpay_return__');
     void (async () => {
       try {
+        const returnOrigin = getSearchReturnOrigin(searchParams);
         const result = await verifyMutation.mutateAsync({
           razorpay_order_id: orderId,
           razorpay_payment_id: paymentId,
@@ -544,7 +581,7 @@ export default function PlansPage() {
         });
         notify.success('Payment successful', result.message || 'Subscription renewed successfully.');
         await refreshSubscriptionState();
-        window.location.replace('/dashboard');
+        window.location.replace(returnOrigin ? appendPath(returnOrigin, '/dashboard') : '/dashboard');
       } catch (error) {
         notify.error('Payment verification failed', errorMessage(error, 'Payment succeeded, but subscription verification failed.'));
         router.replace('/dashboard/plans', { scroll: false });
@@ -575,7 +612,8 @@ export default function PlansPage() {
 
       notify.success('Payment successful', result.message || `${plan?.name ?? 'Selected plan'} is now active.`);
       await refreshSubscriptionState();
-      window.location.replace('/dashboard');
+      const returnOrigin = getCheckoutReturnOrigin(checkout);
+      window.location.replace(returnOrigin ? appendPath(returnOrigin, '/dashboard') : '/dashboard');
     } catch (error) {
       const message = errorMessage(error, 'Unable to complete payment.');
       if (message.toLowerCase().includes('cancelled')) {

@@ -190,6 +190,8 @@ export type SubscriptionCheckoutOrder = {
   school: {
     id: string;
     name: string;
+    subdomain?: string | null;
+    domainUrl?: string | null;
   };
   checkout: {
     action: 'ACTIVATE' | 'UPGRADE' | 'DOWNGRADE' | 'RENEW' | 'CHANGE' | string;

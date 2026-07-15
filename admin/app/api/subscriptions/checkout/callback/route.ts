@@ -9,6 +9,7 @@ const callbackKeys = [
   'error_source',
   'error_step',
   'error_reason',
+  'return_origin',
 ] as const;
 
 const getText = (value: FormDataEntryValue | string | null | undefined) =>
@@ -51,9 +52,20 @@ const readCallbackParams = async (req: Request) => {
   return params;
 };
 
+const getReturnOrigin = (params: URLSearchParams) => {
+  const value = params.get('return_origin');
+  if (!value) return null;
+  try {
+    const url = new URL(value);
+    return url.protocol === 'http:' || url.protocol === 'https:' ? url.origin : null;
+  } catch {
+    return null;
+  }
+};
+
 const redirectToPlans = async (req: Request) => {
   const params = await readCallbackParams(req);
-  const target = new URL('/dashboard/plans', req.url);
+  const target = new URL('/dashboard/plans', getReturnOrigin(params) ?? req.url);
   target.search = params.toString();
   return NextResponse.redirect(target, { status: req.method === 'POST' ? 303 : 302 });
 };

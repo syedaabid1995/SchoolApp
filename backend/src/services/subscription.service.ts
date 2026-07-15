@@ -7,6 +7,7 @@ import { invalidateSchoolCache, invalidateSubscriptionCache } from './cache/cach
 import { createAuditLog } from './auditLog.service';
 import { getNextNumber } from './numberSequence.service';
 import { PermissionCacheService } from './permissionCache.service';
+import { buildSchoolDomainUrl } from '../utils/schoolDomain';
 
 type BillingCycleInput = 'MONTHLY' | 'ANNUAL' | 'QUARTERLY' | 'YEARLY';
 type EffectiveDateInput = 'IMMEDIATE' | 'NEXT_BILLING_CYCLE';
@@ -189,7 +190,7 @@ const invoiceInclude = {
 const requireSchool = async (schoolId: string) => {
   const school = await prisma.school.findFirst({
     where: { id: schoolId, deletedAt: null },
-    select: { id: true, name: true, code: true, status: true, statusReason: true },
+    select: { id: true, name: true, code: true, subdomain: true, domainUrl: true, status: true, statusReason: true },
   });
   if (!school) {
     throw new HttpError(404, 'School not found');
@@ -983,6 +984,8 @@ export const createSchoolSubscriptionCheckoutOrder = async (params: {
       school: {
         id: school.id,
         name: school.name,
+        subdomain: school.subdomain,
+        domainUrl: school.domainUrl || (school.subdomain ? buildSchoolDomainUrl(school.subdomain) : null),
       },
       checkout: {
         action,
