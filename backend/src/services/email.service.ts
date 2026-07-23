@@ -18,6 +18,7 @@ import {
 } from './email/email.types';
 import { PlatformEmailProvider } from './email/platformEmailProvider';
 import { TenantEmailProvider } from './email/tenantEmailProvider';
+import { buildTemporaryPasswordCredentialEmailContent } from './email/credentialEmailContent';
 import { renderEmailTemplate } from './email/templateRenderer';
 
 export type { EmailDeliveryStatus };
@@ -501,6 +502,41 @@ export const EmailService = {
       },
       safePayload: {
         purpose: 'SCHOOL_ADMIN_CREATED',
+        schoolName: params.schoolName ?? null,
+        schoolCode: params.schoolCode ?? null,
+      },
+    });
+  },
+
+  async sendTemporaryPasswordCredentials(params: {
+    to: string;
+    recipientName?: string | null;
+    schoolName?: string | null;
+    schoolCode?: string | null;
+    loginUrl: string;
+    tempPassword: string;
+    userId?: string | null;
+    roleLabel?: string | null;
+  }) {
+    const content = buildTemporaryPasswordCredentialEmailContent({
+      recipientName: params.recipientName?.trim() || params.to,
+      schoolName: params.schoolName ?? null,
+      schoolCode: params.schoolCode ?? null,
+      loginUrl: params.loginUrl,
+      email: params.to,
+      tempPassword: params.tempPassword,
+      roleLabel: params.roleLabel ?? null,
+    });
+
+    return this.sendPlatformEmail({
+      intent: 'PLATFORM_NOTIFICATION',
+      to: params.to,
+      subject: content.subject,
+      body: content.body,
+      userId: params.userId ?? null,
+      safePayload: {
+        purpose: 'TEMPORARY_PASSWORD_CREDENTIALS',
+        roleLabel: params.roleLabel ?? null,
         schoolName: params.schoolName ?? null,
         schoolCode: params.schoolCode ?? null,
       },

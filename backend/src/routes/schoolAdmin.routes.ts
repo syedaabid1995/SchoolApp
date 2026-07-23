@@ -11,6 +11,7 @@ import {
   deleteSchoolApi,
   restoreSchoolApi,
   createSchoolAdminApi,
+  resetSchoolAdminCredentialsApi,
   setSchoolAdminStatusApi,
   impersonateSchoolApi,
 } from '../controllers/schoolAdmin.controller';
@@ -25,6 +26,7 @@ schoolAdminRouter.get('/', listSchoolsApi);
 schoolAdminRouter.get('/:id/admins', listSchoolAdminsApi);
 schoolAdminRouter.patch('/:id', updateSchoolApi);
 schoolAdminRouter.patch('/:id/admins/:adminId/status', setSchoolAdminStatusApi);
+schoolAdminRouter.post('/:id/admins/:adminId/reset-credentials', resetSchoolAdminCredentialsApi);
 schoolAdminRouter.post('/:id/activate', activateSchoolApi);
 schoolAdminRouter.post('/:id/suspend', suspendSchoolApi);
 schoolAdminRouter.post('/:id/impersonate', impersonateSchoolApi);

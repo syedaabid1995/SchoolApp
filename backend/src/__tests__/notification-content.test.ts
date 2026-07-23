@@ -53,3 +53,19 @@ test('account onboarding WhatsApp text uses school code and login URL', () => {
   assert.doesNotMatch(content.manualShareText, /School ID:/);
   assert.match(content.body, /Login Email: admin@school\.com/);
 });
+
+test('regenerated account onboarding WhatsApp text does not use created wording', () => {
+  const content = buildAccountOnboardingMessageContent({
+    role: 'SCHOOL_ADMIN',
+    email: 'admin@school.com',
+    displayName: 'admin@school.com',
+    appLabel: 'CHEZHIYAN SCHOOL Admin Portal',
+    schoolCode: '001',
+    tempPassword: 'temporary-password',
+    loginUrl: 'https://001.app.akademifyy.in/login',
+    event: 'REGENERATED',
+  });
+
+  assert.match(content.manualShareText, /login credentials have been regenerated/);
+  assert.doesNotMatch(content.manualShareText, /created successfully/);
+});

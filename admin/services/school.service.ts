@@ -60,6 +60,21 @@ export type CreateSchoolResponse = {
   loginUrl?: string | null;
 };
 
+export type SchoolAdminCredentialResponse = {
+  school: School;
+  adminUser: SchoolAdminUser;
+  tempPassword: string;
+  revokedSessions?: number;
+  whatsappSentTo?: string | null;
+  manualShareRequired?: boolean;
+  manualShareText?: string | null;
+  manualShareUrl?: string | null;
+  platformEmailDeliveryStatus?: string | null;
+  platformEmailLogId?: string | null;
+  schoolCode?: string | null;
+  loginUrl?: string | null;
+};
+
 export const listSchools = async (params?: { page?: number; limit?: number; status?: string; query?: string; includeDeleted?: boolean }) => {
   const normalized = params
     ? {
@@ -135,19 +150,17 @@ export const impersonateSchool = async (id: string) => {
 };
 
 export const createSchoolAdmin = async (schoolId: string, adminEmail: string) => {
-  const { data } = await api.post<{
-    adminUser: SchoolAdminUser;
-    tempPassword: string;
-    whatsappSentTo?: string | null;
-    manualShareRequired?: boolean;
-    manualShareText?: string | null;
-    manualShareUrl?: string | null;
-    platformEmailDeliveryStatus?: string | null;
-    schoolCode?: string | null;
-    loginUrl?: string | null;
-  }>(
+  const { data } = await api.post<SchoolAdminCredentialResponse>(
     `/admin/schools/${schoolId}/admins`,
     { adminEmail },
+  );
+  return data;
+};
+
+export const resetSchoolAdminCredentials = async (schoolId: string, adminId: string) => {
+  const { data } = await api.post<SchoolAdminCredentialResponse>(
+    `/admin/schools/${schoolId}/admins/${adminId}/reset-credentials`,
+    {},
   );
   return data;
 };

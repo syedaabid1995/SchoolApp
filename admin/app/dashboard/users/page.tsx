@@ -261,7 +261,7 @@ export default function GlobalUsersPage() {
       queryClient.invalidateQueries({ queryKey: ['admin-user-sessions', variables.user.id] });
       if (variables.action === 'force-password-reset' && isForcePasswordResetResult(result)) {
         setResetPasswordResult(result);
-        notify.success('Password reset', 'Share the new temporary password securely.');
+        notify.success('Password reset', 'Temporary password generated and credential email queued.');
         return;
       }
       notify.success('User updated', 'The security action was applied successfully.');
@@ -802,7 +802,8 @@ export default function GlobalUsersPage() {
                         <div>
                           <p className="text-sm font-bold">New temporary password</p>
                           <p className="mt-1 text-xs font-semibold text-amber-800">
-                            Share this once with {selectedUser.email}. {resetPasswordResult.revokedSessions} active session
+                            Email status: {resetPasswordResult.credentialEmailDeliveryStatus?.replace(/_/g, ' ') ?? 'not available'}.{' '}
+                            {resetPasswordResult.revokedSessions} active session
                             {resetPasswordResult.revokedSessions === 1 ? '' : 's'} revoked.
                           </p>
                         </div>
@@ -820,6 +821,12 @@ export default function GlobalUsersPage() {
                       <p className="mt-3 rounded-lg border border-amber-200 bg-white px-3 py-2 font-mono text-sm font-bold text-slate-950">
                         {resetPasswordResult.tempPassword}
                       </p>
+                      {resetPasswordResult.loginUrl ? (
+                        <div className="mt-3 rounded-lg border border-amber-200 bg-white px-3 py-2">
+                          <p className="text-xs font-bold uppercase text-amber-800">Login URL</p>
+                          <p className="mt-1 break-all text-sm font-semibold text-slate-950">{resetPasswordResult.loginUrl}</p>
+                        </div>
+                      ) : null}
                     </div>
                   ) : null}
                 </section>

@@ -3,6 +3,7 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import test from 'node:test';
 import { emailScopeForIntent, normalizeEmailIntent } from '../services/email/email.types';
+import { buildTemporaryPasswordCredentialEmailContent } from '../services/email/credentialEmailContent';
 import { renderEmailTemplate } from '../services/email/templateRenderer';
 
 const source = (path: string) => readFileSync(join(process.cwd(), path), 'utf8');
@@ -35,6 +36,24 @@ test('school admin credential email includes school code and login URL', () => {
   assert.match(content.body, /School Code: 001/);
   assert.match(content.body, /Login URL: https:\/\/001\.app\.saapttech\.com\/login/);
   assert.match(content.body, /Email: load-admin@dks\.com/);
+  assert.match(content.body, /Temporary Password: temporary-password/);
+});
+
+test('temporary password credential email includes regenerated password details', () => {
+  const content = buildTemporaryPasswordCredentialEmailContent({
+    recipientName: 'admin@school.com',
+    schoolName: 'CHEZHIYAN SCHOOL',
+    schoolCode: '001',
+    loginUrl: 'https://001.app.saapttech.com/login',
+    email: 'admin@school.com',
+    tempPassword: 'temporary-password',
+    roleLabel: 'School Admin',
+  });
+
+  assert.match(content.subject, /School Admin login credentials/);
+  assert.match(content.body, /login credentials have been regenerated/);
+  assert.match(content.body, /School Code: 001/);
+  assert.match(content.body, /Login URL: https:\/\/001\.app\.saapttech\.com\/login/);
   assert.match(content.body, /Temporary Password: temporary-password/);
 });
 

@@ -3,6 +3,7 @@ import { z } from 'zod';
 import {
   createSchool,
   createSchoolAdmin,
+  resetSchoolAdminCredentials,
   listSchoolAdmins,
   setSchoolAdminStatus,
   listSchools,
@@ -19,11 +20,7 @@ import { cacheTTL } from '../services/cache/cache.ttl';
 import { invalidateSchoolCache, invalidateSubscriptionCache } from '../services/cache/cache.invalidation';
 import { sendAccountCreatedWhatsapp } from '../services/accountOnboardingWhatsapp.service';
 import { EmailService } from '../services/email.service';
-import {
-  buildSchoolDomainUrl,
-  normalizeSchoolSubdomain,
-  resolveSchoolRootDomainFromHost,
-} from '../utils/schoolDomain';
+import { buildSchoolLoginUrlFromRequest } from '../utils/requestLoginUrl';
 
 const bankDetailsSchema = z
   .object({
@@ -78,40 +75,6 @@ const schoolAdminStatusSchema = z.object({
   status: z.enum(['ACTIVE', 'INACTIVE']),
 });
 
-const requestHeaderValue = (req: Request, name: string) => {
-  const value = req.headers[name.toLowerCase()];
-  if (Array.isArray(value)) return value[0] ?? null;
-  return value ?? null;
-};
-
-const resolveSchoolRootDomainFromRequest = (req: Request) => {
-  const candidates = [
-    requestHeaderValue(req, 'x-forwarded-host'),
-    requestHeaderValue(req, 'origin'),
-    requestHeaderValue(req, 'referer'),
-    requestHeaderValue(req, 'host'),
-  ];
-
-  for (const candidate of candidates) {
-    const rootDomain = resolveSchoolRootDomainFromHost(candidate);
-    if (rootDomain) return rootDomain;
-  }
-  return null;
-};
-
-const buildSchoolAdminLoginUrl = (
-  req: Request,
-  school: { code?: string | null; subdomain?: string | null; domainUrl?: string | null },
-) => {
-  const subdomain = normalizeSchoolSubdomain(school.code ?? school.subdomain ?? '');
-  if (subdomain) {
-    const rootDomain = resolveSchoolRootDomainFromRequest(req) ?? undefined;
-    return `${buildSchoolDomainUrl(subdomain, rootDomain).replace(/\/+$/, '')}/login`;
-  }
-
-  return school.domainUrl ? `${school.domainUrl.replace(/\/+$/, '')}/login` : null;
-};
-
 export const createSchoolApi = async (req: Request, res: Response) => {
   const payload = createSchema.parse(req.body);
   const result = await createSchool({
@@ -132,7 +95,7 @@ export const createSchoolApi = async (req: Request, res: Response) => {
   let platformEmailDeliveryStatus: string | null = null;
   let loginUrl: string | null = null;
   if (result.adminUser) {
-    loginUrl = buildSchoolAdminLoginUrl(req, result.school);
+    loginUrl = buildSchoolLoginUrlFromRequest(req, result.school);
     await logAudit(req, {
       schoolId: result.school.id,
       entityType: 'USER',
@@ -257,7 +220,7 @@ export const createSchoolAdminApi = async (req: Request, res: Response) => {
     action: 'SCHOOL_ADMIN_CREATED',
     afterState: { email: result.adminUser.email, status: result.adminUser.status },
   });
-  const loginUrl = result.school ? buildSchoolAdminLoginUrl(req, result.school) : null;
+  const loginUrl = buildSchoolLoginUrlFromRequest(req, result.school);
   const whatsapp = await sendAccountCreatedWhatsapp({
     role: 'SCHOOL_ADMIN',
     schoolId: req.params.id,
@@ -287,6 +250,59 @@ export const createSchoolAdminApi = async (req: Request, res: Response) => {
     platformEmailDeliveryStatus: platformEmail.status,
     loginUrl,
     schoolCode: result.school?.code ?? null,
+  });
+};
+
+export const resetSchoolAdminCredentialsApi = async (req: Request, res: Response) => {
+  const result = await resetSchoolAdminCredentials(req.params.id, req.params.adminId);
+  await invalidateSchoolCache(req.params.id);
+  const loginUrl = buildSchoolLoginUrlFromRequest(req, result.school);
+  await logAudit(req, {
+    schoolId: req.params.id,
+    entityType: 'USER',
+    entityId: result.adminUser.id,
+    action: 'SCHOOL_ADMIN_CREDENTIALS_REGENERATED',
+    afterState: {
+      email: result.adminUser.email,
+      status: result.adminUser.status,
+      revokedSessions: result.revokedSessions,
+    },
+  });
+
+  const whatsapp = await sendAccountCreatedWhatsapp({
+    role: 'SCHOOL_ADMIN',
+    schoolId: req.params.id,
+    schoolCode: result.school.code,
+    loginUrl,
+    email: result.adminUser.email,
+    mobile: null,
+    tempPassword: result.tempPassword,
+    fullName: result.adminUser.email,
+    event: 'REGENERATED',
+  });
+  const platformEmail = await EmailService.sendTemporaryPasswordCredentials({
+    to: result.adminUser.email,
+    recipientName: result.adminUser.email,
+    schoolName: result.school.name,
+    schoolCode: result.school.code,
+    loginUrl,
+    tempPassword: result.tempPassword,
+    userId: result.adminUser.id,
+    roleLabel: 'School Admin',
+  });
+
+  res.status(200).json({
+    ...result,
+    mappedSchoolId: req.params.id,
+    whatsappSentTo: whatsapp.sentTo,
+    manualShareRequired: whatsapp.manualShareRequired,
+    manualShareText: whatsapp.manualShareText,
+    manualShareUrl: whatsapp.manualShareUrl,
+    notificationDeliveries: whatsapp.deliveries,
+    platformEmailDeliveryStatus: platformEmail.status,
+    platformEmailLogId: platformEmail.logId ?? null,
+    loginUrl,
+    schoolCode: result.school.code,
   });
 };
 

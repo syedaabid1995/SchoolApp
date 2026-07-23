@@ -5,6 +5,7 @@ import { sendNotification } from './notification.service';
 import { hasActiveMessagingGateway } from './messagingSettings.service';
 
 type AccountOnboardingRole = 'SCHOOL_ADMIN' | 'TEACHER' | 'PARENT' | 'ACCOUNTANT' | 'LIBRARIAN' | 'STAFF';
+type AccountOnboardingEvent = 'CREATED' | 'REGENERATED';
 
 const resolveSentTo = (mobile?: string | null) => {
   const trimmed = (mobile ?? '').trim();
@@ -30,12 +31,22 @@ export const buildAccountOnboardingMessageContent = (params: {
   schoolCode: string;
   tempPassword?: string | null;
   loginUrl?: string | null;
+  event?: AccountOnboardingEvent;
 }) => {
   const loginUrl = params.loginUrl?.trim() || null;
+  const event = params.event ?? 'CREATED';
+  const bodyIntro =
+    event === 'REGENERATED'
+      ? `Your ${params.role} login credentials have been regenerated.`
+      : `Welcome to ${params.appLabel}. Your ${params.role} account is ready.`;
+  const manualIntro =
+    event === 'REGENERATED'
+      ? `Your ${params.role} login credentials have been regenerated.`
+      : `Your ${params.role} account has been created successfully.`;
   const body = [
     `Hello ${params.displayName},`,
     '',
-    `Welcome to ${params.appLabel}. Your ${params.role} account is ready.`,
+    bodyIntro,
     '',
     `School Code: ${params.schoolCode}`,
     `Login Email: ${params.email}`,
@@ -50,7 +61,7 @@ export const buildAccountOnboardingMessageContent = (params: {
     `${params.appLabel} - Account Details`,
     '',
     `Hello ${params.displayName},`,
-    `Your ${params.role} account has been created successfully.`,
+    manualIntro,
     '',
     `School Code: ${params.schoolCode}`,
     `Role: ${params.role}`,
@@ -77,6 +88,7 @@ export const sendAccountCreatedWhatsapp = async (params: {
   schoolId?: string | null;
   schoolCode?: string | null;
   loginUrl?: string | null;
+  event?: AccountOnboardingEvent;
 }) => {
   const sentTo = resolveSentTo(params.mobile);
   const mobile = (params.mobile ?? '').trim();
@@ -95,6 +107,7 @@ export const sendAccountCreatedWhatsapp = async (params: {
     schoolCode,
     tempPassword: params.tempPassword,
     loginUrl,
+    event: params.event,
   });
   const manualShareUrl = `https://wa.me/${sentTo}?text=${encodeURIComponent(manualShareText)}`;
 

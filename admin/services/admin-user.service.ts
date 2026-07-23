@@ -87,6 +87,10 @@ export type ForcePasswordResetResult = {
   user: AdminUser;
   tempPassword: string;
   revokedSessions: number;
+  credentialEmailDeliveryStatus?: string | null;
+  credentialEmailLogId?: string | null;
+  loginUrl?: string | null;
+  schoolCode?: string | null;
 };
 
 export type AdminUserListParams = {

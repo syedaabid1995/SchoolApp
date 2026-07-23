@@ -196,6 +196,49 @@ export const createSchoolAdmin = async (schoolId: string, adminEmail: string, ba
   });
 };
 
+export const resetSchoolAdminCredentials = async (schoolId: string, adminId: string) => {
+  return prisma.$transaction(async (tx) => {
+    const school = await tx.school.findFirst({
+      where: { id: schoolId, deletedAt: null },
+      select: { id: true, name: true, code: true, subdomain: true, domainUrl: true },
+    });
+    if (!school) {
+      throw new HttpError(404, 'School not found');
+    }
+
+    const existingAdmin = await tx.user.findFirst({
+      where: {
+        id: adminId,
+        schoolId,
+        roles: { some: { role: { name: 'SCHOOL_ADMIN' } } },
+      },
+      select: { id: true, email: true, schoolId: true, status: true, createdAt: true },
+    });
+    if (!existingAdmin) {
+      throw new HttpError(404, 'School admin not found');
+    }
+
+    const tempPassword = crypto.randomBytes(9).toString('base64url');
+    const passwordHash = await hashPassword(tempPassword);
+    const adminUser = await tx.user.update({
+      where: { id: adminId },
+      data: { passwordHash, mustChangePassword: true },
+      select: { id: true, email: true, schoolId: true, status: true, createdAt: true },
+    });
+    const revokedSessions = await tx.refreshSession.updateMany({
+      where: { userId: adminId, revokedAt: null },
+      data: { revokedAt: new Date() },
+    });
+
+    return {
+      school,
+      adminUser,
+      tempPassword,
+      revokedSessions: revokedSessions.count,
+    };
+  });
+};
+
 export const listSchoolAdmins = async (schoolId: string) => {
   const school = await prisma.school.findFirst({
     where: { id: schoolId, deletedAt: null },

@@ -15,6 +15,8 @@ import {
   unlockAdminUser,
   updateAdminUserStatus,
 } from '../services/adminUser.service';
+import { EmailService } from '../services/email.service';
+import { buildPlatformLoginUrlFromRequest, buildSchoolLoginUrlFromRequest } from '../utils/requestLoginUrl';
 
 const uuidSchema = z.string().uuid();
 
@@ -113,7 +115,36 @@ export const forceAdminPasswordResetApi = async (req: Request, res: Response) =>
   const id = uuidSchema.parse(req.params.id);
   const payload = reasonSchema.parse(req.body);
   const result = await forceAdminPasswordReset({ id, reason: payload.reason ?? null, actor: actorFromRequest(req) });
-  res.status(200).json({ success: true, data: result });
+  const loginUrl = result.user.school
+    ? buildSchoolLoginUrlFromRequest(req, result.user.school)
+    : buildPlatformLoginUrlFromRequest(req);
+  const roleLabel = result.user.role
+    ? result.user.role
+        .toLowerCase()
+        .split('_')
+        .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+        .join(' ')
+    : 'User';
+  const credentialEmail = await EmailService.sendTemporaryPasswordCredentials({
+    to: result.user.email,
+    recipientName: result.user.name ?? result.user.email,
+    schoolName: result.user.school?.name ?? null,
+    schoolCode: result.user.school?.code ?? null,
+    loginUrl,
+    tempPassword: result.tempPassword,
+    userId: result.user.id,
+    roleLabel,
+  });
+  res.status(200).json({
+    success: true,
+    data: {
+      ...result,
+      credentialEmailDeliveryStatus: credentialEmail.status,
+      credentialEmailLogId: credentialEmail.logId ?? null,
+      loginUrl,
+      schoolCode: result.user.school?.code ?? null,
+    },
+  });
 };
 
 export const revokeAdminUserSessionsApi = async (req: Request, res: Response) => {
