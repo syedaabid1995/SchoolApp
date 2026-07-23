@@ -40,13 +40,13 @@ export const PlatformEmailProvider = {
     };
   },
 
-  resolveSender(intent: PlatformEmailIntent, identity?: EmailSenderIdentity) {
+  resolveSender(intent: PlatformEmailIntent, identity?: EmailSenderIdentity, senderName?: string | null) {
     const senderIdentity = identity ?? defaultPlatformSenderForIntent(intent);
     const defaultSender = env.GOOGLE_SMTP_FROM_EMAIL ?? PLATFORM_SENDER_EMAILS.NO_REPLY;
     return {
       identity: senderIdentity,
       email: senderIdentity === 'NO_REPLY' ? defaultSender : PLATFORM_SENDER_EMAILS[senderIdentity],
-      name: env.GOOGLE_SMTP_FROM_NAME,
+      name: senderName?.trim() || env.GOOGLE_SMTP_FROM_NAME,
       replyToEmail: env.GOOGLE_SMTP_REPLY_TO,
     };
   },
@@ -55,6 +55,7 @@ export const PlatformEmailProvider = {
     intent: PlatformEmailIntent;
     message: EmailMessage;
     senderIdentity?: EmailSenderIdentity;
+    senderName?: string | null;
   }): Promise<EmailProviderDeliveryResult> {
     if (!this.isConfigured()) {
       return {
@@ -66,7 +67,7 @@ export const PlatformEmailProvider = {
       };
     }
 
-    const sender = this.resolveSender(params.intent, params.senderIdentity);
+    const sender = this.resolveSender(params.intent, params.senderIdentity, params.senderName);
     const transport = new GoogleWorkspaceTransport({
       host: env.GOOGLE_SMTP_HOST!,
       port: env.GOOGLE_SMTP_PORT!,

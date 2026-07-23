@@ -106,6 +106,7 @@ export type EmailQueueJobData = {
   userId?: string | null;
   intent: EmailIntent;
   senderIdentity?: EmailSenderIdentity;
+  senderName?: string | null;
   templateKey?: string | null;
   to: string;
   subject: string;

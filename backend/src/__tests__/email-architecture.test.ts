@@ -3,7 +3,10 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import test from 'node:test';
 import { emailScopeForIntent, normalizeEmailIntent } from '../services/email/email.types';
-import { buildTemporaryPasswordCredentialEmailContent } from '../services/email/credentialEmailContent';
+import {
+  buildTemporaryPasswordCredentialEmailContent,
+  resolveCredentialSenderNameFromLoginUrl,
+} from '../services/email/credentialEmailContent';
 import { renderEmailTemplate } from '../services/email/templateRenderer';
 
 const source = (path: string) => readFileSync(join(process.cwd(), path), 'utf8');
@@ -55,6 +58,13 @@ test('temporary password credential email includes regenerated password details'
   assert.match(content.body, /School Code: 001/);
   assert.match(content.body, /Login URL: https:\/\/001\.app\.saapttech\.com\/login/);
   assert.match(content.body, /Temporary Password: temporary-password/);
+});
+
+test('credential email sender name follows login URL branding', () => {
+  assert.equal(resolveCredentialSenderNameFromLoginUrl('https://001.app.saapttech.com/login'), 'SAAPT');
+  assert.equal(resolveCredentialSenderNameFromLoginUrl('https://app.saapttech.com/login'), 'SAAPT');
+  assert.equal(resolveCredentialSenderNameFromLoginUrl('https://001.app.akademifyy.in/login'), 'Akademifyy');
+  assert.equal(resolveCredentialSenderNameFromLoginUrl('not-a-url'), 'Akademifyy');
 });
 
 test('platform provider does not read tenant messaging configuration', () => {

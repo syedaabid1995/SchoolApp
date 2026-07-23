@@ -18,7 +18,10 @@ import {
 } from './email/email.types';
 import { PlatformEmailProvider } from './email/platformEmailProvider';
 import { TenantEmailProvider } from './email/tenantEmailProvider';
-import { buildTemporaryPasswordCredentialEmailContent } from './email/credentialEmailContent';
+import {
+  buildTemporaryPasswordCredentialEmailContent,
+  resolveCredentialSenderNameFromLoginUrl,
+} from './email/credentialEmailContent';
 import { renderEmailTemplate } from './email/templateRenderer';
 
 export type { EmailDeliveryStatus };
@@ -47,6 +50,7 @@ type SendEmailParams = {
   data?: Record<string, unknown>;
   safePayload?: Record<string, unknown>;
   senderIdentity?: EmailSenderIdentity;
+  senderName?: string | null;
 };
 
 const payloadRecord = (payload: unknown): Record<string, unknown> => {
@@ -161,6 +165,7 @@ const addDeadLetterJob = async (params: {
               userId: data.userId ?? null,
               intent: data.intent,
               senderIdentity: data.senderIdentity ?? null,
+              senderName: data.senderName ?? null,
               templateKey: data.templateKey ?? null,
               to: data.to,
               queuedAt: data.queuedAt,
@@ -269,7 +274,7 @@ export const EmailService = {
       html: params.html,
       data: params.data,
     });
-    const sender = PlatformEmailProvider.resolveSender(params.intent, params.senderIdentity);
+    const sender = PlatformEmailProvider.resolveSender(params.intent, params.senderIdentity, params.senderName);
     const log = await createEmailLog({
       schoolId: null,
       userId: params.userId ?? null,
@@ -280,7 +285,10 @@ export const EmailService = {
       templateKey: rendered.templateKey,
       provider: 'GOOGLE_WORKSPACE',
       sender: sender.email,
-      safePayload: params.safePayload,
+      safePayload: {
+        ...(params.safePayload ?? {}),
+        ...(params.senderName ? { senderName: params.senderName } : {}),
+      },
     });
     const delivery = await enqueue('PLATFORM', {
       logId: log.id,
@@ -288,6 +296,7 @@ export const EmailService = {
       userId: params.userId ?? null,
       intent: params.intent,
       senderIdentity: params.senderIdentity,
+      senderName: params.senderName,
       templateKey: rendered.templateKey,
       to: params.to,
       subject: rendered.subject,
@@ -414,7 +423,11 @@ export const EmailService = {
   },
 
   async processPlatformEmailJob(data: EmailQueueJobData, attemptCount: number) {
-    const sender = PlatformEmailProvider.resolveSender(data.intent as PlatformEmailIntent, data.senderIdentity);
+    const sender = PlatformEmailProvider.resolveSender(
+      data.intent as PlatformEmailIntent,
+      data.senderIdentity,
+      data.senderName,
+    );
     const alreadySent = await sentProviderDeliveryFromLog(data.logId, {
       provider: 'GOOGLE_WORKSPACE',
       sender: sender.email,
@@ -424,6 +437,7 @@ export const EmailService = {
     const result = await PlatformEmailProvider.send({
       intent: data.intent as PlatformEmailIntent,
       senderIdentity: data.senderIdentity,
+      senderName: data.senderName,
       message: {
         to: data.to,
         subject: data.subject,
@@ -492,6 +506,7 @@ export const EmailService = {
       intent: 'SCHOOL_ADMIN_CREATED',
       to: params.to,
       userId: params.userId ?? null,
+      senderName: resolveCredentialSenderNameFromLoginUrl(params.loginUrl),
       data: {
         recipientName: params.to,
         schoolName: params.schoolName ?? 'your school',
@@ -534,6 +549,7 @@ export const EmailService = {
       subject: content.subject,
       body: content.body,
       userId: params.userId ?? null,
+      senderName: resolveCredentialSenderNameFromLoginUrl(params.loginUrl),
       safePayload: {
         purpose: 'TEMPORARY_PASSWORD_CREDENTIALS',
         roleLabel: params.roleLabel ?? null,

@@ -1,3 +1,19 @@
+const DEFAULT_CREDENTIAL_SENDER_NAME = 'Akademifyy';
+const SAAPT_CREDENTIAL_SENDER_NAME = 'SAAPT';
+
+export const resolveCredentialSenderNameFromLoginUrl = (loginUrl?: string | null) => {
+  if (!loginUrl) return DEFAULT_CREDENTIAL_SENDER_NAME;
+  try {
+    const hostname = new URL(loginUrl).hostname.toLowerCase();
+    if (hostname === 'saapttech.com' || hostname.endsWith('.saapttech.com')) {
+      return SAAPT_CREDENTIAL_SENDER_NAME;
+    }
+  } catch {
+    return DEFAULT_CREDENTIAL_SENDER_NAME;
+  }
+  return DEFAULT_CREDENTIAL_SENDER_NAME;
+};
+
 export const buildTemporaryPasswordCredentialEmailContent = (params: {
   recipientName: string;
   schoolName?: string | null;
