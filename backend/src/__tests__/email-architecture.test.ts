@@ -3,6 +3,7 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import test from 'node:test';
 import { emailScopeForIntent, normalizeEmailIntent } from '../services/email/email.types';
+import { renderEmailTemplate } from '../services/email/templateRenderer';
 
 const source = (path: string) => readFileSync(join(process.cwd(), path), 'utf8');
 
@@ -15,6 +16,26 @@ test('email intent routing separates platform and tenant scopes', () => {
   assert.equal(emailScopeForIntent('GENERAL_COMMUNICATION'), 'TENANT');
   assert.equal(normalizeEmailIntent('password-reset', 'GENERAL_COMMUNICATION'), 'GENERAL_COMMUNICATION');
   assert.equal(normalizeEmailIntent('PASSWORD_RESET', 'GENERAL_COMMUNICATION'), 'PASSWORD_RESET');
+});
+
+test('school admin credential email includes school code and login URL', () => {
+  const content = renderEmailTemplate({
+    intent: 'SCHOOL_ADMIN_CREATED',
+    data: {
+      recipientName: 'load-admin@dks.com',
+      schoolName: 'CHEZHIYAN SCHOOL',
+      schoolCode: '001',
+      loginUrl: 'https://001.app.saapttech.com/login',
+      email: 'load-admin@dks.com',
+      tempPassword: 'temporary-password',
+    },
+  });
+
+  assert.match(content.subject, /school admin account/i);
+  assert.match(content.body, /School Code: 001/);
+  assert.match(content.body, /Login URL: https:\/\/001\.app\.saapttech\.com\/login/);
+  assert.match(content.body, /Email: load-admin@dks\.com/);
+  assert.match(content.body, /Temporary Password: temporary-password/);
 });
 
 test('platform provider does not read tenant messaging configuration', () => {

@@ -17,11 +17,12 @@ const templates: Partial<Record<EmailIntent, EmailTemplate>> = {
   SCHOOL_ADMIN_CREATED: {
     namespace: 'platform',
     key: 'platform.school-admin-credentials',
-    subject: 'Your Akademifyy school admin account',
+    subject: 'Your school admin account is ready',
     body: [
       'Hello {{recipientName}},',
       '',
       'Your school admin account for {{schoolName}} is ready.',
+      'School Code: {{schoolCode}}',
       'Login URL: {{loginUrl}}',
       'Email: {{email}}',
       'Temporary Password: {{tempPassword}}',

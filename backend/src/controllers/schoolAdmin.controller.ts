@@ -19,6 +19,11 @@ import { cacheTTL } from '../services/cache/cache.ttl';
 import { invalidateSchoolCache, invalidateSubscriptionCache } from '../services/cache/cache.invalidation';
 import { sendAccountCreatedWhatsapp } from '../services/accountOnboardingWhatsapp.service';
 import { EmailService } from '../services/email.service';
+import {
+  buildSchoolDomainUrl,
+  normalizeSchoolSubdomain,
+  resolveSchoolRootDomainFromHost,
+} from '../utils/schoolDomain';
 
 const bankDetailsSchema = z
   .object({
@@ -73,6 +78,40 @@ const schoolAdminStatusSchema = z.object({
   status: z.enum(['ACTIVE', 'INACTIVE']),
 });
 
+const requestHeaderValue = (req: Request, name: string) => {
+  const value = req.headers[name.toLowerCase()];
+  if (Array.isArray(value)) return value[0] ?? null;
+  return value ?? null;
+};
+
+const resolveSchoolRootDomainFromRequest = (req: Request) => {
+  const candidates = [
+    requestHeaderValue(req, 'x-forwarded-host'),
+    requestHeaderValue(req, 'origin'),
+    requestHeaderValue(req, 'referer'),
+    requestHeaderValue(req, 'host'),
+  ];
+
+  for (const candidate of candidates) {
+    const rootDomain = resolveSchoolRootDomainFromHost(candidate);
+    if (rootDomain) return rootDomain;
+  }
+  return null;
+};
+
+const buildSchoolAdminLoginUrl = (
+  req: Request,
+  school: { code?: string | null; subdomain?: string | null; domainUrl?: string | null },
+) => {
+  const subdomain = normalizeSchoolSubdomain(school.code ?? school.subdomain ?? '');
+  if (subdomain) {
+    const rootDomain = resolveSchoolRootDomainFromRequest(req) ?? undefined;
+    return `${buildSchoolDomainUrl(subdomain, rootDomain).replace(/\/+$/, '')}/login`;
+  }
+
+  return school.domainUrl ? `${school.domainUrl.replace(/\/+$/, '')}/login` : null;
+};
+
 export const createSchoolApi = async (req: Request, res: Response) => {
   const payload = createSchema.parse(req.body);
   const result = await createSchool({
@@ -91,7 +130,9 @@ export const createSchoolApi = async (req: Request, res: Response) => {
   let manualShareUrl: string | null = null;
   let notificationDeliveries: unknown = null;
   let platformEmailDeliveryStatus: string | null = null;
+  let loginUrl: string | null = null;
   if (result.adminUser) {
+    loginUrl = buildSchoolAdminLoginUrl(req, result.school);
     await logAudit(req, {
       schoolId: result.school.id,
       entityType: 'USER',
@@ -102,6 +143,8 @@ export const createSchoolApi = async (req: Request, res: Response) => {
     const whatsapp = await sendAccountCreatedWhatsapp({
       role: 'SCHOOL_ADMIN',
       schoolId: result.school.id,
+      schoolCode: result.school.code,
+      loginUrl,
       email: result.adminUser.email,
       mobile: null,
       tempPassword: result.tempPassword,
@@ -115,7 +158,8 @@ export const createSchoolApi = async (req: Request, res: Response) => {
     const platformEmail = await EmailService.sendSchoolAdminCredentials({
       to: result.adminUser.email,
       schoolName: result.school.name,
-      loginUrl: result.school.domainUrl,
+      schoolCode: result.school.code,
+      loginUrl,
       tempPassword: result.tempPassword,
       userId: result.adminUser.id,
     });
@@ -130,6 +174,8 @@ export const createSchoolApi = async (req: Request, res: Response) => {
     manualShareUrl,
     notificationDeliveries,
     platformEmailDeliveryStatus,
+    loginUrl,
+    schoolCode: result.school.code,
   });
 };
 
@@ -211,9 +257,12 @@ export const createSchoolAdminApi = async (req: Request, res: Response) => {
     action: 'SCHOOL_ADMIN_CREATED',
     afterState: { email: result.adminUser.email, status: result.adminUser.status },
   });
+  const loginUrl = result.school ? buildSchoolAdminLoginUrl(req, result.school) : null;
   const whatsapp = await sendAccountCreatedWhatsapp({
     role: 'SCHOOL_ADMIN',
     schoolId: req.params.id,
+    schoolCode: result.school?.code ?? null,
+    loginUrl,
     email: result.adminUser.email,
     mobile: null,
     tempPassword: result.tempPassword,
@@ -222,7 +271,8 @@ export const createSchoolAdminApi = async (req: Request, res: Response) => {
   const platformEmail = await EmailService.sendSchoolAdminCredentials({
     to: result.adminUser.email,
     schoolName: result.school?.name ?? null,
-    loginUrl: result.school?.domainUrl ?? null,
+    schoolCode: result.school?.code ?? null,
+    loginUrl,
     tempPassword: result.tempPassword,
     userId: result.adminUser.id,
   });
@@ -235,6 +285,8 @@ export const createSchoolAdminApi = async (req: Request, res: Response) => {
     manualShareUrl: whatsapp.manualShareUrl,
     notificationDeliveries: whatsapp.deliveries,
     platformEmailDeliveryStatus: platformEmail.status,
+    loginUrl,
+    schoolCode: result.school?.code ?? null,
   });
 };
 

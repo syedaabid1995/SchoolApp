@@ -51,8 +51,8 @@ export const isValidSchoolSubdomain = (value?: string | null) => {
   return Boolean(normalized && /^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/.test(normalized) && !RESERVED_SUBDOMAINS.has(normalized));
 };
 
-export const buildSchoolDomainUrl = (subdomain: string) =>
-  `https://${subdomain}.${getSchoolRootDomain()}`;
+export const buildSchoolDomainUrl = (subdomain: string, rootDomain = getSchoolRootDomain()) =>
+  `https://${subdomain}.${rootDomain}`;
 
 export const buildLocalSchoolDomainUrl = (subdomain: string, port = process.env.SCHOOL_LOCAL_PORT || '3001') =>
   `http://${subdomain}.${DEFAULT_LOCAL_HOST}:${port}`;

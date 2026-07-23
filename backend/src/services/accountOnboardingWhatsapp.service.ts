@@ -4,6 +4,8 @@ import { prisma } from '../config/db';
 import { sendNotification } from './notification.service';
 import { hasActiveMessagingGateway } from './messagingSettings.service';
 
+type AccountOnboardingRole = 'SCHOOL_ADMIN' | 'TEACHER' | 'PARENT' | 'ACCOUNTANT' | 'LIBRARIAN' | 'STAFF';
+
 const resolveSentTo = (mobile?: string | null) => {
   const trimmed = (mobile ?? '').trim();
   return trimmed.length > 0 ? trimmed : env.WHATSAPP_FALLBACK_TO;
@@ -11,53 +13,50 @@ const resolveSentTo = (mobile?: string | null) => {
 
 const isDeliverableEmail = (email: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) && !email.endsWith('.local');
 
-const resolveSchoolName = async (schoolId?: string | null) => {
+const resolveSchoolContext = async (schoolId?: string | null) => {
   if (!schoolId) return null;
   const school = await prisma.school.findUnique({
     where: { id: schoolId },
-    select: { name: true },
+    select: { name: true, code: true },
   });
-  return school?.name ?? null;
+  return school ?? null;
 };
 
-export const sendAccountCreatedWhatsapp = async (params: {
-  role: 'SCHOOL_ADMIN' | 'TEACHER' | 'PARENT' | 'ACCOUNTANT' | 'LIBRARIAN' | 'STAFF';
+export const buildAccountOnboardingMessageContent = (params: {
+  role: AccountOnboardingRole;
   email: string;
-  mobile?: string | null;
+  displayName: string;
+  appLabel: string;
+  schoolCode: string;
   tempPassword?: string | null;
-  fullName?: string | null;
-  schoolId?: string | null;
+  loginUrl?: string | null;
 }) => {
-  const sentTo = resolveSentTo(params.mobile);
-  const mobile = (params.mobile ?? '').trim();
-  const displayName = params.fullName?.trim() || params.email;
-  const schoolName = await resolveSchoolName(params.schoolId);
-  const appLabel =
-    params.role === 'SCHOOL_ADMIN' ? 'SAAPT School ERP' : `${schoolName ?? 'School'} ERP`;
-  const bodyLines = [
-    `Hello ${displayName},`,
+  const loginUrl = params.loginUrl?.trim() || null;
+  const body = [
+    `Hello ${params.displayName},`,
     '',
-    `Welcome to ${appLabel}. Your ${params.role} account is ready.`,
+    `Welcome to ${params.appLabel}. Your ${params.role} account is ready.`,
     '',
-    `School ID: ${params.schoolId ?? 'N/A'}`,
+    `School Code: ${params.schoolCode}`,
     `Login Email: ${params.email}`,
     ...(params.tempPassword ? [`Temporary Password: ${params.tempPassword}`] : []),
+    ...(loginUrl ? [`Login URL: ${loginUrl}`] : []),
     '',
     'Please sign in and change your password immediately.',
     'If you did not request this account, contact your school administrator.',
-  ];
-  const body = bodyLines.join('\n');
-  const schoolIdLabel = params.schoolId ?? 'N/A';
+  ].join('\n');
+
   const manualShareText = [
-    `${appLabel} - Account Details`,
+    `${params.appLabel} - Account Details`,
     '',
-    `Hello ${displayName},`,
+    `Hello ${params.displayName},`,
     `Your ${params.role} account has been created successfully.`,
     '',
-    `School ID: ${schoolIdLabel}`,
+    `School Code: ${params.schoolCode}`,
     `Role: ${params.role}`,
     `Email: ${params.email}`,
     ...(params.tempPassword ? [`Temporary Password: ${params.tempPassword}`] : []),
+    ...(loginUrl ? [`Login URL: ${loginUrl}`] : []),
     '',
     'Next steps:',
     '1) Sign in using the credentials above',
@@ -65,6 +64,38 @@ export const sendAccountCreatedWhatsapp = async (params: {
     '',
     'For support, please contact your school administrator.',
   ].join('\n');
+
+  return { body, manualShareText };
+};
+
+export const sendAccountCreatedWhatsapp = async (params: {
+  role: AccountOnboardingRole;
+  email: string;
+  mobile?: string | null;
+  tempPassword?: string | null;
+  fullName?: string | null;
+  schoolId?: string | null;
+  schoolCode?: string | null;
+  loginUrl?: string | null;
+}) => {
+  const sentTo = resolveSentTo(params.mobile);
+  const mobile = (params.mobile ?? '').trim();
+  const displayName = params.fullName?.trim() || params.email;
+  const school = await resolveSchoolContext(params.schoolId);
+  const schoolName = school?.name ?? null;
+  const schoolCode = params.schoolCode?.trim() || school?.code || 'N/A';
+  const loginUrl = params.loginUrl?.trim() || null;
+  const appLabel =
+    params.role === 'SCHOOL_ADMIN' ? `${schoolName ?? 'School'} Admin Portal` : `${schoolName ?? 'School'} ERP`;
+  const { body, manualShareText } = buildAccountOnboardingMessageContent({
+    role: params.role,
+    email: params.email,
+    displayName,
+    appLabel,
+    schoolCode,
+    tempPassword: params.tempPassword,
+    loginUrl,
+  });
   const manualShareUrl = `https://wa.me/${sentTo}?text=${encodeURIComponent(manualShareText)}`;
 
   const deliveries: Record<

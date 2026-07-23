@@ -482,6 +482,7 @@ export const EmailService = {
   async sendSchoolAdminCredentials(params: {
     to: string;
     schoolName?: string | null;
+    schoolCode?: string | null;
     loginUrl?: string | null;
     tempPassword: string;
     userId?: string | null;
@@ -493,6 +494,7 @@ export const EmailService = {
       data: {
         recipientName: params.to,
         schoolName: params.schoolName ?? 'your school',
+        schoolCode: params.schoolCode ?? 'N/A',
         loginUrl: params.loginUrl ?? env.FRONTEND_URL,
         email: params.to,
         tempPassword: params.tempPassword,
@@ -500,6 +502,7 @@ export const EmailService = {
       safePayload: {
         purpose: 'SCHOOL_ADMIN_CREATED',
         schoolName: params.schoolName ?? null,
+        schoolCode: params.schoolCode ?? null,
       },
     });
   },

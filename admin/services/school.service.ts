@@ -55,6 +55,9 @@ export type CreateSchoolResponse = {
   manualShareRequired?: boolean;
   manualShareText?: string | null;
   manualShareUrl?: string | null;
+  platformEmailDeliveryStatus?: string | null;
+  schoolCode?: string | null;
+  loginUrl?: string | null;
 };
 
 export const listSchools = async (params?: { page?: number; limit?: number; status?: string; query?: string; includeDeleted?: boolean }) => {
@@ -139,6 +142,9 @@ export const createSchoolAdmin = async (schoolId: string, adminEmail: string) =>
     manualShareRequired?: boolean;
     manualShareText?: string | null;
     manualShareUrl?: string | null;
+    platformEmailDeliveryStatus?: string | null;
+    schoolCode?: string | null;
+    loginUrl?: string | null;
   }>(
     `/admin/schools/${schoolId}/admins`,
     { adminEmail },

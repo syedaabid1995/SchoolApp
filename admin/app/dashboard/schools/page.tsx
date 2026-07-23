@@ -18,6 +18,7 @@ import { listSubscriptionPlans, upsertSubscription } from '../../../services/sub
 import { useNotify } from '../../../components/NotificationProvider';
 import FullPageLoader from '../../../components/FullPageLoader';
 import Button from '../../../components/Button';
+import WhatsAppCredentialShareDialog from '../../../components/WhatsAppCredentialShareDialog';
 
 type ToolbarAction = 'refresh' | 'export' | 'print' | 'pdf' | null;
 type MoreAction = 'export-page' | 'export-all';
@@ -41,8 +42,13 @@ export default function SchoolsPage() {
     email: string;
     tempPassword: string;
     manualShareRequired?: boolean;
+    manualShareText?: string | null;
     manualShareUrl?: string | null;
+    platformEmailDeliveryStatus?: string | null;
+    schoolCode?: string | null;
+    loginUrl?: string | null;
   } | null>(null);
+  const [whatsAppShareMessage, setWhatsAppShareMessage] = useState<string | null>(null);
   const [formErrors, setFormErrors] = useState<Partial<Record<'name' | 'code' | 'subscriptionPlan' | 'adminEmail', string>>>({});
   const [expiryDates, setExpiryDates] = useState<Record<string, string>>({});
   const [debouncedQuery, setDebouncedQuery] = useState('');
@@ -104,7 +110,11 @@ export default function SchoolsPage() {
           email: result.adminUser.email,
           tempPassword: result.tempPassword,
           manualShareRequired: result.manualShareRequired,
+          manualShareText: result.manualShareText,
           manualShareUrl: result.manualShareUrl,
+          platformEmailDeliveryStatus: result.platformEmailDeliveryStatus,
+          schoolCode: result.schoolCode ?? result.school.code,
+          loginUrl: result.loginUrl,
         });
         notify.success('School created successfully!', `${createdSchoolName} has been created with admin account`);
       } else {
@@ -272,6 +282,7 @@ export default function SchoolsPage() {
     setForm({ name: '', code: '', subscriptionPlan: 'STANDARD', adminEmail: '' });
     setFormErrors({});
     setCreatedAdmin(null);
+    setWhatsAppShareMessage(null);
     setIsCodeAuto(true);
     setIsCreateModalOpen(true);
   };
@@ -281,6 +292,7 @@ export default function SchoolsPage() {
     setIsCreateModalOpen(false);
     setFormErrors({});
     setCreatedAdmin(null);
+    setWhatsAppShareMessage(null);
   };
 
   const validateCreateForm = () => {
@@ -961,6 +973,12 @@ export default function SchoolsPage() {
                       </div>
                     </div>
                     <div className="mt-5 grid gap-3 rounded-lg bg-white/70 p-4 text-sm text-emerald-950 sm:grid-cols-2">
+                      {createdAdmin.schoolCode ? (
+                        <div>
+                          <p className="text-xs font-semibold uppercase text-emerald-700">School Code</p>
+                          <p className="mt-1 break-all font-semibold">{createdAdmin.schoolCode}</p>
+                        </div>
+                      ) : null}
                       <div>
                         <p className="text-xs font-semibold uppercase text-emerald-700">Email</p>
                         <p className="mt-1 break-all font-semibold">{createdAdmin.email}</p>
@@ -971,17 +989,35 @@ export default function SchoolsPage() {
                           {createdAdmin.tempPassword}
                         </code>
                       </div>
+                      {createdAdmin.loginUrl ? (
+                        <div className="sm:col-span-2">
+                          <p className="text-xs font-semibold uppercase text-emerald-700">Login URL</p>
+                          <p className="mt-1 break-all font-semibold">{createdAdmin.loginUrl}</p>
+                        </div>
+                      ) : null}
+                      {createdAdmin.platformEmailDeliveryStatus ? (
+                        <div className="sm:col-span-2">
+                          <p className="text-xs font-semibold uppercase text-emerald-700">Credential Email</p>
+                          <p className="mt-1 font-semibold">{createdAdmin.platformEmailDeliveryStatus.replace(/_/g, ' ')}</p>
+                        </div>
+                      ) : null}
                     </div>
                     <div className="mt-5 flex flex-wrap justify-end gap-3">
-                      {createdAdmin.manualShareUrl ? (
-                        <a
-                          href={createdAdmin.manualShareUrl}
-                          target="_blank"
-                          rel="noreferrer"
-                          className="inline-flex items-center justify-center rounded-xl bg-emerald-600 px-4 py-2 text-xs font-semibold text-white hover:bg-emerald-700"
+                      {createdAdmin.manualShareText ? (
+                        <Button
+                          variant="success"
+                          size="sm"
+                          type="button"
+                          onClick={() => setWhatsAppShareMessage(createdAdmin.manualShareText ?? null)}
+                          icon={
+                            <svg className="h-4 w-4" fill="currentColor" viewBox="0 0 24 24">
+                              <path d="M12.04 2C6.58 2 2.13 6.45 2.13 11.91c0 1.75.46 3.45 1.34 4.95L2.05 22l5.26-1.38a9.86 9.86 0 0 0 4.73 1.2h.01c5.46 0 9.91-4.45 9.91-9.91S17.51 2 12.04 2Zm0 18.13h-.01a8.23 8.23 0 0 1-4.2-1.15l-.3-.18-3.12.82.83-3.04-.2-.31a8.2 8.2 0 0 1-1.26-4.36c0-4.56 3.71-8.27 8.28-8.27 2.21 0 4.29.86 5.85 2.43a8.23 8.23 0 0 1 2.42 5.84c0 4.56-3.71 8.27-8.29 8.27Zm4.54-6.19c-.25-.12-1.47-.72-1.7-.8-.23-.08-.4-.12-.56.12-.17.25-.64.8-.78.96-.14.17-.29.19-.54.06-.25-.12-1.05-.39-2-1.23-.74-.66-1.24-1.47-1.38-1.72-.14-.25-.02-.38.11-.5.11-.11.25-.29.37-.43.12-.14.17-.25.25-.42.08-.17.04-.31-.02-.43-.06-.12-.56-1.36-.77-1.86-.2-.49-.41-.42-.56-.43h-.48c-.17 0-.43.06-.66.31-.23.25-.87.85-.87 2.08s.9 2.42 1.02 2.59c.12.17 1.77 2.7 4.3 3.79.6.26 1.07.41 1.43.53.6.19 1.15.16 1.58.1.48-.07 1.47-.6 1.68-1.18.21-.58.21-1.08.15-1.18-.06-.1-.23-.16-.48-.29Z" />
+                            </svg>
+                          }
+                          iconPosition="left"
                         >
                           Share via WhatsApp
-                        </a>
+                        </Button>
                       ) : null}
                       <Button variant="outline" size="sm" type="button" onClick={closeCreateModal}>
                         Done
@@ -1118,6 +1154,11 @@ export default function SchoolsPage() {
             </aside>
           </div>
         ) : null}
+        <WhatsAppCredentialShareDialog
+          open={Boolean(whatsAppShareMessage)}
+          message={whatsAppShareMessage ?? ''}
+          onClose={() => setWhatsAppShareMessage(null)}
+        />
       </div>
     </div>
   );

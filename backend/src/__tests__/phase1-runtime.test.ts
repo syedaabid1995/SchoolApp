@@ -4,7 +4,12 @@ import { assertSafeCorsConfig, createCorsOriginChecker } from '../config/cors';
 import { env } from '../config/env';
 import { redactSensitive } from '../config/logger';
 import { getSignedUrlForKey, verifyLocalSignedStorageUrl } from '../services/s3.service';
-import { getSchoolRootDomains, resolveSchoolSubdomainFromHost } from '../utils/schoolDomain';
+import {
+  buildSchoolDomainUrl,
+  getSchoolRootDomains,
+  resolveSchoolRootDomainFromHost,
+  resolveSchoolSubdomainFromHost,
+} from '../utils/schoolDomain';
 
 test('production CORS rejects wildcard or empty origins', () => {
   assert.throws(
@@ -41,6 +46,8 @@ test('school subdomain resolver supports Akademifyy and SAAPT app roots', () => 
     assert.deepEqual(getSchoolRootDomains(), ['app.akademifyy.in', 'app.saapttech.com']);
     assert.equal(resolveSchoolSubdomainFromHost('che-00003.app.akademifyy.in'), 'che-00003');
     assert.equal(resolveSchoolSubdomainFromHost('che-00003.app.saapttech.com'), 'che-00003');
+    assert.equal(resolveSchoolRootDomainFromHost('https://app.saapttech.com/dashboard/schools'), 'app.saapttech.com');
+    assert.equal(buildSchoolDomainUrl('001', 'app.saapttech.com'), 'https://001.app.saapttech.com');
     assert.equal(resolveSchoolSubdomainFromHost('app.saapttech.com'), null);
     assert.equal(resolveSchoolSubdomainFromHost('api.saapttech.com'), null);
   } finally {
