@@ -1,0 +1,113 @@
+import 'dart:async';
+
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_riverpod/legacy.dart';
+
+import '../../../../core/network/parent_api_client.dart';
+import '../../../../core/notifications/parent_notification_service.dart';
+import '../../../../core/storage/parent_token_storage.dart';
+import '../../data/parent_models.dart';
+import '../../data/parent_repository.dart';
+
+final parentRepositoryProvider = Provider<ParentRepository>((ref) {
+  return ParentRepository(
+    dio: ref.watch(parentDioProvider),
+    tokenStorage: ref.watch(parentTokenStorageProvider),
+  );
+});
+
+final parentAuthControllerProvider =
+    AsyncNotifierProvider<ParentAuthController, ParentSession>(
+      ParentAuthController.new,
+    );
+
+class ParentAuthController extends AsyncNotifier<ParentSession> {
+  @override
+  Future<ParentSession> build() async {
+    final session = await ref.watch(parentRepositoryProvider).restoreSession();
+    _syncPush(session);
+    return session;
+  }
+
+  Future<void> login({required String email, required String password}) async {
+    state = const AsyncLoading();
+    state = await AsyncValue.guard(
+      () => ref
+          .read(parentRepositoryProvider)
+          .login(email: email, password: password),
+    );
+    _syncPush(state.value);
+  }
+
+  Future<void> verifyMfa({
+    required String challengeId,
+    required String code,
+  }) async {
+    state = const AsyncLoading();
+    state = await AsyncValue.guard(
+      () => ref
+          .read(parentRepositoryProvider)
+          .verifyMfa(challengeId: challengeId, code: code),
+    );
+    _syncPush(state.value);
+  }
+
+  Future<void> logout() async {
+    state = const AsyncLoading();
+    await ref.read(parentRepositoryProvider).logout();
+    ref.invalidate(parentChildrenProvider);
+    ref.invalidate(selectedChildProvider);
+    state = const AsyncData(ParentSession.unauthenticated());
+  }
+
+  void _syncPush(ParentSession? session) {
+    if (session?.isAuthenticated ?? false) {
+      unawaited(ref.read(parentNotificationServiceProvider).syncDeviceToken());
+    }
+  }
+}
+
+final parentProfileProvider = FutureProvider.autoDispose<ParentProfile>((ref) {
+  return ref.watch(parentRepositoryProvider).getProfile();
+});
+
+final parentChildrenProvider = FutureProvider.autoDispose<List<ParentChild>>((
+  ref,
+) {
+  return ref.watch(parentRepositoryProvider).getChildren();
+});
+
+final selectedChildProvider = StateProvider<ParentChild?>((ref) => null);
+
+final effectiveSelectedChildProvider = Provider<AsyncValue<ParentChild?>>((
+  ref,
+) {
+  final selected = ref.watch(selectedChildProvider);
+  if (selected != null) return AsyncData(selected);
+  final children = ref.watch(parentChildrenProvider);
+  return children.whenData((items) => items.isEmpty ? null : items.first);
+});
+
+final parentAttendanceProvider = FutureProvider.autoDispose
+    .family<ParentAttendance, ParentChild>((ref, child) {
+      return ref
+          .watch(parentRepositoryProvider)
+          .getAttendance(childId: child.id, month: DateTime.now());
+    });
+
+final parentResultsProvider = FutureProvider.autoDispose
+    .family<List<ParentResult>, ParentChild>((ref, child) {
+      return ref.watch(parentRepositoryProvider).getResults(childId: child.id);
+    });
+
+final parentFeeSummaryProvider = FutureProvider.autoDispose
+    .family<ParentFeeSummary, ParentChild>((ref, child) {
+      return ref
+          .watch(parentRepositoryProvider)
+          .getFeeSummary(childId: child.id);
+    });
+
+final parentNoticesProvider = FutureProvider.autoDispose
+    .family<List<ParentNotice>, ParentChild?>((ref, child) {
+      return ref.watch(parentRepositoryProvider).getNotices(childId: child?.id);
+    });

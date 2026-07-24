@@ -363,7 +363,7 @@ export const login = async (req: Request, res: Response) => {
     });
     throw err;
   });
-  const schoolScope = selectedSchoolId ?? submittedSchoolScope;
+  let schoolScope = selectedSchoolId ?? submittedSchoolScope;
 
   if (schoolScope !== submittedSchoolScope) {
     try {
@@ -462,6 +462,21 @@ export const login = async (req: Request, res: Response) => {
     },
     select: loginUserSelect,
   });
+
+  if (!user && !selectedSchoolId && loginType === 'parent') {
+    const parentMatches = await AuthLoginRepository.user.findMany({
+      where: {
+        email: { equals: identifier, mode: 'insensitive' },
+        roles: { some: { role: { name: 'PARENT' } } },
+      },
+      select: loginUserSelect,
+      take: 2,
+    });
+    if (parentMatches.length === 1) {
+      user = parentMatches[0];
+      schoolScope = user.schoolId ?? schoolScope;
+    }
+  }
 
   if (!user) {
     await failLogin('user_not_found_or_wrong_school', { selectedSchoolId, loginType: loginType ?? null });
