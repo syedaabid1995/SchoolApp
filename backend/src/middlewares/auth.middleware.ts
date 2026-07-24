@@ -6,6 +6,7 @@ import { prisma } from '../config/db';
 import { PermissionCodes as P, type PermissionCode } from '../permissions/permission-manifest';
 import { AuthorizationService } from '../services/authorization.service';
 import { runWithRequestContext } from '../services/requestContext.service';
+import { checkSubscriptionStatus } from '../services/subscription.service';
 
 type PermissionRequirement = PermissionCode | PermissionCode[];
 
@@ -90,8 +91,11 @@ export const authMiddleware = async (req: Request, _res: Response, next: NextFun
         reason.includes('payment') || reason.includes('subscription') || reason.includes('overdue');
       const isSubscriptionPath = req.originalUrl.startsWith('/api/v1/subscriptions');
       if (isPaymentRestricted && !isSubscriptionPath) {
-        next(new HttpError(403, 'Payment overdue - access limited to plans page'));
-        return;
+        const subscriptionStatus = await checkSubscriptionStatus(schoolId).catch(() => 'SUSPENDED' as const);
+        if (subscriptionStatus === 'SUSPENDED') {
+          next(new HttpError(403, 'Payment overdue - access limited to plans page'));
+          return;
+        }
       }
       if (!isPaymentRestricted) {
         next(new HttpError(403, 'Account suspended'));

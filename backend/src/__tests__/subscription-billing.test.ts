@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { prisma } from '../config/db';
 import {
+  checkSubscriptionStatus,
   enforceLimits,
   generateSchoolSubscriptionInvoice,
   markOverdueSubscriptionInvoices,
@@ -246,6 +247,60 @@ test('overdue subscription invoice suspends the school and marks subscription ov
   assert.deepEqual(updates.find((item) => item.target === 'invoice')?.data, { status: 'OVERDUE' });
   assert.equal(updates.find((item) => item.target === 'subscription')?.data.status, 'OVERDUE');
   assert.equal(updates.find((item) => item.target === 'school')?.data.status, 'SUSPENDED');
+});
+
+test('current active subscription is not blocked by a stale overdue invoice', async () => {
+  patch(prisma.subscription as any, 'findUnique', async () => ({
+    ...subscription,
+    status: 'ACTIVE',
+    startsAt: new Date('2026-07-24T00:00:00.000Z'),
+    endsAt: new Date('2026-08-26T00:00:00.000Z'),
+    nextDueAt: new Date('2026-09-10T00:00:00.000Z'),
+    school: { ...subscription.school, status: 'ACTIVE', statusReason: null },
+  }));
+  patch(prisma.subscriptionInvoice as any, 'findFirst', async () => {
+    throw new Error('stale invoice lookup should not drive subscription access');
+  });
+
+  const status = await checkSubscriptionStatus(SCHOOL_A_ID);
+
+  assert.equal(status, 'ACTIVE');
+});
+
+test('overdue scheduler skips invoices superseded by a newer active subscription period', async () => {
+  const updates: Array<{ target: string; data: any }> = [];
+  patch(prisma.subscriptionInvoice as any, 'findMany', async () => [
+    {
+      id: INVOICE_ID,
+      schoolId: SCHOOL_A_ID,
+      subscriptionId: SUBSCRIPTION_ID,
+      dueDate: new Date('2026-07-20T00:00:00.000Z'),
+      billingPeriodEnd: new Date('2026-07-05T00:00:00.000Z'),
+      subscription: {
+        ...subscription,
+        status: 'ACTIVE',
+        endsAt: new Date('2026-08-26T00:00:00.000Z'),
+        nextDueAt: new Date('2026-09-10T00:00:00.000Z'),
+      },
+    },
+  ]);
+  patch(prisma.subscriptionInvoice as any, 'update', async ({ data }: any) => {
+    updates.push({ target: 'invoice', data });
+    return data;
+  });
+  patch(prisma.subscription as any, 'update', async ({ data }: any) => {
+    updates.push({ target: 'subscription', data });
+    return data;
+  });
+  patch(prisma.school as any, 'update', async ({ data }: any) => {
+    updates.push({ target: 'school', data });
+    return data;
+  });
+
+  const result = await markOverdueSubscriptionInvoices(new Date('2026-07-24T00:00:00.000Z'));
+
+  assert.equal(result.count, 0);
+  assert.deepEqual(updates, []);
 });
 
 test('new school creation starts a proper trial subscription', async () => {

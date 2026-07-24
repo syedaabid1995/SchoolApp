@@ -72,6 +72,21 @@ const invalidateSchoolSubscriptionAuthorizationCache = async (schoolId: string) 
   await PermissionCacheService.invalidateSchool(schoolId);
 };
 
+const paymentRestrictedSchoolWhere = (schoolId: string) => ({
+  id: schoolId,
+  status: 'SUSPENDED' as const,
+  OR: paidRestrictedStatusReasons.map((reason) => ({
+    statusReason: { contains: reason, mode: 'insensitive' as const },
+  })),
+});
+
+const clearPaymentRestrictedSchoolStatus = async (schoolId: string) => {
+  await prisma.school.updateMany({
+    where: paymentRestrictedSchoolWhere(schoolId),
+    data: { status: 'ACTIVE', statusReason: null },
+  });
+};
+
 const addDays = (date: Date, days: number) => {
   const next = new Date(date.getTime());
   next.setDate(next.getDate() + days);
@@ -306,44 +321,27 @@ const ensurePlanByName = async (name: string) => {
 };
 
 export const checkSubscriptionStatus = async (schoolId: string): Promise<'ACTIVE' | 'GRACE_PERIOD' | 'SUSPENDED'> => {
-  const [subscription, overdueInvoice] = await Promise.all([
-    prisma.subscription.findUnique({
-      where: { schoolId },
-      include: { school: true },
-    }),
-    prisma.subscriptionInvoice.findFirst({
-      where: {
-        schoolId,
-        status: { in: [...openInvoiceStatuses] },
-        dueDate: { lt: new Date() },
-        balanceAmount: { gt: 0 },
-      },
-      select: { id: true },
-    }),
-  ]);
+  const subscription = await prisma.subscription.findUnique({
+    where: { schoolId },
+    include: { school: true },
+  });
   
   if (!subscription) return 'SUSPENDED';
   
   const now = new Date();
-  
-  // Check if school is manually suspended
-  if (subscription.school.status === 'SUSPENDED') {
-    return 'SUSPENDED';
-  }
+  const status = String(subscription.status ?? '').toUpperCase();
 
-  if (overdueInvoice) {
-    return 'SUSPENDED';
-  }
-  
-  // Check if subscription is expired
   if (
-    ['EXPIRED', 'CANCELLED', 'PENDING'].includes(subscription.status) ||
+    ['EXPIRED', 'CANCELLED', 'PENDING', 'OVERDUE', 'PAUSED'].includes(status) ||
     (subscription.nextDueAt && subscription.nextDueAt < now)
   ) {
     return 'SUSPENDED';
   }
+
+  if (subscription.school.status === 'SUSPENDED') {
+    return isRestrictedByPaymentReason(subscription.school.statusReason) ? 'ACTIVE' : 'SUSPENDED';
+  }
   
-  // Check if in grace period
   if (subscription.endsAt && subscription.endsAt < now && subscription.nextDueAt && subscription.nextDueAt >= now) {
     return 'GRACE_PERIOD';
   }
@@ -1216,7 +1214,7 @@ const writeSubscription = async (params: {
   const graceDays = 15;
   const nextDueAt = endsAt ? addDays(endsAt, graceDays) : null;
 
-  return prisma.subscription.upsert({
+  const subscription = await prisma.subscription.upsert({
     where: { schoolId: params.schoolId },
     update: {
       planId: params.planId ?? undefined,
@@ -1247,6 +1245,12 @@ const writeSubscription = async (params: {
       teacherLimit: params.teacherLimit ?? plan?.teacherLimit ?? 0,
     },
   });
+
+  if (limitEligibleSubscriptionStatuses.includes(subscription.status as (typeof limitEligibleSubscriptionStatuses)[number])) {
+    await clearPaymentRestrictedSchoolStatus(params.schoolId);
+  }
+
+  return subscription;
 };
 
 export const assignSchoolSubscriptionPlan = async (params: {
@@ -1343,6 +1347,7 @@ export const extendSchoolSubscriptionTrial = async (params: {
     where: { schoolId: params.schoolId },
     data: { status: 'TRIAL', endsAt: addDays(base, params.extraDays), nextDueAt: addDays(base, params.extraDays + existing.graceDays) },
   });
+  await clearPaymentRestrictedSchoolStatus(params.schoolId);
   await auditSubscriptionAction({
     schoolId: params.schoolId,
     subscriptionId: subscription.id,
@@ -1439,6 +1444,9 @@ const updateSubscriptionStatus = async (params: {
     where: { schoolId: params.schoolId },
     data: { status: params.status },
   });
+  if (limitEligibleSubscriptionStatuses.includes(subscription.status as (typeof limitEligibleSubscriptionStatuses)[number])) {
+    await clearPaymentRestrictedSchoolStatus(params.schoolId);
+  }
   await auditSubscriptionAction({
     schoolId: params.schoolId,
     subscriptionId: subscription.id,
@@ -1503,6 +1511,7 @@ export const renewSchoolSubscription = async (params: {
     where: { schoolId: params.schoolId },
     data: { status: 'ACTIVE', startsAt: start, endsAt, nextDueAt: addDays(endsAt, existing.graceDays), paidAt: new Date() },
   });
+  await clearPaymentRestrictedSchoolStatus(params.schoolId);
   await auditSubscriptionAction({
     schoolId: params.schoolId,
     subscriptionId: subscription.id,
@@ -1694,7 +1703,18 @@ export const markOverdueSubscriptionInvoices = async (now = new Date()) => {
     include: { subscription: { include: { school: true } } },
   });
 
+  let count = 0;
+
   for (const invoice of overdueInvoices) {
+    const isSupersededByCurrentAccess =
+      limitEligibleSubscriptionStatuses.includes(invoice.subscription.status as (typeof limitEligibleSubscriptionStatuses)[number]) &&
+      Boolean(invoice.subscription.nextDueAt && invoice.subscription.nextDueAt > invoice.dueDate) &&
+      Boolean(invoice.subscription.endsAt && invoice.billingPeriodEnd && invoice.subscription.endsAt > invoice.billingPeriodEnd);
+
+    if (isSupersededByCurrentAccess) {
+      continue;
+    }
+
     await prisma.$transaction(async (tx) => {
       await tx.subscriptionInvoice.update({
         where: { id: invoice.id },
@@ -1712,9 +1732,10 @@ export const markOverdueSubscriptionInvoices = async (now = new Date()) => {
         },
       });
     });
+    count += 1;
   }
 
-  return { count: overdueInvoices.length };
+  return { count };
 };
 
 export const incrementUsage = async (schoolId: string, type: 'students' | 'teachers', delta = 1) => {

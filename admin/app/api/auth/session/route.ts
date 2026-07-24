@@ -59,6 +59,22 @@ const decodePayload = (token: string) => {
   return JSON.parse(json) as Record<string, unknown>;
 };
 
+const isRestrictedSubscription = (subscription: {
+  status?: string;
+  endsAt?: string | null;
+  nextDueAt?: string | null;
+}) => {
+  const now = new Date();
+  const status = String(subscription.status ?? '').toUpperCase();
+  const nextDueAt = subscription.nextDueAt ? new Date(subscription.nextDueAt) : null;
+  const endsAt = subscription.endsAt ? new Date(subscription.endsAt) : null;
+  return (
+    ['EXPIRED', 'CANCELLED', 'PENDING', 'OVERDUE', 'PAUSED'].includes(status) ||
+    Boolean(nextDueAt && !Number.isNaN(nextDueAt.getTime()) && nextDueAt < now) ||
+    Boolean(endsAt && !Number.isNaN(endsAt.getTime()) && endsAt < now)
+  );
+};
+
 const getBackendSetCookies = (headers: Headers) => {
   const getSetCookie = (headers as Headers & { getSetCookie?: () => string[] }).getSetCookie;
   if (typeof getSetCookie === 'function') return getSetCookie.call(headers);
@@ -153,7 +169,7 @@ export async function GET(req: Request) {
     resolvedSchoolId = data.schoolId ?? resolvedSchoolId;
     permissionCodes = Array.isArray(data.permissionCodes) ? data.permissionCodes : [];
 
-    if (!subscriptionRestricted && payload?.schoolId) {
+    if (payload?.schoolId) {
       try {
         const subRes = await fetch(`${API_BASE}/subscriptions`, {
           headers: { Authorization: `Bearer ${token}` },
@@ -165,16 +181,7 @@ export async function GET(req: Request) {
             endsAt?: string | null;
             nextDueAt?: string | null;
           };
-          const now = new Date();
-          const endsAt = sub.endsAt ? new Date(sub.endsAt) : null;
-          const nextDueAt = sub.nextDueAt ? new Date(sub.nextDueAt) : null;
-          if (
-            sub.status === 'EXPIRED' ||
-            (nextDueAt && !Number.isNaN(nextDueAt.getTime()) && nextDueAt < now) ||
-            (endsAt && !Number.isNaN(endsAt.getTime()) && endsAt < now)
-          ) {
-            subscriptionRestricted = true;
-          }
+          subscriptionRestricted = isRestrictedSubscription(sub);
         }
       } catch {
         // Ignore subscription check failures

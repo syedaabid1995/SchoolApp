@@ -46,6 +46,7 @@ import {
 import { isAuthenticatorAppVerificationEnabled } from '../../../../services/authSecurity.service';
 import { buildAuthAuditMetadata, createAuthAuditLog, maskEmailForAudit } from '../../../../utils/audit';
 import { AuthorizationService } from '../../../../services/authorization.service';
+import { checkSubscriptionStatus } from '../../../../services/subscription.service';
 import { hashPassword, verifyPassword } from '../../../../utils/password';
 import { schoolIdentifierWhere } from '../../../../utils/schoolDomain';
 import { hashToken } from '../../../../utils/token';
@@ -119,6 +120,12 @@ const getSchoolAccessState = async (schoolId: string): Promise<'ACTIVE' | 'PAYME
 
   const reason = (school.statusReason ?? '').toLowerCase();
   if (reason.includes('payment') || reason.includes('subscription') || reason.includes('overdue')) {
+    try {
+      const subscriptionStatus = await checkSubscriptionStatus(schoolId);
+      if (subscriptionStatus !== 'SUSPENDED') return 'ACTIVE';
+    } catch {
+      // Keep the payment-restricted state if current subscription access cannot be confirmed.
+    }
     return 'PAYMENT_RESTRICTED';
   }
 

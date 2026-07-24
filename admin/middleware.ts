@@ -12,7 +12,6 @@ const decodeToken = (token: string) => {
     const parsed = JSON.parse(json) as Record<string, unknown>;
     return {
       role: (parsed.role as string | undefined) ?? null,
-      subscriptionRestricted: Boolean(parsed.subscriptionRestricted),
     };
   } catch {
     return null;
@@ -51,12 +50,6 @@ export function middleware(req: NextRequest) {
 
     const tokenData = decodeToken(token);
     const role = tokenData?.role ?? null;
-    const subscriptionRestricted = tokenData?.subscriptionRestricted ?? false;
-
-    if (subscriptionRestricted && pathname !== '/dashboard/plans') {
-      return NextResponse.redirect(new URL('/dashboard/plans', req.url));
-    }
-
     if (
       (
         pathname.startsWith('/dashboard/schools') ||
