@@ -99,9 +99,9 @@ export default function ExamsPage() {
     enabled: Boolean(effectiveSchoolId),
   });
   const { data: sections } = useQuery({
-    queryKey: ['sections', effectiveSchoolId],
-    queryFn: () => listSections({ schoolId: effectiveSchoolId }),
-    enabled: Boolean(effectiveSchoolId),
+    queryKey: ['sections', effectiveSchoolId, examBasics.classId],
+    queryFn: () => listSections({ schoolId: effectiveSchoolId, classId: examBasics.classId }),
+    enabled: Boolean(effectiveSchoolId && examBasics.classId),
   });
   const canLoadAssignedSubjects = Boolean(effectiveSchoolId && examBasics.academicYearId && examBasics.classId && examBasics.sectionId);
   const { data: assignedSubjects, isLoading: assignedSubjectsLoading } = useQuery({
@@ -409,15 +409,14 @@ export default function ExamsPage() {
                   value={examBasics.sectionId}
                   onChange={(e) => setExamBasics({ ...examBasics, sectionId: e.target.value })}
                   className="w-full rounded-lg border border-slate/20 px-3 py-2 text-sm"
+                  disabled={!examBasics.classId}
                 >
                   <option value="">Select section</option>
-                  {sections
-                    ?.filter((section: { classId: string }) => section.classId === examBasics.classId)
-                    .map((section: { id: string; name: string }) => (
-                      <option key={section.id} value={section.id}>
-                        {section.name}
-                      </option>
-                    ))}
+                  {sections?.map((section: { id: string; name: string }) => (
+                    <option key={section.id} value={section.id}>
+                      {section.name}
+                    </option>
+                  ))}
                 </select>
               </div>
               <div>

@@ -73,9 +73,9 @@ export default function MarksUploadPage() {
     enabled: Boolean(effectiveSchoolId),
   });
   const { data: sections } = useQuery({
-    queryKey: ['sections', effectiveSchoolId],
-    queryFn: () => listSections({ schoolId: effectiveSchoolId }),
-    enabled: Boolean(effectiveSchoolId),
+    queryKey: ['sections', effectiveSchoolId, filters.classId],
+    queryFn: () => listSections({ schoolId: effectiveSchoolId, classId: filters.classId }),
+    enabled: Boolean(effectiveSchoolId && filters.classId),
   });
   const { data: subjects } = useQuery({
     queryKey: ['subjects', effectiveSchoolId],
@@ -131,9 +131,7 @@ export default function MarksUploadPage() {
   const selectedPaper = examPapers.find((paper) => paper.subjectId === filters.subjectId);
   const maxMarks = selectedPaper?.maxMarks ?? 100;
 
-  const sectionOptions = useMemo(() => {
-    return (sections ?? []).filter((section: { classId: string }) => section.classId === filters.classId);
-  }, [sections, filters.classId]);
+  const sectionOptions = useMemo(() => sections ?? [], [sections]);
 
   const loadStudents = async () => {
     let error = '';
