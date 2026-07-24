@@ -327,25 +327,97 @@ test('parent attendance calendar preserves status precedence and remarks through
     },
   ]) as any);
   const restoreRead = replaceMethod(attendanceReadService, 'getStudentAttendance', (async () => [
-    canonicalStudentRecord({ source: 'session-attendance', sourceId: 'sr-1', status: 'PRESENT', note: null }),
-    canonicalStudentRecord({ source: 'session-attendance', sourceId: 'sr-2', status: 'ABSENT', note: 'Sick leave' }),
+    canonicalStudentRecord({
+      source: 'period-attendance',
+      sourceId: 'sr-1',
+      status: 'PRESENT',
+      note: null,
+      unit: {
+        mode: 'TWICE_DAILY',
+        unitType: 'SLOT',
+        slotId: 'morning-slot',
+        periodId: null,
+        timetableEntryId: null,
+      },
+    }),
+    canonicalStudentRecord({
+      source: 'period-attendance',
+      sourceId: 'sr-2',
+      status: 'ABSENT',
+      note: 'Sick leave',
+      unit: {
+        mode: 'TWICE_DAILY',
+        unitType: 'SLOT',
+        slotId: 'afternoon-slot',
+        periodId: null,
+        timetableEntryId: null,
+      },
+    }),
   ]) as any);
+  const restoreUnits = replaceMethod(require('../../../services/attendanceSheet.service'), 'resolveAttendanceUnits', (async () => ({
+    configuration: { mode: 'TWICE_DAILY' },
+    units: [
+      {
+        unitType: 'SLOT',
+        label: 'Morning',
+        slotId: 'morning-slot',
+        startTime: '09:00',
+        endTime: '12:00',
+        source: 'SLOT',
+      },
+      {
+        unitType: 'SLOT',
+        label: 'Afternoon',
+        slotId: 'afternoon-slot',
+        startTime: '13:00',
+        endTime: '16:00',
+        source: 'SLOT',
+      },
+    ],
+  })) as any);
 
   const res = response();
 
   try {
-    await getParentAttendance({ auth: { userId: USER_ID, schoolId: SCHOOL_ID }, query: { month: '2026-02' } } as any, res as any);
+    await getParentAttendance({ auth: { userId: USER_ID, schoolId: SCHOOL_ID }, query: { month: '2026-02', date: DATE } } as any, res as any);
 
     assert.equal(res.statusCode, 200);
     assert.deepEqual(res.body, {
       calendar: [{ date: DATE, status: 'Absent', remark: 'Sick leave' }],
       presentDays: 0,
       absentDays: 1,
+      selectedDate: DATE,
+      mode: 'TWICE_DAILY',
+      sessions: [
+        {
+          id: SESSION_ID,
+          unitType: 'SLOT',
+          mode: 'TWICE_DAILY',
+          label: 'Morning Session',
+          startTime: '09:00',
+          endTime: '12:00',
+          status: 'Present',
+          remark: null,
+          sequence: 1,
+        },
+        {
+          id: SESSION_ID,
+          unitType: 'SLOT',
+          mode: 'TWICE_DAILY',
+          label: 'Afternoon Session',
+          startTime: '13:00',
+          endTime: '16:00',
+          status: 'Absent',
+          remark: 'Sick leave',
+          sequence: 2,
+        },
+      ],
     });
   } finally {
     restoreParents();
     restoreLinks();
     restoreRead();
+    restoreUnits();
   }
 });
 

@@ -3,6 +3,7 @@ import { prisma } from '../config/db';
 import { HttpError } from '../middlewares/error.middleware';
 import { requireAuth } from '../middlewares/rbac.middleware';
 import { attendanceReadService } from '../modules/attendance/services/attendance-read.service';
+import * as attendanceSheetService from '../services/attendanceSheet.service';
 import { evaluateFailCriteria, getExamGradingSettings } from '../services/grade.service';
 import { parseLimit } from '../utils/pagination';
 
@@ -373,7 +374,7 @@ export const getParentResults = async (req: Request, res: Response) => {
 
 export const getParentAttendance = async (req: Request, res: Response) => {
   const auth = requireAuth(req);
-  const { childId, month } = req.query;
+  const { childId, month, date } = req.query;
   const { child } = await requireChildAccess(auth.userId, typeof childId === 'string' ? childId : undefined);
 
   const start = month && typeof month === 'string' ? new Date(`${month}-01`) : new Date();
@@ -388,7 +389,6 @@ export const getParentAttendance = async (req: Request, res: Response) => {
     studentId: child.id,
     fromDate: start,
     toDate: endInclusive,
-    source: 'session-attendance',
   });
 
   const statusRank: Record<string, number> = {
@@ -402,6 +402,32 @@ export const getParentAttendance = async (req: Request, res: Response) => {
     if (status === 'LATE') return 'Late';
     if (status === 'HALF_DAY') return 'Half Day';
     return 'Present';
+  };
+  const dateKey = (value: Date) => value.toISOString().slice(0, 10);
+  const selectedDate =
+    typeof date === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(date) ? date : dateKey(new Date());
+
+  const matchesUnit = (
+    record: (typeof records)[number],
+    unit: Awaited<ReturnType<typeof attendanceSheetService.resolveAttendanceUnits>>['units'][number],
+  ) => {
+    const recordUnit = record.unit;
+    if (unit.unitType === 'DAY') {
+      return recordUnit?.unitType === 'DAY' || record.source === 'session-attendance';
+    }
+    if (unit.unitType === 'SLOT') {
+      return recordUnit?.unitType === 'SLOT' && recordUnit.slotId === (unit.slotId ?? null);
+    }
+    if (unit.unitType === 'PERIOD') {
+      return recordUnit?.unitType === 'PERIOD' && recordUnit.periodId === (unit.periodId ?? null);
+    }
+    if (unit.unitType === 'TIMETABLE_ENTRY') {
+      return (
+        recordUnit?.unitType === 'TIMETABLE_ENTRY' &&
+        recordUnit.timetableEntryId === (unit.timetableEntryId ?? null)
+      );
+    }
+    return false;
   };
 
   const byDate = new Map<string, { status: string; remark?: string | null }>();
@@ -423,8 +449,48 @@ export const getParentAttendance = async (req: Request, res: Response) => {
   }));
   const presentDays = calendar.filter((entry) => entry.status === 'Present').length;
   const absentDays = calendar.filter((entry) => entry.status === 'Absent').length;
+  const selectedDateObject = new Date(`${selectedDate}T00:00:00.000Z`);
+  const attendanceUnits = child.classId
+    ? await attendanceSheetService.resolveAttendanceUnits({
+        schoolId: child.schoolId,
+        academicYearId: child.academicYearId ?? null,
+        classId: child.classId,
+        sectionId: child.sectionId ?? null,
+        date: selectedDateObject,
+      })
+    : {
+        configuration: { mode: 'DAILY' as const },
+        units: [{ unitType: 'DAY' as const, label: 'Day', source: 'DAY' as const }],
+      };
+  const selectedRecords = records.filter((record) => record.date === selectedDate);
+  const sessions = attendanceUnits.units.map((unit, index) => {
+    const record = selectedRecords.find((entry) => matchesUnit(entry, unit));
+    return {
+      id: record?.sessionId ?? `${selectedDate}:${unit.unitType}:${unit.slotId ?? unit.periodId ?? unit.timetableEntryId ?? 'day'}`,
+      unitType: unit.unitType,
+      mode: attendanceUnits.configuration.mode,
+      label:
+        unit.unitType === 'DAY'
+          ? 'Daily Session'
+          : unit.unitType === 'SLOT'
+            ? `${unit.label} Session`
+            : unit.label,
+      startTime: 'startTime' in unit ? unit.startTime ?? null : null,
+      endTime: 'endTime' in unit ? unit.endTime ?? null : null,
+      status: record ? normalizeStatus(record.status) : 'Unmarked',
+      remark: record?.note ?? null,
+      sequence: index + 1,
+    };
+  });
 
-  res.status(200).json({ calendar, presentDays, absentDays });
+  res.status(200).json({
+    calendar,
+    presentDays,
+    absentDays,
+    selectedDate,
+    mode: attendanceUnits.configuration.mode,
+    sessions,
+  });
 };
 
 export const listParentNotices = async (req: Request, res: Response) => {

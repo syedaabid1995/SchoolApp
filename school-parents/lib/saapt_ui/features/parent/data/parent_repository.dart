@@ -126,13 +126,17 @@ class ParentRepository {
   Future<ParentAttendance> getAttendance({
     required String childId,
     required DateTime month,
+    DateTime? date,
   }) async {
+    final selectedDate = date ?? DateTime.now();
     final response = await _dio.get<Map<String, dynamic>>(
       '/parents/portal/attendance',
       queryParameters: {
         'childId': childId,
         'month':
             '${month.year.toString().padLeft(4, '0')}-${month.month.toString().padLeft(2, '0')}',
+        'date':
+            '${selectedDate.year.toString().padLeft(4, '0')}-${selectedDate.month.toString().padLeft(2, '0')}-${selectedDate.day.toString().padLeft(2, '0')}',
       },
     );
     return ParentAttendance.fromJson(

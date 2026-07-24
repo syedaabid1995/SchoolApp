@@ -82,11 +82,9 @@ class _AttendanceContent extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final latestAbsent =
-        attendance.calendar
-            .where((day) => day.status.toLowerCase() == 'absent')
-            .toList()
-          ..sort((a, b) => b.date.compareTo(a.date));
+    final absentSessions = attendance.sessions
+        .where((session) => session.status.toLowerCase() == 'absent')
+        .toList();
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -94,20 +92,20 @@ class _AttendanceContent extends StatelessWidget {
         Row(
           children: [
             StatCard(
-              value: attendance.presentDays.toString(),
+              value: attendance.presentSessions.toString(),
               label: 'Present',
               color: SaaptTheme.success,
             ),
             const SizedBox(width: 12),
             StatCard(
-              value: attendance.absentDays.toString(),
+              value: attendance.absentSessions.toString(),
               label: 'Absent',
               color: const Color(0xFFEF4C55),
             ),
             const SizedBox(width: 12),
             StatCard(
-              value: '${attendance.attendancePercent}%',
-              label: 'Month',
+              value: '${attendance.selectedDayPercent}%',
+              label: 'Day',
               color: SaaptTheme.warning,
             ),
           ],
@@ -122,20 +120,18 @@ class _AttendanceContent extends StatelessWidget {
           ),
         ),
         const SizedBox(height: 16),
-        if (attendance.calendar.isEmpty)
+        if (attendance.sessions.isEmpty)
           const EmptyPanel(
-            message: 'No attendance records are available for this month.',
+            message: 'No attendance sessions are available for this date.',
           )
         else
-          ...attendance.calendar
-              .take(12)
-              .map(
-                (day) => Padding(
-                  padding: const EdgeInsets.only(bottom: 14),
-                  child: _DayAttendanceCard(day: day),
-                ),
-              ),
-        if (latestAbsent.isNotEmpty) ...[
+          ...attendance.sessions.map(
+            (session) => Padding(
+              padding: const EdgeInsets.only(bottom: 14),
+              child: _SessionAttendanceCard(session: session),
+            ),
+          ),
+        if (absentSessions.isNotEmpty) ...[
           const SizedBox(height: 10),
           Container(
             width: double.infinity,
@@ -158,7 +154,7 @@ class _AttendanceContent extends StatelessWidget {
                 ),
                 const SizedBox(height: 10),
                 Text(
-                  '${child.name} was marked absent on ${DateFormat('d MMM y').format(latestAbsent.first.date)}.',
+                  '${child.name} was marked absent for ${absentSessions.first.label.toLowerCase()}.',
                   style: const TextStyle(
                     color: Color(0xFF586985),
                     fontSize: 18,
@@ -175,20 +171,31 @@ class _AttendanceContent extends StatelessWidget {
   }
 }
 
-class _DayAttendanceCard extends StatelessWidget {
-  const _DayAttendanceCard({required this.day});
+class _SessionAttendanceCard extends StatelessWidget {
+  const _SessionAttendanceCard({required this.session});
 
-  final ParentAttendanceDay day;
+  final ParentAttendanceSession session;
 
   @override
   Widget build(BuildContext context) {
-    final absent = day.status.toLowerCase() == 'absent';
-    final late = day.status.toLowerCase() == 'late';
+    final status = session.status.toLowerCase();
+    final absent = status == 'absent';
+    final late = status == 'late';
+    final unmarked = status == 'unmarked';
     final color = absent
         ? const Color(0xFFEF4C55)
         : late
         ? SaaptTheme.warning
+        : unmarked
+        ? const Color(0xFF8EA0BA)
         : SaaptTheme.success;
+    final icon = session.unitType == 'SLOT'
+        ? (session.label.toLowerCase().contains('afternoon') ? '☀️' : '🌅')
+        : session.unitType == 'DAY'
+        ? '📅'
+        : '📚';
+    final timeRange = _formatTimeRange(session.startTime, session.endTime);
+
     return ParentCard(
       child: Row(
         children: [
@@ -201,10 +208,7 @@ class _DayAttendanceCard extends StatelessWidget {
               borderRadius: BorderRadius.circular(20),
               border: Border.all(color: const Color(0xFFD2E1FF)),
             ),
-            child: Text(
-              absent ? '☀️' : '🌅',
-              style: const TextStyle(fontSize: 28),
-            ),
+            child: Text(icon, style: const TextStyle(fontSize: 28)),
           ),
           const SizedBox(width: 16),
           Expanded(
@@ -212,7 +216,7 @@ class _DayAttendanceCard extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  DateFormat('EEE, d MMM').format(day.date),
+                  session.label,
                   style: const TextStyle(
                     color: SaaptTheme.navy,
                     fontSize: 19,
@@ -221,9 +225,9 @@ class _DayAttendanceCard extends StatelessWidget {
                 ),
                 const SizedBox(height: 4),
                 Text(
-                  day.remark?.isNotEmpty == true
-                      ? day.remark!
-                      : 'Daily attendance',
+                  session.remark?.isNotEmpty == true
+                      ? session.remark!
+                      : timeRange,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: const TextStyle(
@@ -243,12 +247,32 @@ class _DayAttendanceCard extends StatelessWidget {
               border: Border.all(color: color.withValues(alpha: 0.3)),
             ),
             child: Text(
-              day.status,
+              session.status,
               style: TextStyle(color: color, fontWeight: FontWeight.w900),
             ),
           ),
         ],
       ),
     );
+  }
+
+  String _formatTimeRange(String? start, String? end) {
+    final startLabel = _formatTime(start);
+    final endLabel = _formatTime(end);
+    if (startLabel == null || endLabel == null) {
+      return 'Attendance session';
+    }
+    return '$startLabel - $endLabel';
+  }
+
+  String? _formatTime(String? value) {
+    if (value == null || value.trim().isEmpty) return null;
+    final parts = value.split(':');
+    final hour = int.tryParse(parts.first);
+    if (hour == null) return value;
+    final minute = parts.length > 1 ? int.tryParse(parts[1]) ?? 0 : 0;
+    final suffix = hour >= 12 ? 'PM' : 'AM';
+    final displayHour = hour == 0 ? 12 : (hour > 12 ? hour - 12 : hour);
+    return '$displayHour:${minute.toString().padLeft(2, '0')} $suffix';
   }
 }

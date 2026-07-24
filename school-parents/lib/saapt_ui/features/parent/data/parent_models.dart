@@ -135,11 +135,33 @@ class ParentAttendance {
     required this.calendar,
     required this.presentDays,
     required this.absentDays,
+    required this.selectedDate,
+    required this.mode,
+    required this.sessions,
   });
 
   final List<ParentAttendanceDay> calendar;
   final int presentDays;
   final int absentDays;
+  final DateTime selectedDate;
+  final String mode;
+  final List<ParentAttendanceSession> sessions;
+
+  int get presentSessions => sessions
+      .where((session) => session.status.toLowerCase() == 'present')
+      .length;
+
+  int get absentSessions => sessions
+      .where((session) => session.status.toLowerCase() == 'absent')
+      .length;
+
+  int get markedSessions => sessions
+      .where((session) => session.status.toLowerCase() != 'unmarked')
+      .length;
+
+  int get selectedDayPercent => markedSessions == 0
+      ? 0
+      : ((presentSessions / markedSessions) * 100).round();
 
   int get totalDays => calendar.length;
 
@@ -154,6 +176,52 @@ class ParentAttendance {
           .toList(),
       presentDays: int.tryParse(json['presentDays']?.toString() ?? '') ?? 0,
       absentDays: int.tryParse(json['absentDays']?.toString() ?? '') ?? 0,
+      selectedDate:
+          DateTime.tryParse(json['selectedDate']?.toString() ?? '') ??
+          DateTime.now(),
+      mode: json['mode']?.toString() ?? 'DAILY',
+      sessions: (json['sessions'] as List? ?? const [])
+          .whereType<Map<String, dynamic>>()
+          .map(ParentAttendanceSession.fromJson)
+          .toList(),
+    );
+  }
+}
+
+class ParentAttendanceSession {
+  const ParentAttendanceSession({
+    required this.id,
+    required this.unitType,
+    required this.mode,
+    required this.label,
+    required this.status,
+    required this.sequence,
+    this.startTime,
+    this.endTime,
+    this.remark,
+  });
+
+  final String id;
+  final String unitType;
+  final String mode;
+  final String label;
+  final String status;
+  final int sequence;
+  final String? startTime;
+  final String? endTime;
+  final String? remark;
+
+  factory ParentAttendanceSession.fromJson(Map<String, dynamic> json) {
+    return ParentAttendanceSession(
+      id: json['id']?.toString() ?? '',
+      unitType: json['unitType']?.toString() ?? 'DAY',
+      mode: json['mode']?.toString() ?? 'DAILY',
+      label: json['label']?.toString() ?? 'Session',
+      status: json['status']?.toString() ?? 'Unmarked',
+      sequence: int.tryParse(json['sequence']?.toString() ?? '') ?? 0,
+      startTime: json['startTime']?.toString(),
+      endTime: json['endTime']?.toString(),
+      remark: json['remark']?.toString(),
     );
   }
 }
