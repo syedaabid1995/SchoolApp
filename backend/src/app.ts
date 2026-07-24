@@ -147,6 +147,8 @@ export const createApp = () => {
     pathName.startsWith('/auth') ||
     pathName.startsWith('/public') ||
     pathName.startsWith('/subscriptions') ||
+    pathName.startsWith('/notifications/push/devices') ||
+    pathName.startsWith('/notifications/push/preferences/me') ||
     pathName.startsWith('/admin');
 
   app.use('/api/v1', (req, res, next) => {
