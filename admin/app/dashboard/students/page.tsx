@@ -59,6 +59,11 @@ const Icon = ({ path }: { path: string }) => (
   </svg>
 );
 
+const studentRoute = (student: Pick<Student, 'id' | 'schoolId'>, suffix = '') => {
+  const base = `/dashboard/students/${student.id}${suffix}`;
+  return student.schoolId ? `${base}?schoolId=${encodeURIComponent(student.schoolId)}` : base;
+};
+
 const SkeletonRows = () => (
   <>
     {Array.from({ length: 6 }).map((_, index) => (
@@ -139,7 +144,8 @@ export default function StudentsPage() {
   const paginated = students.slice((page - 1) * limit, page * limit);
 
   const deleteMutation = useMutation({
-    mutationFn: deleteStudent,
+    mutationFn: (student: Pick<Student, 'id' | 'schoolId'>) =>
+      deleteStudent(student.id, student.schoolId ? { schoolId: student.schoolId } : undefined),
     onSuccess: () => {
       notify.success('Student deleted', 'The student record was removed.');
       queryClient.invalidateQueries({ queryKey: ['students'] });
@@ -281,7 +287,7 @@ export default function StudentsPage() {
                       <td className="px-4 py-4 font-semibold text-slate-900">{student.admissionNo}</td>
                       <td className="px-4 py-4 text-slate-600">{student.rollNo ?? '-'}</td>
                       <td className="px-4 py-4">
-                        <Link href={`/dashboard/students/${student.id}`} className="group flex items-center gap-3 rounded-xl focus:outline-none focus:ring-2 focus:ring-violet-200">
+                        <Link href={studentRoute(student)} className="group flex items-center gap-3 rounded-xl focus:outline-none focus:ring-2 focus:ring-violet-200">
                           <div className="grid h-10 w-10 place-items-center overflow-hidden rounded-full bg-violet-100 text-sm font-bold text-violet-700">
                             {photoUrl ? <img src={photoUrl} alt={name} className="h-full w-full object-cover" /> : name.slice(0, 2).toUpperCase()}
                           </div>
@@ -304,15 +310,15 @@ export default function StudentsPage() {
                         </button>
                         {openActionId === student.id && (
                           <div className="absolute right-4 z-20 mt-2 w-40 rounded-xl border border-slate-200 bg-white p-1 shadow-xl">
-                            <Link href={`/dashboard/students/${student.id}`} className="flex items-center gap-2 rounded-lg px-3 py-2 text-sm text-slate-700 hover:bg-slate-50">
+                            <Link href={studentRoute(student)} className="flex items-center gap-2 rounded-lg px-3 py-2 text-sm text-slate-700 hover:bg-slate-50">
                               <Icon path="M15 12a3 3 0 11-6 0 3 3 0 016 0z M2.458 12C3.732 7.943 7.523 5 12 5c4.477 0 8.268 2.943 9.542 7-1.274 4.057-5.065 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
                               View
                             </Link>
-                            {hasPermission('student.edit') ? <Link href={`/dashboard/students/${student.id}?edit=1`} className="flex items-center gap-2 rounded-lg px-3 py-2 text-sm text-slate-700 hover:bg-slate-50">
+                            {hasPermission('student.edit') ? <Link href={studentRoute(student, '/edit')} className="flex items-center gap-2 rounded-lg px-3 py-2 text-sm text-slate-700 hover:bg-slate-50">
                               <Icon path="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z" />
                               Edit
                             </Link> : null}
-                            {canDeleteStudent ? <button onClick={() => { setOpenActionId(null); if (window.confirm(`Delete ${name}? This cannot be undone.`)) deleteMutation.mutate(student.id); }} className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm text-red-600 hover:bg-red-50">
+                            {canDeleteStudent ? <button onClick={() => { setOpenActionId(null); if (window.confirm(`Delete ${name}? This cannot be undone.`)) deleteMutation.mutate(student); }} className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm text-red-600 hover:bg-red-50">
                               <Icon path="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6M9 7h6m2 0H7m3 0V5a2 2 0 012-2h0a2 2 0 012 2v2" />
                               Delete
                             </button> : null}

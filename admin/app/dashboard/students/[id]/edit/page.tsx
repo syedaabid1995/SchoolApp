@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import { useEffect, useMemo, useState } from 'react';
 import { useMutation, useQuery } from '@tanstack/react-query';
-import { useParams, useRouter } from 'next/navigation';
+import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import FullPageLoader from '../../../../../components/FullPageLoader';
 import PageHeader from '../../../../../components/PageHeader';
 import { useNotify } from '../../../../../components/NotificationProvider';
@@ -175,8 +175,11 @@ const isExpired = (value?: string | null) => {
 export default function EditStudentPage() {
   const params = useParams();
   const router = useRouter();
+  const searchParams = useSearchParams();
   const notify = useNotify();
   const studentId = params.id as string;
+  const scopedSchoolId = searchParams.get('schoolId') ?? undefined;
+  const studentRequestParams = scopedSchoolId ? { schoolId: scopedSchoolId } : undefined;
   const [form, setForm] = useState<AdmissionForm>(initialForm);
   const [currentStep, setCurrentStep] = useState<AdmissionStep>('academic');
   const [sameAddress, setSameAddress] = useState(false);
@@ -190,26 +193,31 @@ export default function EditStudentPage() {
   const canEditStudent = isSuperAdmin || isSchoolAdmin || permissionCodes.includes('student.edit');
 
   const studentQuery = useQuery({
-    queryKey: ['student', studentId, 'edit'],
-    queryFn: () => getStudent(studentId),
+    queryKey: ['student', studentId, scopedSchoolId, 'edit'],
+    queryFn: () => getStudent(studentId, studentRequestParams),
     enabled: Boolean(studentId) && canEditStudent,
   });
   const student = studentQuery.data;
-  const effectiveSchoolId = student?.schoolId;
+  const effectiveSchoolId = student?.schoolId ?? scopedSchoolId;
+  const effectiveStudentRequestParams = effectiveSchoolId ? { schoolId: effectiveSchoolId } : undefined;
+  const studentRoute = (suffix = '') => {
+    const base = `/dashboard/students/${studentId}${suffix}`;
+    return effectiveSchoolId ? `${base}?schoolId=${encodeURIComponent(effectiveSchoolId)}` : base;
+  };
 
-  const yearsQuery = useQuery({ queryKey: ['academic-years', effectiveSchoolId], queryFn: () => listAcademicYears(effectiveSchoolId ? { schoolId: effectiveSchoolId } : undefined), enabled: canEditStudent });
+  const yearsQuery = useQuery({ queryKey: ['academic-years', effectiveSchoolId], queryFn: () => listAcademicYears(effectiveSchoolId ? { schoolId: effectiveSchoolId } : undefined), enabled: canEditStudent && Boolean(effectiveSchoolId || !isSuperAdmin) });
   useEffect(() => {
     const years = yearsQuery.data ?? [];
     if (!years.length || form.academicSessionId) return;
     const active = years.find((y: any) => y.isActive) ?? years[0];
     if (active) setValue('academicSessionId', active.id);
   }, [yearsQuery.data]);
-  const classesQuery = useQuery({ queryKey: ['setup-classes', effectiveSchoolId], queryFn: () => listSetupClasses(effectiveSchoolId ? { schoolId: effectiveSchoolId } : undefined), enabled: canEditStudent });
-  const sectionsQuery = useQuery({ queryKey: ['setup-sections', effectiveSchoolId], queryFn: () => listSetupSections(effectiveSchoolId ? { schoolId: effectiveSchoolId } : undefined), enabled: canEditStudent });
+  const classesQuery = useQuery({ queryKey: ['setup-classes', effectiveSchoolId], queryFn: () => listSetupClasses(effectiveSchoolId ? { schoolId: effectiveSchoolId } : undefined), enabled: canEditStudent && Boolean(effectiveSchoolId || !isSuperAdmin) });
+  const sectionsQuery = useQuery({ queryKey: ['setup-sections', effectiveSchoolId], queryFn: () => listSetupSections(effectiveSchoolId ? { schoolId: effectiveSchoolId } : undefined), enabled: canEditStudent && Boolean(effectiveSchoolId || !isSuperAdmin) });
   const systemSettingsQuery = useQuery({
     queryKey: ['school-system-settings', 'student-admission-base-setup'],
     queryFn: () => getSchoolSystemSettings(),
-    enabled: canEditStudent,
+    enabled: canEditStudent && Boolean(effectiveSchoolId || !isSuperAdmin),
   });
   const feeGroupsQuery = useQuery({
     queryKey: ['admission-fee-groups', form.academicSessionId],
@@ -229,6 +237,7 @@ export default function EditStudentPage() {
   const siblingsQuery = useQuery({
     queryKey: ['students', 'sibling-options', siblingFilters],
     queryFn: () => listStudents({
+      schoolId: effectiveSchoolId,
       classId: siblingFilters.classId,
       sectionId: siblingFilters.sectionId,
       search: siblingFilters.search.trim() || undefined,
@@ -431,47 +440,51 @@ export default function EditStudentPage() {
 
   const updateMutation = useMutation({
     mutationFn: async () => {
-      const updatedStudent = await updateStudent(studentId, {
-        academicSessionId: form.academicSessionId || null,
-        classId: form.classId || null,
-        sectionId: form.sectionId || null,
-        admissionNo: form.admissionNo.trim(),
-        rollNo: form.rollNo.trim() || null,
-        fullName: `${form.firstName.trim()} ${form.lastName.trim()}`.trim(),
-        dob: form.dob || null,
-        gender: form.gender || null,
-        bloodGroup: form.bloodGroup || null,
-        religion: form.religion || null,
-        caste: form.caste || null,
-        email: form.email || null,
-        phone: form.phone || null,
-        admissionDate: form.admissionDate || null,
-        category: form.category || null,
-        height: form.height ? Number(form.height) : null,
-        weight: form.weight ? Number(form.weight) : null,
-        photoUrl: form.photoUrl || null,
-        facePhotoUrls: form.facePhotoUrls.length ? form.facePhotoUrls : undefined,
-        fatherName: form.fatherName || null,
-        fatherOccupation: form.fatherOccupation || null,
-        fatherPhone: form.fatherPhone || null,
-        fatherPhotoUrl: form.fatherPhotoUrl || null,
-        motherName: form.motherName || null,
-        motherOccupation: form.motherOccupation || null,
-        motherPhone: form.motherPhone || null,
-        motherPhotoUrl: form.motherPhotoUrl || null,
-        guardianName: form.guardianName || form.fatherName || form.motherName || null,
-        guardianRelationship: form.guardianRelationship || null,
-        parentPhone: form.parentPhone || form.fatherPhone || form.motherPhone || null,
-        parentEmail: form.parentEmail || null,
-        presentAddress: form.presentAddress || null,
-        permanentAddress: sameAddress ? form.presentAddress : form.permanentAddress || null,
-        addressLine1: form.presentAddress || null,
-        addressLine2: sameAddress ? form.presentAddress : form.permanentAddress || null,
-        siblingIds: form.siblingIds,
-        feeGroupIds: form.feeGroupIds,
-        discountIds: form.discountIds,
-        generateInvoices: form.generateFeeInvoices,
-      });
+      const updatedStudent = await updateStudent(
+        studentId,
+        {
+          academicSessionId: form.academicSessionId || null,
+          classId: form.classId || null,
+          sectionId: form.sectionId || null,
+          admissionNo: form.admissionNo.trim(),
+          rollNo: form.rollNo.trim() || null,
+          fullName: `${form.firstName.trim()} ${form.lastName.trim()}`.trim(),
+          dob: form.dob || null,
+          gender: form.gender || null,
+          bloodGroup: form.bloodGroup || null,
+          religion: form.religion || null,
+          caste: form.caste || null,
+          email: form.email || null,
+          phone: form.phone || null,
+          admissionDate: form.admissionDate || null,
+          category: form.category || null,
+          height: form.height ? Number(form.height) : null,
+          weight: form.weight ? Number(form.weight) : null,
+          photoUrl: form.photoUrl || null,
+          facePhotoUrls: form.facePhotoUrls.length ? form.facePhotoUrls : undefined,
+          fatherName: form.fatherName || null,
+          fatherOccupation: form.fatherOccupation || null,
+          fatherPhone: form.fatherPhone || null,
+          fatherPhotoUrl: form.fatherPhotoUrl || null,
+          motherName: form.motherName || null,
+          motherOccupation: form.motherOccupation || null,
+          motherPhone: form.motherPhone || null,
+          motherPhotoUrl: form.motherPhotoUrl || null,
+          guardianName: form.guardianName || form.fatherName || form.motherName || null,
+          guardianRelationship: form.guardianRelationship || null,
+          parentPhone: form.parentPhone || form.fatherPhone || form.motherPhone || null,
+          parentEmail: form.parentEmail || null,
+          presentAddress: form.presentAddress || null,
+          permanentAddress: sameAddress ? form.presentAddress : form.permanentAddress || null,
+          addressLine1: form.presentAddress || null,
+          addressLine2: sameAddress ? form.presentAddress : form.permanentAddress || null,
+          siblingIds: form.siblingIds,
+          feeGroupIds: form.feeGroupIds,
+          discountIds: form.discountIds,
+          generateInvoices: form.generateFeeInvoices,
+        },
+        effectiveStudentRequestParams,
+      );
 
       let parentLogin: Awaited<ReturnType<typeof createParent>> | null = null;
       let parentLoginError: unknown = null;
@@ -485,8 +498,9 @@ export default function EditStudentPage() {
             email: form.parentLoginEmail || form.parentEmail || undefined,
             createLogin: true,
             sendVia: form.parentLoginSendVia,
+            schoolId: effectiveSchoolId,
           });
-          await linkParent(studentId, parentLogin.id);
+          await linkParent(studentId, parentLogin.id, effectiveStudentRequestParams);
         } catch (error) {
           parentLoginError = error;
         }
@@ -511,7 +525,7 @@ export default function EditStudentPage() {
       if (parentLoginError) {
         notify.error('Parent login not linked', (parentLoginError as any)?.response?.data?.error?.message ?? 'Student was updated, but parent login linking failed.');
       }
-      router.push(`/dashboard/students/${student.id}`);
+      router.push(effectiveSchoolId ? `/dashboard/students/${student.id}?schoolId=${encodeURIComponent(effectiveSchoolId)}` : `/dashboard/students/${student.id}`);
     },
     onError: (error: any) => notify.error('Update failed', error?.response?.data?.error?.message ?? 'Unable to update student.'),
   });
@@ -650,7 +664,7 @@ export default function EditStudentPage() {
       return;
     }
     try {
-      const uploaded = await uploadStudentPhoto(file);
+      const uploaded = await uploadStudentPhoto(file, { schoolId: effectiveSchoolId, studentId });
       setValue(field, uploaded.url);
       notify.success('Image uploaded', 'The image was uploaded successfully.');
     } catch (error: any) {
@@ -682,7 +696,7 @@ export default function EditStudentPage() {
         <PageHeader
           title="Edit Student"
           subtitle="Update student profile, guardian details, fees, photos, and enrollment."
-          breadcrumbs={[{ label: 'Dashboard', href: '/dashboard' }, { label: 'Students', href: '/dashboard/students' }, { label: student.fullName ?? `${student.firstName} ${student.lastName}`.trim(), href: `/dashboard/students/${student.id}` }, { label: 'Edit' }]}
+          breadcrumbs={[{ label: 'Dashboard', href: '/dashboard' }, { label: 'Students', href: '/dashboard/students' }, { label: student.fullName ?? `${student.firstName} ${student.lastName}`.trim(), href: studentRoute() }, { label: 'Edit' }]}
         />
 
         <section className="mb-5 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
@@ -1050,7 +1064,7 @@ export default function EditStudentPage() {
                     const oversized = files.find((f) => f.size > 3 * 1024 * 1024);
                     if (oversized) { notify.error('Image too large', `"${oversized.name}" exceeds 3 MB.`); return; }
                     try {
-                      const uploaded = await Promise.all(files.map((f) => uploadStudentPhoto(f)));
+                      const uploaded = await Promise.all(files.map((f) => uploadStudentPhoto(f, { schoolId: effectiveSchoolId, studentId })));
                       setForm((prev) => ({ ...prev, facePhotoUrls: [...prev.facePhotoUrls, ...uploaded.map((u) => u.url)] }));
                       notify.success('Face photos uploaded', `${files.length} photo${files.length > 1 ? 's' : ''} uploaded successfully.`);
                     } catch (error: any) {

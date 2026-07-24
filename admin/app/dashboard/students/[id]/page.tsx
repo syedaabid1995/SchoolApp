@@ -142,6 +142,8 @@ export default function StudentDetailPage() {
   const queryClient = useQueryClient();
   const notify = useNotify();
   const studentId = params.id as string;
+  const scopedSchoolId = searchParams.get('schoolId') ?? undefined;
+  const studentRequestParams = scopedSchoolId ? { schoolId: scopedSchoolId } : undefined;
   const [tab, setTab] = useState<TabKey>('profile');
   const [editMode, setEditMode] = useState(searchParams.get('edit') === '1');
   const [editForm, setEditForm] = useState({
@@ -212,13 +214,18 @@ export default function StudentDetailPage() {
   const canDeleteTimeline = hasPermission('student.timeline.delete');
 
   const studentQuery = useQuery({
-    queryKey: ['student', studentId],
-    queryFn: () => getStudent(studentId),
+    queryKey: ['student', studentId, scopedSchoolId],
+    queryFn: () => getStudent(studentId, studentRequestParams),
     enabled: Boolean(studentId) && canViewStudent,
   });
   const student = studentQuery.data;
   const displayName = student ? student.fullName ?? `${student.firstName} ${student.lastName}`.trim() : '';
-  const effectiveSchoolId = student?.schoolId;
+  const effectiveSchoolId = student?.schoolId ?? scopedSchoolId;
+  const effectiveStudentRequestParams = effectiveSchoolId ? { schoolId: effectiveSchoolId } : undefined;
+  const studentRoute = (suffix = '') => {
+    const base = `/dashboard/students/${studentId}${suffix}`;
+    return effectiveSchoolId ? `${base}?schoolId=${encodeURIComponent(effectiveSchoolId)}` : base;
+  };
 
   const academicYearsQuery = useQuery({
     queryKey: ['student-detail-academic-years', effectiveSchoolId],
@@ -409,7 +416,7 @@ export default function StudentDetailPage() {
       if (sameStringList(editForm.facePhotoUrls, attendanceFacePhotoUrls(student))) {
         delete payload.facePhotoUrls;
       }
-      return updateStudent(studentId, payload);
+      return updateStudent(studentId, payload, effectiveStudentRequestParams);
     },
     onSuccess: (updated: any) => {
       notify.success('Student updated', 'Profile changes were saved.');
@@ -446,7 +453,7 @@ export default function StudentDetailPage() {
   });
 
   const unlinkParentMutation = useMutation({
-    mutationFn: (parentId: string) => unlinkParent(studentId, parentId),
+    mutationFn: (parentId: string) => unlinkParent(studentId, parentId, effectiveStudentRequestParams),
     onSuccess: () => {
       notify.success('Parent unlinked', 'Parent account was removed from this student.');
       setParentAccountEdit(null);
@@ -494,7 +501,7 @@ export default function StudentDetailPage() {
     }
     setPhotoUploadTarget(target);
     try {
-      const uploaded = await uploadStudentPhoto(file, { studentId });
+      const uploaded = await uploadStudentPhoto(file, { schoolId: effectiveSchoolId, studentId });
       if (target === 'student') {
         const facePhotoLimitReached = editForm.facePhotoUrls.length >= 4 && !editForm.facePhotoUrls.includes(uploaded.url);
         setEditForm((prev) => ({ ...prev, photoUrl: uploaded.url, facePhotoUrls: appendFacePhotoUrl(prev.facePhotoUrls, uploaded.url) }));
@@ -511,7 +518,7 @@ export default function StudentDetailPage() {
         });
         notify.success('Attendance photo uploaded', 'Save changes to register it for AI attendance.');
       } else {
-        await addStudentPhoto(studentId, uploaded.url);
+        await addStudentPhoto(studentId, uploaded.url, effectiveStudentRequestParams);
         notify.success('Photo added', 'Student photo gallery was updated.');
         queryClient.invalidateQueries({ queryKey: ['student', studentId] });
       }
@@ -523,7 +530,7 @@ export default function StudentDetailPage() {
   };
 
   const deleteGalleryPhotoMutation = useMutation({
-    mutationFn: (photoId: string) => deleteStudentPhoto(studentId, photoId),
+    mutationFn: (photoId: string) => deleteStudentPhoto(studentId, photoId, effectiveStudentRequestParams),
     onSuccess: () => {
       notify.success('Photo deleted', 'Student photo was removed.');
       queryClient.invalidateQueries({ queryKey: ['student', studentId] });
@@ -536,14 +543,14 @@ export default function StudentDetailPage() {
     mutationFn: async () => {
       if (!documentForm.file) throw new Error('Select a document.');
       if (!documentForm.title.trim()) throw new Error('Document title is required.');
-      const uploaded = await uploadStudentDocument(documentForm.file, studentId);
+      const uploaded = await uploadStudentDocument(documentForm.file, studentId, effectiveStudentRequestParams);
       return addStudentDocument(studentId, {
         title: documentForm.title.trim(),
         url: uploaded.url,
         fileName: uploaded.filename,
         mimeType: documentForm.file.type,
         sizeBytes: documentForm.file.size,
-      });
+      }, effectiveStudentRequestParams);
     },
     onSuccess: () => {
       notify.success('Document uploaded', 'Student document was added.');
@@ -560,7 +567,7 @@ export default function StudentDetailPage() {
         title: timelineForm.title.trim(),
         description: timelineForm.description.trim() || null,
         timelineDate: timelineForm.timelineDate,
-      });
+      }, effectiveStudentRequestParams);
     },
     onSuccess: () => {
       notify.success('Timeline added', 'Timeline item was saved.');
@@ -571,7 +578,7 @@ export default function StudentDetailPage() {
   });
 
   const deleteDocumentMutation = useMutation({
-    mutationFn: (documentId: string) => deleteStudentDocument(studentId, documentId),
+    mutationFn: (documentId: string) => deleteStudentDocument(studentId, documentId, effectiveStudentRequestParams),
     onSuccess: () => {
       notify.success('Document deleted', 'Student document was removed.');
       queryClient.invalidateQueries({ queryKey: ['student', studentId] });
@@ -579,7 +586,7 @@ export default function StudentDetailPage() {
   });
 
   const deleteTimelineMutation = useMutation({
-    mutationFn: (timelineId: string) => deleteStudentTimeline(studentId, timelineId),
+    mutationFn: (timelineId: string) => deleteStudentTimeline(studentId, timelineId, effectiveStudentRequestParams),
     onSuccess: () => {
       notify.success('Timeline deleted', 'Timeline item was removed.');
       queryClient.invalidateQueries({ queryKey: ['student', studentId] });
@@ -632,7 +639,7 @@ export default function StudentDetailPage() {
                 <InfoRow label="Status" value={student.status} />
               </div>
               <div className="mt-5 flex gap-2">
-                {canEditStudent ? <Link href={`/dashboard/students/${student.id}/edit`} className="flex-1 rounded-xl bg-[var(--theme-button-bg)] px-4 py-2 text-center text-sm font-bold text-[var(--theme-button-text)]">Edit</Link> : null}
+                {canEditStudent ? <Link href={studentRoute('/edit')} className="flex-1 rounded-xl bg-[var(--theme-button-bg)] px-4 py-2 text-center text-sm font-bold text-[var(--theme-button-text)]">Edit</Link> : null}
                 <Link href="/dashboard/students" className="rounded-xl border border-slate-200 px-4 py-2 text-sm font-bold text-slate-700">Back</Link>
               </div>
             </div>

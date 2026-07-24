@@ -317,8 +317,8 @@ export const importStudents = async (payload: {
   };
 };
 
-export const deleteStudent = async (id: string) => {
-  const { data } = await api.delete(`/students/students/${id}`);
+export const deleteStudent = async (id: string, params?: { schoolId?: string }) => {
+  const { data } = await api.delete(`/students/students/${id}`, { params });
   return data;
 };
 
@@ -353,25 +353,27 @@ export const uploadStudentDocument = async (file: File, studentId: string, param
 export const addStudentDocument = async (
   studentId: string,
   payload: { title: string; url: string; fileName?: string | null; mimeType?: string | null; sizeBytes?: number | null },
+  params?: { schoolId?: string },
 ) => {
-  const { data } = await api.post<StudentDocument>(`/students/students/${studentId}/documents`, payload);
+  const { data } = await api.post<StudentDocument>(`/students/students/${studentId}/documents`, payload, { params });
   return data;
 };
 
-export const deleteStudentDocument = async (studentId: string, documentId: string) => {
-  await api.delete(`/students/students/${studentId}/documents/${documentId}`);
+export const deleteStudentDocument = async (studentId: string, documentId: string, params?: { schoolId?: string }) => {
+  await api.delete(`/students/students/${studentId}/documents/${documentId}`, { params });
 };
 
 export const addStudentTimeline = async (
   studentId: string,
   payload: { title: string; description?: string | null; timelineDate: string },
+  params?: { schoolId?: string },
 ) => {
-  const { data } = await api.post<StudentTimeline>(`/students/students/${studentId}/timeline`, payload);
+  const { data } = await api.post<StudentTimeline>(`/students/students/${studentId}/timeline`, payload, { params });
   return data;
 };
 
-export const deleteStudentTimeline = async (studentId: string, timelineId: string) => {
-  await api.delete(`/students/students/${studentId}/timeline/${timelineId}`);
+export const deleteStudentTimeline = async (studentId: string, timelineId: string, params?: { schoolId?: string }) => {
+  await api.delete(`/students/students/${studentId}/timeline/${timelineId}`, { params });
 };
 
 export const resolveUploadUrl = (value?: string | null, asset?: SignedUploadAssetRef | null) =>
@@ -380,22 +382,22 @@ export const resolveUploadUrl = (value?: string | null, asset?: SignedUploadAsse
 export const resolveStudentPhotoUrl = (student?: Student | null) =>
   resolveStudentPhotoUrlWithBase(student, env.apiBaseUrl);
 
-export const addStudentPhoto = async (studentId: string, url: string) => {
-  const { data } = await api.post(`/students/students/${studentId}/photos`, { url });
+export const addStudentPhoto = async (studentId: string, url: string, params?: { schoolId?: string }) => {
+  const { data } = await api.post(`/students/students/${studentId}/photos`, { url }, { params });
   return data as { id: string; url: string; createdAt: string };
 };
 
-export const deleteStudentPhoto = async (studentId: string, photoId: string) => {
-  await api.delete(`/students/students/${studentId}/photos/${photoId}`);
+export const deleteStudentPhoto = async (studentId: string, photoId: string, params?: { schoolId?: string }) => {
+  await api.delete(`/students/students/${studentId}/photos/${photoId}`, { params });
 };
 
-export const linkParent = async (studentId: string, parentId: string) => {
-  const { data } = await api.post(`/students/students/${studentId}/parents`, { parentId });
+export const linkParent = async (studentId: string, parentId: string, params?: { schoolId?: string }) => {
+  const { data } = await api.post(`/students/students/${studentId}/parents`, { parentId, schoolId: params?.schoolId }, { params });
   return data;
 };
 
-export const unlinkParent = async (studentId: string, parentId: string) => {
-  await api.delete(`/students/students/${studentId}/parents/${parentId}`);
+export const unlinkParent = async (studentId: string, parentId: string, params?: { schoolId?: string }) => {
+  await api.delete(`/students/students/${studentId}/parents/${parentId}`, { params });
 };
 
 export const changeStudentStatus = async (studentId: string, status: 'TRANSFERRED' | 'EXITED', reason?: string) => {
