@@ -208,6 +208,21 @@ export const sendStudentLeaveRequestTeacherAlerts = async (params: {
       type: 'TEACHER',
     });
   }
+  if (!Array.from(recipients.values()).some((recipient) => recipient.type === 'TEACHER')) {
+    const teachers = await prisma.teacherProfile.findMany({
+      where: { schoolId: params.schoolId, isActive: true },
+      select: { userId: true, firstName: true, lastName: true },
+      orderBy: [{ firstName: 'asc' }, { lastName: 'asc' }],
+      take: 100,
+    });
+    for (const teacher of teachers) {
+      recipients.set(teacher.userId, {
+        userId: teacher.userId,
+        name: `${teacher.firstName} ${teacher.lastName}`.trim() || 'Teacher',
+        type: 'TEACHER',
+      });
+    }
+  }
   for (const admin of admins) {
     recipients.set(admin.id, { userId: admin.id, name: admin.email, type: 'SCHOOL_ADMIN' });
   }

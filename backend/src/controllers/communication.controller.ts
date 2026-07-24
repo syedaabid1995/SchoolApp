@@ -522,7 +522,42 @@ export const listCommunicationNoticesApi = async (req: Request, res: Response) =
     include: { createdBy: { select: { email: true } } },
     orderBy: [{ publishedAt: 'desc' }, { createdAt: 'desc' }],
   });
-  res.status(200).json({ items: notices.map(noticeDto) });
+  const pushLeaveLogs = await prisma.notificationLog.findMany({
+    where: {
+      schoolId,
+      channel: 'PUSH',
+      payload: { path: ['to'], equals: req.auth.userId },
+      OR: [
+        { payload: { path: ['alertType'], equals: 'STUDENT_LEAVE_REQUEST' } },
+        { payload: { path: ['category'], equals: 'leave' } },
+      ],
+    },
+    orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+    take: 50,
+  });
+  const leaveItems = pushLeaveLogs.map((log) => {
+    const payload = log.payload && typeof log.payload === 'object' ? (log.payload as Record<string, unknown>) : {};
+    const subject = typeof payload.subject === 'string' ? payload.subject : 'Student leave request';
+    const body = typeof payload.body === 'string' ? payload.body : '';
+    return {
+      id: `push-${log.id}`,
+      title: subject,
+      message: body,
+      audience: ['Teacher'],
+      status: log.status,
+      publishedAt: log.createdAt,
+      expiresAt: null,
+      createdAt: log.createdAt,
+      updatedAt: log.updatedAt,
+      createdByEmail: null,
+    };
+  });
+  const items = [...leaveItems, ...notices.map(noticeDto)].sort((a, b) => {
+    const aDate = new Date(a.publishedAt).getTime();
+    const bDate = new Date(b.publishedAt).getTime();
+    return bDate - aDate;
+  });
+  res.status(200).json({ items });
 };
 
 export const createCommunicationNoticeApi = async (req: Request, res: Response) => {
