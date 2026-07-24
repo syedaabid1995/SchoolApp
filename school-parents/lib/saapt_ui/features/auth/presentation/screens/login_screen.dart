@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../app/theme/saapt_theme.dart';
+import '../../../../core/network/parent_api_client.dart';
 import '../../../parent/presentation/providers/parent_providers.dart';
 
 class SaaptLoginScreen extends ConsumerStatefulWidget {
@@ -197,7 +198,10 @@ class _SaaptLoginScreenState extends ConsumerState<SaaptLoginScreen> {
                         if (auth.hasError) ...[
                           const SizedBox(height: 14),
                           Text(
-                            auth.error.toString(),
+                            parentApiError(
+                              auth.error!,
+                              'Unable to sign in. Please check the email and password.',
+                            ),
                             style: TextStyle(
                               color: Theme.of(context).colorScheme.error,
                               fontWeight: FontWeight.w700,
