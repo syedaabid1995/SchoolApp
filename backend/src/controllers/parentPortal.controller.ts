@@ -6,7 +6,10 @@ import { HttpError } from '../middlewares/error.middleware';
 import { requireAuth } from '../middlewares/rbac.middleware';
 import { attendanceReadService } from '../modules/attendance/services/attendance-read.service';
 import * as attendanceSheetService from '../services/attendanceSheet.service';
-import { evaluateFailCriteria, getExamGradingSettings } from '../services/grade.service';
+import {
+  evaluateFailCriteria,
+  getExamGradingSettings,
+} from '../services/grade.service';
 import {
   computeStudentLeaveDays,
   findParentProfileForChild,
@@ -76,7 +79,9 @@ const requireChildAccess = async (userId: string, childId?: string) => {
 };
 
 const payloadRecord = (payload: unknown) =>
-  payload && typeof payload === 'object' ? (payload as Record<string, unknown>) : {};
+  payload && typeof payload === 'object'
+    ? (payload as Record<string, unknown>)
+    : {};
 
 const payloadString = (payload: Record<string, unknown>, key: string) => {
   const value = payload[key];
@@ -84,7 +89,8 @@ const payloadString = (payload: Record<string, unknown>, key: string) => {
 };
 
 const parseJsonPayload = (value: unknown) => {
-  if (Array.isArray(value) || (value && typeof value === 'object')) return value;
+  if (Array.isArray(value) || (value && typeof value === 'object'))
+    return value;
   if (typeof value !== 'string' || !value.trim()) return null;
   try {
     return JSON.parse(value);
@@ -111,11 +117,23 @@ const parentProfileUpdateSchema = z.object({
 const skippedDaysArray = (value: Prisma.JsonValue) =>
   Array.isArray(value)
     ? value
-        .filter((item) => Boolean(item) && typeof item === 'object' && !Array.isArray(item))
+        .filter(
+          (item) =>
+            Boolean(item) && typeof item === 'object' && !Array.isArray(item),
+        )
         .map((item) => ({
-          date: typeof (item as Record<string, unknown>).date === 'string' ? String((item as Record<string, unknown>).date) : '',
-          reason: typeof (item as Record<string, unknown>).reason === 'string' ? String((item as Record<string, unknown>).reason) : 'Non-working day',
-          type: typeof (item as Record<string, unknown>).type === 'string' ? String((item as Record<string, unknown>).type) : 'HOLIDAY',
+          date:
+            typeof (item as Record<string, unknown>).date === 'string'
+              ? String((item as Record<string, unknown>).date)
+              : '',
+          reason:
+            typeof (item as Record<string, unknown>).reason === 'string'
+              ? String((item as Record<string, unknown>).reason)
+              : 'Non-working day',
+          type:
+            typeof (item as Record<string, unknown>).type === 'string'
+              ? String((item as Record<string, unknown>).type)
+              : 'HOLIDAY',
         }))
     : [];
 
@@ -124,7 +142,12 @@ const formatStudentLeaveRequest = (request: any) => {
     request.student?.fullName ||
     `${request.student?.firstName ?? ''} ${request.student?.lastName ?? ''}`.trim() ||
     'Student';
-  const classLabel = [request.student?.class?.name, request.student?.section?.name].filter(Boolean).join(' ');
+  const classLabel = [
+    request.student?.class?.name,
+    request.student?.section?.name,
+  ]
+    .filter(Boolean)
+    .join(' ');
   return {
     id: request.id,
     childId: request.studentId,
@@ -164,6 +187,36 @@ export const getParentChildDetail = async (req: Request, res: Response) => {
       studentCategory: { select: { id: true, name: true } },
       guardians: { orderBy: [{ isPrimary: 'desc' }, { createdAt: 'asc' }] },
       parentLinks: { include: { parent: true } },
+      siblings: {
+        include: {
+          sibling: {
+            select: {
+              id: true,
+              admissionNo: true,
+              rollNo: true,
+              fullName: true,
+              photoUrl: true,
+              class: { select: { id: true, name: true } },
+              section: { select: { id: true, name: true } },
+            },
+          },
+        },
+      },
+      siblingOf: {
+        include: {
+          student: {
+            select: {
+              id: true,
+              admissionNo: true,
+              rollNo: true,
+              fullName: true,
+              photoUrl: true,
+              class: { select: { id: true, name: true } },
+              section: { select: { id: true, name: true } },
+            },
+          },
+        },
+      },
       enrollments: {
         include: {
           academicSession: { select: { id: true, name: true, isActive: true } },
@@ -205,7 +258,15 @@ export const getParentChildDetail = async (req: Request, res: Response) => {
       },
       examSeatingAllocations: {
         include: {
-          exam: { select: { id: true, name: true, type: true, status: true, scheduledAt: true } },
+          exam: {
+            select: {
+              id: true,
+              name: true,
+              type: true,
+              status: true,
+              scheduledAt: true,
+            },
+          },
           center: { select: { id: true, name: true, code: true } },
           room: { select: { id: true, name: true, code: true, floor: true } },
         },
@@ -273,8 +334,17 @@ export const getParentChildDetail = async (req: Request, res: Response) => {
       },
       dormitoryAssignments: {
         include: {
-          dormitory: { select: { id: true, name: true, type: true, address: true } },
-          room: { select: { id: true, roomNumber: true, bedCount: true, costPerBed: true } },
+          dormitory: {
+            select: { id: true, name: true, type: true, address: true },
+          },
+          room: {
+            select: {
+              id: true,
+              roomNumber: true,
+              bedCount: true,
+              costPerBed: true,
+            },
+          },
         },
         orderBy: { assignedAt: 'desc' },
       },
@@ -282,7 +352,15 @@ export const getParentChildDetail = async (req: Request, res: Response) => {
         include: {
           issues: {
             include: {
-              book: { select: { id: true, title: true, authorName: true, bookNumber: true, isbnNumber: true } },
+              book: {
+                select: {
+                  id: true,
+                  title: true,
+                  authorName: true,
+                  bookNumber: true,
+                  isbnNumber: true,
+                },
+              },
             },
             orderBy: { issueDate: 'desc' },
             take: 50,
@@ -294,8 +372,11 @@ export const getParentChildDetail = async (req: Request, res: Response) => {
 
   if (!student) throw new HttpError(404, 'Student not found');
 
-  const name = student.fullName || `${student.firstName} ${student.lastName}`.trim();
-  const classLabel = [student.class?.name, student.section?.name].filter(Boolean).join(' ');
+  const name =
+    student.fullName || `${student.firstName} ${student.lastName}`.trim();
+  const classLabel = [student.class?.name, student.section?.name]
+    .filter(Boolean)
+    .join(' ');
   const summary = {
     id: student.id,
     name,
@@ -316,7 +397,6 @@ export const getParentChildDetail = async (req: Request, res: Response) => {
     child: summary,
     tabs: {
       profile: {
-        summary,
         admission: {
           admissionNo: student.admissionNo,
           admissionDate: student.admissionDate,
@@ -357,6 +437,16 @@ export const getParentChildDetail = async (req: Request, res: Response) => {
           allergies: student.allergies,
           doctorContact: student.doctorContact,
         },
+        siblings: [
+          ...student.siblings.map((entry) => ({
+            relation: entry.relation,
+            student: entry.sibling,
+          })),
+          ...student.siblingOf.map((entry) => ({
+            relation: entry.relation,
+            student: entry.student,
+          })),
+        ],
       },
       parents: {
         father: {
@@ -421,7 +511,8 @@ export const getParentChildDetail = async (req: Request, res: Response) => {
 
 export const listParentLeaveRequests = async (req: Request, res: Response) => {
   const auth = requireAuth(req);
-  const childId = typeof req.query.childId === 'string' ? req.query.childId : undefined;
+  const childId =
+    typeof req.query.childId === 'string' ? req.query.childId : undefined;
   const { child, children } = await requireChildAccess(auth.userId, childId);
   const childIds = childId ? [child.id] : children.map((entry) => entry.id);
   const rows = await prisma.studentLeaveRequest.findMany({
@@ -439,7 +530,10 @@ export const listParentLeaveRequests = async (req: Request, res: Response) => {
   });
 
   const now = new Date();
-  const month = new Intl.DateTimeFormat('en-IN', { month: 'short', year: 'numeric' }).format(now);
+  const month = new Intl.DateTimeFormat('en-IN', {
+    month: 'short',
+    year: 'numeric',
+  }).format(now);
   res.status(200).json({
     items: rows.map(formatStudentLeaveRequest),
     total: rows.length,
@@ -452,7 +546,10 @@ export const createParentLeaveRequest = async (req: Request, res: Response) => {
   const auth = requireAuth(req);
   const payload = studentLeaveSchema.parse(req.body);
   const { child } = await requireChildAccess(auth.userId, payload.childId);
-  const parent = await findParentProfileForChild({ userId: auth.userId, childId: child.id });
+  const parent = await findParentProfileForChild({
+    userId: auth.userId,
+    childId: child.id,
+  });
 
   const calculation = await computeStudentLeaveDays({
     schoolId: child.schoolId,
@@ -462,7 +559,10 @@ export const createParentLeaveRequest = async (req: Request, res: Response) => {
     toDate: payload.toDate,
   });
   if (calculation.workingDays <= 0) {
-    throw new HttpError(400, 'Selected dates only include weekends or holidays');
+    throw new HttpError(
+      400,
+      'Selected dates only include weekends or holidays',
+    );
   }
 
   const overlap = await prisma.studentLeaveRequest.findFirst({
@@ -475,7 +575,11 @@ export const createParentLeaveRequest = async (req: Request, res: Response) => {
     },
     select: { id: true },
   });
-  if (overlap) throw new HttpError(409, 'Leave request already exists for this date range');
+  if (overlap)
+    throw new HttpError(
+      409,
+      'Leave request already exists for this date range',
+    );
 
   const request = await prisma.studentLeaveRequest.create({
     data: {
@@ -525,7 +629,9 @@ export const getParentProfile = async (req: Request, res: Response) => {
   const profile = parents[0];
   const children = await resolveChildren(auth.userId);
   res.status(200).json({
-    name: profile ? `${profile.firstName} ${profile.lastName}`.trim() : user?.email ?? 'Parent',
+    name: profile
+      ? `${profile.firstName} ${profile.lastName}`.trim()
+      : (user?.email ?? 'Parent'),
     firstName: profile?.firstName ?? '',
     lastName: profile?.lastName ?? '',
     phone: profile?.phone ?? null,
@@ -550,7 +656,8 @@ export const updateParentProfile = async (req: Request, res: Response) => {
     },
     select: { id: true },
   });
-  if (duplicate) throw new HttpError(409, 'Email is already used by another account');
+  if (duplicate)
+    throw new HttpError(409, 'Email is already used by another account');
 
   await prisma.$transaction([
     prisma.parentProfile.updateMany({
@@ -574,7 +681,10 @@ export const updateParentProfile = async (req: Request, res: Response) => {
 export const getParentDashboard = async (req: Request, res: Response) => {
   const auth = requireAuth(req);
   const { childId } = req.query;
-  const { child } = await requireChildAccess(auth.userId, typeof childId === 'string' ? childId : undefined);
+  const { child } = await requireChildAccess(
+    auth.userId,
+    typeof childId === 'string' ? childId : undefined,
+  );
 
   const attendanceRecords = await attendanceReadService.getStudentAttendance({
     schoolId: child.schoolId,
@@ -582,8 +692,12 @@ export const getParentDashboard = async (req: Request, res: Response) => {
     source: 'period-attendance',
   });
   const totalRecords = attendanceRecords.length;
-  const presentRecords = attendanceRecords.filter((record) => ['PRESENT', 'LATE', 'EXCUSED'].includes(record.status)).length;
-  const attendancePercent = totalRecords ? Math.round((presentRecords / totalRecords) * 100) : null;
+  const presentRecords = attendanceRecords.filter((record) =>
+    ['PRESENT', 'LATE', 'EXCUSED'].includes(record.status),
+  ).length;
+  const attendancePercent = totalRecords
+    ? Math.round((presentRecords / totalRecords) * 100)
+    : null;
 
   const currentExam = await prisma.exam.findFirst({
     where: {
@@ -602,9 +716,19 @@ export const getParentDashboard = async (req: Request, res: Response) => {
     take: 300,
   });
   const gradingSettings = await getExamGradingSettings(child.schoolId);
-  let latestResult: { examName: string; total: string; status: string } | null = null;
+  let latestResult: { examName: string; total: string; status: string } | null =
+    null;
   if (marks.length) {
-    const byExam = new Map<string, { examName: string; totalMarks: number; maxMarks: number; subjectMarks: Array<{ marks: number; maxMarks: number }>; createdAt: Date }>();
+    const byExam = new Map<
+      string,
+      {
+        examName: string;
+        totalMarks: number;
+        maxMarks: number;
+        subjectMarks: Array<{ marks: number; maxMarks: number }>;
+        createdAt: Date;
+      }
+    >();
     marks.forEach((mark) => {
       const exam = mark.examPaper.exam;
       if (!exam) return;
@@ -617,16 +741,27 @@ export const getParentDashboard = async (req: Request, res: Response) => {
       };
       entry.totalMarks += mark.marks;
       entry.maxMarks += mark.examPaper.maxMarks;
-      entry.subjectMarks.push({ marks: mark.marks, maxMarks: mark.examPaper.maxMarks });
+      entry.subjectMarks.push({
+        marks: mark.marks,
+        maxMarks: mark.examPaper.maxMarks,
+      });
       if (exam.createdAt > entry.createdAt) entry.createdAt = exam.createdAt;
       byExam.set(exam.id, entry);
     });
-    const latest = Array.from(byExam.values()).sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())[0];
+    const latest = Array.from(byExam.values()).sort(
+      (a, b) => b.createdAt.getTime() - a.createdAt.getTime(),
+    )[0];
     if (latest) {
       latestResult = {
         examName: latest.examName,
         total: `${latest.totalMarks}/${latest.maxMarks}`,
-        status: evaluateFailCriteria(latest.subjectMarks, gradingSettings.failCriteria).status === 'PASS' ? 'Pass' : 'Fail',
+        status:
+          evaluateFailCriteria(
+            latest.subjectMarks,
+            gradingSettings.failCriteria,
+          ).status === 'PASS'
+            ? 'Pass'
+            : 'Fail',
       };
     }
   }
@@ -640,9 +775,15 @@ export const getParentDashboard = async (req: Request, res: Response) => {
     toDate: new Date(),
     source: 'period-attendance',
   });
-  const presentDays = recentAttendance.filter((record) => record.status !== 'ABSENT').length;
-  const absentDays = recentAttendance.filter((record) => record.status === 'ABSENT').length;
-  const monthlyPercent = recentAttendance.length ? Math.round((presentDays / recentAttendance.length) * 100) : 0;
+  const presentDays = recentAttendance.filter(
+    (record) => record.status !== 'ABSENT',
+  ).length;
+  const absentDays = recentAttendance.filter(
+    (record) => record.status === 'ABSENT',
+  ).length;
+  const monthlyPercent = recentAttendance.length
+    ? Math.round((presentDays / recentAttendance.length) * 100)
+    : 0;
 
   res.status(200).json({
     child,
@@ -661,9 +802,18 @@ export const getParentDashboard = async (req: Request, res: Response) => {
 export const listParentExams = async (req: Request, res: Response) => {
   const auth = requireAuth(req);
   const { childId, academicYearId } = req.query;
-  const { child } = await requireChildAccess(auth.userId, typeof childId === 'string' ? childId : undefined);
-  const yearId = typeof academicYearId === 'string' && academicYearId.trim() ? academicYearId.trim() : null;
-  const limit = parseLimit(req.query.limit, { defaultLimit: 50, maxLimit: 100 });
+  const { child } = await requireChildAccess(
+    auth.userId,
+    typeof childId === 'string' ? childId : undefined,
+  );
+  const yearId =
+    typeof academicYearId === 'string' && academicYearId.trim()
+      ? academicYearId.trim()
+      : null;
+  const limit = parseLimit(req.query.limit, {
+    defaultLimit: 50,
+    maxLimit: 100,
+  });
 
   const exams = await prisma.exam.findMany({
     where: {
@@ -672,10 +822,7 @@ export const listParentExams = async (req: Request, res: Response) => {
       status: { in: ['PUBLISHED', 'CLOSED'] },
       AND: [
         {
-          OR: [
-            { classId: child.classId ?? undefined },
-            { classId: null },
-          ],
+          OR: [{ classId: child.classId ?? undefined }, { classId: null }],
         },
         {
           OR: [
@@ -713,7 +860,10 @@ export const listParentExams = async (req: Request, res: Response) => {
 export const listParentSubjects = async (req: Request, res: Response) => {
   const auth = requireAuth(req);
   const { childId } = req.query;
-  const { child } = await requireChildAccess(auth.userId, typeof childId === 'string' ? childId : undefined);
+  const { child } = await requireChildAccess(
+    auth.userId,
+    typeof childId === 'string' ? childId : undefined,
+  );
 
   if (!child.classId) {
     res.status(200).json([]);
@@ -729,14 +879,22 @@ export const listParentSubjects = async (req: Request, res: Response) => {
     orderBy: { name: 'asc' },
   });
 
-  res.status(200).json(subjects.map((subject) => ({ id: subject.id, name: subject.name })));
+  res
+    .status(200)
+    .json(subjects.map((subject) => ({ id: subject.id, name: subject.name })));
 };
 
 export const getParentResults = async (req: Request, res: Response) => {
   const auth = requireAuth(req);
   const { childId } = req.query;
-  const { child } = await requireChildAccess(auth.userId, typeof childId === 'string' ? childId : undefined);
-  const limit = parseLimit(req.query.limit, { defaultLimit: 200, maxLimit: 500 });
+  const { child } = await requireChildAccess(
+    auth.userId,
+    typeof childId === 'string' ? childId : undefined,
+  );
+  const limit = parseLimit(req.query.limit, {
+    defaultLimit: 200,
+    maxLimit: 500,
+  });
 
   const examTypeRows = await prisma.examTypeConfig.findMany({
     where: { schoolId: child.schoolId },
@@ -760,29 +918,32 @@ export const getParentResults = async (req: Request, res: Response) => {
   const hasNextPage = marks.length > limit;
   const resultMarks = marks.slice(0, limit);
 
-  const grouped = new Map<string, {
-    examId: string;
-    examName: string;
-    examType: string;
-    examTypeCode: string;
-    examTypeActive: boolean | null;
-    examDate: string | null;
-    resultPublishAt: string | null;
-    academicYearId: string;
-    classId: string | null;
-    sectionId: string | null;
-    subjects: Array<{
-      subjectId: string;
-      subjectName: string;
-      marks: number;
-      maxMarks: number;
-      passMarks: number;
-      grade?: string | null;
-      scheduledAt: string | null;
-    }>;
-    totalMarks: number;
-    totalMaxMarks: number;
-  }>();
+  const grouped = new Map<
+    string,
+    {
+      examId: string;
+      examName: string;
+      examType: string;
+      examTypeCode: string;
+      examTypeActive: boolean | null;
+      examDate: string | null;
+      resultPublishAt: string | null;
+      academicYearId: string;
+      classId: string | null;
+      sectionId: string | null;
+      subjects: Array<{
+        subjectId: string;
+        subjectName: string;
+        marks: number;
+        maxMarks: number;
+        passMarks: number;
+        grade?: string | null;
+        scheduledAt: string | null;
+      }>;
+      totalMarks: number;
+      totalMaxMarks: number;
+    }
+  >();
 
   resultMarks.forEach((mark) => {
     const exam = mark.examPaper.exam;
@@ -796,7 +957,9 @@ export const getParentResults = async (req: Request, res: Response) => {
       maxMarks: mark.examPaper.maxMarks,
       passMarks: mark.examPaper.passMarks,
       grade: mark.grade ?? null,
-      scheduledAt: mark.examPaper.scheduledAt ? mark.examPaper.scheduledAt.toISOString() : null,
+      scheduledAt: mark.examPaper.scheduledAt
+        ? mark.examPaper.scheduledAt.toISOString()
+        : null,
     };
 
     if (!existing) {
@@ -807,7 +970,9 @@ export const getParentResults = async (req: Request, res: Response) => {
         examTypeCode: exam.type,
         examTypeActive: examTypeInfo?.isActive ?? null,
         examDate: exam.scheduledAt ? exam.scheduledAt.toISOString() : null,
-        resultPublishAt: exam.resultPublishAt ? exam.resultPublishAt.toISOString() : null,
+        resultPublishAt: exam.resultPublishAt
+          ? exam.resultPublishAt.toISOString()
+          : null,
         academicYearId: exam.academicYearId,
         classId: exam.classId ?? null,
         sectionId: exam.sectionId ?? null,
@@ -825,13 +990,18 @@ export const getParentResults = async (req: Request, res: Response) => {
 
   const items = Array.from(grouped.values()).map((entry) => ({
     ...entry,
-    percentage: entry.totalMaxMarks ? Math.round((entry.totalMarks / entry.totalMaxMarks) * 100) : null,
+    percentage: entry.totalMaxMarks
+      ? Math.round((entry.totalMarks / entry.totalMaxMarks) * 100)
+      : null,
   }));
 
   const gradingSettings = await getExamGradingSettings(child.schoolId);
   const itemsWithStatus = items.map((entry) => {
     const evaluation = evaluateFailCriteria(
-      entry.subjects.map((subject) => ({ marks: subject.marks, maxMarks: subject.maxMarks })),
+      entry.subjects.map((subject) => ({
+        marks: subject.marks,
+        maxMarks: subject.maxMarks,
+      })),
       gradingSettings.failCriteria,
     );
     return {
@@ -855,9 +1025,13 @@ export const getParentResults = async (req: Request, res: Response) => {
 export const getParentAttendance = async (req: Request, res: Response) => {
   const auth = requireAuth(req);
   const { childId, month, date } = req.query;
-  const { child } = await requireChildAccess(auth.userId, typeof childId === 'string' ? childId : undefined);
+  const { child } = await requireChildAccess(
+    auth.userId,
+    typeof childId === 'string' ? childId : undefined,
+  );
 
-  const start = month && typeof month === 'string' ? new Date(`${month}-01`) : new Date();
+  const start =
+    month && typeof month === 'string' ? new Date(`${month}-01`) : new Date();
   start.setDate(1);
   const end = new Date(start);
   end.setMonth(start.getMonth() + 1);
@@ -885,21 +1059,33 @@ export const getParentAttendance = async (req: Request, res: Response) => {
   };
   const dateKey = (value: Date) => value.toISOString().slice(0, 10);
   const selectedDate =
-    typeof date === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(date) ? date : dateKey(new Date());
+    typeof date === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(date)
+      ? date
+      : dateKey(new Date());
 
   const matchesUnit = (
     record: (typeof records)[number],
-    unit: Awaited<ReturnType<typeof attendanceSheetService.resolveAttendanceUnits>>['units'][number],
+    unit: Awaited<
+      ReturnType<typeof attendanceSheetService.resolveAttendanceUnits>
+    >['units'][number],
   ) => {
     const recordUnit = record.unit;
     if (unit.unitType === 'DAY') {
-      return recordUnit?.unitType === 'DAY' || record.source === 'session-attendance';
+      return (
+        recordUnit?.unitType === 'DAY' || record.source === 'session-attendance'
+      );
     }
     if (unit.unitType === 'SLOT') {
-      return recordUnit?.unitType === 'SLOT' && recordUnit.slotId === (unit.slotId ?? null);
+      return (
+        recordUnit?.unitType === 'SLOT' &&
+        recordUnit.slotId === (unit.slotId ?? null)
+      );
     }
     if (unit.unitType === 'PERIOD') {
-      return recordUnit?.unitType === 'PERIOD' && recordUnit.periodId === (unit.periodId ?? null);
+      return (
+        recordUnit?.unitType === 'PERIOD' &&
+        recordUnit.periodId === (unit.periodId ?? null)
+      );
     }
     if (unit.unitType === 'TIMETABLE_ENTRY') {
       return (
@@ -916,8 +1102,12 @@ export const getParentAttendance = async (req: Request, res: Response) => {
     const nextStatus = normalizeStatus(record.status);
     const existing = byDate.get(key);
     const nextRank = statusRank[nextStatus] ?? 0;
-    const existingRank = existing ? statusRank[existing.status] ?? 0 : 0;
-    if (!existing || nextRank > existingRank || (nextRank === existingRank && !existing.remark && record.note)) {
+    const existingRank = existing ? (statusRank[existing.status] ?? 0) : 0;
+    if (
+      !existing ||
+      nextRank > existingRank ||
+      (nextRank === existingRank && !existing.remark && record.note)
+    ) {
       byDate.set(key, { status: nextStatus, remark: record.note ?? null });
     }
   });
@@ -927,8 +1117,12 @@ export const getParentAttendance = async (req: Request, res: Response) => {
     status: entry.status,
     remark: entry.remark ?? null,
   }));
-  const presentDays = calendar.filter((entry) => entry.status === 'Present').length;
-  const absentDays = calendar.filter((entry) => entry.status === 'Absent').length;
+  const presentDays = calendar.filter(
+    (entry) => entry.status === 'Present',
+  ).length;
+  const absentDays = calendar.filter(
+    (entry) => entry.status === 'Absent',
+  ).length;
   const selectedDateObject = new Date(`${selectedDate}T00:00:00.000Z`);
   const attendanceUnits = child.classId
     ? await attendanceSheetService.resolveAttendanceUnits({
@@ -940,13 +1134,19 @@ export const getParentAttendance = async (req: Request, res: Response) => {
       })
     : {
         configuration: { mode: 'DAILY' as const },
-        units: [{ unitType: 'DAY' as const, label: 'Day', source: 'DAY' as const }],
+        units: [
+          { unitType: 'DAY' as const, label: 'Day', source: 'DAY' as const },
+        ],
       };
-  const selectedRecords = records.filter((record) => record.date === selectedDate);
+  const selectedRecords = records.filter(
+    (record) => record.date === selectedDate,
+  );
   const sessions = attendanceUnits.units.map((unit, index) => {
     const record = selectedRecords.find((entry) => matchesUnit(entry, unit));
     return {
-      id: record?.sessionId ?? `${selectedDate}:${unit.unitType}:${unit.slotId ?? unit.periodId ?? unit.timetableEntryId ?? 'day'}`,
+      id:
+        record?.sessionId ??
+        `${selectedDate}:${unit.unitType}:${unit.slotId ?? unit.periodId ?? unit.timetableEntryId ?? 'day'}`,
       unitType: unit.unitType,
       mode: attendanceUnits.configuration.mode,
       label:
@@ -955,8 +1155,8 @@ export const getParentAttendance = async (req: Request, res: Response) => {
           : unit.unitType === 'SLOT'
             ? `${unit.label} Session`
             : unit.label,
-      startTime: 'startTime' in unit ? unit.startTime ?? null : null,
-      endTime: 'endTime' in unit ? unit.endTime ?? null : null,
+      startTime: 'startTime' in unit ? (unit.startTime ?? null) : null,
+      endTime: 'endTime' in unit ? (unit.endTime ?? null) : null,
       status: record ? normalizeStatus(record.status) : 'Unmarked',
       remark: record?.note ?? null,
       sequence: index + 1,
@@ -976,7 +1176,10 @@ export const getParentAttendance = async (req: Request, res: Response) => {
 export const listParentNotices = async (req: Request, res: Response) => {
   const auth = requireAuth(req);
   const { childId } = req.query;
-  const { child } = await requireChildAccess(auth.userId, typeof childId === 'string' ? childId : undefined);
+  const { child } = await requireChildAccess(
+    auth.userId,
+    typeof childId === 'string' ? childId : undefined,
+  );
   const now = new Date();
   const [notices, pushLogs] = await Promise.all([
     prisma.communicationNotice.findMany({
@@ -1005,7 +1208,9 @@ export const listParentNotices = async (req: Request, res: Response) => {
       const to = payloadString(payload, 'to');
       const payloadChildId = payloadString(payload, 'childId');
       const alertType = payloadString(payload, 'alertType');
-      return to === auth.userId && payloadChildId === child.id && Boolean(alertType);
+      return (
+        to === auth.userId && payloadChildId === child.id && Boolean(alertType)
+      );
     })
     .map(({ log, payload }) => ({
       id: log.id,
@@ -1045,11 +1250,13 @@ export const listParentNotices = async (req: Request, res: Response) => {
       details: { audience: notice.audience },
     }));
 
-  res.status(200).json(
-    [...targetedAlerts, ...noticeItems]
-      .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
-      .slice(0, 100),
-  );
+  res
+    .status(200)
+    .json(
+      [...targetedAlerts, ...noticeItems]
+        .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
+        .slice(0, 100),
+    );
 };
 
 export const listParentTimetable = async (_req: Request, res: Response) => {
@@ -1059,8 +1266,14 @@ export const listParentTimetable = async (_req: Request, res: Response) => {
 export const listParentFees = async (req: Request, res: Response) => {
   const auth = requireAuth(req);
   const { childId } = req.query;
-  const { child } = await requireChildAccess(auth.userId, typeof childId === 'string' ? childId : undefined);
-  const limit = parseLimit(req.query.limit, { defaultLimit: 100, maxLimit: 100 });
+  const { child } = await requireChildAccess(
+    auth.userId,
+    typeof childId === 'string' ? childId : undefined,
+  );
+  const limit = parseLimit(req.query.limit, {
+    defaultLimit: 100,
+    maxLimit: 100,
+  });
 
   const invoices = await prisma.feeInvoice.findMany({
     where: {
@@ -1081,7 +1294,9 @@ export const listParentFees = async (req: Request, res: Response) => {
   const items = invoices.map((invoice) => ({
     id: invoice.id,
     invoiceNumber: invoice.invoiceNumber,
-    title: invoice.feeMonth ? `${invoice.feeMonth} Fee` : invoice.feeType?.name ?? 'School Fee',
+    title: invoice.feeMonth
+      ? `${invoice.feeMonth} Fee`
+      : (invoice.feeType?.name ?? 'School Fee'),
     feeType: invoice.feeType?.name ?? null,
     amount: invoice.totalAmount,
     paidAmount: invoice.paidAmount,

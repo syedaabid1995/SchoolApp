@@ -60,6 +60,9 @@ class _ParentProfileScreenState extends ConsumerState<ParentProfileScreen> {
   Widget build(BuildContext context) {
     final profileState = ref.watch(parentProfileProvider);
     final pushState = ref.watch(parentPushPreferenceProvider);
+    final childDetailId = _panel == _ProfilePanel.children
+        ? _selectedChildId
+        : null;
     return PopScope(
       canPop: _panel == _ProfilePanel.menu && _selectedChildId == null,
       onPopInvokedWithResult: (didPop, _) {
@@ -74,95 +77,120 @@ class _ParentProfileScreenState extends ConsumerState<ParentProfileScreen> {
             if (_selectedChildId != null) {
               ref.invalidate(parentChildDetailProvider(_selectedChildId!));
             }
-            await ref.read(parentProfileProvider.future);
+            if (childDetailId == null) {
+              await ref.read(parentProfileProvider.future);
+            }
           },
-          child: ListView(
-            padding: EdgeInsets.zero,
-            children: [
-              ParentHero(
-                badge: '👤 Parent Profile',
-                title: _titleForPanel(),
-                subtitle: _subtitleForPanel(),
-                trailing: IconButton(
-                  tooltip: 'Back',
-                  style: IconButton.styleFrom(
-                    backgroundColor: Colors.white.withValues(alpha: 0.16),
-                    foregroundColor: Colors.white,
+          child: childDetailId != null
+              ? _ChildDetailScroll(
+                  childId: childDetailId,
+                  hero: ParentHero(
+                    badge: '👤 Parent Profile',
+                    title: _titleForPanel(),
+                    subtitle: _subtitleForPanel(),
+                    trailing: IconButton(
+                      tooltip: 'Back',
+                      style: IconButton.styleFrom(
+                        backgroundColor: Colors.white.withValues(alpha: 0.16),
+                        foregroundColor: Colors.white,
+                      ),
+                      onPressed: _handleBack,
+                      icon: const Icon(Icons.arrow_back_rounded),
+                    ),
                   ),
-                  onPressed: () {
-                    if (_panel == _ProfilePanel.menu &&
-                        _selectedChildId == null) {
-                      Navigator.of(context).maybePop();
-                    } else {
-                      _handleBack();
-                    }
-                  },
-                  icon: const Icon(Icons.arrow_back_rounded),
-                ),
-              ),
-              Padding(
-                padding: const EdgeInsets.fromLTRB(20, 22, 20, 32),
-                child: profileState.when(
-                  loading: () => const LoadingPanel(),
-                  error: (error, _) =>
-                      EmptyPanel(message: parentApiError(error)),
-                  data: (profile) {
-                    _seedProfile(profile);
-                    return switch (_panel) {
-                      _ProfilePanel.viewProfile => _ViewProfilePanel(
-                        profile: profile,
-                      ),
-                      _ProfilePanel.editProfile => _EditProfilePanel(
-                        firstNameController: _firstNameController,
-                        lastNameController: _lastNameController,
-                        emailController: _emailController,
-                        phoneController: _phoneController,
-                        saving: _savingProfile,
-                        onSave: _saveProfile,
-                      ),
-                      _ProfilePanel.changePassword => _ChangePasswordPanel(
-                        currentPasswordController: _currentPasswordController,
-                        newPasswordController: _newPasswordController,
-                        confirmPasswordController: _confirmPasswordController,
-                        saving: _changingPassword,
-                        onSave: _changePassword,
-                      ),
-                      _ProfilePanel.info => _InfoPanel(
-                        title: _infoTitle,
-                        body: _infoBody,
-                      ),
-                      _ProfilePanel.children => _ChildrenPanel(
-                        profile: profile,
-                        selectedChildId: _selectedChildId,
-                        onSelectChild: (childId) =>
-                            setState(() => _selectedChildId = childId),
-                      ),
-                      _ProfilePanel.menu => _ProfileMenuPanel(
-                        profile: profile,
-                        pushState: pushState,
-                        onOpenProfile: () =>
-                            setState(() => _panel = _ProfilePanel.viewProfile),
-                        onOpenEdit: () =>
-                            setState(() => _panel = _ProfilePanel.editProfile),
-                        onOpenChildren: () => setState(() {
-                          _selectedChildId = null;
-                          _panel = _ProfilePanel.children;
-                        }),
-                        onOpenPassword: () => setState(
-                          () => _panel = _ProfilePanel.changePassword,
+                )
+              : ListView(
+                  padding: EdgeInsets.zero,
+                  children: [
+                    ParentHero(
+                      badge: '👤 Parent Profile',
+                      title: _titleForPanel(),
+                      subtitle: _subtitleForPanel(),
+                      trailing: IconButton(
+                        tooltip: 'Back',
+                        style: IconButton.styleFrom(
+                          backgroundColor: Colors.white.withValues(alpha: 0.16),
+                          foregroundColor: Colors.white,
                         ),
-                        onTogglePush: _togglePush,
-                        onOpenInfo: _openInfo,
-                        onLogout: () => ref
-                            .read(parentAuthControllerProvider.notifier)
-                            .logout(),
+                        onPressed: () {
+                          if (_panel == _ProfilePanel.menu &&
+                              _selectedChildId == null) {
+                            Navigator.of(context).maybePop();
+                          } else {
+                            _handleBack();
+                          }
+                        },
+                        icon: const Icon(Icons.arrow_back_rounded),
                       ),
-                    };
-                  },
+                    ),
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(20, 22, 20, 32),
+                      child: profileState.when(
+                        loading: () => const LoadingPanel(),
+                        error: (error, _) =>
+                            EmptyPanel(message: parentApiError(error)),
+                        data: (profile) {
+                          _seedProfile(profile);
+                          return switch (_panel) {
+                            _ProfilePanel.viewProfile => _ViewProfilePanel(
+                              profile: profile,
+                            ),
+                            _ProfilePanel.editProfile => _EditProfilePanel(
+                              firstNameController: _firstNameController,
+                              lastNameController: _lastNameController,
+                              emailController: _emailController,
+                              phoneController: _phoneController,
+                              saving: _savingProfile,
+                              onSave: _saveProfile,
+                            ),
+                            _ProfilePanel.changePassword =>
+                              _ChangePasswordPanel(
+                                currentPasswordController:
+                                    _currentPasswordController,
+                                newPasswordController: _newPasswordController,
+                                confirmPasswordController:
+                                    _confirmPasswordController,
+                                saving: _changingPassword,
+                                onSave: _changePassword,
+                              ),
+                            _ProfilePanel.info => _InfoPanel(
+                              title: _infoTitle,
+                              body: _infoBody,
+                            ),
+                            _ProfilePanel.children => _ChildrenPanel(
+                              profile: profile,
+                              selectedChildId: _selectedChildId,
+                              onSelectChild: (childId) =>
+                                  setState(() => _selectedChildId = childId),
+                            ),
+                            _ProfilePanel.menu => _ProfileMenuPanel(
+                              profile: profile,
+                              pushState: pushState,
+                              onOpenProfile: () => setState(
+                                () => _panel = _ProfilePanel.viewProfile,
+                              ),
+                              onOpenEdit: () => setState(
+                                () => _panel = _ProfilePanel.editProfile,
+                              ),
+                              onOpenChildren: () => setState(() {
+                                _selectedChildId = null;
+                                _panel = _ProfilePanel.children;
+                              }),
+                              onOpenPassword: () => setState(
+                                () => _panel = _ProfilePanel.changePassword,
+                              ),
+                              onTogglePush: _togglePush,
+                              onOpenInfo: _openInfo,
+                              onLogout: () => ref
+                                  .read(parentAuthControllerProvider.notifier)
+                                  .logout(),
+                            ),
+                          };
+                        },
+                      ),
+                    ),
+                  ],
                 ),
-              ),
-            ],
-          ),
         ),
       ),
     );
@@ -633,9 +661,87 @@ class _ChildDetailPanel extends ConsumerWidget {
         children: [
           _ChildSummaryCard(child: detail.child),
           const SizedBox(height: 16),
-          _ChildDetailTabs(tabs: detail.tabs),
+          _DataPanel(
+            tabKey: 'profile',
+            title: 'Profile',
+            data: detail.tabs['profile'],
+          ),
         ],
       ),
+    );
+  }
+}
+
+class _ChildDetailScroll extends ConsumerStatefulWidget {
+  const _ChildDetailScroll({required this.childId, required this.hero});
+
+  final String childId;
+  final Widget hero;
+
+  @override
+  ConsumerState<_ChildDetailScroll> createState() => _ChildDetailScrollState();
+}
+
+class _ChildDetailScrollState extends ConsumerState<_ChildDetailScroll> {
+  int _selectedIndex = 0;
+
+  @override
+  Widget build(BuildContext context) {
+    final detailState = ref.watch(parentChildDetailProvider(widget.childId));
+    return detailState.when(
+      loading: () => CustomScrollView(
+        slivers: [
+          SliverToBoxAdapter(child: widget.hero),
+          const SliverPadding(
+            padding: EdgeInsets.fromLTRB(20, 22, 20, 32),
+            sliver: SliverToBoxAdapter(child: LoadingPanel()),
+          ),
+        ],
+      ),
+      error: (error, _) => CustomScrollView(
+        slivers: [
+          SliverToBoxAdapter(child: widget.hero),
+          SliverPadding(
+            padding: const EdgeInsets.fromLTRB(20, 22, 20, 32),
+            sliver: SliverToBoxAdapter(
+              child: EmptyPanel(
+                message: parentApiError(error, 'Unable to load child profile'),
+              ),
+            ),
+          ),
+        ],
+      ),
+      data: (detail) {
+        final selectedTab = _childDetailTabs[_selectedIndex];
+        return CustomScrollView(
+          slivers: [
+            SliverToBoxAdapter(child: widget.hero),
+            SliverPadding(
+              padding: const EdgeInsets.fromLTRB(20, 22, 20, 14),
+              sliver: SliverToBoxAdapter(
+                child: _ChildSummaryCard(child: detail.child),
+              ),
+            ),
+            SliverPersistentHeader(
+              pinned: true,
+              delegate: _ChildTabsHeaderDelegate(
+                selectedIndex: _selectedIndex,
+                onTap: (index) => setState(() => _selectedIndex = index),
+              ),
+            ),
+            SliverPadding(
+              padding: const EdgeInsets.fromLTRB(20, 14, 20, 32),
+              sliver: SliverToBoxAdapter(
+                child: _DataPanel(
+                  tabKey: selectedTab.key,
+                  title: selectedTab.label,
+                  data: detail.tabs[selectedTab.key],
+                ),
+              ),
+            ),
+          ],
+        );
+      },
     );
   }
 }
@@ -674,19 +780,6 @@ class _ChildSummaryCard extends StatelessWidget {
                   color: Color(0xFF60708F),
                   fontWeight: FontWeight.w800,
                 ),
-              ),
-              const SizedBox(height: 6),
-              Wrap(
-                spacing: 8,
-                runSpacing: 8,
-                children: [
-                  if (child.rollNo?.trim().isNotEmpty == true)
-                    _InfoChip(label: 'Roll', value: child.rollNo!),
-                  if (child.status?.trim().isNotEmpty == true)
-                    _InfoChip(label: 'Status', value: child.status!),
-                  if (child.gender?.trim().isNotEmpty == true)
-                    _InfoChip(label: 'Gender', value: child.gender!),
-                ],
               ),
             ],
           ),
@@ -734,31 +827,6 @@ class _ChildAvatar extends StatelessWidget {
   );
 }
 
-class _InfoChip extends StatelessWidget {
-  const _InfoChip({required this.label, required this.value});
-
-  final String label;
-  final String value;
-
-  @override
-  Widget build(BuildContext context) => Container(
-    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
-    decoration: BoxDecoration(
-      color: const Color(0xFFEAF1FF),
-      borderRadius: BorderRadius.circular(999),
-      border: Border.all(color: const Color(0xFFD9E6FF)),
-    ),
-    child: Text(
-      '$label: ${_displayValue(value)}',
-      style: const TextStyle(
-        color: SaaptTheme.primary,
-        fontSize: 12,
-        fontWeight: FontWeight.w900,
-      ),
-    ),
-  );
-}
-
 const _childDetailTabs = [
   _ChildTabConfig('profile', 'Profile', Icons.person_outline),
   _ChildTabConfig('parents', 'Parents', Icons.supervisor_account_outlined),
@@ -779,75 +847,143 @@ class _ChildTabConfig {
   final IconData icon;
 }
 
-class _ChildDetailTabs extends StatefulWidget {
-  const _ChildDetailTabs({required this.tabs});
+class _ChildTabsHeaderDelegate extends SliverPersistentHeaderDelegate {
+  const _ChildTabsHeaderDelegate({
+    required this.selectedIndex,
+    required this.onTap,
+  });
 
-  final Map<String, dynamic> tabs;
+  final int selectedIndex;
+  final ValueChanged<int> onTap;
 
   @override
-  State<_ChildDetailTabs> createState() => _ChildDetailTabsState();
+  double get minExtent => 64;
+
+  @override
+  double get maxExtent => 64;
+
+  @override
+  Widget build(
+    BuildContext context,
+    double shrinkOffset,
+    bool overlapsContent,
+  ) {
+    return Container(
+      color: SaaptTheme.canvas,
+      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 6),
+      child: _ChildTabBar(selectedIndex: selectedIndex, onTap: onTap),
+    );
+  }
+
+  @override
+  bool shouldRebuild(covariant _ChildTabsHeaderDelegate oldDelegate) {
+    return oldDelegate.selectedIndex != selectedIndex;
+  }
 }
 
-class _ChildDetailTabsState extends State<_ChildDetailTabs> {
-  int _selectedIndex = 0;
+class _ChildTabBar extends StatelessWidget {
+  const _ChildTabBar({required this.selectedIndex, required this.onTap});
+
+  final int selectedIndex;
+  final ValueChanged<int> onTap;
 
   @override
   Widget build(BuildContext context) {
-    final selectedTab = _childDetailTabs[_selectedIndex];
-    return DefaultTabController(
-      length: _childDetailTabs.length,
-      initialIndex: _selectedIndex,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          ParentCard(
-            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 8),
-            child: TabBar(
-              isScrollable: true,
-              tabAlignment: TabAlignment.start,
-              labelColor: SaaptTheme.primary,
-              unselectedLabelColor: const Color(0xFF60708F),
-              indicatorColor: SaaptTheme.primary,
-              labelStyle: const TextStyle(fontWeight: FontWeight.w900),
-              onTap: (index) => setState(() => _selectedIndex = index),
-              tabs: _childDetailTabs
-                  .map(
-                    (tab) =>
-                        Tab(icon: Icon(tab.icon, size: 20), text: tab.label),
-                  )
-                  .toList(),
-            ),
+    return ParentCard(
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 6),
+      child: SingleChildScrollView(
+        scrollDirection: Axis.horizontal,
+        child: Row(
+          children: [
+            for (var index = 0; index < _childDetailTabs.length; index++)
+              _ChildTabButton(
+                tab: _childDetailTabs[index],
+                selected: selectedIndex == index,
+                onTap: () => onTap(index),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _ChildTabButton extends StatelessWidget {
+  const _ChildTabButton({
+    required this.tab,
+    required this.selected,
+    required this.onTap,
+  });
+
+  final _ChildTabConfig tab;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(right: 6),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(12),
+        onTap: onTap,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 160),
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
+          decoration: BoxDecoration(
+            color: selected ? SaaptTheme.primary : Colors.transparent,
+            borderRadius: BorderRadius.circular(12),
           ),
-          const SizedBox(height: 14),
-          _DataPanel(
-            title: selectedTab.label,
-            data: widget.tabs[selectedTab.key],
+          child: Row(
+            children: [
+              Icon(
+                tab.icon,
+                size: 16,
+                color: selected ? Colors.white : const Color(0xFF60708F),
+              ),
+              const SizedBox(width: 6),
+              Text(
+                tab.label,
+                style: TextStyle(
+                  color: selected ? Colors.white : SaaptTheme.navy,
+                  fontSize: 12,
+                  fontWeight: FontWeight.w900,
+                ),
+              ),
+            ],
           ),
-        ],
+        ),
       ),
     );
   }
 }
 
 class _DataPanel extends StatelessWidget {
-  const _DataPanel({required this.title, required this.data});
+  const _DataPanel({
+    required this.tabKey,
+    required this.title,
+    required this.data,
+  });
 
+  final String tabKey;
   final String title;
   final Object? data;
 
   @override
   Widget build(BuildContext context) {
-    final cards = _buildCards(data, fallbackTitle: title);
-    if (cards.isEmpty) {
+    if (tabKey == 'profile') {
+      return _ProfileTabPanel(data: data);
+    }
+    final records = _recordsForTab(tabKey, data);
+    if (records.isEmpty) {
       return EmptyPanel(message: 'No $title records available.');
     }
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: cards
+      children: records
           .map(
-            (card) => Padding(
+            (record) => Padding(
               padding: const EdgeInsets.only(bottom: 14),
-              child: card,
+              child: _SummaryRecordTile(record: record),
             ),
           )
           .toList(),
@@ -855,46 +991,450 @@ class _DataPanel extends StatelessWidget {
   }
 }
 
-List<Widget> _buildCards(Object? data, {required String fallbackTitle}) {
+class _ProfileTabPanel extends StatelessWidget {
+  const _ProfileTabPanel({required this.data});
+
+  final Object? data;
+
+  @override
+  Widget build(BuildContext context) {
+    final map = _asMap(data);
+    final sections = <Widget>[];
+    for (final key in const ['admission', 'personal', 'address', 'medical']) {
+      final section = _asMap(map[key]);
+      if (!_isEmptyData(section)) {
+        sections.add(_RecordCard(title: _labelForKey(key), data: section));
+      }
+    }
+
+    final siblings = _recordsFromGroup('Siblings', map['siblings']);
+    if (siblings.isNotEmpty) {
+      sections.add(
+        _SimpleSection(
+          title: 'Siblings',
+          children: siblings
+              .map((record) => _SummaryRecordTile(record: record))
+              .toList(),
+        ),
+      );
+    }
+
+    if (sections.isEmpty) {
+      return const EmptyPanel(message: 'No profile records available.');
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: sections
+          .map(
+            (section) => Padding(
+              padding: const EdgeInsets.only(bottom: 14),
+              child: section,
+            ),
+          )
+          .toList(),
+    );
+  }
+}
+
+class _SimpleSection extends StatelessWidget {
+  const _SimpleSection({required this.title, required this.children});
+
+  final String title;
+  final List<Widget> children;
+
+  @override
+  Widget build(BuildContext context) {
+    return ParentCard(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            title,
+            style: const TextStyle(
+              color: SaaptTheme.navy,
+              fontSize: 16,
+              fontWeight: FontWeight.w900,
+            ),
+          ),
+          const SizedBox(height: 12),
+          ...children,
+        ],
+      ),
+    );
+  }
+}
+
+class _DisplayRecord {
+  const _DisplayRecord({
+    required this.title,
+    required this.subtitle,
+    required this.category,
+    required this.data,
+    required this.icon,
+    this.imageUrl,
+  });
+
+  final String title;
+  final String subtitle;
+  final String category;
+  final Map<String, dynamic> data;
+  final IconData icon;
+  final String? imageUrl;
+}
+
+List<_DisplayRecord> _recordsForTab(String tabKey, Object? data) {
   if (_isEmptyData(data)) return const [];
-  if (data is List) {
-    return data
+  if (tabKey == 'parents') return _parentRecords(data);
+  if (tabKey == 'documents') return _documentRecords(data);
+
+  final map = _asMap(data);
+  if (map.isEmpty) return _recordsFromGroup(_labelForKey(tabKey), data);
+
+  final records = <_DisplayRecord>[];
+  map.forEach((key, value) {
+    if (_isEmptyData(value)) return;
+    records.addAll(_recordsFromGroup(_labelForKey(key), value));
+  });
+  return records;
+}
+
+List<_DisplayRecord> _parentRecords(Object? data) {
+  final map = _asMap(data);
+  final records = <_DisplayRecord>[];
+  final seen = <String>{};
+
+  void addPerson(String type, Map<String, dynamic> person) {
+    final name = _firstString(person, ['name', 'fullName', 'firstName']);
+    if (name == null) return;
+    final details = <String, dynamic>{'type': type, ...person};
+    final key = [
+      name.toLowerCase(),
+      type.toLowerCase(),
+      _firstString(details, ['phone', 'email']) ?? '',
+    ].join('|');
+    if (!seen.add(key)) return;
+    records.add(
+      _DisplayRecord(
+        title: name,
+        subtitle: [
+          type,
+          _firstString(details, ['occupation', 'relationship', 'relation']),
+        ].whereType<String>().join(' • '),
+        category: type,
+        data: details,
+        icon: Icons.person_outline,
+        imageUrl: _imageUrlFrom(details),
+      ),
+    );
+  }
+
+  addPerson('Father', _asMap(map['father']));
+  addPerson('Mother', _asMap(map['mother']));
+  addPerson('Guardian', _asMap(map['guardian']));
+  for (final guardian in _asList(map['guardians'])) {
+    final guardianMap = _asMap(guardian);
+    addPerson(
+      _firstString(guardianMap, ['type', 'relation']) ?? 'Guardian',
+      guardianMap,
+    );
+  }
+  for (final link in _asList(map['linkedParents'])) {
+    final parent = _asMap(_asMap(link)['parent']);
+    addPerson('Linked Parent', parent);
+  }
+  return records;
+}
+
+List<_DisplayRecord> _documentRecords(Object? data) {
+  final map = _asMap(data);
+  final records = <_DisplayRecord>[];
+  records.addAll(
+    _recordsFromGroup('Uploaded Documents', map['uploadedDocuments']),
+  );
+  records.addAll(_recordsFromGroup('Student Photos', map['studentPhotos']));
+
+  final admissionDocs = _asMap(map['admissionDocuments']);
+  admissionDocs.forEach((key, value) {
+    if (_isEmptyData(value)) return;
+    records.add(
+      _DisplayRecord(
+        title: _labelForKey(key),
+        subtitle: 'Admission document',
+        category: 'Document',
+        data: {'type': _labelForKey(key), 'url': value},
+        icon: Icons.description_outlined,
+        imageUrl: value.toString(),
+      ),
+    );
+  });
+
+  final faceProfile = _asMap(map['faceProfile']);
+  if (!_isEmptyData(faceProfile)) {
+    records.add(
+      _DisplayRecord(
+        title: 'Face Profile',
+        subtitle: _displayValue(faceProfile['status']),
+        category: 'Face Profile',
+        data: faceProfile,
+        icon: Icons.face_retouching_natural_outlined,
+        imageUrl: _imageUrlFrom(faceProfile),
+      ),
+    );
+  }
+  return records;
+}
+
+List<_DisplayRecord> _recordsFromGroup(String group, Object? value) {
+  if (_isEmptyData(value)) return const [];
+  final icon = _iconForGroup(group);
+  if (value is List) {
+    return value
+        .map(_asMap)
         .where((item) => !_isEmptyData(item))
         .map(
-          (item) =>
-              _RecordCard(title: _recordTitle(item, fallbackTitle), data: item),
+          (item) => _DisplayRecord(
+            title: _titleForRecord(group, item),
+            subtitle: _subtitleForRecord(group, item),
+            category: group,
+            data: item,
+            icon: icon,
+            imageUrl: _imageUrlFrom(item),
+          ),
         )
         .toList();
   }
-  if (data is Map) {
-    final map = data.map((key, value) => MapEntry(key.toString(), value));
-    final cards = <Widget>[];
-    final scalarMap = <String, dynamic>{};
-    map.forEach((key, value) {
-      if (_shouldHideKey(key) || _isEmptyData(value)) return;
-      if (_isScalar(value)) {
-        scalarMap[key] = value;
-      } else if (value is List) {
-        cards.addAll(
-          value
-              .where((item) => !_isEmptyData(item))
-              .map(
-                (item) => _RecordCard(
-                  title: _recordTitle(item, _labelForKey(key)),
-                  data: item,
-                ),
-              ),
-        );
-      } else {
-        cards.add(_RecordCard(title: _labelForKey(key), data: value));
-      }
-    });
-    if (scalarMap.isNotEmpty) {
-      cards.insert(0, _RecordCard(title: fallbackTitle, data: scalarMap));
-    }
-    return cards;
+  final map = _asMap(value);
+  if (map.isEmpty) {
+    return [
+      _DisplayRecord(
+        title: group,
+        subtitle: _displayValue(value),
+        category: group,
+        data: {'value': value},
+        icon: icon,
+      ),
+    ];
   }
-  return [_RecordCard(title: fallbackTitle, data: data)];
+  return [
+    _DisplayRecord(
+      title: _titleForRecord(group, map),
+      subtitle: _subtitleForRecord(group, map),
+      category: group,
+      data: map,
+      icon: icon,
+      imageUrl: _imageUrlFrom(map),
+    ),
+  ];
+}
+
+class _SummaryRecordTile extends StatelessWidget {
+  const _SummaryRecordTile({required this.record});
+
+  final _DisplayRecord record;
+
+  @override
+  Widget build(BuildContext context) {
+    return ParentCard(
+      padding: const EdgeInsets.all(12),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(12),
+        onTap: () => _showRecordSheet(context, record),
+        child: Row(
+          children: [
+            _RecordThumb(imageUrl: record.imageUrl, icon: record.icon),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    record.title,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      color: SaaptTheme.navy,
+                      fontSize: 15,
+                      fontWeight: FontWeight.w900,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    record.subtitle.isEmpty ? record.category : record.subtitle,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      color: Color(0xFF60708F),
+                      fontSize: 13,
+                      height: 1.3,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(width: 8),
+            const Icon(Icons.chevron_right_rounded, color: Color(0xFF8EA0BA)),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _showRecordSheet(BuildContext context, _DisplayRecord record) {
+    showModalBottomSheet<void>(
+      context: context,
+      showDragHandle: true,
+      isScrollControlled: true,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (context) => _RecordDetailSheet(record: record),
+    );
+  }
+}
+
+class _RecordThumb extends StatelessWidget {
+  const _RecordThumb({required this.icon, this.imageUrl});
+
+  final IconData icon;
+  final String? imageUrl;
+
+  @override
+  Widget build(BuildContext context) {
+    final url = imageUrl;
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(14),
+      child: Container(
+        width: 48,
+        height: 48,
+        color: const Color(0xFFEAF1FF),
+        child: url?.trim().isNotEmpty == true
+            ? Image.network(
+                url!,
+                fit: BoxFit.cover,
+                errorBuilder: (context, error, stackTrace) =>
+                    Icon(icon, color: SaaptTheme.primary),
+              )
+            : Icon(icon, color: SaaptTheme.primary),
+      ),
+    );
+  }
+}
+
+class _RecordDetailSheet extends StatelessWidget {
+  const _RecordDetailSheet({required this.record});
+
+  final _DisplayRecord record;
+
+  @override
+  Widget build(BuildContext context) {
+    final nested = _nestedLists(record.data);
+    final scalarData = _withoutNestedLists(record.data);
+    final imageUrls = _imageUrlsFrom(record.data);
+    return SafeArea(
+      child: Padding(
+        padding: EdgeInsets.fromLTRB(
+          20,
+          4,
+          20,
+          20 + MediaQuery.of(context).viewInsets.bottom,
+        ),
+        child: SingleChildScrollView(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Row(
+                children: [
+                  _RecordThumb(imageUrl: record.imageUrl, icon: record.icon),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          record.title,
+                          style: const TextStyle(
+                            color: SaaptTheme.navy,
+                            fontSize: 18,
+                            fontWeight: FontWeight.w900,
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          record.category,
+                          style: const TextStyle(
+                            color: Color(0xFF60708F),
+                            fontWeight: FontWeight.w800,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+              if (imageUrls.isNotEmpty) ...[
+                const SizedBox(height: 16),
+                _ImageStrip(urls: imageUrls),
+              ],
+              const SizedBox(height: 16),
+              _RecordCard(title: 'Details', data: scalarData),
+              for (final entry in nested.entries) ...[
+                const SizedBox(height: 14),
+                _SimpleSection(
+                  title: _labelForKey(entry.key),
+                  children: entry.value
+                      .map(
+                        (item) => _RecordCard(
+                          title: _recordTitle(item, _labelForKey(entry.key)),
+                          data: item,
+                        ),
+                      )
+                      .toList(),
+                ),
+              ],
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _ImageStrip extends StatelessWidget {
+  const _ImageStrip({required this.urls});
+
+  final List<String> urls;
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      height: 88,
+      child: ListView.separated(
+        scrollDirection: Axis.horizontal,
+        itemCount: urls.length,
+        separatorBuilder: (_, _) => const SizedBox(width: 10),
+        itemBuilder: (context, index) => ClipRRect(
+          borderRadius: BorderRadius.circular(14),
+          child: Container(
+            width: 88,
+            height: 88,
+            color: const Color(0xFFEAF1FF),
+            child: Image.network(
+              urls[index],
+              fit: BoxFit.cover,
+              errorBuilder: (context, error, stackTrace) => const Icon(
+                Icons.image_not_supported_outlined,
+                color: SaaptTheme.primary,
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
 }
 
 class _RecordCard extends StatelessWidget {
@@ -947,8 +1487,16 @@ List<Widget> _rowsForData(Object? data) {
   return [_DetailRow(label: 'Value', value: _displayValue(data), last: true)];
 }
 
-bool _isScalar(Object? value) {
-  return value == null || value is String || value is num || value is bool;
+Map<String, dynamic> _asMap(Object? value) {
+  if (value is Map<String, dynamic>) return value;
+  if (value is Map) {
+    return value.map((key, item) => MapEntry(key.toString(), item));
+  }
+  return const <String, dynamic>{};
+}
+
+List<Object?> _asList(Object? value) {
+  return value is List ? value : const [];
 }
 
 bool _isEmptyData(Object? value) {
@@ -993,12 +1541,14 @@ String _recordTitle(Object? data, String fallback) {
       'title',
       'name',
       'fullName',
+      'studentName',
+      'leaveType',
       'invoiceNumber',
       'paymentNumber',
       'receiptNumber',
-      'leaveType',
-      'status',
       'memberCode',
+      'bookNumber',
+      'status',
     ]) {
       final value = data[key];
       if (value != null && value.toString().trim().isNotEmpty) {
@@ -1007,6 +1557,165 @@ String _recordTitle(Object? data, String fallback) {
     }
   }
   return fallback;
+}
+
+String _titleForRecord(String group, Map<String, dynamic> data) {
+  final student = _asMap(data['student']);
+  final book = _asMap(data['book']);
+  final examPaper = _asMap(data['examPaper']);
+  final exam = _asMap(examPaper['exam']);
+  final subject = _asMap(examPaper['subject']);
+  if (student.isNotEmpty) {
+    return _firstString(student, ['fullName', 'name']) ?? group;
+  }
+  if (book.isNotEmpty) {
+    return _firstString(book, ['title', 'bookNumber']) ?? group;
+  }
+  if (exam.isNotEmpty || subject.isNotEmpty) {
+    return [
+      _firstString(exam, ['name']),
+      _firstString(subject, ['name', 'code']),
+    ].whereType<String>().join(' • ');
+  }
+  return _recordTitle(data, group);
+}
+
+String _subtitleForRecord(String group, Map<String, dynamic> data) {
+  final route = _asMap(data['route']);
+  final vehicle = _asMap(data['vehicle']);
+  final dormitory = _asMap(data['dormitory']);
+  final room = _asMap(data['room']);
+  final book = _asMap(data['book']);
+  final examPaper = _asMap(data['examPaper']);
+  final exam = _asMap(examPaper['exam']);
+  final subject = _asMap(examPaper['subject']);
+  final student = _asMap(data['student']);
+  final parts = <String?>[
+    group,
+    _firstString(data, [
+      'status',
+      'type',
+      'targetType',
+      'source',
+      'paymentMode',
+      'memberType',
+      'relation',
+    ]),
+    _firstString(data, ['feeMonth', 'leaveType']),
+    _firstString(data, ['totalAmount', 'amount', 'dueAmount', 'marks']),
+    _firstString(route, ['title']),
+    _firstString(vehicle, ['vehicleNumber']),
+    _firstString(dormitory, ['name']),
+    _firstString(room, ['roomNumber']),
+    _firstString(book, ['authorName', 'bookNumber']),
+    _firstString(exam, ['name', 'status']),
+    _firstString(subject, ['name']),
+    _firstString(student, ['rollNo', 'admissionNo']),
+    _firstString(data, ['issueDate', 'returnDate', 'createdAt', 'entryDate']),
+  ];
+  return parts.whereType<String>().take(4).join(' • ');
+}
+
+String? _firstString(Map<String, dynamic> data, List<String> keys) {
+  for (final key in keys) {
+    final value = data[key];
+    if (!_isEmptyData(value)) return _displayValue(value);
+  }
+  return null;
+}
+
+IconData _iconForGroup(String group) {
+  final normalized = group.toLowerCase();
+  if (normalized.contains('invoice') ||
+      normalized.contains('fee') ||
+      normalized.contains('ledger')) {
+    return Icons.receipt_long_outlined;
+  }
+  if (normalized.contains('transport')) return Icons.directions_bus_outlined;
+  if (normalized.contains('library') ||
+      normalized.contains('book') ||
+      normalized.contains('issue')) {
+    return Icons.local_library_outlined;
+  }
+  if (normalized.contains('dormitory')) return Icons.bed_outlined;
+  if (normalized.contains('exam') || normalized.contains('mark')) {
+    return Icons.assignment_outlined;
+  }
+  if (normalized.contains('document') || normalized.contains('photo')) {
+    return Icons.folder_outlined;
+  }
+  if (normalized.contains('timeline') ||
+      normalized.contains('status') ||
+      normalized.contains('leave')) {
+    return Icons.timeline_outlined;
+  }
+  if (normalized.contains('sibling')) return Icons.family_restroom_outlined;
+  return Icons.info_outline;
+}
+
+String? _imageUrlFrom(Map<String, dynamic> data) {
+  for (final key in const ['photoUrl', 'url', 'imageUrl', 'fileUrl']) {
+    final value = data[key];
+    if (value is String && value.trim().isNotEmpty) return value;
+  }
+  final parent = _asMap(data['parent']);
+  if (parent.isNotEmpty) return _imageUrlFrom(parent);
+  final student = _asMap(data['student']);
+  if (student.isNotEmpty) return _imageUrlFrom(student);
+  return null;
+}
+
+List<String> _imageUrlsFrom(Object? data) {
+  final urls = <String>{};
+
+  void collect(Object? value, [String key = '']) {
+    if (value is String && value.trim().isNotEmpty) {
+      final normalizedKey = key.toLowerCase();
+      final lower = value.toLowerCase();
+      if (normalizedKey.contains('photo') ||
+          normalizedKey.contains('image') ||
+          lower.endsWith('.jpg') ||
+          lower.endsWith('.jpeg') ||
+          lower.endsWith('.png') ||
+          lower.endsWith('.webp')) {
+        urls.add(value);
+      }
+      return;
+    }
+    if (value is Map) {
+      value.forEach(
+        (entryKey, entryValue) => collect(entryValue, entryKey.toString()),
+      );
+    }
+    if (value is List) {
+      for (final item in value) {
+        collect(item, key);
+      }
+    }
+  }
+
+  collect(data);
+  return urls.toList();
+}
+
+Map<String, List<Map<String, dynamic>>> _nestedLists(
+  Map<String, dynamic> data,
+) {
+  final result = <String, List<Map<String, dynamic>>>{};
+  data.forEach((key, value) {
+    if (value is List && value.isNotEmpty) {
+      final records = value
+          .map(_asMap)
+          .where((item) => !_isEmptyData(item))
+          .toList();
+      if (records.isNotEmpty) result[key] = records;
+    }
+  });
+  return result;
+}
+
+Map<String, dynamic> _withoutNestedLists(Map<String, dynamic> data) {
+  return Map.fromEntries(data.entries.where((entry) => entry.value is! List));
 }
 
 String _labelForKey(String key) {
