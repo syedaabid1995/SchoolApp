@@ -89,6 +89,34 @@ const payloadString = (payload: Record<string, unknown>, key: string) => {
   return typeof value === 'string' ? value : '';
 };
 
+const payloadStringFrom = (
+  payload: Record<string, unknown>,
+  keys: string[],
+) => {
+  for (const key of keys) {
+    const value = payloadString(payload, key).trim();
+    if (value) return value;
+  }
+  return '';
+};
+
+const alertFingerprint = (item: { title: string; summary: string }) =>
+  `${item.title.trim().toLowerCase()}::${item.summary.trim().toLowerCase()}`;
+
+const parentPushAlertVisibleForChild = (params: {
+  payload: Record<string, unknown>;
+  parentUserId: string;
+  childId: string;
+}) => {
+  const to = payloadString(params.payload, 'to');
+  if (to !== params.parentUserId) return false;
+
+  const payloadChildId = payloadString(params.payload, 'childId');
+  if (payloadChildId && payloadChildId !== params.childId) return false;
+
+  return true;
+};
+
 const parseJsonPayload = (value: unknown) => {
   if (Array.isArray(value) || (value && typeof value === 'object'))
     return value;
@@ -1312,42 +1340,6 @@ export const listParentNotices = async (req: Request, res: Response) => {
     }),
   ]);
 
-  const targetedAlerts = pushLogs
-    .map((log) => ({ log, payload: payloadRecord(log.payload) }))
-    .filter(({ payload }) => {
-      const to = payloadString(payload, 'to');
-      const payloadChildId = payloadString(payload, 'childId');
-      const alertType = payloadString(payload, 'alertType');
-      return (
-        to === auth.userId && payloadChildId === child.id && Boolean(alertType)
-      );
-    })
-    .map(({ log, payload }) => ({
-      id: log.id,
-      title: payloadString(payload, 'subject') || 'School alert',
-      date: (log.sentAt ?? log.createdAt).toISOString(),
-      summary: payloadString(payload, 'body'),
-      type: payloadString(payload, 'alertType'),
-      status: log.status,
-      details: {
-        childId: payloadString(payload, 'childId'),
-        childName: payloadString(payload, 'childName'),
-        examId: payloadString(payload, 'examId'),
-        examName: payloadString(payload, 'examName'),
-        examStatus: payloadString(payload, 'examStatus'),
-        examType: payloadString(payload, 'examType'),
-        className: payloadString(payload, 'className'),
-        sectionName: payloadString(payload, 'sectionName'),
-        scheduledAt: payloadString(payload, 'scheduledAt'),
-        resultPublishAt: payloadString(payload, 'resultPublishAt'),
-        subjects: parseJsonPayload(payload.subjects),
-        attendanceDate: payloadString(payload, 'attendanceDate'),
-        attendanceUnit: payloadString(payload, 'attendanceUnit'),
-        attendanceStatus: payloadString(payload, 'attendanceStatus'),
-        remarks: payloadString(payload, 'remarks'),
-      },
-    }));
-
   const noticeItems = notices
     .filter((notice) => noticeAudienceMatchesRole(notice.audience, 'PARENT'))
     .map((notice) => ({
@@ -1359,6 +1351,64 @@ export const listParentNotices = async (req: Request, res: Response) => {
       audience: notice.audience,
       details: { audience: notice.audience },
     }));
+  const noticeFingerprints = new Set(noticeItems.map(alertFingerprint));
+
+  const targetedAlerts = pushLogs
+    .map((log) => ({ log, payload: payloadRecord(log.payload) }))
+    .filter(({ payload }) =>
+      parentPushAlertVisibleForChild({
+        payload,
+        parentUserId: auth.userId,
+        childId: child.id,
+      }),
+    )
+    .map(({ log, payload }) => {
+      const category = payloadString(payload, 'category');
+      const type = (
+        payloadString(payload, 'alertType') ||
+        (category ? category.toUpperCase() : '') ||
+        'PUSH'
+      ).toUpperCase();
+      const title =
+        payloadStringFrom(payload, ['subject', 'title']) || 'School alert';
+      const summary = payloadStringFrom(payload, ['body', 'message']);
+      return {
+        id: log.id,
+        title,
+        date: (log.sentAt ?? log.createdAt).toISOString(),
+        summary,
+        type,
+        status: log.status,
+        details: {
+          childId: payloadString(payload, 'childId'),
+          childName: payloadString(payload, 'childName'),
+          examId: payloadString(payload, 'examId'),
+          examName: payloadString(payload, 'examName'),
+          examStatus: payloadString(payload, 'examStatus'),
+          examType: payloadString(payload, 'examType'),
+          className: payloadString(payload, 'className'),
+          sectionName: payloadString(payload, 'sectionName'),
+          classLabel: payloadString(payload, 'classLabel'),
+          scheduledAt: payloadString(payload, 'scheduledAt'),
+          resultPublishAt: payloadString(payload, 'resultPublishAt'),
+          subjects: parseJsonPayload(payload.subjects),
+          attendanceDate: payloadString(payload, 'attendanceDate'),
+          attendanceUnit: payloadString(payload, 'attendanceUnit'),
+          attendanceStatus: payloadString(payload, 'attendanceStatus'),
+          remarks: payloadString(payload, 'remarks'),
+          route: payloadString(payload, 'route'),
+          module: payloadString(payload, 'module'),
+          category,
+          priority: payloadString(payload, 'priority'),
+          recipientName: payloadString(payload, 'recipientName'),
+          recipientType: payloadString(payload, 'recipientType'),
+        },
+      };
+    })
+    .filter(
+      (alert) =>
+        alert.type !== 'NOTICE' || !noticeFingerprints.has(alertFingerprint(alert)),
+    );
 
   res
     .status(200)
