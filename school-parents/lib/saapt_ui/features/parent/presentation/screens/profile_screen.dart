@@ -868,10 +868,12 @@ class _ChildTabsHeaderDelegate extends SliverPersistentHeaderDelegate {
     double shrinkOffset,
     bool overlapsContent,
   ) {
-    return Container(
-      color: SaaptTheme.canvas,
-      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 6),
-      child: _ChildTabBar(selectedIndex: selectedIndex, onTap: onTap),
+    return SizedBox.expand(
+      child: Container(
+        color: SaaptTheme.canvas,
+        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 6),
+        child: _ChildTabBar(selectedIndex: selectedIndex, onTap: onTap),
+      ),
     );
   }
 
