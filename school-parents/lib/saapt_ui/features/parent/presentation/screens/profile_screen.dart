@@ -975,6 +975,9 @@ class _DataPanel extends StatelessWidget {
     if (tabKey == 'profile') {
       return _ProfileTabPanel(data: data);
     }
+    if (tabKey == 'library') {
+      return _LibraryTabPanel(data: data);
+    }
     final records = _recordsForTab(tabKey, data);
     if (records.isEmpty) {
       return EmptyPanel(message: 'No $title records available.');
@@ -1062,6 +1065,214 @@ class _SimpleSection extends StatelessWidget {
           const SizedBox(height: 12),
           ...children,
         ],
+      ),
+    );
+  }
+}
+
+class _LibraryTabPanel extends StatelessWidget {
+  const _LibraryTabPanel({required this.data});
+
+  final Object? data;
+
+  @override
+  Widget build(BuildContext context) {
+    final memberships = _asList(
+      _asMap(data)['memberships'],
+    ).map(_asMap).where((item) => !_isEmptyData(item)).toList();
+    if (memberships.isEmpty) {
+      return const EmptyPanel(message: 'No library records available.');
+    }
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: memberships
+          .map(
+            (membership) => Padding(
+              padding: const EdgeInsets.only(bottom: 14),
+              child: _LibraryMembershipPanel(membership: membership),
+            ),
+          )
+          .toList(),
+    );
+  }
+}
+
+class _LibraryMembershipPanel extends StatelessWidget {
+  const _LibraryMembershipPanel({required this.membership});
+
+  final Map<String, dynamic> membership;
+
+  @override
+  Widget build(BuildContext context) {
+    final membershipDetails = Map<String, dynamic>.from(membership)
+      ..remove('issues');
+    final issues = _libraryIssueRecords(membership);
+    return ParentCard(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            children: [
+              const Icon(
+                Icons.local_library_outlined,
+                color: SaaptTheme.primary,
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  _firstString(membership, ['fullName', 'memberCode']) ??
+                      'Library Membership',
+                  style: const TextStyle(
+                    color: SaaptTheme.navy,
+                    fontSize: 16,
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          ..._rowsForData(membershipDetails),
+          const SizedBox(height: 14),
+          Row(
+            children: [
+              const Expanded(
+                child: Text(
+                  'Issued Books',
+                  style: TextStyle(
+                    color: SaaptTheme.navy,
+                    fontSize: 15,
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
+              ),
+              Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 10,
+                  vertical: 6,
+                ),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFEAF1FF),
+                  borderRadius: BorderRadius.circular(999),
+                ),
+                child: Text(
+                  '${issues.length}',
+                  style: const TextStyle(
+                    color: SaaptTheme.primary,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          if (issues.isEmpty)
+            const Text(
+              'No issued books.',
+              style: TextStyle(
+                color: Color(0xFF60708F),
+                fontSize: 13,
+                fontWeight: FontWeight.w700,
+              ),
+            )
+          else
+            ...issues.map(
+              (record) => Padding(
+                padding: const EdgeInsets.only(bottom: 10),
+                child: _LibraryIssueTile(record: record),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+class _LibraryIssueTile extends StatelessWidget {
+  const _LibraryIssueTile({required this.record});
+
+  final _DisplayRecord record;
+
+  @override
+  Widget build(BuildContext context) {
+    final status = _displayValue(record.data['status']);
+    return InkWell(
+      borderRadius: BorderRadius.circular(12),
+      onTap: () => _showRecordDetailSheet(context, record),
+      child: Container(
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: const Color(0xFFF7FAFF),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: const Color(0xFFDDE7F7)),
+        ),
+        child: Row(
+          children: [
+            const Icon(
+              Icons.menu_book_outlined,
+              color: SaaptTheme.primary,
+              size: 22,
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    record.title,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      color: SaaptTheme.navy,
+                      fontSize: 14,
+                      fontWeight: FontWeight.w900,
+                    ),
+                  ),
+                  const SizedBox(height: 3),
+                  Text(
+                    record.subtitle,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      color: Color(0xFF60708F),
+                      fontSize: 12,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(width: 8),
+            _StatusBadge(status: status),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _StatusBadge extends StatelessWidget {
+  const _StatusBadge({required this.status});
+
+  final String status;
+
+  @override
+  Widget build(BuildContext context) {
+    final isReturned = status.toLowerCase().contains('return');
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
+      decoration: BoxDecoration(
+        color: isReturned ? const Color(0xFFE9F8EF) : const Color(0xFFFFF4DF),
+        borderRadius: BorderRadius.circular(999),
+      ),
+      child: Text(
+        status,
+        style: TextStyle(
+          color: isReturned ? const Color(0xFF05A66B) : const Color(0xFFF59E0B),
+          fontSize: 11,
+          fontWeight: FontWeight.w900,
+        ),
       ),
     );
   }
@@ -1284,17 +1495,21 @@ class _SummaryRecordTile extends StatelessWidget {
   }
 
   void _showRecordSheet(BuildContext context, _DisplayRecord record) {
-    showModalBottomSheet<void>(
-      context: context,
-      showDragHandle: true,
-      isScrollControlled: true,
-      backgroundColor: Colors.white,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-      ),
-      builder: (context) => _RecordDetailSheet(record: record),
-    );
+    _showRecordDetailSheet(context, record);
   }
+}
+
+void _showRecordDetailSheet(BuildContext context, _DisplayRecord record) {
+  showModalBottomSheet<void>(
+    context: context,
+    showDragHandle: true,
+    isScrollControlled: true,
+    backgroundColor: Colors.white,
+    shape: const RoundedRectangleBorder(
+      borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+    ),
+    builder: (context) => _RecordDetailSheet(record: record),
+  );
 }
 
 class _RecordThumb extends StatelessWidget {
@@ -1517,24 +1732,17 @@ bool _isEmptyData(Object? value) {
 bool _shouldHideKey(String key) {
   const hidden = {
     'id',
-    'schoolId',
-    'studentId',
-    'parentId',
-    'classId',
-    'sectionId',
-    'academicSessionId',
-    'feeTypeId',
-    'feeGroupId',
-    'feeStructureId',
-    'invoiceId',
-    'paymentId',
+    'createdAt',
+    'updatedAt',
+    'deletedAt',
     'createdById',
     'updatedById',
     'deletedById',
     'reviewedById',
     'uploadedById',
+    'returnedById',
   };
-  return hidden.contains(key);
+  return hidden.contains(key) || key.endsWith('Id');
 }
 
 String _recordTitle(Object? data, String fallback) {
@@ -1613,9 +1821,64 @@ String _subtitleForRecord(String group, Map<String, dynamic> data) {
     _firstString(exam, ['name', 'status']),
     _firstString(subject, ['name']),
     _firstString(student, ['rollNo', 'admissionNo']),
-    _firstString(data, ['issueDate', 'returnDate', 'createdAt', 'entryDate']),
+    _firstString(data, ['issueDate', 'returnDate', 'entryDate']),
   ];
   return parts.whereType<String>().take(4).join(' • ');
+}
+
+List<_DisplayRecord> _libraryIssueRecords(Map<String, dynamic> membership) {
+  final memberCode = _firstString(membership, ['memberCode']);
+  final memberName = _firstString(membership, ['fullName', 'name']);
+  return _asList(
+    membership['issues'],
+  ).map(_asMap).where((issue) => !_isEmptyData(issue)).map((issue) {
+    final book = _asMap(issue['book']);
+    final category = _asMap(book['category']);
+    final subject = _asMap(book['subject']);
+    final title = _firstString(book, ['title', 'bookNumber']) ?? 'Book';
+    final status = _firstString(issue, ['status']) ?? 'Issued';
+    final returnDate = _firstString(issue, ['returnDate', 'returnedAt']);
+    final issueDate = _firstString(issue, ['issueDate']);
+    final details = <String, dynamic>{
+      'bookNumber': book['bookNumber'],
+      'bookName': book['title'],
+      'category': category['name'],
+      'subject': subject['name'],
+      'author': book['authorName'],
+      'isbnNumber': book['isbnNumber'],
+      'publisherName': book['publisherName'],
+      'rackNumber': book['rackNumber'],
+      'memberCode': memberCode,
+      'memberName': memberName,
+      'issueDate': issue['issueDate'],
+      'returnDate': issue['returnDate'],
+      'returnedAt': issue['returnedAt'],
+      'status': status,
+      'issuedBy': _userDisplayName(_asMap(issue['createdBy'])),
+      'returnedBy': _userDisplayName(_asMap(issue['returnedBy'])),
+      'note': issue['note'],
+    };
+    return _DisplayRecord(
+      title: title,
+      subtitle: [
+        if (!_isEmptyData(category['name'])) _displayValue(category['name']),
+        if (returnDate != null) 'Return: $returnDate',
+        if (returnDate == null && issueDate != null) 'Issued: $issueDate',
+      ].join(' • '),
+      category: 'Issued Book',
+      data: details,
+      icon: Icons.menu_book_outlined,
+    );
+  }).toList();
+}
+
+String? _userDisplayName(Map<String, dynamic> user) {
+  if (user.isEmpty) return null;
+  final firstName = user['firstName']?.toString().trim() ?? '';
+  final lastName = user['lastName']?.toString().trim() ?? '';
+  final name = [firstName, lastName].where((part) => part.isNotEmpty).join(' ');
+  if (name.isNotEmpty) return name;
+  return _firstString(user, ['name', 'fullName', 'email']);
 }
 
 String? _firstString(Map<String, dynamic> data, List<String> keys) {
