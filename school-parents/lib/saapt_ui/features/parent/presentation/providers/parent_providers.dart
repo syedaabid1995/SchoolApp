@@ -83,6 +83,13 @@ final parentChildrenProvider = FutureProvider.autoDispose<List<ParentChild>>((
   return ref.watch(parentRepositoryProvider).getChildren();
 });
 
+final parentChildDetailProvider = FutureProvider.autoDispose
+    .family<ParentChildDetail, String>((ref, childId) {
+      return ref
+          .watch(parentRepositoryProvider)
+          .getChildDetail(childId: childId);
+    });
+
 final selectedChildProvider = StateProvider<ParentChild?>((ref) => null);
 
 final effectiveSelectedChildProvider = Provider<AsyncValue<ParentChild?>>((

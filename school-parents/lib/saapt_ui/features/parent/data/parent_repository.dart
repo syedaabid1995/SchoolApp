@@ -171,6 +171,15 @@ class ParentRepository {
         .toList();
   }
 
+  Future<ParentChildDetail> getChildDetail({required String childId}) async {
+    final response = await _dio.get<Map<String, dynamic>>(
+      '/parents/portal/children/$childId',
+    );
+    return ParentChildDetail.fromJson(
+      response.data ?? const <String, dynamic>{},
+    );
+  }
+
   Future<ParentAttendance> getAttendance({
     required String childId,
     required DateTime month,

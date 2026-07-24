@@ -11,7 +11,14 @@ import '../../data/parent_models.dart';
 import '../providers/parent_providers.dart';
 import 'parent_screen_widgets.dart';
 
-enum _ProfilePanel { menu, viewProfile, editProfile, changePassword, info }
+enum _ProfilePanel {
+  menu,
+  viewProfile,
+  editProfile,
+  children,
+  changePassword,
+  info,
+}
 
 class ParentProfileScreen extends ConsumerStatefulWidget {
   const ParentProfileScreen({super.key});
@@ -25,6 +32,7 @@ class _ParentProfileScreenState extends ConsumerState<ParentProfileScreen> {
   _ProfilePanel _panel = _ProfilePanel.menu;
   String _infoTitle = '';
   String _infoBody = '';
+  String? _selectedChildId;
   final _firstNameController = TextEditingController();
   final _lastNameController = TextEditingController();
   final _emailController = TextEditingController();
@@ -53,16 +61,19 @@ class _ParentProfileScreenState extends ConsumerState<ParentProfileScreen> {
     final profileState = ref.watch(parentProfileProvider);
     final pushState = ref.watch(parentPushPreferenceProvider);
     return PopScope(
-      canPop: _panel == _ProfilePanel.menu,
+      canPop: _panel == _ProfilePanel.menu && _selectedChildId == null,
       onPopInvokedWithResult: (didPop, _) {
-        if (didPop || _panel == _ProfilePanel.menu) return;
-        setState(() => _panel = _ProfilePanel.menu);
+        if (didPop) return;
+        _handleBack();
       },
       child: Scaffold(
         body: RefreshIndicator(
           onRefresh: () async {
             ref.invalidate(parentProfileProvider);
             ref.invalidate(parentPushPreferenceProvider);
+            if (_selectedChildId != null) {
+              ref.invalidate(parentChildDetailProvider(_selectedChildId!));
+            }
             await ref.read(parentProfileProvider.future);
           },
           child: ListView(
@@ -79,10 +90,11 @@ class _ParentProfileScreenState extends ConsumerState<ParentProfileScreen> {
                     foregroundColor: Colors.white,
                   ),
                   onPressed: () {
-                    if (_panel == _ProfilePanel.menu) {
+                    if (_panel == _ProfilePanel.menu &&
+                        _selectedChildId == null) {
                       Navigator.of(context).maybePop();
                     } else {
-                      setState(() => _panel = _ProfilePanel.menu);
+                      _handleBack();
                     }
                   },
                   icon: const Icon(Icons.arrow_back_rounded),
@@ -119,6 +131,12 @@ class _ParentProfileScreenState extends ConsumerState<ParentProfileScreen> {
                         title: _infoTitle,
                         body: _infoBody,
                       ),
+                      _ProfilePanel.children => _ChildrenPanel(
+                        profile: profile,
+                        selectedChildId: _selectedChildId,
+                        onSelectChild: (childId) =>
+                            setState(() => _selectedChildId = childId),
+                      ),
                       _ProfilePanel.menu => _ProfileMenuPanel(
                         profile: profile,
                         pushState: pushState,
@@ -126,6 +144,10 @@ class _ParentProfileScreenState extends ConsumerState<ParentProfileScreen> {
                             setState(() => _panel = _ProfilePanel.viewProfile),
                         onOpenEdit: () =>
                             setState(() => _panel = _ProfilePanel.editProfile),
+                        onOpenChildren: () => setState(() {
+                          _selectedChildId = null;
+                          _panel = _ProfilePanel.children;
+                        }),
                         onOpenPassword: () => setState(
                           () => _panel = _ProfilePanel.changePassword,
                         ),
@@ -150,6 +172,8 @@ class _ParentProfileScreenState extends ConsumerState<ParentProfileScreen> {
     return switch (_panel) {
       _ProfilePanel.editProfile => 'Edit Profile',
       _ProfilePanel.viewProfile => 'Profile',
+      _ProfilePanel.children =>
+        _selectedChildId == null ? 'Children' : 'Child Profile',
       _ProfilePanel.changePassword => 'Change Password',
       _ProfilePanel.info => _infoTitle,
       _ProfilePanel.menu => 'Account',
@@ -160,10 +184,27 @@ class _ParentProfileScreenState extends ConsumerState<ParentProfileScreen> {
     return switch (_panel) {
       _ProfilePanel.editProfile => 'Update parent contact details',
       _ProfilePanel.viewProfile => 'Parent account details',
+      _ProfilePanel.children =>
+        _selectedChildId == null
+            ? 'Mapped child profiles'
+            : 'Student details and school records',
       _ProfilePanel.changePassword => 'Secure your parent login',
       _ProfilePanel.info => 'Reference information',
       _ProfilePanel.menu => 'Profile, settings, and app information',
     };
+  }
+
+  void _handleBack() {
+    if (_panel == _ProfilePanel.children && _selectedChildId != null) {
+      setState(() => _selectedChildId = null);
+      return;
+    }
+    if (_panel != _ProfilePanel.menu) {
+      setState(() {
+        _panel = _ProfilePanel.menu;
+        _selectedChildId = null;
+      });
+    }
   }
 
   void _seedProfile(ParentProfile profile) {
@@ -280,6 +321,7 @@ class _ProfileMenuPanel extends StatelessWidget {
     required this.pushState,
     required this.onOpenProfile,
     required this.onOpenEdit,
+    required this.onOpenChildren,
     required this.onOpenPassword,
     required this.onTogglePush,
     required this.onOpenInfo,
@@ -290,6 +332,7 @@ class _ProfileMenuPanel extends StatelessWidget {
   final AsyncValue<bool> pushState;
   final VoidCallback onOpenProfile;
   final VoidCallback onOpenEdit;
+  final VoidCallback onOpenChildren;
   final VoidCallback onOpenPassword;
   final ValueChanged<bool> onTogglePush;
   final void Function(String title, String body) onOpenInfo;
@@ -373,6 +416,12 @@ class _ProfileMenuPanel extends StatelessWidget {
                 onTap: onOpenEdit,
               ),
               _MenuTile(
+                icon: Icons.family_restroom_outlined,
+                title: 'Children',
+                subtitle: '${profile.children.length} mapped child profiles',
+                onTap: onOpenChildren,
+              ),
+              _MenuTile(
                 icon: Icons.lock_outline,
                 title: 'Change Password',
                 subtitle: 'Update parent login password',
@@ -439,6 +488,563 @@ class _ProfileMenuPanel extends StatelessWidget {
       ],
     );
   }
+}
+
+class _ChildrenPanel extends StatelessWidget {
+  const _ChildrenPanel({
+    required this.profile,
+    required this.selectedChildId,
+    required this.onSelectChild,
+  });
+
+  final ParentProfile profile;
+  final String? selectedChildId;
+  final ValueChanged<String> onSelectChild;
+
+  @override
+  Widget build(BuildContext context) {
+    if (selectedChildId != null) {
+      return _ChildDetailPanel(childId: selectedChildId!);
+    }
+    if (profile.children.isEmpty) {
+      return const EmptyPanel(
+        message: 'No children are mapped to this account.',
+      );
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        ParentCard(
+          child: Row(
+            children: [
+              const Icon(
+                Icons.family_restroom_rounded,
+                color: SaaptTheme.primary,
+                size: 34,
+              ),
+              const SizedBox(width: 14),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      'Children',
+                      style: TextStyle(
+                        color: SaaptTheme.navy,
+                        fontSize: 21,
+                        fontWeight: FontWeight.w900,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      '${profile.children.length} child profiles mapped to this parent account',
+                      style: const TextStyle(
+                        color: Color(0xFF60708F),
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 14),
+        ...profile.children.map(
+          (child) => Padding(
+            padding: const EdgeInsets.only(bottom: 14),
+            child: ParentCard(
+              padding: const EdgeInsets.all(16),
+              child: InkWell(
+                borderRadius: BorderRadius.circular(14),
+                onTap: () => onSelectChild(child.id),
+                child: Row(
+                  children: [
+                    _ChildAvatar(child: child, size: 56),
+                    const SizedBox(width: 14),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            child.name,
+                            style: const TextStyle(
+                              color: SaaptTheme.navy,
+                              fontSize: 18,
+                              fontWeight: FontWeight.w900,
+                            ),
+                          ),
+                          const SizedBox(height: 5),
+                          Text(
+                            [
+                              if (child.schoolName?.trim().isNotEmpty == true)
+                                child.schoolName!,
+                              child.classLabel,
+                            ].join(' • '),
+                            style: const TextStyle(
+                              color: Color(0xFF60708F),
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                          if (child.rollNo?.trim().isNotEmpty == true) ...[
+                            const SizedBox(height: 4),
+                            Text(
+                              'Roll / Admission: ${child.rollNo}',
+                              style: const TextStyle(
+                                color: Color(0xFF91A1BB),
+                                fontWeight: FontWeight.w800,
+                              ),
+                            ),
+                          ],
+                        ],
+                      ),
+                    ),
+                    const Icon(
+                      Icons.chevron_right_rounded,
+                      color: SaaptTheme.primary,
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _ChildDetailPanel extends ConsumerWidget {
+  const _ChildDetailPanel({required this.childId});
+
+  final String childId;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final detailState = ref.watch(parentChildDetailProvider(childId));
+    return detailState.when(
+      loading: () => const LoadingPanel(),
+      error: (error, _) => EmptyPanel(
+        message: parentApiError(error, 'Unable to load child profile'),
+      ),
+      data: (detail) => Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          _ChildSummaryCard(child: detail.child),
+          const SizedBox(height: 16),
+          _ChildDetailTabs(tabs: detail.tabs),
+        ],
+      ),
+    );
+  }
+}
+
+class _ChildSummaryCard extends StatelessWidget {
+  const _ChildSummaryCard({required this.child});
+
+  final ParentChild child;
+
+  @override
+  Widget build(BuildContext context) => ParentCard(
+    child: Row(
+      children: [
+        _ChildAvatar(child: child, size: 72),
+        const SizedBox(width: 16),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                child.name,
+                style: const TextStyle(
+                  color: SaaptTheme.navy,
+                  fontSize: 22,
+                  fontWeight: FontWeight.w900,
+                ),
+              ),
+              const SizedBox(height: 6),
+              Text(
+                [
+                  if (child.schoolName?.trim().isNotEmpty == true)
+                    child.schoolName!,
+                  child.classLabel,
+                ].join(' • '),
+                style: const TextStyle(
+                  color: Color(0xFF60708F),
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+              const SizedBox(height: 6),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  if (child.rollNo?.trim().isNotEmpty == true)
+                    _InfoChip(label: 'Roll', value: child.rollNo!),
+                  if (child.status?.trim().isNotEmpty == true)
+                    _InfoChip(label: 'Status', value: child.status!),
+                  if (child.gender?.trim().isNotEmpty == true)
+                    _InfoChip(label: 'Gender', value: child.gender!),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ],
+    ),
+  );
+}
+
+class _ChildAvatar extends StatelessWidget {
+  const _ChildAvatar({required this.child, required this.size});
+
+  final ParentChild child;
+  final double size;
+
+  @override
+  Widget build(BuildContext context) {
+    final photoUrl = child.photoUrl;
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(18),
+      child: Container(
+        width: size,
+        height: size,
+        color: const Color(0xFFEAF1FF),
+        child: photoUrl?.trim().isNotEmpty == true
+            ? Image.network(
+                photoUrl!,
+                fit: BoxFit.cover,
+                errorBuilder: (context, error, stackTrace) => _fallbackAvatar(),
+              )
+            : _fallbackAvatar(),
+      ),
+    );
+  }
+
+  Widget _fallbackAvatar() => Center(
+    child: Text(
+      child.name.trim().isEmpty ? 'S' : child.name.trim()[0].toUpperCase(),
+      style: TextStyle(
+        color: SaaptTheme.primary,
+        fontSize: size * 0.42,
+        fontWeight: FontWeight.w900,
+      ),
+    ),
+  );
+}
+
+class _InfoChip extends StatelessWidget {
+  const _InfoChip({required this.label, required this.value});
+
+  final String label;
+  final String value;
+
+  @override
+  Widget build(BuildContext context) => Container(
+    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+    decoration: BoxDecoration(
+      color: const Color(0xFFEAF1FF),
+      borderRadius: BorderRadius.circular(999),
+      border: Border.all(color: const Color(0xFFD9E6FF)),
+    ),
+    child: Text(
+      '$label: ${_displayValue(value)}',
+      style: const TextStyle(
+        color: SaaptTheme.primary,
+        fontSize: 12,
+        fontWeight: FontWeight.w900,
+      ),
+    ),
+  );
+}
+
+const _childDetailTabs = [
+  _ChildTabConfig('profile', 'Profile', Icons.person_outline),
+  _ChildTabConfig('parents', 'Parents', Icons.supervisor_account_outlined),
+  _ChildTabConfig('fees', 'Fees', Icons.receipt_long_outlined),
+  _ChildTabConfig('transport', 'Transport', Icons.directions_bus_outlined),
+  _ChildTabConfig('library', 'Library', Icons.local_library_outlined),
+  _ChildTabConfig('dormitory', 'Dormitory', Icons.bed_outlined),
+  _ChildTabConfig('exam', 'Exam', Icons.assignment_outlined),
+  _ChildTabConfig('documents', 'Documents', Icons.folder_outlined),
+  _ChildTabConfig('timeline', 'Timeline', Icons.timeline_outlined),
+];
+
+class _ChildTabConfig {
+  const _ChildTabConfig(this.key, this.label, this.icon);
+
+  final String key;
+  final String label;
+  final IconData icon;
+}
+
+class _ChildDetailTabs extends StatefulWidget {
+  const _ChildDetailTabs({required this.tabs});
+
+  final Map<String, dynamic> tabs;
+
+  @override
+  State<_ChildDetailTabs> createState() => _ChildDetailTabsState();
+}
+
+class _ChildDetailTabsState extends State<_ChildDetailTabs> {
+  int _selectedIndex = 0;
+
+  @override
+  Widget build(BuildContext context) {
+    final selectedTab = _childDetailTabs[_selectedIndex];
+    return DefaultTabController(
+      length: _childDetailTabs.length,
+      initialIndex: _selectedIndex,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          ParentCard(
+            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 8),
+            child: TabBar(
+              isScrollable: true,
+              tabAlignment: TabAlignment.start,
+              labelColor: SaaptTheme.primary,
+              unselectedLabelColor: const Color(0xFF60708F),
+              indicatorColor: SaaptTheme.primary,
+              labelStyle: const TextStyle(fontWeight: FontWeight.w900),
+              onTap: (index) => setState(() => _selectedIndex = index),
+              tabs: _childDetailTabs
+                  .map(
+                    (tab) =>
+                        Tab(icon: Icon(tab.icon, size: 20), text: tab.label),
+                  )
+                  .toList(),
+            ),
+          ),
+          const SizedBox(height: 14),
+          _DataPanel(
+            title: selectedTab.label,
+            data: widget.tabs[selectedTab.key],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _DataPanel extends StatelessWidget {
+  const _DataPanel({required this.title, required this.data});
+
+  final String title;
+  final Object? data;
+
+  @override
+  Widget build(BuildContext context) {
+    final cards = _buildCards(data, fallbackTitle: title);
+    if (cards.isEmpty) {
+      return EmptyPanel(message: 'No $title records available.');
+    }
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: cards
+          .map(
+            (card) => Padding(
+              padding: const EdgeInsets.only(bottom: 14),
+              child: card,
+            ),
+          )
+          .toList(),
+    );
+  }
+}
+
+List<Widget> _buildCards(Object? data, {required String fallbackTitle}) {
+  if (_isEmptyData(data)) return const [];
+  if (data is List) {
+    return data
+        .where((item) => !_isEmptyData(item))
+        .map(
+          (item) =>
+              _RecordCard(title: _recordTitle(item, fallbackTitle), data: item),
+        )
+        .toList();
+  }
+  if (data is Map) {
+    final map = data.map((key, value) => MapEntry(key.toString(), value));
+    final cards = <Widget>[];
+    final scalarMap = <String, dynamic>{};
+    map.forEach((key, value) {
+      if (_shouldHideKey(key) || _isEmptyData(value)) return;
+      if (_isScalar(value)) {
+        scalarMap[key] = value;
+      } else if (value is List) {
+        cards.addAll(
+          value
+              .where((item) => !_isEmptyData(item))
+              .map(
+                (item) => _RecordCard(
+                  title: _recordTitle(item, _labelForKey(key)),
+                  data: item,
+                ),
+              ),
+        );
+      } else {
+        cards.add(_RecordCard(title: _labelForKey(key), data: value));
+      }
+    });
+    if (scalarMap.isNotEmpty) {
+      cards.insert(0, _RecordCard(title: fallbackTitle, data: scalarMap));
+    }
+    return cards;
+  }
+  return [_RecordCard(title: fallbackTitle, data: data)];
+}
+
+class _RecordCard extends StatelessWidget {
+  const _RecordCard({required this.title, required this.data});
+
+  final String title;
+  final Object? data;
+
+  @override
+  Widget build(BuildContext context) {
+    final rows = _rowsForData(data);
+    if (rows.isEmpty) return const SizedBox.shrink();
+    return ParentCard(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            title,
+            style: const TextStyle(
+              color: SaaptTheme.navy,
+              fontSize: 18,
+              fontWeight: FontWeight.w900,
+            ),
+          ),
+          const SizedBox(height: 12),
+          ...rows,
+        ],
+      ),
+    );
+  }
+}
+
+List<Widget> _rowsForData(Object? data) {
+  if (data is Map) {
+    final entries = data.entries
+        .where((entry) => !_shouldHideKey(entry.key.toString()))
+        .where((entry) => !_isEmptyData(entry.value))
+        .toList();
+    return entries.asMap().entries.map((entry) {
+      final isLast = entry.key == entries.length - 1;
+      final key = entry.value.key.toString();
+      final value = entry.value.value;
+      return _DetailRow(
+        label: _labelForKey(key),
+        value: _displayValue(value),
+        last: isLast,
+      );
+    }).toList();
+  }
+  return [_DetailRow(label: 'Value', value: _displayValue(data), last: true)];
+}
+
+bool _isScalar(Object? value) {
+  return value == null || value is String || value is num || value is bool;
+}
+
+bool _isEmptyData(Object? value) {
+  if (value == null) return true;
+  if (value is String) return value.trim().isEmpty;
+  if (value is List) return value.isEmpty;
+  if (value is Map) {
+    return value.entries.every(
+      (entry) =>
+          _shouldHideKey(entry.key.toString()) || _isEmptyData(entry.value),
+    );
+  }
+  return false;
+}
+
+bool _shouldHideKey(String key) {
+  const hidden = {
+    'id',
+    'schoolId',
+    'studentId',
+    'parentId',
+    'classId',
+    'sectionId',
+    'academicSessionId',
+    'feeTypeId',
+    'feeGroupId',
+    'feeStructureId',
+    'invoiceId',
+    'paymentId',
+    'createdById',
+    'updatedById',
+    'deletedById',
+    'reviewedById',
+    'uploadedById',
+  };
+  return hidden.contains(key);
+}
+
+String _recordTitle(Object? data, String fallback) {
+  if (data is Map) {
+    for (final key in const [
+      'title',
+      'name',
+      'fullName',
+      'invoiceNumber',
+      'paymentNumber',
+      'receiptNumber',
+      'leaveType',
+      'status',
+      'memberCode',
+    ]) {
+      final value = data[key];
+      if (value != null && value.toString().trim().isNotEmpty) {
+        return _displayValue(value);
+      }
+    }
+  }
+  return fallback;
+}
+
+String _labelForKey(String key) {
+  final spaced = key
+      .replaceAllMapped(RegExp(r'([a-z0-9])([A-Z])'), (m) => '${m[1]} ${m[2]}')
+      .replaceAll('_', ' ')
+      .replaceAll('-', ' ')
+      .trim();
+  if (spaced.isEmpty) return key;
+  return spaced
+      .split(RegExp(r'\s+'))
+      .map(
+        (part) => part.isEmpty
+            ? part
+            : '${part[0].toUpperCase()}${part.substring(1)}',
+      )
+      .join(' ');
+}
+
+String _displayValue(Object? value) {
+  if (value == null) return '-';
+  if (value is bool) return value ? 'Yes' : 'No';
+  if (value is List) return value.isEmpty ? '-' : '${value.length} record(s)';
+  if (value is Map) {
+    final preferred = _recordTitle(value, '');
+    if (preferred.isNotEmpty) return preferred;
+    return '${value.length} field(s)';
+  }
+  final text = value.toString();
+  final date = DateTime.tryParse(text);
+  if (date != null && text.length >= 10) {
+    return [
+      date.day.toString().padLeft(2, '0'),
+      date.month.toString().padLeft(2, '0'),
+      date.year.toString().padLeft(4, '0'),
+    ].join('-');
+  }
+  return text.replaceAll('_', ' ');
 }
 
 class _EditProfilePanel extends StatelessWidget {

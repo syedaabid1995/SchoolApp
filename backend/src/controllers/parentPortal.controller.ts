@@ -148,6 +148,276 @@ export const listParentChildren = async (req: Request, res: Response) => {
   res.status(200).json(children);
 };
 
+export const getParentChildDetail = async (req: Request, res: Response) => {
+  const auth = requireAuth(req);
+  const { child } = await requireChildAccess(auth.userId, req.params.childId);
+
+  const student = await prisma.student.findFirst({
+    where: { id: child.id, schoolId: child.schoolId },
+    include: {
+      school: { select: { id: true, name: true } },
+      academicSession: { select: { id: true, name: true, isActive: true } },
+      class: { select: { id: true, name: true } },
+      section: { select: { id: true, name: true } },
+      studentGroup: { select: { id: true, name: true } },
+      studentCategory: { select: { id: true, name: true } },
+      guardians: { orderBy: [{ isPrimary: 'desc' }, { createdAt: 'asc' }] },
+      parentLinks: { include: { parent: true } },
+      enrollments: {
+        include: {
+          academicSession: { select: { id: true, name: true, isActive: true } },
+          class: { select: { id: true, name: true } },
+          section: { select: { id: true, name: true } },
+        },
+        orderBy: { enrolledAt: 'desc' },
+      },
+      promotionHistories: { orderBy: { createdAt: 'desc' }, take: 25 },
+      documents: { orderBy: { createdAt: 'desc' } },
+      photos: { orderBy: { createdAt: 'desc' } },
+      timelines: { orderBy: { timelineDate: 'desc' } },
+      statusEvents: { orderBy: { changedAt: 'desc' } },
+      transferRequests: { orderBy: { createdAt: 'desc' }, take: 25 },
+      leaveRequests: { orderBy: { createdAt: 'desc' }, take: 25 },
+      faceProfile: {
+        include: { samples: { orderBy: { createdAt: 'desc' } } },
+      },
+      marks: {
+        include: {
+          examPaper: {
+            include: {
+              subject: { select: { id: true, name: true, code: true } },
+              exam: {
+                select: {
+                  id: true,
+                  name: true,
+                  type: true,
+                  status: true,
+                  scheduledAt: true,
+                  resultPublishAt: true,
+                },
+              },
+            },
+          },
+        },
+        orderBy: { createdAt: 'desc' },
+        take: 100,
+      },
+      examSeatingAllocations: {
+        include: {
+          exam: { select: { id: true, name: true, type: true, status: true, scheduledAt: true } },
+          center: { select: { id: true, name: true, code: true } },
+          room: { select: { id: true, name: true, code: true, floor: true } },
+        },
+        orderBy: { createdAt: 'desc' },
+        take: 25,
+      },
+      feeAssignments: {
+        where: { deletedAt: null },
+        include: {
+          academicSession: { select: { id: true, name: true, isActive: true } },
+          feeStructure: { select: { id: true, name: true, status: true } },
+          class: { select: { id: true, name: true } },
+          section: { select: { id: true, name: true } },
+          group: { select: { id: true, name: true } },
+          category: { select: { id: true, name: true } },
+          transportRoute: { select: { id: true, title: true, fare: true } },
+        },
+        orderBy: { assignedAt: 'desc' },
+        take: 50,
+      },
+      feeGroupAssignments: {
+        where: { deletedAt: null },
+        include: {
+          academicSession: { select: { id: true, name: true, isActive: true } },
+          feeGroup: { select: { id: true, name: true, status: true } },
+        },
+        orderBy: { assignedAt: 'desc' },
+        take: 50,
+      },
+      feeInvoices: {
+        where: { deletedAt: null },
+        include: {
+          academicSession: { select: { id: true, name: true, isActive: true } },
+          feeType: { select: { id: true, name: true, schedule: true } },
+          feeGroup: { select: { id: true, name: true, status: true } },
+          feeStructure: { select: { id: true, name: true, status: true } },
+          items: { orderBy: { sortOrder: 'asc' } },
+          payments: { orderBy: { paidAt: 'desc' }, take: 20 },
+          receipts: { orderBy: { receiptDate: 'desc' }, take: 20 },
+        },
+        orderBy: { issueDate: 'desc' },
+        take: 50,
+      },
+      feeDiscounts: {
+        where: { deletedAt: null },
+        orderBy: { createdAt: 'desc' },
+        take: 50,
+      },
+      feeLedgers: { orderBy: { entryDate: 'desc' }, take: 50 },
+      feeCarryForwards: { orderBy: { createdAt: 'desc' }, take: 20 },
+      transportAssignments: {
+        include: {
+          route: { select: { id: true, title: true, fare: true } },
+          vehicle: {
+            select: {
+              id: true,
+              vehicleNumber: true,
+              vehicleModel: true,
+              driverName: true,
+              driverContact: true,
+            },
+          },
+        },
+        orderBy: { assignedAt: 'desc' },
+      },
+      dormitoryAssignments: {
+        include: {
+          dormitory: { select: { id: true, name: true, type: true, address: true } },
+          room: { select: { id: true, roomNumber: true, bedCount: true, costPerBed: true } },
+        },
+        orderBy: { assignedAt: 'desc' },
+      },
+      libraryMemberships: {
+        include: {
+          issues: {
+            include: {
+              book: { select: { id: true, title: true, authorName: true, bookNumber: true, isbnNumber: true } },
+            },
+            orderBy: { issueDate: 'desc' },
+            take: 50,
+          },
+        },
+      },
+    },
+  });
+
+  if (!student) throw new HttpError(404, 'Student not found');
+
+  const name = student.fullName || `${student.firstName} ${student.lastName}`.trim();
+  const classLabel = [student.class?.name, student.section?.name].filter(Boolean).join(' ');
+  const summary = {
+    id: student.id,
+    name,
+    admissionNo: student.admissionNo,
+    rollNo: student.rollNo,
+    classLabel,
+    classId: student.classId,
+    sectionId: student.sectionId,
+    schoolId: student.schoolId,
+    schoolName: student.school?.name ?? child.schoolName,
+    status: student.status,
+    gender: student.gender,
+    dob: student.dob,
+    photoUrl: student.photoUrl ?? student.photos[0]?.url ?? null,
+  };
+
+  res.status(200).json({
+    child: summary,
+    tabs: {
+      profile: {
+        summary,
+        admission: {
+          admissionNo: student.admissionNo,
+          admissionDate: student.admissionDate,
+          academicSession: student.academicSession,
+          class: student.class,
+          section: student.section,
+          group: student.studentGroup,
+          category: student.studentCategory,
+          status: student.status,
+        },
+        personal: {
+          firstName: student.firstName,
+          lastName: student.lastName,
+          fullName: student.fullName,
+          dob: student.dob,
+          gender: student.gender,
+          bloodGroup: student.bloodGroup,
+          religion: student.religion,
+          caste: student.caste,
+          category: student.category,
+          height: student.height,
+          weight: student.weight,
+          email: student.email,
+          phone: student.phone,
+        },
+        address: {
+          presentAddress: student.presentAddress,
+          permanentAddress: student.permanentAddress,
+          addressLine1: student.addressLine1,
+          addressLine2: student.addressLine2,
+          city: student.city,
+          state: student.state,
+          pincode: student.pincode,
+        },
+        medical: {
+          emergencyContact: student.emergencyContact,
+          medicalConditions: student.medicalConditions,
+          allergies: student.allergies,
+          doctorContact: student.doctorContact,
+        },
+      },
+      parents: {
+        father: {
+          name: student.fatherName,
+          occupation: student.fatherOccupation,
+          phone: student.fatherPhone,
+          photoUrl: student.fatherPhotoUrl,
+        },
+        mother: {
+          name: student.motherName,
+          occupation: student.motherOccupation,
+          phone: student.motherPhone,
+          photoUrl: student.motherPhotoUrl,
+        },
+        guardian: {
+          name: student.guardianName,
+          relationship: student.guardianRelationship,
+          phone: student.parentPhone,
+          email: student.parentEmail,
+          photoUrl: student.guardianPhotoUrl,
+        },
+        linkedParents: student.parentLinks.map((link) => ({
+          createdAt: link.createdAt,
+          parent: link.parent,
+        })),
+        guardians: student.guardians,
+      },
+      fees: {
+        invoices: student.feeInvoices,
+        assignments: student.feeAssignments,
+        groups: student.feeGroupAssignments,
+        discounts: student.feeDiscounts,
+        ledger: student.feeLedgers,
+        carryForwards: student.feeCarryForwards,
+      },
+      transport: { assignments: student.transportAssignments },
+      library: { memberships: student.libraryMemberships },
+      dormitory: { assignments: student.dormitoryAssignments },
+      exam: { marks: student.marks, seating: student.examSeatingAllocations },
+      documents: {
+        uploadedDocuments: student.documents,
+        studentPhotos: student.photos,
+        admissionDocuments: {
+          birthCertificate: student.docBirthCert,
+          transferCertificate: student.docTransferCert,
+          aadhaar: student.docAadhaar,
+          reportCard: student.docReportCard,
+        },
+        faceProfile: student.faceProfile,
+      },
+      timeline: {
+        timelines: student.timelines,
+        statusEvents: student.statusEvents,
+        enrollments: student.enrollments,
+        promotions: student.promotionHistories,
+        transferRequests: student.transferRequests,
+        leaveRequests: student.leaveRequests,
+      },
+    },
+  });
+};
+
 export const listParentLeaveRequests = async (req: Request, res: Response) => {
   const auth = requireAuth(req);
   const childId = typeof req.query.childId === 'string' ? req.query.childId : undefined;

@@ -1,3 +1,11 @@
+Map<String, dynamic> _jsonMap(Object? value) {
+  if (value is Map<String, dynamic>) return value;
+  if (value is Map) {
+    return value.map((key, item) => MapEntry(key.toString(), item));
+  }
+  return const <String, dynamic>{};
+}
+
 class ParentUser {
   const ParentUser({
     required this.id,
@@ -60,6 +68,10 @@ class ParentChild {
     required this.schoolId,
     this.rollNo,
     this.schoolName,
+    this.admissionNo,
+    this.status,
+    this.gender,
+    this.photoUrl,
   });
 
   final String id;
@@ -68,6 +80,10 @@ class ParentChild {
   final String schoolId;
   final String? rollNo;
   final String? schoolName;
+  final String? admissionNo;
+  final String? status;
+  final String? gender;
+  final String? photoUrl;
 
   factory ParentChild.fromJson(Map<String, dynamic> json) {
     return ParentChild(
@@ -75,8 +91,26 @@ class ParentChild {
       name: json['name']?.toString() ?? 'Student',
       classLabel: json['classLabel']?.toString() ?? 'Class',
       schoolId: json['schoolId']?.toString() ?? '',
-      rollNo: json['rollNo']?.toString(),
+      rollNo: json['rollNo']?.toString() ?? json['admissionNo']?.toString(),
       schoolName: json['schoolName']?.toString(),
+      admissionNo: json['admissionNo']?.toString(),
+      status: json['status']?.toString(),
+      gender: json['gender']?.toString(),
+      photoUrl: json['photoUrl']?.toString(),
+    );
+  }
+}
+
+class ParentChildDetail {
+  const ParentChildDetail({required this.child, required this.tabs});
+
+  final ParentChild child;
+  final Map<String, dynamic> tabs;
+
+  factory ParentChildDetail.fromJson(Map<String, dynamic> json) {
+    return ParentChildDetail(
+      child: ParentChild.fromJson(_jsonMap(json['child'])),
+      tabs: _jsonMap(json['tabs']),
     );
   }
 }

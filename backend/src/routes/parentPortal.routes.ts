@@ -3,6 +3,7 @@ import { authMiddleware } from '../middlewares/auth.middleware';
 import { requireParentProfile } from '../middlewares/parent.middleware';
 import {
   listParentChildren,
+  getParentChildDetail,
   createParentLeaveRequest,
   getParentProfile,
   updateParentProfile,
@@ -23,6 +24,7 @@ parentPortalRouter.use(authMiddleware);
 parentPortalRouter.use(requireParentProfile);
 
 parentPortalRouter.get('/children', listParentChildren);
+parentPortalRouter.get('/children/:childId', getParentChildDetail);
 parentPortalRouter.get('/profile', getParentProfile);
 parentPortalRouter.patch('/profile', updateParentProfile);
 parentPortalRouter.get('/dashboard', getParentDashboard);
