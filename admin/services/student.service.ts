@@ -109,6 +109,13 @@ export type Student = {
     parentId: string;
     parent: { id: string; firstName: string; lastName: string; phone: string | null; email: string | null };
   }>;
+  feeGroupAssignments?: Array<{
+    id: string;
+    academicSessionId: string;
+    feeGroupId: string;
+    status: string;
+    feeGroup?: { id: string; name: string; status?: string | null };
+  }>;
   studentFeeGroupAssignments?: Array<{
     id: string;
     academicSessionId: string;

@@ -404,7 +404,7 @@ export default function EditStudentPage() {
       phone: student.phone ?? '',
       admissionDate: toDateInput(student.admissionDate) || new Date().toISOString().slice(0, 10),
       category: student.category ?? 'Regular',
-      feeGroupIds: (student.studentFeeGroupAssignments ?? []).map((assignment) => assignment.feeGroupId),
+      feeGroupIds: (student.feeGroupAssignments ?? student.studentFeeGroupAssignments ?? []).map((assignment) => assignment.feeGroupId),
       discountIds: [],
       generateFeeInvoices: false,
       height: student.height === undefined || student.height === null ? '' : String(student.height),

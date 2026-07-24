@@ -16,5 +16,6 @@ test('student detail include preserves document, marks, and status relationships
   assert.deepEqual(include.documents.orderBy, { createdAt: 'desc' });
   assert.deepEqual(include.timelines.orderBy, { timelineDate: 'desc' });
   assert.ok(include.marks.include.examPaper.include.subject.select.code);
+  assert.ok(include.feeGroupAssignments.include.feeGroup.select.name);
   assert.deepEqual(include.statusEvents.orderBy, { changedAt: 'desc' });
 });

@@ -70,7 +70,7 @@ export const StudentRepository = {
         },
       },
       parentLinks: { include: { parent: true } },
-      studentFeeGroupAssignments: {
+      feeGroupAssignments: {
         where: { deletedAt: null, status: 'ACTIVE' as const },
         include: { feeGroup: { select: { id: true, name: true, status: true } } },
         orderBy: { assignedAt: 'desc' as const },
