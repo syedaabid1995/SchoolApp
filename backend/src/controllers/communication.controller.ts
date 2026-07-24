@@ -8,6 +8,7 @@ import { AuthorizationService } from '../services/authorization.service';
 import { sendNotification } from '../services/notification.service';
 import { invalidateNotificationCache } from '../services/cache/cache.invalidation';
 import { resolveSchoolId } from '../utils/tenant';
+import { noticeAudienceMatchesRole } from '../utils/noticeAudience';
 
 const channelSchema = z.enum(['EMAIL', 'SMS', 'PUSH']);
 const pushPrioritySchema = z.enum(['normal', 'high', 'urgent']);
@@ -522,7 +523,13 @@ export const listCommunicationNoticesApi = async (req: Request, res: Response) =
     include: { createdBy: { select: { email: true } } },
     orderBy: [{ publishedAt: 'desc' }, { createdAt: 'desc' }],
   });
-  res.status(200).json({ items: notices.map(noticeDto) });
+  const visibleNotices =
+    canManageNotices && !publishedOnly
+      ? notices
+      : notices.filter((notice) =>
+          noticeAudienceMatchesRole(notice.audience, req.auth?.role),
+        );
+  res.status(200).json({ items: visibleNotices.map(noticeDto) });
 };
 
 export const createCommunicationNoticeApi = async (req: Request, res: Response) => {

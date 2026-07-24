@@ -14,6 +14,7 @@ import {
   studentLeaveTypes,
 } from '../services/studentLeave.service';
 import { parseLimit } from '../utils/pagination';
+import { noticeAudienceMatchesRole } from '../utils/noticeAudience';
 
 const resolveParentProfiles = async (userId: string) => {
   return prisma.parentProfile.findMany({
@@ -1032,7 +1033,9 @@ export const listParentNotices = async (req: Request, res: Response) => {
       },
     }));
 
-  const noticeItems = notices.map((notice) => ({
+  const noticeItems = notices
+    .filter((notice) => noticeAudienceMatchesRole(notice.audience, 'PARENT'))
+    .map((notice) => ({
       id: notice.id,
       title: notice.title,
       date: notice.publishedAt.toISOString(),
