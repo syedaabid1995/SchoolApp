@@ -342,6 +342,8 @@ class _PerformanceReportView extends ConsumerWidget {
               const SizedBox(height: 22),
               _DonutSummary(result: selectedResult!),
               const SizedBox(height: 22),
+              _PerformanceStatsRow(result: selectedResult),
+              const SizedBox(height: 22),
               _SubjectMarksCard(result: selectedResult),
             ],
           ],
@@ -724,6 +726,38 @@ class _DonutSummary extends StatelessWidget {
   }
 }
 
+class _PerformanceStatsRow extends StatelessWidget {
+  const _PerformanceStatsRow({required this.result});
+
+  final ParentResult result;
+
+  @override
+  Widget build(BuildContext context) {
+    final rank = result.sectionRank ?? result.classRank;
+    return Row(
+      children: [
+        StatCard(
+          value: '${_resultPercent(result)}%',
+          label: 'Overall',
+          color: SaaptTheme.success,
+        ),
+        const SizedBox(width: 12),
+        StatCard(
+          value: _overallGrade(result),
+          label: 'Grade',
+          color: SaaptTheme.primary,
+        ),
+        const SizedBox(width: 12),
+        StatCard(
+          value: rank?.toString() ?? '-',
+          label: 'Rank',
+          color: SaaptTheme.warning,
+        ),
+      ],
+    );
+  }
+}
+
 class _DonutPainter extends CustomPainter {
   const _DonutPainter({required this.percent});
 
@@ -803,68 +837,61 @@ class _SubjectMarksCard extends StatelessWidget {
               fontWeight: FontWeight.w900,
             ),
           ),
-          const SizedBox(height: 24),
-          SizedBox(
-            height: 175,
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.end,
-              children: [
-                for (var index = 0; index < subjects.length; index++) ...[
-                  Expanded(
-                    child: _SubjectBar(
-                      subject: subjects[index],
-                      color: _barColor(index),
-                    ),
-                  ),
-                  if (index != subjects.length - 1) const SizedBox(width: 12),
-                ],
-              ],
+          const SizedBox(height: 18),
+          for (var index = 0; index < subjects.length; index++) ...[
+            _SubjectProgressRow(
+              subject: subjects[index],
+              color: _barColor(index),
             ),
-          ),
+            if (index != subjects.length - 1) const SizedBox(height: 14),
+          ],
         ],
       ),
     );
   }
 }
 
-class _SubjectBar extends StatelessWidget {
-  const _SubjectBar({required this.subject, required this.color});
+class _SubjectProgressRow extends StatelessWidget {
+  const _SubjectProgressRow({required this.subject, required this.color});
 
   final ParentResultSubject subject;
   final Color color;
 
   @override
   Widget build(BuildContext context) {
-    final percent = subject.percentage.clamp(4, 100);
+    final percent = subject.percentage.clamp(0, 100);
     return Column(
-      mainAxisAlignment: MainAxisAlignment.end,
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Flexible(
-          child: FractionallySizedBox(
-            heightFactor: percent / 100,
-            alignment: Alignment.bottomCenter,
-            child: Container(
-              width: double.infinity,
-              decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(14),
-                gradient: LinearGradient(
-                  colors: [color, color.withValues(alpha: 0.55)],
-                  begin: Alignment.topCenter,
-                  end: Alignment.bottomCenter,
-                ),
-              ),
-            ),
-          ),
-        ),
-        const SizedBox(height: 12),
         Text(
-          _shortLabel(subject.subjectName),
+          subject.subjectName,
           maxLines: 1,
           overflow: TextOverflow.ellipsis,
           style: const TextStyle(
-            color: Color(0xFF6E7C95),
-            fontSize: 12,
+            color: SaaptTheme.navy,
+            fontSize: 17,
             fontWeight: FontWeight.w900,
+          ),
+        ),
+        const SizedBox(height: 9),
+        ClipRRect(
+          borderRadius: BorderRadius.circular(999),
+          child: LinearProgressIndicator(
+            value: percent / 100,
+            minHeight: 9,
+            backgroundColor: const Color(0xFFEAF0FB),
+            color: color,
+          ),
+        ),
+        const SizedBox(height: 8),
+        Text(
+          '${_formatMark(subject.marks)} marks • ${subject.grade?.trim().isNotEmpty == true ? subject.grade!.trim() : _performanceRemark(percent)}',
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: const TextStyle(
+            color: Color(0xFF586985),
+            fontSize: 15,
+            fontWeight: FontWeight.w700,
           ),
         ),
       ],
@@ -1071,6 +1098,29 @@ int _resultPercent(ParentResult result) {
   );
 }
 
+String _overallGrade(ParentResult result) {
+  final grade = result.overallGrade?.trim();
+  if (grade != null && grade.isNotEmpty) return grade;
+  final subjectGrades = result.subjects
+      .map((subject) => subject.grade?.trim())
+      .whereType<String>()
+      .where((grade) => grade.isNotEmpty)
+      .toList();
+  return subjectGrades.isEmpty ? '-' : subjectGrades.first;
+}
+
+String _performanceRemark(int percent) {
+  if (percent >= 90) return 'Excellent';
+  if (percent >= 80) return 'Very Good';
+  if (percent >= 70) return 'Good';
+  if (percent >= 50) return 'Average';
+  return 'Needs Improvement';
+}
+
+String _formatMark(num value) {
+  return value % 1 == 0 ? value.toInt().toString() : value.toStringAsFixed(1);
+}
+
 Color _barColor(int index) {
   const colors = [
     SaaptTheme.success,
@@ -1132,16 +1182,6 @@ String _titleCase(String value) {
             : '${part[0].toUpperCase()}${part.substring(1).toLowerCase()}',
       )
       .join(' ');
-}
-
-String _shortLabel(String value) {
-  final trimmed = value.trim();
-  if (trimmed.length <= 8) return trimmed;
-  final words = trimmed.split(RegExp(r'\s+'));
-  if (words.length > 1) {
-    return words.map((word) => word.substring(0, 1).toUpperCase()).join();
-  }
-  return trimmed.substring(0, 8);
 }
 
 String _safeFileName(String value) {

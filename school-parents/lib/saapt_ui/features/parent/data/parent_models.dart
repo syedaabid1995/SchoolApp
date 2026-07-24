@@ -280,6 +280,11 @@ class ParentResult {
     this.percentage,
     this.resultStatus,
     this.examType,
+    this.overallGrade,
+    this.classRank,
+    this.sectionRank,
+    this.classSize,
+    this.sectionSize,
   });
 
   final String examId;
@@ -290,6 +295,11 @@ class ParentResult {
   final int? percentage;
   final String? resultStatus;
   final String? examType;
+  final String? overallGrade;
+  final int? classRank;
+  final int? sectionRank;
+  final int? classSize;
+  final int? sectionSize;
 
   factory ParentResult.fromJson(Map<String, dynamic> json) {
     return ParentResult(
@@ -304,6 +314,11 @@ class ParentResult {
       percentage: num.tryParse(json['percentage']?.toString() ?? '')?.round(),
       resultStatus: json['resultStatus']?.toString(),
       examType: json['examType']?.toString(),
+      overallGrade: json['overallGrade']?.toString(),
+      classRank: int.tryParse(json['classRank']?.toString() ?? ''),
+      sectionRank: int.tryParse(json['sectionRank']?.toString() ?? ''),
+      classSize: int.tryParse(json['classSize']?.toString() ?? ''),
+      sectionSize: int.tryParse(json['sectionSize']?.toString() ?? ''),
     );
   }
 }

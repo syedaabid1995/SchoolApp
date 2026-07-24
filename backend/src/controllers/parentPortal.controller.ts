@@ -7,6 +7,7 @@ import { requireAuth } from '../middlewares/rbac.middleware';
 import { attendanceReadService } from '../modules/attendance/services/attendance-read.service';
 import * as attendanceSheetService from '../services/attendanceSheet.service';
 import {
+  calculateGrade,
   evaluateFailCriteria,
   getExamGradingSettings,
 } from '../services/grade.service';
@@ -946,6 +947,11 @@ export const getParentResults = async (req: Request, res: Response) => {
       }>;
       totalMarks: number;
       totalMaxMarks: number;
+      overallGrade?: string | null;
+      classRank?: number | null;
+      sectionRank?: number | null;
+      classSize?: number;
+      sectionSize?: number;
     }
   >();
 
@@ -992,14 +998,114 @@ export const getParentResults = async (req: Request, res: Response) => {
     existing.totalMaxMarks += mark.examPaper.maxMarks;
   });
 
+  const gradingSettings = await getExamGradingSettings(child.schoolId);
   const items = Array.from(grouped.values()).map((entry) => ({
     ...entry,
     percentage: entry.totalMaxMarks
       ? Math.round((entry.totalMarks / entry.totalMaxMarks) * 100)
       : null,
+    overallGrade: entry.totalMaxMarks
+      ? calculateGrade(
+          entry.totalMarks,
+          entry.totalMaxMarks,
+          gradingSettings.gradeScale,
+        )
+      : null,
   }));
 
-  const gradingSettings = await getExamGradingSettings(child.schoolId);
+  const examIds = items.map((entry) => entry.examId);
+  const rankMarks = examIds.length
+    ? await prisma.mark.findMany({
+        where: {
+          status: 'LOCKED',
+          examPaper: { examId: { in: examIds } },
+        },
+        select: {
+          studentId: true,
+          marks: true,
+          examPaper: {
+            select: {
+              examId: true,
+              maxMarks: true,
+            },
+          },
+          student: { select: { classId: true, sectionId: true } },
+        },
+      })
+    : [];
+
+  const rankSummaries = new Map<
+    string,
+    Map<
+      string,
+      {
+        studentId: string;
+        totalMarks: number;
+        totalMaxMarks: number;
+        classId: string | null;
+        sectionId: string | null;
+        percentage: number;
+      }
+    >
+  >();
+
+  rankMarks.forEach((mark) => {
+    const examId = mark.examPaper.examId;
+    const examMap = rankSummaries.get(examId) ?? new Map();
+    const summary = examMap.get(mark.studentId) ?? {
+      studentId: mark.studentId,
+      totalMarks: 0,
+      totalMaxMarks: 0,
+      classId: mark.student.classId,
+      sectionId: mark.student.sectionId,
+      percentage: 0,
+    };
+    summary.totalMarks += mark.marks;
+    summary.totalMaxMarks += mark.examPaper.maxMarks;
+    summary.percentage = summary.totalMaxMarks
+      ? (summary.totalMarks / summary.totalMaxMarks) * 100
+      : 0;
+    examMap.set(mark.studentId, summary);
+    rankSummaries.set(examId, examMap);
+  });
+
+  const rankOf = (
+    rows: Array<{ studentId: string; totalMarks: number; percentage: number }>,
+  ) => {
+    const sorted = [...rows].sort(
+      (a, b) => b.percentage - a.percentage || b.totalMarks - a.totalMarks,
+    );
+    let rank = 0;
+    let previous: { totalMarks: number; percentage: number } | null = null;
+    for (let index = 0; index < sorted.length; index += 1) {
+      const row = sorted[index];
+      if (
+        !previous ||
+        row.percentage !== previous.percentage ||
+        row.totalMarks !== previous.totalMarks
+      ) {
+        rank = index + 1;
+      }
+      previous = row;
+      if (row.studentId === child.id) return rank;
+    }
+    return null;
+  };
+
+  items.forEach((entry) => {
+    const rows = Array.from(rankSummaries.get(entry.examId)?.values() ?? []);
+    const classRows = entry.classId
+      ? rows.filter((row) => row.classId === entry.classId)
+      : [];
+    const sectionRows = entry.sectionId
+      ? rows.filter((row) => row.sectionId === entry.sectionId)
+      : [];
+    entry.classRank = classRows.length ? rankOf(classRows) : null;
+    entry.sectionRank = sectionRows.length ? rankOf(sectionRows) : null;
+    entry.classSize = classRows.length;
+    entry.sectionSize = sectionRows.length;
+  });
+
   const itemsWithStatus = items.map((entry) => {
     const evaluation = evaluateFailCriteria(
       entry.subjects.map((subject) => ({
