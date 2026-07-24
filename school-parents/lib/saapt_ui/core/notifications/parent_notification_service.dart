@@ -74,14 +74,32 @@ class ParentNotificationService {
   }
 
   Future<void> registerDeviceToken(String token) async {
+    final trimmedToken = token.trim();
+    if (trimmedToken.length < 20) {
+      debugPrint('Skipping short Firebase token registration.');
+      return;
+    }
     final platform = switch (defaultTargetPlatform) {
       TargetPlatform.iOS || TargetPlatform.macOS => 'IOS',
       _ => 'ANDROID',
     };
-    await _dio.post<Map<String, dynamic>>(
-      '/notifications/push/devices',
-      data: {'token': token, 'platform': platform, 'app': 'school-parents'},
-    );
+    try {
+      await _dio.post<Map<String, dynamic>>(
+        '/notifications/push/devices',
+        data: {
+          'token': trimmedToken,
+          'platform': platform,
+          'app': 'school-parents',
+        },
+      );
+    } on DioException catch (error) {
+      debugPrint(
+        'Parent push token registration failed: '
+        '${error.response?.statusCode} ${error.response?.data ?? error.message}',
+      );
+    } catch (error) {
+      debugPrint('Parent push token registration failed: $error');
+    }
   }
 
   Future<void> _showForegroundNotification(RemoteMessage message) async {

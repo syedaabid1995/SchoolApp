@@ -3,6 +3,7 @@ import { prisma } from '../config/db';
 import { HttpError } from '../middlewares/error.middleware';
 import { attendanceReadService } from '../modules/attendance/services/attendance-read.service';
 import { createAuditLog } from './auditLog.service';
+import { sendAttendanceAbsenceParentAlerts } from './parentAlert.service';
 
 const normalizeDate = (value?: Date | string | null) => {
   const date = value ? new Date(value) : new Date();
@@ -617,6 +618,9 @@ export const updateStudentAttendanceSession = async (params: {
     where: { sessionId: session.id },
     select: { studentId: true, status: true, remarks: true },
   });
+  const previousStatusByStudent = new Map(
+    beforeState.map((record) => [record.studentId, record.status]),
+  );
 
   await prisma.$transaction(async (tx) => {
     for (const record of params.records) {
@@ -658,6 +662,21 @@ export const updateStudentAttendanceSession = async (params: {
     action: params.submit ? 'SUBMIT_AND_LOCK' : 'UPDATE',
     beforeState,
     afterState: updated.records.map((r) => ({ studentId: r.studentId, status: r.status, remarks: r.remarks })),
+  });
+
+  await sendAttendanceAbsenceParentAlerts({
+    schoolId: params.schoolId,
+    actorId: params.actorId,
+    date: session.date,
+    unitLabel: 'Daily Session',
+    sessionId: session.id,
+    source: 'legacy-attendance',
+    absentRecords: params.records.map((record) => ({
+      studentId: record.studentId,
+      status: record.status,
+      previousStatus: previousStatusByStudent.get(record.studentId) ?? null,
+      remarks: record.remarks,
+    })),
   });
 
   return updated;

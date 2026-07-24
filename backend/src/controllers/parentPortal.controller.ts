@@ -66,6 +66,24 @@ const requireChildAccess = async (userId: string, childId?: string) => {
   return { child, children };
 };
 
+const payloadRecord = (payload: unknown) =>
+  payload && typeof payload === 'object' ? (payload as Record<string, unknown>) : {};
+
+const payloadString = (payload: Record<string, unknown>, key: string) => {
+  const value = payload[key];
+  return typeof value === 'string' ? value : '';
+};
+
+const parseJsonPayload = (value: unknown) => {
+  if (Array.isArray(value) || (value && typeof value === 'object')) return value;
+  if (typeof value !== 'string' || !value.trim()) return null;
+  try {
+    return JSON.parse(value);
+  } catch {
+    return null;
+  }
+};
+
 export const listParentChildren = async (req: Request, res: Response) => {
   const auth = requireAuth(req);
   const children = await resolveChildren(auth.userId);
@@ -498,25 +516,75 @@ export const listParentNotices = async (req: Request, res: Response) => {
   const { childId } = req.query;
   const { child } = await requireChildAccess(auth.userId, typeof childId === 'string' ? childId : undefined);
   const now = new Date();
-  const notices = await prisma.communicationNotice.findMany({
-    where: {
-      schoolId: child.schoolId,
-      status: 'PUBLISHED',
-      publishedAt: { lte: now },
-      OR: [{ expiresAt: null }, { expiresAt: { gte: now } }],
-    },
-    orderBy: [{ publishedAt: 'desc' }, { createdAt: 'desc' }],
-    take: 50,
-  });
+  const [notices, pushLogs] = await Promise.all([
+    prisma.communicationNotice.findMany({
+      where: {
+        schoolId: child.schoolId,
+        status: 'PUBLISHED',
+        publishedAt: { lte: now },
+        OR: [{ expiresAt: null }, { expiresAt: { gte: now } }],
+      },
+      orderBy: [{ publishedAt: 'desc' }, { createdAt: 'desc' }],
+      take: 50,
+    }),
+    prisma.notificationLog.findMany({
+      where: {
+        schoolId: child.schoolId,
+        channel: 'PUSH',
+      },
+      orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+      take: 200,
+    }),
+  ]);
 
-  res.status(200).json(
-    notices.map((notice) => ({
+  const targetedAlerts = pushLogs
+    .map((log) => ({ log, payload: payloadRecord(log.payload) }))
+    .filter(({ payload }) => {
+      const to = payloadString(payload, 'to');
+      const payloadChildId = payloadString(payload, 'childId');
+      const alertType = payloadString(payload, 'alertType');
+      return to === auth.userId && payloadChildId === child.id && Boolean(alertType);
+    })
+    .map(({ log, payload }) => ({
+      id: log.id,
+      title: payloadString(payload, 'subject') || 'School alert',
+      date: (log.sentAt ?? log.createdAt).toISOString(),
+      summary: payloadString(payload, 'body'),
+      type: payloadString(payload, 'alertType'),
+      status: log.status,
+      details: {
+        childId: payloadString(payload, 'childId'),
+        childName: payloadString(payload, 'childName'),
+        examId: payloadString(payload, 'examId'),
+        examName: payloadString(payload, 'examName'),
+        examStatus: payloadString(payload, 'examStatus'),
+        examType: payloadString(payload, 'examType'),
+        className: payloadString(payload, 'className'),
+        sectionName: payloadString(payload, 'sectionName'),
+        scheduledAt: payloadString(payload, 'scheduledAt'),
+        resultPublishAt: payloadString(payload, 'resultPublishAt'),
+        subjects: parseJsonPayload(payload.subjects),
+        attendanceDate: payloadString(payload, 'attendanceDate'),
+        attendanceUnit: payloadString(payload, 'attendanceUnit'),
+        attendanceStatus: payloadString(payload, 'attendanceStatus'),
+        remarks: payloadString(payload, 'remarks'),
+      },
+    }));
+
+  const noticeItems = notices.map((notice) => ({
       id: notice.id,
       title: notice.title,
       date: notice.publishedAt.toISOString(),
       summary: notice.message,
+      type: 'NOTICE',
       audience: notice.audience,
-    })),
+      details: { audience: notice.audience },
+    }));
+
+  res.status(200).json(
+    [...targetedAlerts, ...noticeItems]
+      .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
+      .slice(0, 100),
   );
 };
 

@@ -155,6 +155,10 @@ class ParentAttendance {
       .where((session) => session.status.toLowerCase() == 'absent')
       .length;
 
+  int get leaveDays => calendar
+      .where((entry) => entry.status.toLowerCase().contains('leave'))
+      .length;
+
   int get markedSessions => sessions
       .where((session) => session.status.toLowerCase() != 'unmarked')
       .length;
@@ -228,26 +232,69 @@ class ParentAttendanceSession {
 
 class ParentResult {
   const ParentResult({
+    required this.examId,
     required this.examName,
     required this.totalMarks,
     required this.totalMaxMarks,
+    required this.subjects,
     this.percentage,
     this.resultStatus,
+    this.examType,
   });
 
+  final String examId;
   final String examName;
   final num totalMarks;
   final num totalMaxMarks;
+  final List<ParentResultSubject> subjects;
   final int? percentage;
   final String? resultStatus;
+  final String? examType;
 
   factory ParentResult.fromJson(Map<String, dynamic> json) {
     return ParentResult(
-      examName: json['examName']?.toString() ?? 'Exam',
+      examId: (json['examId'] ?? json['id'])?.toString() ?? '',
+      examName: (json['examName'] ?? json['name'])?.toString() ?? 'Exam',
       totalMarks: num.tryParse(json['totalMarks']?.toString() ?? '') ?? 0,
       totalMaxMarks: num.tryParse(json['totalMaxMarks']?.toString() ?? '') ?? 0,
-      percentage: int.tryParse(json['percentage']?.toString() ?? ''),
+      subjects: (json['subjects'] as List? ?? const [])
+          .whereType<Map<String, dynamic>>()
+          .map(ParentResultSubject.fromJson)
+          .toList(),
+      percentage: num.tryParse(json['percentage']?.toString() ?? '')?.round(),
       resultStatus: json['resultStatus']?.toString(),
+      examType: json['examType']?.toString(),
+    );
+  }
+}
+
+class ParentResultSubject {
+  const ParentResultSubject({
+    required this.subjectId,
+    required this.subjectName,
+    required this.marks,
+    required this.maxMarks,
+    this.passMarks,
+    this.grade,
+  });
+
+  final String subjectId;
+  final String subjectName;
+  final num marks;
+  final num maxMarks;
+  final num? passMarks;
+  final String? grade;
+
+  int get percentage => maxMarks == 0 ? 0 : ((marks / maxMarks) * 100).round();
+
+  factory ParentResultSubject.fromJson(Map<String, dynamic> json) {
+    return ParentResultSubject(
+      subjectId: json['subjectId']?.toString() ?? '',
+      subjectName: json['subjectName']?.toString() ?? 'Subject',
+      marks: num.tryParse(json['marks']?.toString() ?? '') ?? 0,
+      maxMarks: num.tryParse(json['maxMarks']?.toString() ?? '') ?? 0,
+      passMarks: num.tryParse(json['passMarks']?.toString() ?? ''),
+      grade: json['grade']?.toString(),
     );
   }
 }
@@ -258,12 +305,18 @@ class ParentNotice {
     required this.title,
     required this.summary,
     required this.date,
+    this.type,
+    this.status,
+    this.details = const {},
   });
 
   final String id;
   final String title;
   final String summary;
   final DateTime date;
+  final String? type;
+  final String? status;
+  final Map<String, dynamic> details;
 
   factory ParentNotice.fromJson(Map<String, dynamic> json) {
     return ParentNotice(
@@ -271,6 +324,11 @@ class ParentNotice {
       title: json['title']?.toString() ?? 'Notice',
       summary: json['summary']?.toString() ?? '',
       date: DateTime.tryParse(json['date']?.toString() ?? '') ?? DateTime.now(),
+      type: json['type']?.toString(),
+      status: json['status']?.toString(),
+      details: json['details'] is Map<String, dynamic>
+          ? json['details'] as Map<String, dynamic>
+          : const {},
     );
   }
 }

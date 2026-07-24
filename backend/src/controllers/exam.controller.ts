@@ -5,6 +5,7 @@ import { HttpError } from '../middlewares/error.middleware';
 import { resolveSchoolId } from '../utils/tenant';
 import { logAudit } from '../utils/audit';
 import { invalidateAdminDashboardCache, invalidateAttendanceCache } from '../services/cache/cache.invalidation';
+import { sendExamParentAlerts } from '../services/parentAlert.service';
 
 const defaultExamTypes = [
   { code: 'MIDTERM', name: 'Mid Term' },
@@ -230,6 +231,20 @@ export const createExam = async (req: Request, res: Response) => {
 
   await invalidateAdminDashboardCache(schoolId);
   await invalidateAttendanceCache(schoolId);
+  await sendExamParentAlerts({
+    schoolId,
+    actorId: req.auth?.userId ?? null,
+    examId: exam.id,
+    event: 'EXAM_CREATED',
+  });
+  if (exam.status === 'PUBLISHED') {
+    await sendExamParentAlerts({
+      schoolId,
+      actorId: req.auth?.userId ?? null,
+      examId: exam.id,
+      event: 'EXAM_PUBLISHED',
+    });
+  }
 
   res.status(201).json(exam);
 };
@@ -340,6 +355,14 @@ export const updateExam = async (req: Request, res: Response) => {
 
   await invalidateAdminDashboardCache(schoolId);
   await invalidateAttendanceCache(schoolId);
+  if (existing.status !== 'PUBLISHED' && exam.status === 'PUBLISHED') {
+    await sendExamParentAlerts({
+      schoolId,
+      actorId: req.auth?.userId ?? null,
+      examId: exam.id,
+      event: 'EXAM_PUBLISHED',
+    });
+  }
 
   res.status(200).json(exam);
 };

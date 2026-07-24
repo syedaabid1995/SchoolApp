@@ -11,6 +11,10 @@ import { prisma } from '../config/db';
 import { HttpError } from '../middlewares/error.middleware';
 import { ensureTeacherAssignedToClassSection, isAdminRole } from './attendanceP1.service';
 import { createAuditLog } from './auditLog.service';
+import {
+  attendanceUnitLabel,
+  sendAttendanceAbsenceParentAlerts,
+} from './parentAlert.service';
 
 type AttendanceScopeParams = {
   schoolId: string;
@@ -543,6 +547,14 @@ export const saveAttendanceSheet = async (
     timetableEntryId: resolved.unit.unitType === 'TIMETABLE_ENTRY' ? resolved.unit.timetableEntryId ?? null : null,
   };
 
+  const existingSession = await prisma.attendanceSession.findFirst({
+    where: sessionWhere({ ...params, date, ...normalizedUnit }),
+    include: { records: { select: { studentId: true, status: true } } },
+  });
+  const previousStatusByStudent = new Map(
+    existingSession?.records.map((record) => [record.studentId, record.status]) ?? [],
+  );
+
   const deviceId = params.deviceId?.trim() || 'manual';
   const session = await prisma.$transaction(async (tx) => {
     let row = await tx.attendanceSession.findFirst({
@@ -625,6 +637,25 @@ export const saveAttendanceSheet = async (
       timetableEntryId: normalizedUnit.timetableEntryId,
       recordCount: params.records.length,
     },
+  });
+
+  await sendAttendanceAbsenceParentAlerts({
+    schoolId: params.schoolId,
+    actorId: params.actorId,
+    date,
+    unitLabel: attendanceUnitLabel({
+      unitType: resolved.unit.unitType,
+      label: resolved.unit.label,
+      slotType: resolved.unit.unitType === 'SLOT' ? resolved.unit.slotType : null,
+    }),
+    sessionId: session.id,
+    source: 'attendance-sheet',
+    absentRecords: params.records.map((record) => ({
+      studentId: record.studentId,
+      status: record.status,
+      previousStatus: previousStatusByStudent.get(record.studentId) ?? null,
+      remarks: record.manualOverrideReason,
+    })),
   });
 
   return formatSheet({ ...params, date, ...normalizedUnit });
