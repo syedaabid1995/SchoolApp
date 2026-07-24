@@ -35,6 +35,18 @@ const noticePayloadSchema = z.object({
   expiresAt: z.coerce.date().optional().nullable(),
 });
 
+const resolveNoticePublishedAt = (params: {
+  status?: string;
+  publishedAt?: Date;
+  fallback?: Date;
+}) => {
+  const publishedAt = params.publishedAt ?? params.fallback ?? new Date();
+  if (params.status === 'PUBLISHED' && publishedAt.getTime() > Date.now()) {
+    return new Date();
+  }
+  return publishedAt;
+};
+
 const templatePayloadSchema = z.object({
   schoolId: z.string().uuid().optional(),
   platform: z.boolean().optional(),
@@ -543,7 +555,10 @@ export const createCommunicationNoticeApi = async (req: Request, res: Response) 
       message: payload.message,
       audience: payload.audience,
       status: payload.status,
-      publishedAt: payload.publishedAt ?? new Date(),
+      publishedAt: resolveNoticePublishedAt({
+        status: payload.status,
+        publishedAt: payload.publishedAt,
+      }),
       expiresAt: payload.expiresAt ?? null,
       createdById: req.auth?.userId ?? null,
     },
@@ -568,6 +583,7 @@ export const updateCommunicationNoticeApi = async (req: Request, res: Response) 
   const schoolId = resolveSchoolId(req, payload.schoolId);
   const existing = await prisma.communicationNotice.findFirst({ where: { id: req.params.id, schoolId } });
   if (!existing) throw new HttpError(404, 'Notice not found');
+  const noticeStatus = payload.status ?? existing.status;
 
   const notice = await prisma.communicationNotice.update({
     where: { id: existing.id },
@@ -576,7 +592,14 @@ export const updateCommunicationNoticeApi = async (req: Request, res: Response) 
       message: payload.message,
       audience: payload.audience,
       status: payload.status,
-      publishedAt: payload.publishedAt,
+      publishedAt:
+        payload.publishedAt || payload.status === 'PUBLISHED'
+          ? resolveNoticePublishedAt({
+              status: noticeStatus,
+              publishedAt: payload.publishedAt,
+              fallback: existing.publishedAt,
+            })
+          : undefined,
       expiresAt: payload.expiresAt,
     },
     include: { createdBy: { select: { email: true } } },
