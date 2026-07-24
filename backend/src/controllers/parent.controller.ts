@@ -43,6 +43,17 @@ const buildParentTempPassword = (firstName: string, lastName: string, phone?: st
   return `${namePart}@${phonePart}`;
 };
 
+const parentProfileSelect = {
+  id: true,
+  userId: true,
+  firstName: true,
+  lastName: true,
+  phone: true,
+  email: true,
+  createdAt: true,
+  updatedAt: true,
+} as const;
+
 export const createParent = async (req: Request, res: Response) => {
   const payload = createSchema.parse(req.body);
   const schoolId = resolveSchoolId(req, payload.schoolId);
@@ -62,20 +73,20 @@ export const createParent = async (req: Request, res: Response) => {
     }
   }
 
-  const existingByPhone = payload.phone
-    ? await prisma.parentProfile.findFirst({
-        where: { phone: payload.phone },
-        select: { id: true },
-      })
-    : null;
-  if (existingByPhone && payload.createLogin) {
-    throw new HttpError(409, 'Parent with this phone already exists');
-  }
-
   const result = await prisma.$transaction(async (tx) => {
     let userId = payload.userId ?? null;
     let tempPassword: string | null = null;
     let created = false;
+    const contactMatches = [
+      payload.phone ? { phone: payload.phone } : null,
+      payload.email ? { email: payload.email } : null,
+    ].filter(Boolean) as Array<{ phone: string } | { email: string }>;
+    const existingContactProfile = contactMatches.length
+      ? await tx.parentProfile.findFirst({
+          where: { OR: contactMatches },
+          select: parentProfileSelect,
+        })
+      : null;
 
     if (payload.createLogin) {
       await tx.role.upsert({
@@ -84,13 +95,19 @@ export const createParent = async (req: Request, res: Response) => {
         create: { name: 'PARENT' },
       });
       const email = payload.email ?? `${payload.phone}@parent.local`;
-      const existingUser = await tx.user.findFirst({
-        where: { schoolId: null, email },
-        select: { id: true },
-      });
-      if (existingUser) {
-        userId = existingUser.id;
-      } else {
+      if (existingContactProfile?.userId) {
+        userId = existingContactProfile.userId;
+      }
+      if (!userId) {
+        const existingUser = await tx.user.findFirst({
+          where: { schoolId: null, email },
+          select: { id: true },
+        });
+        if (existingUser) {
+          userId = existingUser.id;
+        }
+      }
+      if (!userId) {
         tempPassword = buildParentTempPassword(payload.firstName, payload.lastName, payload.phone);
         const passwordHash = await hashPassword(tempPassword);
         const createdUser = await tx.user.create({
@@ -110,25 +127,33 @@ export const createParent = async (req: Request, res: Response) => {
       }
     }
 
+    if (existingContactProfile) {
+      const needsUserLink = userId && existingContactProfile.userId !== userId;
+      const needsContactUpdate =
+        (payload.phone && !existingContactProfile.phone) ||
+        (payload.email && !existingContactProfile.email);
+      if (needsUserLink || needsContactUpdate) {
+        const updatedProfile = await tx.parentProfile.update({
+          where: { id: existingContactProfile.id },
+          data: {
+            userId: needsUserLink ? userId : undefined,
+            phone: payload.phone && !existingContactProfile.phone ? payload.phone : undefined,
+            email: payload.email && !existingContactProfile.email ? payload.email : undefined,
+          },
+          select: parentProfileSelect,
+        });
+        return { parent: updatedProfile, tempPassword, created: false };
+      }
+      return { parent: existingContactProfile, tempPassword: null, created: false };
+    }
+
     const existingProfile = userId
       ? await tx.parentProfile.findFirst({
           where: { userId },
-          select: {
-            id: true,
-            userId: true,
-            firstName: true,
-            lastName: true,
-            phone: true,
-            email: true,
-            createdAt: true,
-            updatedAt: true,
-          },
+          select: parentProfileSelect,
         })
       : null;
     if (existingProfile) {
-      if (payload.createLogin) {
-        throw new HttpError(409, 'Parent already exists');
-      }
       return { parent: existingProfile, tempPassword: null, created: false };
     }
 
@@ -163,25 +188,28 @@ export const createParent = async (req: Request, res: Response) => {
   }
   await invalidateStudentCache(schoolId);
 
-  const whatsapp = await sendAccountCreatedWhatsapp({
-    role: 'PARENT',
-    schoolId,
-    email: result.parent.email ?? `${result.parent.phone ?? 'parent'}@parent.local`,
-    mobile: result.parent.phone,
-    tempPassword: result.tempPassword,
-    fullName: `${result.parent.firstName} ${result.parent.lastName}`.trim(),
-  });
+  const whatsapp = result.tempPassword
+    ? await sendAccountCreatedWhatsapp({
+        role: 'PARENT',
+        schoolId,
+        email: result.parent.email ?? `${result.parent.phone ?? 'parent'}@parent.local`,
+        mobile: result.parent.phone,
+        tempPassword: result.tempPassword,
+        fullName: `${result.parent.firstName} ${result.parent.lastName}`.trim(),
+      })
+    : null;
 
-  res.status(201).json({
+  res.status(result.created ? 201 : 200).json({
     ...result.parent,
     mappedSchoolId: schoolId,
     tempPassword: result.tempPassword,
+    reusedExisting: !result.created,
     sendVia: payload.sendVia ?? null,
-    whatsappSentTo: whatsapp.sentTo,
-    manualShareRequired: whatsapp.manualShareRequired,
-    manualShareText: whatsapp.manualShareText,
-    manualShareUrl: whatsapp.manualShareUrl,
-    notificationDeliveries: whatsapp.deliveries,
+    whatsappSentTo: whatsapp?.sentTo ?? null,
+    manualShareRequired: whatsapp?.manualShareRequired ?? false,
+    manualShareText: whatsapp?.manualShareText ?? null,
+    manualShareUrl: whatsapp?.manualShareUrl ?? null,
+    notificationDeliveries: whatsapp?.deliveries ?? null,
   });
 };
 

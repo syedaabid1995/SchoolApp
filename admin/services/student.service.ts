@@ -416,7 +416,15 @@ export const createParent = async (payload: {
   schoolId?: string;
 }) => {
   const { data } = await api.post('/students/parents', payload);
-  return data;
+  return data as {
+    id: string;
+    firstName: string;
+    lastName: string;
+    phone?: string | null;
+    email?: string | null;
+    tempPassword?: string | null;
+    reusedExisting?: boolean;
+  };
 };
 
 export const listTransferTargets = async (params?: { schoolId?: string }) => {

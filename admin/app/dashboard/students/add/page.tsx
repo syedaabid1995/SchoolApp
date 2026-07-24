@@ -419,7 +419,10 @@ export default function AddStudentPage() {
       }
       if (parentLogin) {
         const passwordText = parentLogin.tempPassword ? ` Temporary password: ${parentLogin.tempPassword}` : '';
-        notify.success('Parent login created', `Parent login was linked to this student.${passwordText}`);
+        notify.success(
+          parentLogin.reusedExisting ? 'Parent login linked' : 'Parent login created',
+          `${parentLogin.reusedExisting ? 'Existing parent login' : 'Parent login'} was linked to this student.${passwordText}`,
+        );
       }
       if (parentLoginError) {
         notify.error('Parent login not created', (parentLoginError as any)?.response?.data?.error?.message ?? 'Student was saved, but parent login creation failed.');
