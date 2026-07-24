@@ -84,6 +84,7 @@ model School {
   studentAttendanceSessions      StudentAttendanceSession[]
   teacherSelfAttendances         TeacherSelfAttendance[]
   teacherLeaveRequests           TeacherLeaveRequest[]
+  studentLeaveRequests           StudentLeaveRequest[]
   leaveTypes                     LeaveType[]
   leaveDefines                   LeaveDefine[]
   leaveApplications              LeaveApplication[]
@@ -243,6 +244,7 @@ model User {
   teacherSelfAttendancesCreated          TeacherSelfAttendance[]         @relation("TeacherSelfAttendanceCreatedBy")
   teacherSelfAttendancesOverridden       TeacherSelfAttendance[]         @relation("TeacherSelfAttendanceOverriddenBy")
   teacherLeaveRequestsReviewed           TeacherLeaveRequest[]           @relation("TeacherLeaveRequestReviewedBy")
+  studentLeaveRequestsReviewed           StudentLeaveRequest[]           @relation("StudentLeaveRequestReviewedBy")
   leaveApplicationsReviewed              LeaveApplication[]              @relation("LeaveApplicationReviewedBy")
   leaveAttachmentsUploaded               LeaveAttachment[]               @relation("LeaveAttachmentUploadedBy")
   leaveStatusHistoriesChanged            LeaveStatusHistory[]            @relation("LeaveStatusHistoryChangedBy")
@@ -850,6 +852,7 @@ model Student {
   siblings                 StudentSibling[]             @relation("StudentSiblingOwner")
   siblingOf                StudentSibling[]             @relation("StudentSiblingLinked")
   parentLinks              StudentParent[]
+  leaveRequests            StudentLeaveRequest[]
   statusEvents             StudentStatusHistory[]
   transferRequests         StudentTransferRequest[]
   faceProfile              FaceProfile?
@@ -1543,9 +1546,10 @@ model ParentProfile {
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
-  user     User?           @relation(fields: [userId], references: [id], onDelete: SetNull)
-  links    StudentParent[]
-  consents ConsentRecord[]
+  user                 User?                 @relation(fields: [userId], references: [id], onDelete: SetNull)
+  links                StudentParent[]
+  consents             ConsentRecord[]
+  studentLeaveRequests StudentLeaveRequest[]
 
   @@unique([userId])
   @@index([userId])
@@ -2129,6 +2133,36 @@ model TeacherLeaveRequest {
   @@index([schoolId, status, createdAt])
   @@index([teacherId, status, fromDate])
   @@map("teacher_leave_requests")
+}
+
+model StudentLeaveRequest {
+  id            String             @id @default(uuid()) @db.Uuid
+  schoolId      String             @map("school_id") @db.Uuid
+  studentId     String             @map("student_id") @db.Uuid
+  parentId      String             @map("parent_id") @db.Uuid
+  leaveType     String             @map("leave_type")
+  fromDate      DateTime           @map("from_date") @db.Date
+  toDate        DateTime           @map("to_date") @db.Date
+  requestedDays Int                @map("requested_days")
+  workingDays   Int                @map("working_days")
+  skippedDays   Json               @default("[]") @map("skipped_days")
+  reason        String
+  status        LeaveRequestStatus @default(PENDING)
+  reviewedById  String?            @map("reviewed_by_id") @db.Uuid
+  reviewedAt    DateTime?          @map("reviewed_at")
+  reviewNote    String?            @map("review_note")
+  createdAt     DateTime           @default(now()) @map("created_at")
+  updatedAt     DateTime           @updatedAt @map("updated_at")
+
+  school     School        @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  student    Student       @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  parent     ParentProfile @relation(fields: [parentId], references: [id], onDelete: Cascade)
+  reviewedBy User?         @relation("StudentLeaveRequestReviewedBy", fields: [reviewedById], references: [id], onDelete: SetNull)
+
+  @@index([schoolId, status, createdAt])
+  @@index([studentId, status, fromDate])
+  @@index([parentId, createdAt])
+  @@map("student_leave_requests")
 }
 
 model LeaveType {

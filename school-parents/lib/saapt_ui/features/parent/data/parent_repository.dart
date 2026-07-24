@@ -175,4 +175,38 @@ class ParentRepository {
         .map(ParentNotice.fromJson)
         .toList();
   }
+
+  Future<ParentLeaveCenter> getLeaveRequests({String? childId}) async {
+    final response = await _dio.get<Map<String, dynamic>>(
+      '/parents/portal/leave-requests',
+      queryParameters: {?childId: childId},
+    );
+    return ParentLeaveCenter.fromJson(
+      response.data ?? const <String, dynamic>{},
+    );
+  }
+
+  Future<ParentLeaveRequest> submitLeaveRequest({
+    required String childId,
+    required String leaveType,
+    required DateTime fromDate,
+    required DateTime toDate,
+    required String reason,
+  }) async {
+    String dateValue(DateTime value) =>
+        '${value.year.toString().padLeft(4, '0')}-${value.month.toString().padLeft(2, '0')}-${value.day.toString().padLeft(2, '0')}';
+    final response = await _dio.post<Map<String, dynamic>>(
+      '/parents/portal/leave-requests',
+      data: {
+        'childId': childId,
+        'leaveType': leaveType,
+        'fromDate': dateValue(fromDate),
+        'toDate': dateValue(toDate),
+        'reason': reason,
+      },
+    );
+    return ParentLeaveRequest.fromJson(
+      response.data ?? const <String, dynamic>{},
+    );
+  }
 }

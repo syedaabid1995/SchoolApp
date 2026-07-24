@@ -7,6 +7,7 @@ import '../../../global_ui/features/auth/presentation/providers/auth_controller.
 import '../../features/attendance/presentation/screens/my_attendance_screen.dart';
 import '../../features/auth/presentation/screens/login_screen.dart';
 import '../../features/auth/presentation/screens/splash_screen.dart';
+import '../../features/notifications/presentation/screens/saapt_push_notifications_screen.dart';
 import '../../features/profile/presentation/screens/profile_screen.dart';
 import '../../features/reports/presentation/screens/reports_screen.dart';
 import '../../features/students/presentation/screens/students_screen.dart';
@@ -44,6 +45,10 @@ final saaptRouterProvider = Provider<GoRouter>((ref) {
     routes: [
       GoRoute(path: '/splash', builder: (_, _) => const SaaptSplashScreen()),
       GoRoute(path: '/login', builder: (_, _) => const SaaptLoginScreen()),
+      GoRoute(
+        path: '/notifications',
+        builder: (_, _) => const SaaptPushNotificationsScreen(),
+      ),
       StatefulShellRoute.indexedStack(
         builder: (context, state, shell) => _SaaptShell(shell: shell),
         branches: [

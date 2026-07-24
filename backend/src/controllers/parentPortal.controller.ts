@@ -1,10 +1,18 @@
 import type { Request, Response } from 'express';
+import { Prisma } from '@prisma/client';
+import { z } from 'zod';
 import { prisma } from '../config/db';
 import { HttpError } from '../middlewares/error.middleware';
 import { requireAuth } from '../middlewares/rbac.middleware';
 import { attendanceReadService } from '../modules/attendance/services/attendance-read.service';
 import * as attendanceSheetService from '../services/attendanceSheet.service';
 import { evaluateFailCriteria, getExamGradingSettings } from '../services/grade.service';
+import {
+  computeStudentLeaveDays,
+  findParentProfileForChild,
+  sendStudentLeaveRequestTeacherAlerts,
+  studentLeaveTypes,
+} from '../services/studentLeave.service';
 import { parseLimit } from '../utils/pagination';
 
 const resolveParentProfiles = async (userId: string) => {
@@ -84,10 +92,149 @@ const parseJsonPayload = (value: unknown) => {
   }
 };
 
+const studentLeaveSchema = z.object({
+  childId: z.string().uuid(),
+  leaveType: z.enum(studentLeaveTypes).or(z.string().trim().min(1).max(80)),
+  fromDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+  toDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+  reason: z.string().trim().min(3).max(1000),
+});
+
+const skippedDaysArray = (value: Prisma.JsonValue) =>
+  Array.isArray(value)
+    ? value
+        .filter((item) => Boolean(item) && typeof item === 'object' && !Array.isArray(item))
+        .map((item) => ({
+          date: typeof (item as Record<string, unknown>).date === 'string' ? String((item as Record<string, unknown>).date) : '',
+          reason: typeof (item as Record<string, unknown>).reason === 'string' ? String((item as Record<string, unknown>).reason) : 'Non-working day',
+          type: typeof (item as Record<string, unknown>).type === 'string' ? String((item as Record<string, unknown>).type) : 'HOLIDAY',
+        }))
+    : [];
+
+const formatStudentLeaveRequest = (request: any) => {
+  const childName =
+    request.student?.fullName ||
+    `${request.student?.firstName ?? ''} ${request.student?.lastName ?? ''}`.trim() ||
+    'Student';
+  const classLabel = [request.student?.class?.name, request.student?.section?.name].filter(Boolean).join(' ');
+  return {
+    id: request.id,
+    childId: request.studentId,
+    childName,
+    classLabel,
+    leaveType: request.leaveType,
+    fromDate: request.fromDate,
+    toDate: request.toDate,
+    requestedDays: request.requestedDays,
+    workingDays: request.workingDays,
+    skippedDays: skippedDaysArray(request.skippedDays),
+    reason: request.reason,
+    status: request.status,
+    createdAt: request.createdAt,
+    updatedAt: request.updatedAt,
+  };
+};
+
 export const listParentChildren = async (req: Request, res: Response) => {
   const auth = requireAuth(req);
   const children = await resolveChildren(auth.userId);
   res.status(200).json(children);
+};
+
+export const listParentLeaveRequests = async (req: Request, res: Response) => {
+  const auth = requireAuth(req);
+  const childId = typeof req.query.childId === 'string' ? req.query.childId : undefined;
+  const { child, children } = await requireChildAccess(auth.userId, childId);
+  const childIds = childId ? [child.id] : children.map((entry) => entry.id);
+  const rows = await prisma.studentLeaveRequest.findMany({
+    where: { studentId: { in: childIds } },
+    include: {
+      student: {
+        include: {
+          class: { select: { id: true, name: true } },
+          section: { select: { id: true, name: true } },
+        },
+      },
+    },
+    orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+    take: 100,
+  });
+
+  const now = new Date();
+  const month = new Intl.DateTimeFormat('en-IN', { month: 'short', year: 'numeric' }).format(now);
+  res.status(200).json({
+    items: rows.map(formatStudentLeaveRequest),
+    total: rows.length,
+    currentMonth: month,
+    leaveTypes: studentLeaveTypes,
+  });
+};
+
+export const createParentLeaveRequest = async (req: Request, res: Response) => {
+  const auth = requireAuth(req);
+  const payload = studentLeaveSchema.parse(req.body);
+  const { child } = await requireChildAccess(auth.userId, payload.childId);
+  const parent = await findParentProfileForChild({ userId: auth.userId, childId: child.id });
+
+  const calculation = await computeStudentLeaveDays({
+    schoolId: child.schoolId,
+    classId: child.classId,
+    sectionId: child.sectionId,
+    fromDate: payload.fromDate,
+    toDate: payload.toDate,
+  });
+  if (calculation.workingDays <= 0) {
+    throw new HttpError(400, 'Selected dates only include weekends or holidays');
+  }
+
+  const overlap = await prisma.studentLeaveRequest.findFirst({
+    where: {
+      schoolId: child.schoolId,
+      studentId: child.id,
+      status: { in: ['PENDING', 'APPROVED'] },
+      fromDate: { lte: calculation.toDate },
+      toDate: { gte: calculation.fromDate },
+    },
+    select: { id: true },
+  });
+  if (overlap) throw new HttpError(409, 'Leave request already exists for this date range');
+
+  const request = await prisma.studentLeaveRequest.create({
+    data: {
+      schoolId: child.schoolId,
+      studentId: child.id,
+      parentId: parent.id,
+      leaveType: payload.leaveType,
+      fromDate: calculation.fromDate,
+      toDate: calculation.toDate,
+      requestedDays: calculation.requestedDays,
+      workingDays: calculation.workingDays,
+      skippedDays: calculation.skippedDays as Prisma.InputJsonValue,
+      reason: payload.reason,
+    },
+    include: {
+      student: {
+        include: {
+          class: { select: { id: true, name: true } },
+          section: { select: { id: true, name: true } },
+        },
+      },
+    },
+  });
+
+  await sendStudentLeaveRequestTeacherAlerts({
+    schoolId: child.schoolId,
+    actorId: auth.userId,
+    child,
+    leaveType: payload.leaveType,
+    fromDate: calculation.fromDate,
+    toDate: calculation.toDate,
+    workingDays: calculation.workingDays,
+    reason: payload.reason,
+    requestId: request.id,
+  });
+
+  res.status(201).json(formatStudentLeaveRequest(request));
 };
 
 export const getParentProfile = async (req: Request, res: Response) => {

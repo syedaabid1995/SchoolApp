@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 
 import '../../../../../global_ui/features/auth/presentation/providers/auth_controller.dart';
 import '../../../../app/theme/saapt_theme.dart';
@@ -72,6 +73,16 @@ class SaaptProfileScreen extends ConsumerWidget {
             icon: Icons.school_outlined,
             label: 'School',
             value: user?.schoolName ?? user?.schoolId ?? '-',
+          ),
+          const SizedBox(height: 12),
+          OutlinedButton.icon(
+            style: OutlinedButton.styleFrom(
+              minimumSize: const Size.fromHeight(52),
+              foregroundColor: SaaptTheme.primary,
+            ),
+            onPressed: () => context.push('/notifications'),
+            icon: const Icon(Icons.notifications_active_outlined),
+            label: const Text('Notifications'),
           ),
           const SizedBox(height: 22),
           OutlinedButton.icon(

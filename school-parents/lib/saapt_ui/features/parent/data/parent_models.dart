@@ -355,3 +355,110 @@ class ParentFeeSummary {
     );
   }
 }
+
+class ParentLeaveRequest {
+  const ParentLeaveRequest({
+    required this.id,
+    required this.childId,
+    required this.childName,
+    required this.classLabel,
+    required this.leaveType,
+    required this.fromDate,
+    required this.toDate,
+    required this.requestedDays,
+    required this.workingDays,
+    required this.skippedDays,
+    required this.reason,
+    required this.status,
+    required this.createdAt,
+  });
+
+  final String id;
+  final String childId;
+  final String childName;
+  final String classLabel;
+  final String leaveType;
+  final DateTime fromDate;
+  final DateTime toDate;
+  final int requestedDays;
+  final int workingDays;
+  final List<ParentLeaveSkippedDay> skippedDays;
+  final String reason;
+  final String status;
+  final DateTime createdAt;
+
+  factory ParentLeaveRequest.fromJson(Map<String, dynamic> json) {
+    return ParentLeaveRequest(
+      id: json['id']?.toString() ?? '',
+      childId: json['childId']?.toString() ?? '',
+      childName: json['childName']?.toString() ?? 'Student',
+      classLabel: json['classLabel']?.toString() ?? 'Class',
+      leaveType: json['leaveType']?.toString() ?? 'Leave',
+      fromDate:
+          DateTime.tryParse(json['fromDate']?.toString() ?? '') ??
+          DateTime.now(),
+      toDate:
+          DateTime.tryParse(json['toDate']?.toString() ?? '') ?? DateTime.now(),
+      requestedDays: int.tryParse(json['requestedDays']?.toString() ?? '') ?? 0,
+      workingDays: int.tryParse(json['workingDays']?.toString() ?? '') ?? 0,
+      skippedDays: (json['skippedDays'] as List? ?? const [])
+          .whereType<Map<String, dynamic>>()
+          .map(ParentLeaveSkippedDay.fromJson)
+          .toList(),
+      reason: json['reason']?.toString() ?? '',
+      status: json['status']?.toString() ?? 'PENDING',
+      createdAt:
+          DateTime.tryParse(json['createdAt']?.toString() ?? '') ??
+          DateTime.now(),
+    );
+  }
+}
+
+class ParentLeaveSkippedDay {
+  const ParentLeaveSkippedDay({
+    required this.date,
+    required this.reason,
+    required this.type,
+  });
+
+  final DateTime date;
+  final String reason;
+  final String type;
+
+  factory ParentLeaveSkippedDay.fromJson(Map<String, dynamic> json) {
+    return ParentLeaveSkippedDay(
+      date: DateTime.tryParse(json['date']?.toString() ?? '') ?? DateTime.now(),
+      reason: json['reason']?.toString() ?? 'Non-working day',
+      type: json['type']?.toString() ?? 'HOLIDAY',
+    );
+  }
+}
+
+class ParentLeaveCenter {
+  const ParentLeaveCenter({
+    required this.items,
+    required this.total,
+    required this.currentMonth,
+    required this.leaveTypes,
+  });
+
+  final List<ParentLeaveRequest> items;
+  final int total;
+  final String currentMonth;
+  final List<String> leaveTypes;
+
+  factory ParentLeaveCenter.fromJson(Map<String, dynamic> json) {
+    return ParentLeaveCenter(
+      items: (json['items'] as List? ?? const [])
+          .whereType<Map<String, dynamic>>()
+          .map(ParentLeaveRequest.fromJson)
+          .toList(),
+      total: int.tryParse(json['total']?.toString() ?? '') ?? 0,
+      currentMonth: json['currentMonth']?.toString() ?? '',
+      leaveTypes: (json['leaveTypes'] as List? ?? const [])
+          .map((item) => item.toString())
+          .where((item) => item.trim().isNotEmpty)
+          .toList(),
+    );
+  }
+}

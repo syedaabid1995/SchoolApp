@@ -111,3 +111,10 @@ final parentNoticesProvider = FutureProvider.autoDispose
     .family<List<ParentNotice>, ParentChild?>((ref, child) {
       return ref.watch(parentRepositoryProvider).getNotices(childId: child?.id);
     });
+
+final parentLeaveCenterProvider = FutureProvider.autoDispose
+    .family<ParentLeaveCenter, ParentChild?>((ref, child) {
+      return ref
+          .watch(parentRepositoryProvider)
+          .getLeaveRequests(childId: child?.id);
+    });
