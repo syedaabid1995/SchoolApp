@@ -283,6 +283,9 @@ const updateSchema = z.object({
   sectionId: z.string().uuid().optional().nullable(),
   schoolId: z.string().uuid().optional(),
   siblingIds: z.array(z.string().uuid()).optional(),
+  feeGroupIds: z.array(z.string().uuid()).optional(),
+  discountIds: z.array(z.string().uuid()).optional(),
+  generateInvoices: z.boolean().optional(),
 });
 
 const documentSchema = z.object({
@@ -735,9 +738,15 @@ export const updateStudent = async (req: Request, res: Response) => {
   };
   await ensureAcademicScope(schoolId, nextAcademic);
   await ensureRollIsUnique(schoolId, nextAcademic, id);
+  if (payload.feeGroupIds !== undefined || payload.discountIds !== undefined) {
+    await ensureAdmissionFeeReferences(schoolId, nextAcademic.academicSessionId, {
+      feeGroupIds: payload.feeGroupIds ?? [],
+      discountIds: payload.discountIds ?? [],
+    });
+  }
 
   const fullName = payload.fullName ? normalizeText(payload.fullName) : undefined;
-  const student = await StudentEnrollmentRepository.$transaction(async (tx) => {
+  const result = await StudentEnrollmentRepository.$transaction(async (tx) => {
     const updated = await tx.student.update({
       where: { id },
       data: {
@@ -829,24 +838,75 @@ export const updateStudent = async (req: Request, res: Response) => {
       }
     }
 
-    return updated;
+    let feeInvoiceGenerationJob = null;
+    if (payload.feeGroupIds !== undefined || payload.discountIds !== undefined) {
+      if (!nextAcademic.academicSessionId) {
+        throw new HttpError(400, 'academicSessionId is required to update fee details');
+      }
+      const feeGroupIds = Array.from(new Set(payload.feeGroupIds ?? []));
+      const discountIds = Array.from(new Set(payload.discountIds ?? []));
+
+      await tx.studentFeeGroupAssignment.updateMany({
+        where: {
+          schoolId,
+          academicSessionId: nextAcademic.academicSessionId,
+          studentId: id,
+          deletedAt: null,
+        },
+        data: {
+          status: 'INACTIVE',
+          deletedAt: new Date(),
+          deletedById: auth.userId,
+        },
+      });
+
+      if (feeGroupIds.length) {
+        await tx.studentFeeGroupAssignment.createMany({
+          data: feeGroupIds.map((feeGroupId) => ({
+            schoolId,
+            academicSessionId: nextAcademic.academicSessionId!,
+            studentId: id,
+            feeGroupId,
+            source: 'MANUAL',
+            createdById: auth.userId,
+          })),
+          skipDuplicates: true,
+        });
+      }
+
+      if (payload.generateInvoices && (feeGroupIds.length || discountIds.length)) {
+        feeInvoiceGenerationJob = await tx.feeInvoiceGenerationJob.create({
+          data: {
+            schoolId,
+            academicSessionId: nextAcademic.academicSessionId,
+            studentId: id,
+            source: 'MANUAL',
+            payload: { feeGroupIds, discountIds },
+            createdById: auth.userId,
+          },
+        });
+      }
+    }
+
+    return { student: updated, feeInvoiceGenerationJob };
   });
 
   await AuditLogService.record(req, {
     schoolId,
     entityType: 'STUDENT',
-    entityId: student.id,
+    entityId: result.student.id,
     action: 'UPDATE',
     beforeState: existing,
     afterState: {
-      admissionNo: student.admissionNo,
-      rollNo: student.rollNo,
-      fullName: student.fullName,
-      dob: student.dob,
-      academicSessionId: student.academicSessionId,
-      classId: student.classId,
-      sectionId: student.sectionId,
-      status: student.status,
+      admissionNo: result.student.admissionNo,
+      rollNo: result.student.rollNo,
+      fullName: result.student.fullName,
+      dob: result.student.dob,
+      academicSessionId: result.student.academicSessionId,
+      classId: result.student.classId,
+      sectionId: result.student.sectionId,
+      status: result.student.status,
+      feeInvoiceGenerationJobId: result.feeInvoiceGenerationJob?.id ?? null,
     },
   });
 
@@ -856,7 +916,7 @@ export const updateStudent = async (req: Request, res: Response) => {
     if (imageRefs.length) {
       faceRegistration = await autoRegisterAdmissionFaces({
         schoolId,
-        studentId: student.id,
+        studentId: result.student.id,
         createdById: auth.userId,
         imageRefs,
       });
@@ -864,22 +924,39 @@ export const updateStudent = async (req: Request, res: Response) => {
       try {
         await clearStudentFaceRegistration({
           schoolId,
-          studentId: student.id,
+          studentId: result.student.id,
           clearedById: auth.userId,
         });
         faceRegistration = { success: true, sampleCount: 0 };
       } catch (error) {
         const message = error instanceof HttpError ? error.message : 'Face registration failed';
-        logger.warn({ err: error, schoolId, studentId: student.id }, 'Student face registration clear failed');
+        logger.warn({ err: error, schoolId, studentId: result.student.id }, 'Student face registration clear failed');
         faceRegistration = { success: false, sampleCount: 0, error: message };
       }
     }
   }
 
-  await invalidateStudentCache(schoolId, student.id);
+  await invalidateStudentCache(schoolId, result.student.id);
+
+  if (result.feeInvoiceGenerationJob) {
+    await feeGenerationQueue
+      .add(
+        'student-fee-generation',
+        { jobId: result.feeInvoiceGenerationJob.id },
+        { jobId: result.feeInvoiceGenerationJob.id, attempts: 3, backoff: { type: 'exponential', delay: 5000 } },
+      )
+      .catch(async (err) => {
+        logger.warn({ err, feeInvoiceGenerationJobId: result.feeInvoiceGenerationJob?.id }, 'failed to enqueue student fee generation job');
+        await StudentEnrollmentRepository.feeInvoiceGenerationJob.update({
+          where: { id: result.feeInvoiceGenerationJob!.id },
+          data: { status: 'FAILED', error: 'Unable to enqueue fee generation job' },
+        }).catch((updateErr) => logger.warn({ err: updateErr }, 'failed to mark student fee generation job failed'));
+      });
+  }
 
   res.status(200).json({
-    ...student,
+    ...result.student,
+    feeInvoiceGenerationJob: result.feeInvoiceGenerationJob,
     faceRegistration,
   });
 };

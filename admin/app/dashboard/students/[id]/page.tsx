@@ -632,7 +632,7 @@ export default function StudentDetailPage() {
                 <InfoRow label="Status" value={student.status} />
               </div>
               <div className="mt-5 flex gap-2">
-                {canEditStudent ? <button onClick={() => setEditMode(true)} className="flex-1 rounded-xl bg-[var(--theme-button-bg)] px-4 py-2 text-sm font-bold text-[var(--theme-button-text)]">Edit</button> : null}
+                {canEditStudent ? <Link href={`/dashboard/students/${student.id}/edit`} className="flex-1 rounded-xl bg-[var(--theme-button-bg)] px-4 py-2 text-center text-sm font-bold text-[var(--theme-button-text)]">Edit</Link> : null}
                 <Link href="/dashboard/students" className="rounded-xl border border-slate-200 px-4 py-2 text-sm font-bold text-slate-700">Back</Link>
               </div>
             </div>

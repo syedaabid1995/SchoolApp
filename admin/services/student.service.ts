@@ -109,6 +109,13 @@ export type Student = {
     parentId: string;
     parent: { id: string; firstName: string; lastName: string; phone: string | null; email: string | null };
   }>;
+  studentFeeGroupAssignments?: Array<{
+    id: string;
+    academicSessionId: string;
+    feeGroupId: string;
+    status: string;
+    feeGroup?: { id: string; name: string; status?: string | null };
+  }>;
   createdAt: string;
   updatedAt: string;
 };
@@ -268,11 +275,14 @@ export const updateStudent = async (
     docBirthCert: string | null;
     docTransferCert: string | null;
     docAadhaar: string | null;
-    docReportCard: string | null;
-    classId: string | null;
-    sectionId: string | null;
-    siblingIds: string[];
-  }>,
+	    docReportCard: string | null;
+	    classId: string | null;
+	    sectionId: string | null;
+	    siblingIds: string[];
+	    feeGroupIds: string[];
+	    discountIds: string[];
+	    generateInvoices: boolean;
+	  }>,
   params?: { schoolId?: string },
 ) => {
   const { data } = await api.patch(`/students/students/${id}`, payload, { params });

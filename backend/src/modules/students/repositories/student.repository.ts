@@ -70,6 +70,11 @@ export const StudentRepository = {
         },
       },
       parentLinks: { include: { parent: true } },
+      studentFeeGroupAssignments: {
+        where: { deletedAt: null, status: 'ACTIVE' as const },
+        include: { feeGroup: { select: { id: true, name: true, status: true } } },
+        orderBy: { assignedAt: 'desc' as const },
+      },
       photos: { orderBy: { createdAt: 'desc' as const } },
       faceProfile: {
         include: {
