@@ -21,7 +21,7 @@ class ParentHero extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.fromLTRB(24, 58, 24, 30),
+      padding: const EdgeInsets.fromLTRB(22, 52, 22, 24),
       decoration: const BoxDecoration(
         gradient: LinearGradient(
           colors: [Color(0xFF1E4FE8), Color(0xFF346BFF)],
@@ -67,6 +67,7 @@ class ParentHero extends StatelessWidget {
                       badge,
                       style: const TextStyle(
                         color: Colors.white,
+                        fontSize: 12,
                         fontWeight: FontWeight.w900,
                       ),
                     ),
@@ -80,8 +81,8 @@ class ParentHero extends StatelessWidget {
                 title,
                 style: const TextStyle(
                   color: Colors.white,
-                  fontSize: 38,
-                  height: 1.05,
+                  fontSize: 30,
+                  height: 1.1,
                   fontWeight: FontWeight.w900,
                 ),
               ),
@@ -90,7 +91,7 @@ class ParentHero extends StatelessWidget {
                 subtitle,
                 style: TextStyle(
                   color: Colors.white.withValues(alpha: 0.78),
-                  fontSize: 18,
+                  fontSize: 15,
                   fontWeight: FontWeight.w700,
                 ),
               ),
@@ -128,10 +129,10 @@ class ParentCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: padding ?? const EdgeInsets.all(20),
+      padding: padding ?? const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(24),
+        borderRadius: BorderRadius.circular(16),
         border: Border.all(color: const Color(0xFFDDE7F7)),
         boxShadow: const [
           BoxShadow(
@@ -196,7 +197,7 @@ class StatCard extends StatelessWidget {
   Widget build(BuildContext context) {
     return Expanded(
       child: ParentCard(
-        padding: const EdgeInsets.symmetric(vertical: 22, horizontal: 12),
+        padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 10),
         child: Column(
           children: [
             Text(
@@ -205,7 +206,7 @@ class StatCard extends StatelessWidget {
               overflow: TextOverflow.ellipsis,
               style: TextStyle(
                 color: color,
-                fontSize: 32,
+                fontSize: 26,
                 fontWeight: FontWeight.w900,
               ),
             ),
@@ -214,7 +215,7 @@ class StatCard extends StatelessWidget {
               label,
               style: const TextStyle(
                 color: Color(0xFF91A1BB),
-                fontSize: 15,
+                fontSize: 12,
                 fontWeight: FontWeight.w800,
               ),
             ),

@@ -114,28 +114,28 @@ class _SaaptShell extends StatelessWidget {
             shell.goBranch(index, initialLocation: index == shell.currentIndex),
         destinations: const [
           NavigationDestination(
-            icon: Text('🏠', style: TextStyle(fontSize: 26)),
-            selectedIcon: Text('🏠', style: TextStyle(fontSize: 30)),
+            icon: Text('🏠', style: TextStyle(fontSize: 22)),
+            selectedIcon: Text('🏠', style: TextStyle(fontSize: 24)),
             label: 'Home',
           ),
           NavigationDestination(
-            icon: Text('📅', style: TextStyle(fontSize: 26)),
-            selectedIcon: Text('📅', style: TextStyle(fontSize: 30)),
+            icon: Text('📅', style: TextStyle(fontSize: 22)),
+            selectedIcon: Text('📅', style: TextStyle(fontSize: 24)),
             label: 'Attend',
           ),
           NavigationDestination(
-            icon: Text('📝', style: TextStyle(fontSize: 26)),
-            selectedIcon: Text('📝', style: TextStyle(fontSize: 30)),
+            icon: Text('📝', style: TextStyle(fontSize: 22)),
+            selectedIcon: Text('📝', style: TextStyle(fontSize: 24)),
             label: 'Leave',
           ),
           NavigationDestination(
-            icon: Text('📊', style: TextStyle(fontSize: 26)),
-            selectedIcon: Text('📊', style: TextStyle(fontSize: 30)),
+            icon: Text('📊', style: TextStyle(fontSize: 22)),
+            selectedIcon: Text('📊', style: TextStyle(fontSize: 24)),
             label: 'Reports',
           ),
           NavigationDestination(
-            icon: Text('🔔', style: TextStyle(fontSize: 26)),
-            selectedIcon: Text('🔔', style: TextStyle(fontSize: 30)),
+            icon: Text('🔔', style: TextStyle(fontSize: 22)),
+            selectedIcon: Text('🔔', style: TextStyle(fontSize: 24)),
             label: 'Alerts',
           ),
         ],

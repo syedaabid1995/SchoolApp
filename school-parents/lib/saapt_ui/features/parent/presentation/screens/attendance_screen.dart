@@ -115,7 +115,7 @@ class _AttendanceContent extends StatelessWidget {
           'Session-wise Attendance',
           style: TextStyle(
             color: SaaptTheme.navy,
-            fontSize: 23,
+            fontSize: 19,
             fontWeight: FontWeight.w900,
           ),
         ),
@@ -148,7 +148,7 @@ class _AttendanceContent extends StatelessWidget {
                   'Attendance Alert',
                   style: TextStyle(
                     color: SaaptTheme.warning,
-                    fontSize: 22,
+                    fontSize: 18,
                     fontWeight: FontWeight.w900,
                   ),
                 ),
@@ -157,7 +157,7 @@ class _AttendanceContent extends StatelessWidget {
                   '${child.name} was marked absent for ${absentSessions.first.label.toLowerCase()}.',
                   style: const TextStyle(
                     color: Color(0xFF586985),
-                    fontSize: 18,
+                    fontSize: 15,
                     height: 1.45,
                     fontWeight: FontWeight.w700,
                   ),
@@ -208,7 +208,7 @@ class _SessionAttendanceCard extends StatelessWidget {
               borderRadius: BorderRadius.circular(20),
               border: Border.all(color: const Color(0xFFD2E1FF)),
             ),
-            child: Text(icon, style: const TextStyle(fontSize: 28)),
+            child: Text(icon, style: const TextStyle(fontSize: 23)),
           ),
           const SizedBox(width: 16),
           Expanded(
@@ -219,7 +219,7 @@ class _SessionAttendanceCard extends StatelessWidget {
                   session.label,
                   style: const TextStyle(
                     color: SaaptTheme.navy,
-                    fontSize: 19,
+                    fontSize: 16,
                     fontWeight: FontWeight.w900,
                   ),
                 ),
@@ -232,7 +232,7 @@ class _SessionAttendanceCard extends StatelessWidget {
                   overflow: TextOverflow.ellipsis,
                   style: const TextStyle(
                     color: Color(0xFF586985),
-                    fontSize: 15,
+                    fontSize: 13,
                     fontWeight: FontWeight.w700,
                   ),
                 ),

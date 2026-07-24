@@ -101,7 +101,7 @@ class _ChildCard extends ConsumerWidget {
             ),
             child: Text(
               _avatarFor(child.name),
-              style: const TextStyle(fontSize: 28),
+              style: const TextStyle(fontSize: 23),
             ),
           ),
           const SizedBox(width: 16),
@@ -115,7 +115,7 @@ class _ChildCard extends ConsumerWidget {
                   overflow: TextOverflow.ellipsis,
                   style: const TextStyle(
                     color: SaaptTheme.navy,
-                    fontSize: 20,
+                    fontSize: 17,
                     fontWeight: FontWeight.w900,
                   ),
                 ),
@@ -124,7 +124,7 @@ class _ChildCard extends ConsumerWidget {
                   child.classLabel,
                   style: const TextStyle(
                     color: Color(0xFF586985),
-                    fontSize: 16,
+                    fontSize: 14,
                     fontWeight: FontWeight.w700,
                   ),
                 ),

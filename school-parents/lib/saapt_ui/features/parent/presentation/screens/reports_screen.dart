@@ -250,7 +250,7 @@ class _SwitchButton extends StatelessWidget {
                   overflow: TextOverflow.ellipsis,
                   style: TextStyle(
                     color: selected ? Colors.white : SaaptTheme.navy,
-                    fontSize: 15,
+                    fontSize: 13,
                     fontWeight: FontWeight.w900,
                   ),
                 ),
@@ -322,7 +322,7 @@ class _PerformanceReportView extends ConsumerWidget {
                       'Performance Source',
                       style: TextStyle(
                         color: SaaptTheme.primary,
-                        fontSize: 22,
+                        fontSize: 18,
                         fontWeight: FontWeight.w900,
                       ),
                     ),
@@ -331,7 +331,7 @@ class _PerformanceReportView extends ConsumerWidget {
                       'Marks are uploaded by school admin/teacher in admin panel.',
                       style: TextStyle(
                         color: Color(0xFF586985),
-                        fontSize: 20,
+                        fontSize: 15,
                         height: 1.35,
                         fontWeight: FontWeight.w700,
                       ),
@@ -458,7 +458,7 @@ class _AttendanceReportView extends ConsumerWidget {
                     foregroundColor: Colors.white,
                     padding: const EdgeInsets.symmetric(vertical: 15),
                     textStyle: const TextStyle(
-                      fontSize: 17,
+                      fontSize: 14,
                       fontWeight: FontWeight.w900,
                     ),
                   ),
@@ -560,7 +560,7 @@ class _FieldLabel extends StatelessWidget {
       text.toUpperCase(),
       style: const TextStyle(
         color: Color(0xFF9BADCA),
-        fontSize: 14,
+        fontSize: 12,
         fontWeight: FontWeight.w900,
       ),
     );
@@ -611,7 +611,7 @@ class _DropdownField<T> extends StatelessWidget {
       ),
       style: const TextStyle(
         color: SaaptTheme.primary,
-        fontSize: 18,
+        fontSize: 15,
         fontWeight: FontWeight.w900,
       ),
     );
@@ -663,7 +663,7 @@ class _MonthPickerField extends StatelessWidget {
                 DateFormat('MMMM yyyy').format(month),
                 style: const TextStyle(
                   color: SaaptTheme.navy,
-                  fontSize: 18,
+                  fontSize: 15,
                   fontWeight: FontWeight.w900,
                 ),
               ),
@@ -702,7 +702,7 @@ class _DonutSummary extends StatelessWidget {
                   '$percent%',
                   style: const TextStyle(
                     color: SaaptTheme.primary,
-                    fontSize: 31,
+                    fontSize: 26,
                     fontWeight: FontWeight.w900,
                   ),
                 ),
@@ -711,7 +711,7 @@ class _DonutSummary extends StatelessWidget {
                   'Overall',
                   style: TextStyle(
                     color: Color(0xFF6E7C95),
-                    fontSize: 15,
+                    fontSize: 12,
                     fontWeight: FontWeight.w900,
                   ),
                 ),
@@ -799,7 +799,7 @@ class _SubjectMarksCard extends StatelessWidget {
             'Subject-wise Marks',
             style: TextStyle(
               color: SaaptTheme.navy,
-              fontSize: 20,
+              fontSize: 17,
               fontWeight: FontWeight.w900,
             ),
           ),
@@ -863,7 +863,7 @@ class _SubjectBar extends StatelessWidget {
           overflow: TextOverflow.ellipsis,
           style: const TextStyle(
             color: Color(0xFF6E7C95),
-            fontSize: 14,
+            fontSize: 12,
             fontWeight: FontWeight.w900,
           ),
         ),
@@ -904,7 +904,7 @@ class _AttendanceBarsCard extends StatelessWidget {
             'Monthly Till Date Attendance',
             style: TextStyle(
               color: SaaptTheme.navy,
-              fontSize: 20,
+              fontSize: 17,
               fontWeight: FontWeight.w900,
             ),
           ),
@@ -969,7 +969,7 @@ class _SessionBar extends StatelessWidget {
           textAlign: TextAlign.center,
           style: const TextStyle(
             color: Color(0xFF6E7C95),
-            fontSize: 14,
+            fontSize: 12,
             fontWeight: FontWeight.w900,
           ),
         ),
@@ -1033,7 +1033,7 @@ class _ProgressLine extends StatelessWidget {
           title,
           style: const TextStyle(
             color: SaaptTheme.navy,
-            fontSize: 22,
+            fontSize: 17,
             fontWeight: FontWeight.w900,
           ),
         ),
@@ -1052,7 +1052,7 @@ class _ProgressLine extends StatelessWidget {
           note,
           style: const TextStyle(
             color: Color(0xFF586985),
-            fontSize: 18,
+            fontSize: 14,
             height: 1.3,
             fontWeight: FontWeight.w700,
           ),

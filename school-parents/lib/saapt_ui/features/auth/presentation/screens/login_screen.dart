@@ -67,7 +67,7 @@ class _SaaptLoginScreenState extends ConsumerState<SaaptLoginScreen> {
                 Text(
                   isMfa ? 'Verify Parent Login' : 'Parent Login',
                   style: const TextStyle(
-                    fontSize: 34,
+                    fontSize: 30,
                     fontWeight: FontWeight.w900,
                     color: SaaptTheme.navy,
                   ),
@@ -236,7 +236,7 @@ class _Logo extends StatelessWidget {
           color: SaaptTheme.primary,
           borderRadius: BorderRadius.circular(18),
         ),
-        child: const Text('👨‍👩‍👧', style: TextStyle(fontSize: 30)),
+        child: const Text('👨‍👩‍👧', style: TextStyle(fontSize: 26)),
       ),
     );
   }

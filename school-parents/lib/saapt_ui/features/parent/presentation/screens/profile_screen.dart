@@ -356,7 +356,7 @@ class _ProfileMenuPanel extends StatelessWidget {
                   initial,
                   style: const TextStyle(
                     color: SaaptTheme.primary,
-                    fontSize: 26,
+                    fontSize: 22,
                     fontWeight: FontWeight.w900,
                   ),
                 ),
@@ -370,7 +370,7 @@ class _ProfileMenuPanel extends StatelessWidget {
                       profile.name,
                       style: const TextStyle(
                         color: SaaptTheme.navy,
-                        fontSize: 20,
+                        fontSize: 17,
                         fontWeight: FontWeight.w900,
                       ),
                     ),
@@ -532,7 +532,7 @@ class _ChildrenPanel extends StatelessWidget {
                       'Children',
                       style: TextStyle(
                         color: SaaptTheme.navy,
-                        fontSize: 21,
+                        fontSize: 18,
                         fontWeight: FontWeight.w900,
                       ),
                     ),
@@ -571,7 +571,7 @@ class _ChildrenPanel extends StatelessWidget {
                             child.name,
                             style: const TextStyle(
                               color: SaaptTheme.navy,
-                              fontSize: 18,
+                              fontSize: 16,
                               fontWeight: FontWeight.w900,
                             ),
                           ),
@@ -659,7 +659,7 @@ class _ChildSummaryCard extends StatelessWidget {
                 child.name,
                 style: const TextStyle(
                   color: SaaptTheme.navy,
-                  fontSize: 22,
+                  fontSize: 18,
                   fontWeight: FontWeight.w900,
                 ),
               ),
@@ -727,7 +727,7 @@ class _ChildAvatar extends StatelessWidget {
       child.name.trim().isEmpty ? 'S' : child.name.trim()[0].toUpperCase(),
       style: TextStyle(
         color: SaaptTheme.primary,
-        fontSize: size * 0.42,
+        fontSize: size * 0.36,
         fontWeight: FontWeight.w900,
       ),
     ),
@@ -915,7 +915,7 @@ class _RecordCard extends StatelessWidget {
             title,
             style: const TextStyle(
               color: SaaptTheme.navy,
-              fontSize: 18,
+              fontSize: 16,
               fontWeight: FontWeight.w900,
             ),
           ),
@@ -1254,7 +1254,7 @@ class _InfoPanel extends StatelessWidget {
           title,
           style: const TextStyle(
             color: SaaptTheme.navy,
-            fontSize: 22,
+            fontSize: 18,
             fontWeight: FontWeight.w900,
           ),
         ),
@@ -1263,7 +1263,7 @@ class _InfoPanel extends StatelessWidget {
           body,
           style: const TextStyle(
             color: Color(0xFF60708F),
-            fontSize: 16,
+            fontSize: 14,
             height: 1.5,
             fontWeight: FontWeight.w700,
           ),

@@ -28,8 +28,8 @@ class SaaptTheme {
         filled: true,
         fillColor: const Color(0xFFF7F9FE),
         contentPadding: const EdgeInsets.symmetric(
-          horizontal: 16,
-          vertical: 16,
+          horizontal: 14,
+          vertical: 14,
         ),
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(8),
@@ -47,7 +47,7 @@ class SaaptTheme {
       navigationBarTheme: const NavigationBarThemeData(
         backgroundColor: Colors.white,
         indicatorColor: Color(0xFFE8EFFF),
-        height: 72,
+        height: 64,
         labelBehavior: NavigationDestinationLabelBehavior.alwaysShow,
       ),
     );

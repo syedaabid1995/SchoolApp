@@ -364,7 +364,7 @@ class _LeaveHistoryCard extends StatelessWidget {
               ),
               child: Text(
                 _leaveIcon(item.leaveType),
-                style: const TextStyle(fontSize: 28),
+                style: const TextStyle(fontSize: 22),
               ),
             ),
             const SizedBox(width: 16),
@@ -376,7 +376,7 @@ class _LeaveHistoryCard extends StatelessWidget {
                     item.leaveType,
                     style: const TextStyle(
                       color: Color(0xFF0F1D3A),
-                      fontSize: 19,
+                      fontSize: 16,
                       fontWeight: FontWeight.w900,
                     ),
                   ),
@@ -385,7 +385,7 @@ class _LeaveHistoryCard extends StatelessWidget {
                     '${item.childName} • ${_dateRange(item.fromDate, item.toDate)}',
                     style: const TextStyle(
                       color: Color(0xFF61718D),
-                      fontSize: 16,
+                      fontSize: 14,
                       fontWeight: FontWeight.w700,
                     ),
                   ),
@@ -416,7 +416,7 @@ class _LeaveDetailsSheet extends StatelessWidget {
           children: [
             Text(
               item.leaveType,
-              style: const TextStyle(fontSize: 24, fontWeight: FontWeight.w900),
+              style: const TextStyle(fontSize: 19, fontWeight: FontWeight.w900),
             ),
             const SizedBox(height: 14),
             _DetailRow(
@@ -435,7 +435,7 @@ class _LeaveDetailsSheet extends StatelessWidget {
               const SizedBox(height: 12),
               const Text(
                 'Excluded Days',
-                style: TextStyle(fontSize: 16, fontWeight: FontWeight.w900),
+                style: TextStyle(fontSize: 14, fontWeight: FontWeight.w900),
               ),
               const SizedBox(height: 8),
               for (final day in item.skippedDays)
@@ -464,7 +464,7 @@ class _FieldLabel extends StatelessWidget {
         text,
         style: const TextStyle(
           color: Color(0xFF91A1BB),
-          fontSize: 14,
+          fontSize: 12,
           fontWeight: FontWeight.w900,
           letterSpacing: 0,
         ),
@@ -514,12 +514,12 @@ class _DateBox extends StatelessWidget {
               _formatDate(date),
               style: const TextStyle(
                 color: Color(0xFF0F1D3A),
-                fontSize: 18,
+                fontSize: 15,
                 fontWeight: FontWeight.w900,
               ),
             ),
           ),
-          const Text('📅', style: TextStyle(fontSize: 22)),
+          const Text('📅', style: TextStyle(fontSize: 18)),
         ],
       ),
     ),

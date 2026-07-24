@@ -72,23 +72,23 @@ class _AlertCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return InkWell(
-      borderRadius: BorderRadius.circular(24),
+      borderRadius: BorderRadius.circular(16),
       onTap: () => _showAlertDetails(context, display),
       child: ParentCard(
-        padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 24),
+        padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 16),
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.center,
           children: [
             Container(
-              width: 58,
-              height: 58,
+              width: 48,
+              height: 48,
               alignment: Alignment.center,
               decoration: BoxDecoration(
                 color: const Color(0xFFEAF1FF),
                 borderRadius: BorderRadius.circular(18),
                 border: Border.all(color: const Color(0xFFD1E0FF)),
               ),
-              child: Text(display.icon, style: const TextStyle(fontSize: 28)),
+              child: Text(display.icon, style: const TextStyle(fontSize: 22)),
             ),
             const SizedBox(width: 18),
             Expanded(
@@ -101,7 +101,7 @@ class _AlertCard extends StatelessWidget {
                     overflow: TextOverflow.ellipsis,
                     style: const TextStyle(
                       color: SaaptTheme.navy,
-                      fontSize: 20,
+                      fontSize: 17,
                       height: 1.18,
                       fontWeight: FontWeight.w900,
                     ),
@@ -113,7 +113,7 @@ class _AlertCard extends StatelessWidget {
                     overflow: TextOverflow.ellipsis,
                     style: const TextStyle(
                       color: Color(0xFF586985),
-                      fontSize: 17,
+                      fontSize: 14,
                       height: 1.45,
                       fontWeight: FontWeight.w700,
                     ),
@@ -180,8 +180,8 @@ class _AlertDetailsSheet extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Container(
-                    width: 56,
-                    height: 56,
+                    width: 48,
+                    height: 48,
                     alignment: Alignment.center,
                     decoration: BoxDecoration(
                       color: const Color(0xFFEAF1FF),
@@ -190,7 +190,7 @@ class _AlertDetailsSheet extends StatelessWidget {
                     ),
                     child: Text(
                       display.icon,
-                      style: const TextStyle(fontSize: 26),
+                      style: const TextStyle(fontSize: 22),
                     ),
                   ),
                   const SizedBox(width: 14),
@@ -202,7 +202,7 @@ class _AlertDetailsSheet extends StatelessWidget {
                           display.title,
                           style: const TextStyle(
                             color: SaaptTheme.navy,
-                            fontSize: 22,
+                            fontSize: 18,
                             height: 1.15,
                             fontWeight: FontWeight.w900,
                           ),
@@ -225,7 +225,7 @@ class _AlertDetailsSheet extends StatelessWidget {
                 display.summary,
                 style: const TextStyle(
                   color: Color(0xFF586985),
-                  fontSize: 17,
+                  fontSize: 14,
                   height: 1.45,
                   fontWeight: FontWeight.w700,
                 ),
@@ -288,8 +288,8 @@ class _AlertBadge extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      constraints: const BoxConstraints(minWidth: 82),
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+      constraints: const BoxConstraints(minWidth: 68),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
       alignment: Alignment.center,
       decoration: BoxDecoration(
         color: style.background,
@@ -302,7 +302,7 @@ class _AlertBadge extends StatelessWidget {
         overflow: TextOverflow.ellipsis,
         style: TextStyle(
           color: style.foreground,
-          fontSize: 16,
+          fontSize: 12,
           fontWeight: FontWeight.w900,
         ),
       ),
