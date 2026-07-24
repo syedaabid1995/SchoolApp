@@ -52,86 +52,95 @@ class _ParentProfileScreenState extends ConsumerState<ParentProfileScreen> {
   Widget build(BuildContext context) {
     final profileState = ref.watch(parentProfileProvider);
     final pushState = ref.watch(parentPushPreferenceProvider);
-    return Scaffold(
-      body: RefreshIndicator(
-        onRefresh: () async {
-          ref.invalidate(parentProfileProvider);
-          ref.invalidate(parentPushPreferenceProvider);
-          await ref.read(parentProfileProvider.future);
-        },
-        child: ListView(
-          padding: EdgeInsets.zero,
-          children: [
-            ParentHero(
-              badge: '👤 Parent Profile',
-              title: _titleForPanel(),
-              subtitle: _subtitleForPanel(),
-              trailing: IconButton(
-                tooltip: 'Back',
-                style: IconButton.styleFrom(
-                  backgroundColor: Colors.white.withValues(alpha: 0.16),
-                  foregroundColor: Colors.white,
+    return PopScope(
+      canPop: _panel == _ProfilePanel.menu,
+      onPopInvokedWithResult: (didPop, _) {
+        if (didPop || _panel == _ProfilePanel.menu) return;
+        setState(() => _panel = _ProfilePanel.menu);
+      },
+      child: Scaffold(
+        body: RefreshIndicator(
+          onRefresh: () async {
+            ref.invalidate(parentProfileProvider);
+            ref.invalidate(parentPushPreferenceProvider);
+            await ref.read(parentProfileProvider.future);
+          },
+          child: ListView(
+            padding: EdgeInsets.zero,
+            children: [
+              ParentHero(
+                badge: '👤 Parent Profile',
+                title: _titleForPanel(),
+                subtitle: _subtitleForPanel(),
+                trailing: IconButton(
+                  tooltip: 'Back',
+                  style: IconButton.styleFrom(
+                    backgroundColor: Colors.white.withValues(alpha: 0.16),
+                    foregroundColor: Colors.white,
+                  ),
+                  onPressed: () {
+                    if (_panel == _ProfilePanel.menu) {
+                      Navigator.of(context).maybePop();
+                    } else {
+                      setState(() => _panel = _ProfilePanel.menu);
+                    }
+                  },
+                  icon: const Icon(Icons.arrow_back_rounded),
                 ),
-                onPressed: () {
-                  if (_panel == _ProfilePanel.menu) {
-                    Navigator.of(context).maybePop();
-                  } else {
-                    setState(() => _panel = _ProfilePanel.menu);
-                  }
-                },
-                icon: const Icon(Icons.arrow_back_rounded),
               ),
-            ),
-            Padding(
-              padding: const EdgeInsets.fromLTRB(20, 22, 20, 32),
-              child: profileState.when(
-                loading: () => const LoadingPanel(),
-                error: (error, _) => EmptyPanel(message: parentApiError(error)),
-                data: (profile) {
-                  _seedProfile(profile);
-                  return switch (_panel) {
-                    _ProfilePanel.viewProfile => _ViewProfilePanel(
-                      profile: profile,
-                    ),
-                    _ProfilePanel.editProfile => _EditProfilePanel(
-                      firstNameController: _firstNameController,
-                      lastNameController: _lastNameController,
-                      emailController: _emailController,
-                      phoneController: _phoneController,
-                      saving: _savingProfile,
-                      onSave: _saveProfile,
-                    ),
-                    _ProfilePanel.changePassword => _ChangePasswordPanel(
-                      currentPasswordController: _currentPasswordController,
-                      newPasswordController: _newPasswordController,
-                      confirmPasswordController: _confirmPasswordController,
-                      saving: _changingPassword,
-                      onSave: _changePassword,
-                    ),
-                    _ProfilePanel.info => _InfoPanel(
-                      title: _infoTitle,
-                      body: _infoBody,
-                    ),
-                    _ProfilePanel.menu => _ProfileMenuPanel(
-                      profile: profile,
-                      pushState: pushState,
-                      onOpenProfile: () =>
-                          setState(() => _panel = _ProfilePanel.viewProfile),
-                      onOpenEdit: () =>
-                          setState(() => _panel = _ProfilePanel.editProfile),
-                      onOpenPassword: () =>
-                          setState(() => _panel = _ProfilePanel.changePassword),
-                      onTogglePush: _togglePush,
-                      onOpenInfo: _openInfo,
-                      onLogout: () => ref
-                          .read(parentAuthControllerProvider.notifier)
-                          .logout(),
-                    ),
-                  };
-                },
+              Padding(
+                padding: const EdgeInsets.fromLTRB(20, 22, 20, 32),
+                child: profileState.when(
+                  loading: () => const LoadingPanel(),
+                  error: (error, _) =>
+                      EmptyPanel(message: parentApiError(error)),
+                  data: (profile) {
+                    _seedProfile(profile);
+                    return switch (_panel) {
+                      _ProfilePanel.viewProfile => _ViewProfilePanel(
+                        profile: profile,
+                      ),
+                      _ProfilePanel.editProfile => _EditProfilePanel(
+                        firstNameController: _firstNameController,
+                        lastNameController: _lastNameController,
+                        emailController: _emailController,
+                        phoneController: _phoneController,
+                        saving: _savingProfile,
+                        onSave: _saveProfile,
+                      ),
+                      _ProfilePanel.changePassword => _ChangePasswordPanel(
+                        currentPasswordController: _currentPasswordController,
+                        newPasswordController: _newPasswordController,
+                        confirmPasswordController: _confirmPasswordController,
+                        saving: _changingPassword,
+                        onSave: _changePassword,
+                      ),
+                      _ProfilePanel.info => _InfoPanel(
+                        title: _infoTitle,
+                        body: _infoBody,
+                      ),
+                      _ProfilePanel.menu => _ProfileMenuPanel(
+                        profile: profile,
+                        pushState: pushState,
+                        onOpenProfile: () =>
+                            setState(() => _panel = _ProfilePanel.viewProfile),
+                        onOpenEdit: () =>
+                            setState(() => _panel = _ProfilePanel.editProfile),
+                        onOpenPassword: () => setState(
+                          () => _panel = _ProfilePanel.changePassword,
+                        ),
+                        onTogglePush: _togglePush,
+                        onOpenInfo: _openInfo,
+                        onLogout: () => ref
+                            .read(parentAuthControllerProvider.notifier)
+                            .logout(),
+                      ),
+                    };
+                  },
+                ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );
