@@ -100,6 +100,13 @@ const studentLeaveSchema = z.object({
   reason: z.string().trim().min(3).max(1000),
 });
 
+const parentProfileUpdateSchema = z.object({
+  firstName: z.string().trim().min(1).max(80),
+  lastName: z.string().trim().min(1).max(80),
+  email: z.string().trim().email().max(160),
+  phone: z.string().trim().max(32).optional().nullable(),
+});
+
 const skippedDaysArray = (value: Prisma.JsonValue) =>
   Array.isArray(value)
     ? value
@@ -248,12 +255,49 @@ export const getParentProfile = async (req: Request, res: Response) => {
   const children = await resolveChildren(auth.userId);
   res.status(200).json({
     name: profile ? `${profile.firstName} ${profile.lastName}`.trim() : user?.email ?? 'Parent',
+    firstName: profile?.firstName ?? '',
+    lastName: profile?.lastName ?? '',
     phone: profile?.phone ?? null,
     email: profile?.email ?? user?.email ?? null,
     schoolName: children[0]?.schoolName ?? null,
     academicYear: null,
     children,
   });
+};
+
+export const updateParentProfile = async (req: Request, res: Response) => {
+  const auth = requireAuth(req);
+  const payload = parentProfileUpdateSchema.parse(req.body);
+  const profiles = await resolveParentProfiles(auth.userId);
+  if (!profiles.length) throw new HttpError(404, 'Parent profile not found');
+
+  const duplicate = await prisma.user.findFirst({
+    where: {
+      id: { not: auth.userId },
+      schoolId: auth.schoolId ?? null,
+      email: payload.email,
+    },
+    select: { id: true },
+  });
+  if (duplicate) throw new HttpError(409, 'Email is already used by another account');
+
+  await prisma.$transaction([
+    prisma.parentProfile.updateMany({
+      where: { userId: auth.userId },
+      data: {
+        firstName: payload.firstName,
+        lastName: payload.lastName,
+        email: payload.email,
+        phone: payload.phone?.trim() || null,
+      },
+    }),
+    prisma.user.update({
+      where: { id: auth.userId },
+      data: { email: payload.email },
+    }),
+  ]);
+
+  return getParentProfile(req, res);
 };
 
 export const getParentDashboard = async (req: Request, res: Response) => {

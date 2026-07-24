@@ -115,6 +115,54 @@ class ParentRepository {
     return ParentProfile.fromJson(response.data ?? const <String, dynamic>{});
   }
 
+  Future<ParentProfile> updateProfile({
+    required String firstName,
+    required String lastName,
+    required String email,
+    String? phone,
+  }) async {
+    final response = await _dio.patch<Map<String, dynamic>>(
+      '/parents/portal/profile',
+      data: {
+        'firstName': firstName,
+        'lastName': lastName,
+        'email': email,
+        'phone': phone,
+      },
+    );
+    return ParentProfile.fromJson(response.data ?? const <String, dynamic>{});
+  }
+
+  Future<bool> getPushEnabled() async {
+    final response = await _dio.get<Map<String, dynamic>>(
+      '/notifications/push/preferences/me',
+    );
+    return response.data?['pushEnabled'] == true;
+  }
+
+  Future<bool> updatePushEnabled(bool enabled) async {
+    final response = await _dio.patch<Map<String, dynamic>>(
+      '/notifications/push/preferences/me',
+      data: {'pushEnabled': enabled},
+    );
+    return response.data?['pushEnabled'] == true;
+  }
+
+  Future<void> changePassword({
+    required String currentPassword,
+    required String newPassword,
+    required String confirmPassword,
+  }) async {
+    await _dio.post<Map<String, dynamic>>(
+      '/auth/change-password',
+      data: {
+        'currentPassword': currentPassword,
+        'newPassword': newPassword,
+        'confirmPassword': confirmPassword,
+      },
+    );
+  }
+
   Future<List<ParentChild>> getChildren() async {
     final response = await _dio.get<List<dynamic>>('/parents/portal/children');
     return (response.data ?? const [])

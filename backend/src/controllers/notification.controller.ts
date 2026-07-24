@@ -246,10 +246,24 @@ export const listPushNotificationLogs = async (req: Request, res: Response) => {
 
 export const listMyPushNotifications = async (req: Request, res: Response) => {
   if (!req.auth) throw new HttpError(401, 'Unauthorized');
-  const schoolId = resolveSchoolId(req, req.auth.schoolId ?? undefined);
+  const requestedSchoolId = typeof req.query.schoolId === 'string' ? req.query.schoolId : undefined;
+  let schoolId: string | undefined;
+  if (req.auth.schoolId) {
+    schoolId = resolveSchoolId(req, requestedSchoolId ?? req.auth.schoolId);
+  } else if (requestedSchoolId) {
+    const parentLink = await prisma.studentParent.findFirst({
+      where: {
+        parent: { userId: req.auth.userId },
+        student: { schoolId: requestedSchoolId },
+      },
+      select: { studentId: true },
+    });
+    if (!parentLink) throw new HttpError(403, 'Tenant scope violation');
+    schoolId = requestedSchoolId;
+  }
   const rows = await prisma.notificationLog.findMany({
     where: {
-      schoolId,
+      ...(schoolId ? { schoolId } : {}),
       channel: 'PUSH',
       OR: [
         { userId: req.auth.userId },

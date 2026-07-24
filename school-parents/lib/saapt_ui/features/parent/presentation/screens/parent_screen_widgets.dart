@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 
 import '../../../../app/theme/saapt_theme.dart';
 
@@ -71,7 +72,7 @@ class ParentHero extends StatelessWidget {
                     ),
                   ),
                   const Spacer(),
-                  ?trailing,
+                  trailing ?? const ParentProfileAction(),
                 ],
               ),
               const SizedBox(height: 22),
@@ -97,6 +98,23 @@ class ParentHero extends StatelessWidget {
           ),
         ],
       ),
+    );
+  }
+}
+
+class ParentProfileAction extends StatelessWidget {
+  const ParentProfileAction({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return IconButton(
+      tooltip: 'Profile',
+      style: IconButton.styleFrom(
+        backgroundColor: Colors.white.withValues(alpha: 0.16),
+        foregroundColor: Colors.white,
+      ),
+      onPressed: () => context.push('/profile'),
+      icon: const Icon(Icons.person_rounded),
     );
   }
 }

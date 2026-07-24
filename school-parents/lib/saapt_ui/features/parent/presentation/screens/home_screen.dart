@@ -13,7 +13,6 @@ class ParentHomeScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final childrenState = ref.watch(parentChildrenProvider);
-    final auth = ref.watch(parentAuthControllerProvider);
     return Scaffold(
       body: RefreshIndicator(
         onRefresh: () async => ref.invalidate(parentChildrenProvider),
@@ -27,19 +26,6 @@ class ParentHomeScreen extends ConsumerWidget {
                   data: (children) =>
                       '${children.length} ${children.length == 1 ? 'student' : 'students'} mapped to this parent account',
                   orElse: () => 'Loading mapped children',
-                ),
-                trailing: IconButton(
-                  tooltip: 'Sign out',
-                  style: IconButton.styleFrom(
-                    backgroundColor: Colors.white.withValues(alpha: 0.16),
-                    foregroundColor: Colors.white,
-                  ),
-                  onPressed: auth.isLoading
-                      ? null
-                      : () => ref
-                            .read(parentAuthControllerProvider.notifier)
-                            .logout(),
-                  icon: const Icon(Icons.logout_rounded),
                 ),
               ),
             ),

@@ -5,6 +5,7 @@ import {
   listParentChildren,
   createParentLeaveRequest,
   getParentProfile,
+  updateParentProfile,
   getParentDashboard,
   listParentLeaveRequests,
   listParentExams,
@@ -23,6 +24,7 @@ parentPortalRouter.use(requireParentProfile);
 
 parentPortalRouter.get('/children', listParentChildren);
 parentPortalRouter.get('/profile', getParentProfile);
+parentPortalRouter.patch('/profile', updateParentProfile);
 parentPortalRouter.get('/dashboard', getParentDashboard);
 parentPortalRouter.get('/leave-requests', listParentLeaveRequests);
 parentPortalRouter.post('/leave-requests', createParentLeaveRequest);

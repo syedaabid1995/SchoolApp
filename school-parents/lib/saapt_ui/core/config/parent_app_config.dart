@@ -2,6 +2,7 @@ class ParentAppConfig {
   const ParentAppConfig._();
 
   static const appName = 'SAAPT Parent';
+  static const appVersion = '1.0.0+1';
   static const clientPlatform = 'school-mobile';
 
   static const apiBaseUrl = String.fromEnvironment(

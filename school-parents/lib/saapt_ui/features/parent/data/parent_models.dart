@@ -86,12 +86,16 @@ class ParentProfile {
     required this.name,
     required this.email,
     required this.children,
+    this.firstName,
+    this.lastName,
     this.phone,
     this.schoolName,
   });
 
   final String name;
   final String email;
+  final String? firstName;
+  final String? lastName;
   final String? phone;
   final String? schoolName;
   final List<ParentChild> children;
@@ -100,6 +104,8 @@ class ParentProfile {
     return ParentProfile(
       name: json['name']?.toString() ?? 'Parent',
       email: json['email']?.toString() ?? '',
+      firstName: json['firstName']?.toString(),
+      lastName: json['lastName']?.toString(),
       phone: json['phone']?.toString(),
       schoolName: json['schoolName']?.toString(),
       children: (json['children'] as List? ?? const [])

@@ -9,6 +9,8 @@ import '../../features/parent/presentation/screens/alerts_screen.dart';
 import '../../features/parent/presentation/screens/attendance_screen.dart';
 import '../../features/parent/presentation/screens/home_screen.dart';
 import '../../features/parent/presentation/screens/leave_screen.dart';
+import '../../features/parent/presentation/screens/profile_screen.dart';
+import '../../features/parent/presentation/screens/reports_screen.dart';
 
 class _RouterRefreshNotifier extends ChangeNotifier {
   void refresh() => notifyListeners();
@@ -47,6 +49,7 @@ final saaptRouterProvider = Provider<GoRouter>((ref) {
     routes: [
       GoRoute(path: '/splash', builder: (_, _) => const SaaptSplashScreen()),
       GoRoute(path: '/login', builder: (_, _) => const SaaptLoginScreen()),
+      GoRoute(path: '/profile', builder: (_, _) => const ParentProfileScreen()),
       StatefulShellRoute.indexedStack(
         builder: (context, state, shell) => _SaaptShell(shell: shell),
         branches: [
@@ -71,6 +74,14 @@ final saaptRouterProvider = Provider<GoRouter>((ref) {
               GoRoute(
                 path: '/leave',
                 builder: (_, _) => const ParentLeaveScreen(),
+              ),
+            ],
+          ),
+          StatefulShellBranch(
+            routes: [
+              GoRoute(
+                path: '/reports',
+                builder: (_, _) => const SaaptReportsScreen(),
               ),
             ],
           ),
@@ -116,6 +127,11 @@ class _SaaptShell extends StatelessWidget {
             icon: Text('📝', style: TextStyle(fontSize: 26)),
             selectedIcon: Text('📝', style: TextStyle(fontSize: 30)),
             label: 'Leave',
+          ),
+          NavigationDestination(
+            icon: Text('📊', style: TextStyle(fontSize: 26)),
+            selectedIcon: Text('📊', style: TextStyle(fontSize: 30)),
+            label: 'Reports',
           ),
           NavigationDestination(
             icon: Text('🔔', style: TextStyle(fontSize: 26)),

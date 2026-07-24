@@ -55,6 +55,8 @@ class ParentAuthController extends AsyncNotifier<ParentSession> {
   Future<void> logout() async {
     state = const AsyncLoading();
     await ref.read(parentRepositoryProvider).logout();
+    ref.invalidate(parentProfileProvider);
+    ref.invalidate(parentPushPreferenceProvider);
     ref.invalidate(parentChildrenProvider);
     ref.invalidate(selectedChildProvider);
     state = const AsyncData(ParentSession.unauthenticated());
@@ -69,6 +71,10 @@ class ParentAuthController extends AsyncNotifier<ParentSession> {
 
 final parentProfileProvider = FutureProvider.autoDispose<ParentProfile>((ref) {
   return ref.watch(parentRepositoryProvider).getProfile();
+});
+
+final parentPushPreferenceProvider = FutureProvider.autoDispose<bool>((ref) {
+  return ref.watch(parentRepositoryProvider).getPushEnabled();
 });
 
 final parentChildrenProvider = FutureProvider.autoDispose<List<ParentChild>>((
@@ -93,6 +99,16 @@ final parentAttendanceProvider = FutureProvider.autoDispose
       return ref
           .watch(parentRepositoryProvider)
           .getAttendance(childId: child.id, month: DateTime.now());
+    });
+
+typedef ParentAttendanceReportQuery = ({String childId, DateTime month});
+
+final parentMonthlyAttendanceProvider = FutureProvider.autoDispose
+    .family<ParentAttendance, ParentAttendanceReportQuery>((ref, query) {
+      final month = DateTime(query.month.year, query.month.month);
+      return ref
+          .watch(parentRepositoryProvider)
+          .getAttendance(childId: query.childId, month: month, date: month);
     });
 
 final parentResultsProvider = FutureProvider.autoDispose
