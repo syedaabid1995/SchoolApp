@@ -88,7 +88,8 @@ class _ParentProfileScreenState extends ConsumerState<ParentProfileScreen> {
                     badge: '👤 Parent Profile',
                     title: _titleForPanel(),
                     subtitle: _subtitleForPanel(),
-                    trailing: IconButton(
+                    showDefaultTrailing: false,
+                    leading: IconButton(
                       tooltip: 'Back',
                       style: IconButton.styleFrom(
                         backgroundColor: Colors.white.withValues(alpha: 0.16),
@@ -106,7 +107,8 @@ class _ParentProfileScreenState extends ConsumerState<ParentProfileScreen> {
                       badge: '👤 Parent Profile',
                       title: _titleForPanel(),
                       subtitle: _subtitleForPanel(),
-                      trailing: IconButton(
+                      showDefaultTrailing: false,
+                      leading: IconButton(
                         tooltip: 'Back',
                         style: IconButton.styleFrom(
                           backgroundColor: Colors.white.withValues(alpha: 0.16),

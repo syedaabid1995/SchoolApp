@@ -1,4 +1,4 @@
-package com.akademifyy.parent
+package com.saapt.teacher
 
 import io.flutter.embedding.android.FlutterActivity
 

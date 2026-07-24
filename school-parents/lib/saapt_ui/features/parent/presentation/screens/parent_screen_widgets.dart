@@ -9,13 +9,17 @@ class ParentHero extends StatelessWidget {
     required this.badge,
     required this.title,
     required this.subtitle,
+    this.leading,
     this.trailing,
+    this.showDefaultTrailing = true,
   });
 
   final String badge;
   final String title;
   final String subtitle;
+  final Widget? leading;
   final Widget? trailing;
+  final bool showDefaultTrailing;
 
   @override
   Widget build(BuildContext context) {
@@ -51,6 +55,10 @@ class ParentHero extends StatelessWidget {
             children: [
               Row(
                 children: [
+                  if (leading != null) ...[
+                    leading!,
+                    const SizedBox(width: 10),
+                  ],
                   Container(
                     padding: const EdgeInsets.symmetric(
                       horizontal: 12,
@@ -73,7 +81,10 @@ class ParentHero extends StatelessWidget {
                     ),
                   ),
                   const Spacer(),
-                  trailing ?? const ParentProfileAction(),
+                  if (trailing != null)
+                    trailing!
+                  else if (showDefaultTrailing)
+                    const ParentProfileAction(),
                 ],
               ),
               const SizedBox(height: 22),
