@@ -8,6 +8,8 @@ import PageHeader from '../../../../components/PageHeader';
 import FullPageLoader from '../../../../components/FullPageLoader';
 import { useNotify } from '../../../../components/NotificationProvider';
 import { getSession } from '../../../../services/auth.service';
+import { listAcademicYears } from '../../../../services/academic.service';
+import { listSetupClasses, listSetupSections } from '../../../../services/academic-setup.service';
 import {
   addStudentDocument,
   addStudentPhoto,
@@ -18,7 +20,9 @@ import {
   getStudent,
   resolveStudentPhotoUrl,
   resolveUploadUrl,
+  unlinkParent,
   type Student,
+  updateParent,
   updateStudent,
   uploadStudentDocument,
   uploadStudentPhoto,
@@ -29,7 +33,7 @@ import {
 } from '../../../../services/fee-management.service';
 import { listStudentTransportAssignments } from '../../../../services/transport.service';
 import { listStudentDormitoryAssignments } from '../../../../services/dormitory.service';
-import { listLibraryMembers, listMemberIssues } from '../../../../services/library.service';
+import { cancelLibraryMember, createLibraryMember, listLibraryMembers, listMemberIssues, returnLibraryBook } from '../../../../services/library.service';
 
 type TabKey = 'profile' | 'parents' | 'fees' | 'transport' | 'library' | 'dormitory' | 'exam' | 'documents' | 'timeline';
 
@@ -64,6 +68,27 @@ const InfoRow = ({ label, value }: { label: string; value?: string | number | nu
     <p className="mt-1 text-sm font-semibold text-slate-900">{value || '-'}</p>
   </div>
 );
+
+const Field = ({ label, children }: { label: string; children: React.ReactNode }) => (
+  <label className="block">
+    <span className="mb-1 block text-xs font-bold uppercase tracking-wide text-slate-500">{label}</span>
+    {children}
+  </label>
+);
+
+const inputClass = 'w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-violet-400 focus:ring-2 focus:ring-violet-100';
+
+const dateInputValue = (value?: string | null) => {
+  if (!value) return '';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return '';
+  return date.toISOString().slice(0, 10);
+};
+
+const optionalText = (value: string) => {
+  const trimmed = value.trim();
+  return trimmed || null;
+};
 
 const toMoney = (value?: string | number | null) => {
   const amount = Number(value ?? 0);
@@ -120,23 +145,65 @@ export default function StudentDetailPage() {
   const [tab, setTab] = useState<TabKey>('profile');
   const [editMode, setEditMode] = useState(searchParams.get('edit') === '1');
   const [editForm, setEditForm] = useState({
+    admissionNo: '',
+    rollNo: '',
+    academicSessionId: '',
+    classId: '',
+    sectionId: '',
     fullName: '',
+    dob: '',
+    gender: '',
+    bloodGroup: '',
+    religion: '',
+    caste: '',
     phone: '',
     email: '',
+    admissionDate: '',
     category: '',
+    height: '',
+    weight: '',
+    fatherName: '',
+    fatherOccupation: '',
+    fatherPhone: '',
+    motherName: '',
+    motherOccupation: '',
+    motherPhone: '',
+    guardianName: '',
+    guardianRelationship: '',
+    parentPhone: '',
+    parentEmail: '',
     presentAddress: '',
     permanentAddress: '',
+    city: '',
+    state: '',
+    pincode: '',
+    emergencyContact: '',
+    medicalConditions: '',
+    allergies: '',
+    doctorContact: '',
+    docBirthCert: '',
+    docTransferCert: '',
+    docAadhaar: '',
+    docReportCard: '',
     photoUrl: null as string | null,
     facePhotoUrls: [] as string[],
   });
+  const [parentAccountEdit, setParentAccountEdit] = useState<{
+    id: string;
+    firstName: string;
+    lastName: string;
+    phone: string;
+    email: string;
+  } | null>(null);
   const [documentForm, setDocumentForm] = useState({ title: '', file: null as File | null });
   const [timelineForm, setTimelineForm] = useState({ title: '', description: '', timelineDate: new Date().toISOString().slice(0, 10) });
   const [photoUploadTarget, setPhotoUploadTarget] = useState<'student' | 'gallery' | 'face' | null>(null);
 
   const { data: session, isLoading: isSessionLoading } = useQuery({ queryKey: ['session'], queryFn: getSession });
+  const isSuperAdmin = session?.role === 'SUPER_ADMIN';
   const isSchoolAdmin = session?.role === 'SCHOOL_ADMIN';
   const permissionCodes = session?.permissionCodes ?? [];
-  const hasPermission = (code: string) => isSchoolAdmin || permissionCodes.includes(code);
+  const hasPermission = (code: string) => isSuperAdmin || isSchoolAdmin || permissionCodes.includes(code);
   const canViewStudent = hasPermission('students.list') || hasPermission('student.view');
   const canEditStudent = hasPermission('student.edit');
   const canCreateDocument = hasPermission('student.document.create');
@@ -151,6 +218,28 @@ export default function StudentDetailPage() {
   });
   const student = studentQuery.data;
   const displayName = student ? student.fullName ?? `${student.firstName} ${student.lastName}`.trim() : '';
+  const effectiveSchoolId = student?.schoolId;
+
+  const academicYearsQuery = useQuery({
+    queryKey: ['student-detail-academic-years', effectiveSchoolId],
+    queryFn: () => listAcademicYears(effectiveSchoolId ? { schoolId: effectiveSchoolId } : undefined),
+    enabled: Boolean(student?.id) && canEditStudent && editMode,
+  });
+  const classesQuery = useQuery({
+    queryKey: ['student-detail-classes', effectiveSchoolId],
+    queryFn: () => listSetupClasses(effectiveSchoolId ? { schoolId: effectiveSchoolId } : undefined),
+    enabled: Boolean(student?.id) && canEditStudent && editMode,
+  });
+  const sectionsQuery = useQuery({
+    queryKey: ['student-detail-sections', effectiveSchoolId],
+    queryFn: () => listSetupSections(effectiveSchoolId ? { schoolId: effectiveSchoolId } : undefined),
+    enabled: Boolean(student?.id) && canEditStudent && editMode,
+  });
+  const availableSections = (sectionsQuery.data ?? []).filter((section: any) => {
+    if (!editForm.classId) return true;
+    if (section.classId) return section.classId === editForm.classId;
+    return (section.classSections ?? []).some((link: any) => link.classId === editForm.classId);
+  });
 
   const feeInvoicesQuery = useQuery({
     queryKey: ['student-fee-invoices', studentId, student?.academicSessionId],
@@ -219,12 +308,46 @@ export default function StudentDetailPage() {
   useEffect(() => {
     if (!student) return;
     setEditForm({
+      admissionNo: student.admissionNo ?? '',
+      rollNo: student.rollNo ?? '',
+      academicSessionId: student.academicSessionId ?? '',
+      classId: student.classId ?? '',
+      sectionId: student.sectionId ?? '',
       fullName: displayName,
+      dob: dateInputValue(student.dob),
+      gender: student.gender ?? '',
+      bloodGroup: student.bloodGroup ?? '',
+      religion: student.religion ?? '',
+      caste: student.caste ?? '',
       phone: student.phone ?? '',
       email: student.email ?? '',
+      admissionDate: dateInputValue(student.admissionDate),
       category: student.category ?? '',
+      height: student.height === undefined || student.height === null ? '' : String(student.height),
+      weight: student.weight === undefined || student.weight === null ? '' : String(student.weight),
+      fatherName: student.fatherName ?? '',
+      fatherOccupation: student.fatherOccupation ?? '',
+      fatherPhone: student.fatherPhone ?? '',
+      motherName: student.motherName ?? '',
+      motherOccupation: student.motherOccupation ?? '',
+      motherPhone: student.motherPhone ?? '',
+      guardianName: student.guardianName ?? '',
+      guardianRelationship: student.guardianRelationship ?? '',
+      parentPhone: student.parentPhone ?? '',
+      parentEmail: student.parentEmail ?? '',
       presentAddress: student.presentAddress ?? student.addressLine1 ?? '',
       permanentAddress: student.permanentAddress ?? student.addressLine2 ?? '',
+      city: student.city ?? '',
+      state: student.state ?? '',
+      pincode: student.pincode ?? '',
+      emergencyContact: student.emergencyContact ?? '',
+      medicalConditions: student.medicalConditions ?? '',
+      allergies: student.allergies ?? '',
+      doctorContact: student.doctorContact ?? '',
+      docBirthCert: student.docBirthCert ?? '',
+      docTransferCert: student.docTransferCert ?? '',
+      docAadhaar: student.docAadhaar ?? '',
+      docReportCard: student.docReportCard ?? '',
       photoUrl: student.photoUrl ?? null,
       facePhotoUrls: attendanceFacePhotoUrls(student),
     });
@@ -232,7 +355,57 @@ export default function StudentDetailPage() {
 
   const updateMutation = useMutation({
     mutationFn: () => {
-      const payload: Parameters<typeof updateStudent>[1] = { ...editForm };
+      const payload: Parameters<typeof updateStudent>[1] = {
+        admissionNo: editForm.admissionNo.trim(),
+        rollNo: optionalText(editForm.rollNo),
+        academicSessionId: editForm.academicSessionId || null,
+        classId: editForm.classId || null,
+        sectionId: editForm.sectionId || null,
+        fullName: editForm.fullName.trim(),
+        dob: editForm.dob || null,
+        gender: optionalText(editForm.gender),
+        bloodGroup: optionalText(editForm.bloodGroup),
+        religion: optionalText(editForm.religion),
+        caste: optionalText(editForm.caste),
+        email: optionalText(editForm.email),
+        phone: optionalText(editForm.phone),
+        admissionDate: editForm.admissionDate || null,
+        category: optionalText(editForm.category),
+        height: editForm.height.trim() ? Number(editForm.height) : null,
+        weight: editForm.weight.trim() ? Number(editForm.weight) : null,
+        fatherName: optionalText(editForm.fatherName),
+        fatherOccupation: optionalText(editForm.fatherOccupation),
+        fatherPhone: optionalText(editForm.fatherPhone),
+        motherName: optionalText(editForm.motherName),
+        motherOccupation: optionalText(editForm.motherOccupation),
+        motherPhone: optionalText(editForm.motherPhone),
+        guardianName: optionalText(editForm.guardianName),
+        guardianRelationship: optionalText(editForm.guardianRelationship),
+        parentPhone: optionalText(editForm.parentPhone),
+        parentEmail: optionalText(editForm.parentEmail),
+        presentAddress: optionalText(editForm.presentAddress),
+        permanentAddress: optionalText(editForm.permanentAddress),
+        addressLine1: optionalText(editForm.presentAddress),
+        addressLine2: optionalText(editForm.permanentAddress),
+        city: optionalText(editForm.city),
+        state: optionalText(editForm.state),
+        pincode: optionalText(editForm.pincode),
+        emergencyContact: optionalText(editForm.emergencyContact),
+        medicalConditions: optionalText(editForm.medicalConditions),
+        allergies: optionalText(editForm.allergies),
+        doctorContact: optionalText(editForm.doctorContact),
+        docBirthCert: optionalText(editForm.docBirthCert),
+        docTransferCert: optionalText(editForm.docTransferCert),
+        docAadhaar: optionalText(editForm.docAadhaar),
+        docReportCard: optionalText(editForm.docReportCard),
+        photoUrl: editForm.photoUrl,
+        facePhotoUrls: editForm.facePhotoUrls,
+      };
+      if (!payload.admissionNo || !payload.fullName) {
+        throw new Error('Admission number and full name are required.');
+      }
+      if (editForm.height.trim() && Number.isNaN(Number(editForm.height))) throw new Error('Height must be a valid number.');
+      if (editForm.weight.trim() && Number.isNaN(Number(editForm.weight))) throw new Error('Weight must be a valid number.');
       if (sameStringList(editForm.facePhotoUrls, attendanceFacePhotoUrls(student))) {
         delete payload.facePhotoUrls;
       }
@@ -249,7 +422,65 @@ export default function StudentDetailPage() {
       queryClient.invalidateQueries({ queryKey: ['student', studentId] });
       queryClient.invalidateQueries({ queryKey: ['students'] });
     },
-    onError: (error: any) => notify.error('Update failed', error?.response?.data?.error?.message ?? 'Unable to update student.'),
+    onError: (error: any) => notify.error('Update failed', error?.response?.data?.error?.message ?? error?.message ?? 'Unable to update student.'),
+  });
+
+  const updateParentMutation = useMutation({
+    mutationFn: async () => {
+      if (!parentAccountEdit) throw new Error('Select a parent account to update.');
+      if (!parentAccountEdit.firstName.trim()) throw new Error('Parent first name is required.');
+      return updateParent(parentAccountEdit.id, {
+        firstName: parentAccountEdit.firstName.trim(),
+        lastName: parentAccountEdit.lastName.trim() || 'Guardian',
+        phone: optionalText(parentAccountEdit.phone),
+        email: optionalText(parentAccountEdit.email),
+        schoolId: effectiveSchoolId,
+      });
+    },
+    onSuccess: () => {
+      notify.success('Parent account updated', 'Linked parent account details were saved.');
+      setParentAccountEdit(null);
+      queryClient.invalidateQueries({ queryKey: ['student', studentId] });
+    },
+    onError: (error: any) => notify.error('Parent update failed', error?.response?.data?.error?.message ?? error?.message ?? 'Unable to update parent account.'),
+  });
+
+  const unlinkParentMutation = useMutation({
+    mutationFn: (parentId: string) => unlinkParent(studentId, parentId),
+    onSuccess: () => {
+      notify.success('Parent unlinked', 'Parent account was removed from this student.');
+      setParentAccountEdit(null);
+      queryClient.invalidateQueries({ queryKey: ['student', studentId] });
+    },
+    onError: (error: any) => notify.error('Unlink failed', error?.response?.data?.error?.message ?? 'Unable to unlink parent account.'),
+  });
+
+  const createLibraryMemberMutation = useMutation({
+    mutationFn: () => createLibraryMember({ schoolId: effectiveSchoolId, memberType: 'STUDENT', memberId: studentId }),
+    onSuccess: () => {
+      notify.success('Library member created', 'Student was registered as a library member.');
+      queryClient.invalidateQueries({ queryKey: ['student-detail-library-members'] });
+    },
+    onError: (error: any) => notify.error('Library update failed', error?.response?.data?.error?.message ?? 'Unable to register library member.'),
+  });
+
+  const cancelLibraryMemberMutation = useMutation({
+    mutationFn: (memberId: string) => cancelLibraryMember(memberId, effectiveSchoolId ? { schoolId: effectiveSchoolId } : undefined),
+    onSuccess: () => {
+      notify.success('Library member cancelled', 'Library membership was cancelled.');
+      queryClient.invalidateQueries({ queryKey: ['student-detail-library-members'] });
+      queryClient.invalidateQueries({ queryKey: ['student-detail-library-issues'] });
+    },
+    onError: (error: any) => notify.error('Library update failed', error?.response?.data?.error?.message ?? 'Unable to cancel library member.'),
+  });
+
+  const returnLibraryIssueMutation = useMutation({
+    mutationFn: (issueId: string) => returnLibraryBook(issueId, effectiveSchoolId ? { schoolId: effectiveSchoolId } : undefined),
+    onSuccess: () => {
+      notify.success('Book returned', 'Library issue was marked as returned.');
+      queryClient.invalidateQueries({ queryKey: ['student-detail-library-issues'] });
+    },
+    onError: (error: any) => notify.error('Return failed', error?.response?.data?.error?.message ?? 'Unable to return library book.'),
   });
 
   const uploadImageFile = async (file: File, target: 'student' | 'gallery' | 'face') => {
@@ -425,17 +656,176 @@ export default function StudentDetailPage() {
             {editMode && canEditStudent && (
               <section className="rounded-2xl border border-violet-100 bg-white p-5 shadow-sm">
                 <div className="mb-4 flex items-center justify-between">
-                  <h2 className="text-lg font-bold text-slate-950">Edit Basic Profile</h2>
+                  <h2 className="text-lg font-bold text-slate-950">Edit Student Details</h2>
                   <button onClick={() => setEditMode(false)} className="text-sm font-semibold text-slate-500">Cancel</button>
                 </div>
-                <div className="grid gap-4 md:grid-cols-2">
-                  <input value={editForm.fullName} onChange={(event) => setEditForm({ ...editForm, fullName: event.target.value })} placeholder="Full name" className="rounded-xl border border-slate-200 px-3 py-2 text-sm" />
-                  <input value={editForm.category} onChange={(event) => setEditForm({ ...editForm, category: event.target.value })} placeholder="Type / category" className="rounded-xl border border-slate-200 px-3 py-2 text-sm" />
-                  <input value={editForm.phone} onChange={(event) => setEditForm({ ...editForm, phone: event.target.value })} placeholder="Phone" className="rounded-xl border border-slate-200 px-3 py-2 text-sm" />
-                  <input value={editForm.email} onChange={(event) => setEditForm({ ...editForm, email: event.target.value })} placeholder="Email" className="rounded-xl border border-slate-200 px-3 py-2 text-sm" />
-                  <textarea value={editForm.presentAddress} onChange={(event) => setEditForm({ ...editForm, presentAddress: event.target.value })} placeholder="Present address" className="rounded-xl border border-slate-200 px-3 py-2 text-sm md:col-span-2" />
-                  <textarea value={editForm.permanentAddress} onChange={(event) => setEditForm({ ...editForm, permanentAddress: event.target.value })} placeholder="Permanent address" className="rounded-xl border border-slate-200 px-3 py-2 text-sm md:col-span-2" />
+
+                <div className="space-y-6">
+                  <div>
+                    <h3 className="mb-3 text-sm font-black uppercase tracking-wide text-slate-500">Academic</h3>
+                    <div className="grid gap-4 md:grid-cols-3">
+                      <Field label="Admission number">
+                        <input value={editForm.admissionNo} onChange={(event) => setEditForm({ ...editForm, admissionNo: event.target.value })} className={inputClass} />
+                      </Field>
+                      <Field label="Roll number">
+                        <input value={editForm.rollNo} onChange={(event) => setEditForm({ ...editForm, rollNo: event.target.value })} className={inputClass} />
+                      </Field>
+                      <Field label="Admission date">
+                        <input type="date" value={editForm.admissionDate} onChange={(event) => setEditForm({ ...editForm, admissionDate: event.target.value })} className={inputClass} />
+                      </Field>
+                      <Field label="Academic session">
+                        <select value={editForm.academicSessionId} onChange={(event) => setEditForm({ ...editForm, academicSessionId: event.target.value })} className={inputClass}>
+                          <option value="">No session</option>
+                          {(academicYearsQuery.data ?? []).map((year: any) => <option key={year.id} value={year.id}>{year.name}</option>)}
+                        </select>
+                      </Field>
+                      <Field label="Class">
+                        <select
+                          value={editForm.classId}
+                          onChange={(event) => setEditForm((prev) => ({ ...prev, classId: event.target.value, sectionId: '' }))}
+                          className={inputClass}
+                        >
+                          <option value="">No class</option>
+                          {(classesQuery.data ?? []).map((item: any) => <option key={item.id} value={item.id}>{item.name}</option>)}
+                        </select>
+                      </Field>
+                      <Field label="Section">
+                        <select value={editForm.sectionId} onChange={(event) => setEditForm({ ...editForm, sectionId: event.target.value })} className={inputClass}>
+                          <option value="">No section</option>
+                          {availableSections.map((item: any) => <option key={item.id} value={item.id}>{item.name}</option>)}
+                        </select>
+                      </Field>
+                    </div>
+                  </div>
+
+                  <div>
+                    <h3 className="mb-3 text-sm font-black uppercase tracking-wide text-slate-500">Student Profile</h3>
+                    <div className="grid gap-4 md:grid-cols-3">
+                      <Field label="Full name">
+                        <input value={editForm.fullName} onChange={(event) => setEditForm({ ...editForm, fullName: event.target.value })} className={inputClass} />
+                      </Field>
+                      <Field label="Date of birth">
+                        <input type="date" value={editForm.dob} onChange={(event) => setEditForm({ ...editForm, dob: event.target.value })} className={inputClass} />
+                      </Field>
+                      <Field label="Gender">
+                        <select value={editForm.gender} onChange={(event) => setEditForm({ ...editForm, gender: event.target.value })} className={inputClass}>
+                          <option value="">Select gender</option>
+                          <option value="Male">Male</option>
+                          <option value="Female">Female</option>
+                          <option value="Other">Other</option>
+                        </select>
+                      </Field>
+                      <Field label="Blood group">
+                        <input value={editForm.bloodGroup} onChange={(event) => setEditForm({ ...editForm, bloodGroup: event.target.value })} className={inputClass} />
+                      </Field>
+                      <Field label="Religion">
+                        <input value={editForm.religion} onChange={(event) => setEditForm({ ...editForm, religion: event.target.value })} className={inputClass} />
+                      </Field>
+                      <Field label="Caste">
+                        <input value={editForm.caste} onChange={(event) => setEditForm({ ...editForm, caste: event.target.value })} className={inputClass} />
+                      </Field>
+                      <Field label="Category">
+                        <input value={editForm.category} onChange={(event) => setEditForm({ ...editForm, category: event.target.value })} className={inputClass} />
+                      </Field>
+                      <Field label="Phone">
+                        <input value={editForm.phone} onChange={(event) => setEditForm({ ...editForm, phone: event.target.value })} className={inputClass} />
+                      </Field>
+                      <Field label="Email">
+                        <input type="email" value={editForm.email} onChange={(event) => setEditForm({ ...editForm, email: event.target.value })} className={inputClass} />
+                      </Field>
+                      <Field label="Height">
+                        <input value={editForm.height} onChange={(event) => setEditForm({ ...editForm, height: event.target.value })} className={inputClass} />
+                      </Field>
+                      <Field label="Weight">
+                        <input value={editForm.weight} onChange={(event) => setEditForm({ ...editForm, weight: event.target.value })} className={inputClass} />
+                      </Field>
+                    </div>
+                  </div>
+
+                  <div>
+                    <h3 className="mb-3 text-sm font-black uppercase tracking-wide text-slate-500">Parents & Guardians</h3>
+                    <div className="grid gap-4 md:grid-cols-3">
+                      <Field label="Father name">
+                        <input value={editForm.fatherName} onChange={(event) => setEditForm({ ...editForm, fatherName: event.target.value })} className={inputClass} />
+                      </Field>
+                      <Field label="Father phone">
+                        <input value={editForm.fatherPhone} onChange={(event) => setEditForm({ ...editForm, fatherPhone: event.target.value })} className={inputClass} />
+                      </Field>
+                      <Field label="Father occupation">
+                        <input value={editForm.fatherOccupation} onChange={(event) => setEditForm({ ...editForm, fatherOccupation: event.target.value })} className={inputClass} />
+                      </Field>
+                      <Field label="Mother name">
+                        <input value={editForm.motherName} onChange={(event) => setEditForm({ ...editForm, motherName: event.target.value })} className={inputClass} />
+                      </Field>
+                      <Field label="Mother phone">
+                        <input value={editForm.motherPhone} onChange={(event) => setEditForm({ ...editForm, motherPhone: event.target.value })} className={inputClass} />
+                      </Field>
+                      <Field label="Mother occupation">
+                        <input value={editForm.motherOccupation} onChange={(event) => setEditForm({ ...editForm, motherOccupation: event.target.value })} className={inputClass} />
+                      </Field>
+                      <Field label="Guardian name">
+                        <input value={editForm.guardianName} onChange={(event) => setEditForm({ ...editForm, guardianName: event.target.value })} className={inputClass} />
+                      </Field>
+                      <Field label="Guardian relationship">
+                        <input value={editForm.guardianRelationship} onChange={(event) => setEditForm({ ...editForm, guardianRelationship: event.target.value })} className={inputClass} />
+                      </Field>
+                      <Field label="Parent login phone">
+                        <input value={editForm.parentPhone} onChange={(event) => setEditForm({ ...editForm, parentPhone: event.target.value })} className={inputClass} />
+                      </Field>
+                      <Field label="Parent email">
+                        <input type="email" value={editForm.parentEmail} onChange={(event) => setEditForm({ ...editForm, parentEmail: event.target.value })} className={inputClass} />
+                      </Field>
+                    </div>
+                  </div>
+
+                  <div>
+                    <h3 className="mb-3 text-sm font-black uppercase tracking-wide text-slate-500">Address, Health & References</h3>
+                    <div className="grid gap-4 md:grid-cols-3">
+                      <Field label="Present address">
+                        <textarea value={editForm.presentAddress} onChange={(event) => setEditForm({ ...editForm, presentAddress: event.target.value })} className={`${inputClass} min-h-20`} />
+                      </Field>
+                      <Field label="Permanent address">
+                        <textarea value={editForm.permanentAddress} onChange={(event) => setEditForm({ ...editForm, permanentAddress: event.target.value })} className={`${inputClass} min-h-20`} />
+                      </Field>
+                      <div className="grid gap-4">
+                        <Field label="City">
+                          <input value={editForm.city} onChange={(event) => setEditForm({ ...editForm, city: event.target.value })} className={inputClass} />
+                        </Field>
+                        <Field label="State">
+                          <input value={editForm.state} onChange={(event) => setEditForm({ ...editForm, state: event.target.value })} className={inputClass} />
+                        </Field>
+                      </div>
+                      <Field label="Pincode">
+                        <input value={editForm.pincode} onChange={(event) => setEditForm({ ...editForm, pincode: event.target.value })} className={inputClass} />
+                      </Field>
+                      <Field label="Emergency contact">
+                        <input value={editForm.emergencyContact} onChange={(event) => setEditForm({ ...editForm, emergencyContact: event.target.value })} className={inputClass} />
+                      </Field>
+                      <Field label="Doctor contact">
+                        <input value={editForm.doctorContact} onChange={(event) => setEditForm({ ...editForm, doctorContact: event.target.value })} className={inputClass} />
+                      </Field>
+                      <Field label="Medical conditions">
+                        <input value={editForm.medicalConditions} onChange={(event) => setEditForm({ ...editForm, medicalConditions: event.target.value })} className={inputClass} />
+                      </Field>
+                      <Field label="Allergies">
+                        <input value={editForm.allergies} onChange={(event) => setEditForm({ ...editForm, allergies: event.target.value })} className={inputClass} />
+                      </Field>
+                      <Field label="Birth certificate ref">
+                        <input value={editForm.docBirthCert} onChange={(event) => setEditForm({ ...editForm, docBirthCert: event.target.value })} className={inputClass} />
+                      </Field>
+                      <Field label="Transfer certificate ref">
+                        <input value={editForm.docTransferCert} onChange={(event) => setEditForm({ ...editForm, docTransferCert: event.target.value })} className={inputClass} />
+                      </Field>
+                      <Field label="Aadhaar ref">
+                        <input value={editForm.docAadhaar} onChange={(event) => setEditForm({ ...editForm, docAadhaar: event.target.value })} className={inputClass} />
+                      </Field>
+                      <Field label="Report card ref">
+                        <input value={editForm.docReportCard} onChange={(event) => setEditForm({ ...editForm, docReportCard: event.target.value })} className={inputClass} />
+                      </Field>
+                    </div>
+                  </div>
                 </div>
+
                 <div className="mt-5 grid gap-5 lg:grid-cols-3">
                   <div>
                     <p className="text-sm font-bold text-slate-900">Student photo</p>
@@ -534,9 +924,14 @@ export default function StudentDetailPage() {
                     <p className="mt-2 text-xs text-slate-500">{editForm.facePhotoUrls.length}/4 attendance face photos selected.</p>
                   </div>
                 </div>
-                <button onClick={() => updateMutation.mutate()} disabled={updateMutation.isPending} className="mt-4 rounded-xl bg-violet-600 px-5 py-2 text-sm font-bold text-white disabled:opacity-50">
-                  {updateMutation.isPending ? 'Saving...' : 'Save changes'}
-                </button>
+                <div className="mt-5 flex flex-wrap gap-2">
+                  <button onClick={() => updateMutation.mutate()} disabled={updateMutation.isPending} className="rounded-xl bg-violet-600 px-5 py-2 text-sm font-bold text-white disabled:opacity-50">
+                    {updateMutation.isPending ? 'Saving...' : 'Save all changes'}
+                  </button>
+                  <button type="button" onClick={() => setEditMode(false)} className="rounded-xl border border-slate-200 px-5 py-2 text-sm font-bold text-slate-700">
+                    Cancel
+                  </button>
+                </div>
               </section>
             )}
 
@@ -585,9 +980,51 @@ export default function StudentDetailPage() {
                 <div className="mt-3 grid gap-3 md:grid-cols-2">
                   {student.parentLinks?.length ? student.parentLinks.map((link) => (
                     <div key={link.parentId} className="rounded-xl border border-slate-100 bg-slate-50 p-4">
-                      <p className="font-bold text-slate-950">{link.parent.firstName} {link.parent.lastName}</p>
-                      <p className="mt-1 text-sm text-slate-600">{link.parent.phone ?? 'No phone'}</p>
-                      <p className="text-sm text-slate-600">{link.parent.email ?? 'No email'}</p>
+                      {parentAccountEdit?.id === link.parentId ? (
+                        <div className="space-y-3">
+                          <div className="grid gap-3 sm:grid-cols-2">
+                            <input value={parentAccountEdit.firstName} onChange={(event) => setParentAccountEdit({ ...parentAccountEdit, firstName: event.target.value })} placeholder="First name" className={inputClass} />
+                            <input value={parentAccountEdit.lastName} onChange={(event) => setParentAccountEdit({ ...parentAccountEdit, lastName: event.target.value })} placeholder="Last name" className={inputClass} />
+                            <input value={parentAccountEdit.phone} onChange={(event) => setParentAccountEdit({ ...parentAccountEdit, phone: event.target.value })} placeholder="Phone" className={inputClass} />
+                            <input type="email" value={parentAccountEdit.email} onChange={(event) => setParentAccountEdit({ ...parentAccountEdit, email: event.target.value })} placeholder="Email" className={inputClass} />
+                          </div>
+                          <div className="flex flex-wrap gap-2">
+                            <button onClick={() => updateParentMutation.mutate()} disabled={updateParentMutation.isPending} className="rounded-lg bg-violet-600 px-3 py-2 text-xs font-bold text-white disabled:opacity-50">
+                              {updateParentMutation.isPending ? 'Saving...' : 'Save parent'}
+                            </button>
+                            <button onClick={() => setParentAccountEdit(null)} className="rounded-lg border border-slate-200 px-3 py-2 text-xs font-bold text-slate-700">Cancel</button>
+                          </div>
+                        </div>
+                      ) : (
+                        <>
+                          <p className="font-bold text-slate-950">{link.parent.firstName} {link.parent.lastName}</p>
+                          <p className="mt-1 text-sm text-slate-600">{link.parent.phone ?? 'No phone'}</p>
+                          <p className="text-sm text-slate-600">{link.parent.email ?? 'No email'}</p>
+                          {canEditStudent ? (
+                            <div className="mt-4 flex flex-wrap gap-2">
+                              <button
+                                onClick={() => setParentAccountEdit({
+                                  id: link.parentId,
+                                  firstName: link.parent.firstName,
+                                  lastName: link.parent.lastName,
+                                  phone: link.parent.phone ?? '',
+                                  email: link.parent.email ?? '',
+                                })}
+                                className="rounded-lg border border-violet-200 bg-violet-50 px-3 py-2 text-xs font-bold text-violet-700"
+                              >
+                                Edit account
+                              </button>
+                              <button
+                                onClick={() => window.confirm('Unlink this parent account from the student?') && unlinkParentMutation.mutate(link.parentId)}
+                                disabled={unlinkParentMutation.isPending}
+                                className="rounded-lg border border-red-200 px-3 py-2 text-xs font-bold text-red-600 disabled:opacity-50"
+                              >
+                                Unlink
+                              </button>
+                            </div>
+                          ) : null}
+                        </>
+                      )}
                     </div>
                   )) : <p className="rounded-xl border border-dashed border-slate-200 p-6 text-sm text-slate-500">No parent login account is linked.</p>}
                 </div>
@@ -617,9 +1054,14 @@ export default function StudentDetailPage() {
               <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
                 <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
                   <h2 className="text-lg font-bold text-slate-950">Fees</h2>
-                  <Link href={`/dashboard/fees/collection?studentId=${student.id}`} className="rounded-xl border border-violet-200 bg-violet-50 px-3 py-2 text-sm font-bold text-violet-700">
-                    Open fee collection
-                  </Link>
+                  <div className="flex flex-wrap gap-2">
+                    <Link href={`/dashboard/fees?studentId=${student.id}`} className="rounded-xl border border-slate-200 px-3 py-2 text-sm font-bold text-slate-700">
+                      Manage fee setup
+                    </Link>
+                    <Link href={`/dashboard/fees/collection?studentId=${student.id}`} className="rounded-xl border border-violet-200 bg-violet-50 px-3 py-2 text-sm font-bold text-violet-700">
+                      Open fee collection
+                    </Link>
+                  </div>
                 </div>
                 {feeInvoicesQuery.isLoading ? (
                   <div className="rounded-xl border border-dashed border-slate-200 p-8 text-center text-sm text-slate-500">Loading fee details...</div>
@@ -726,7 +1168,12 @@ export default function StudentDetailPage() {
 
             {tab === 'transport' && (
               <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-                <h2 className="mb-4 text-lg font-bold text-slate-950">Transport</h2>
+                <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+                  <h2 className="text-lg font-bold text-slate-950">Transport</h2>
+                  <Link href={`/dashboard/transport?studentId=${student.id}`} className="rounded-xl border border-violet-200 bg-violet-50 px-3 py-2 text-sm font-bold text-violet-700">
+                    Manage transport
+                  </Link>
+                </div>
                 {transportQuery.isLoading ? (
                   <div className="rounded-xl border border-dashed border-slate-200 p-8 text-center text-sm text-slate-500">Loading transport assignment...</div>
                 ) : transportQuery.isError ? (
@@ -757,41 +1204,82 @@ export default function StudentDetailPage() {
 
             {tab === 'library' && (
               <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-                <h2 className="mb-4 text-lg font-bold text-slate-950">Library</h2>
+                <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+                  <h2 className="text-lg font-bold text-slate-950">Library</h2>
+                  <Link href={`/dashboard/library?studentId=${student.id}`} className="rounded-xl border border-violet-200 bg-violet-50 px-3 py-2 text-sm font-bold text-violet-700">
+                    Manage library
+                  </Link>
+                </div>
                 {libraryMembersQuery.isLoading || libraryIssuesQuery.isLoading ? (
                   <div className="rounded-xl border border-dashed border-slate-200 p-8 text-center text-sm text-slate-500">Loading library details...</div>
                 ) : libraryMembersQuery.isError || libraryIssuesQuery.isError ? (
                   <div className="rounded-xl border border-amber-200 bg-amber-50 p-6 text-sm font-semibold text-amber-800">Unable to load library details. Check whether Library access is enabled for this role.</div>
                 ) : libraryMember ? (
                   <>
-                    <div className="grid gap-3 md:grid-cols-4">
-                      <InfoRow label="Member code" value={libraryMember.memberCode} />
-                      <InfoRow label="Member status" value={libraryMember.active ? 'Active' : 'Inactive'} />
-                      <InfoRow label="Phone" value={libraryMember.phone} />
-                      <InfoRow label="Issued books" value={libraryIssues.length} />
-                    </div>
-                    <div className="mt-5 overflow-x-auto rounded-xl border border-slate-100">
-                      <table className="min-w-full text-left text-sm">
-                        <thead className="bg-slate-50 text-xs uppercase text-slate-500">
-                          <tr><th className="px-3 py-2">Book</th><th className="px-3 py-2">Book No</th><th className="px-3 py-2">Issue Date</th><th className="px-3 py-2">Return Date</th><th className="px-3 py-2">Status</th></tr>
-                        </thead>
-                        <tbody>
-                          {libraryIssues.length ? libraryIssues.map((issue) => (
-                            <tr key={issue.id} className="border-b border-slate-100">
-                              <td className="px-3 py-2 font-semibold text-slate-900">{issue.book?.title ?? '-'}</td>
-                              <td className="px-3 py-2">{issue.book?.bookNumber ?? '-'}</td>
-                              <td className="px-3 py-2">{formatDate(issue.issueDate)}</td>
-                              <td className="px-3 py-2">{formatDate(issue.returnDate ?? issue.returnedAt)}</td>
-                              <td className="px-3 py-2">{issue.status}</td>
-                            </tr>
-                          )) : <tr><td colSpan={5} className="px-3 py-8 text-center text-slate-500">No library issues found for this student.</td></tr>}
-                        </tbody>
-                      </table>
-                    </div>
-                  </>
-                ) : (
-                  <div className="rounded-xl border border-dashed border-slate-200 p-8 text-center text-sm text-slate-500">This student is not registered as a library member.</div>
-                )}
+	                    <div className="grid gap-3 md:grid-cols-4">
+	                      <InfoRow label="Member code" value={libraryMember.memberCode} />
+	                      <InfoRow label="Member status" value={libraryMember.active ? 'Active' : 'Inactive'} />
+	                      <InfoRow label="Phone" value={libraryMember.phone} />
+	                      <InfoRow label="Issued books" value={libraryIssues.length} />
+	                    </div>
+	                    {canEditStudent ? (
+	                      <div className="mt-4 flex flex-wrap gap-2">
+	                        <button
+	                          onClick={() => window.confirm('Cancel this library membership?') && cancelLibraryMemberMutation.mutate(libraryMember.id)}
+	                          disabled={cancelLibraryMemberMutation.isPending || libraryIssues.some((issue) => issue.status === 'ISSUED')}
+	                          className="rounded-xl border border-red-200 px-3 py-2 text-sm font-bold text-red-600 disabled:cursor-not-allowed disabled:opacity-50"
+	                        >
+	                          Cancel membership
+	                        </button>
+	                        {libraryIssues.some((issue) => issue.status === 'ISSUED') ? (
+	                          <span className="self-center text-xs font-semibold text-slate-500">Return issued books before cancelling membership.</span>
+	                        ) : null}
+	                      </div>
+	                    ) : null}
+	                    <div className="mt-5 overflow-x-auto rounded-xl border border-slate-100">
+	                      <table className="min-w-full text-left text-sm">
+	                        <thead className="bg-slate-50 text-xs uppercase text-slate-500">
+	                          <tr><th className="px-3 py-2">Book</th><th className="px-3 py-2">Book No</th><th className="px-3 py-2">Issue Date</th><th className="px-3 py-2">Return Date</th><th className="px-3 py-2">Status</th><th className="px-3 py-2">Action</th></tr>
+	                        </thead>
+	                        <tbody>
+	                          {libraryIssues.length ? libraryIssues.map((issue) => (
+	                            <tr key={issue.id} className="border-b border-slate-100">
+	                              <td className="px-3 py-2 font-semibold text-slate-900">{issue.book?.title ?? '-'}</td>
+	                              <td className="px-3 py-2">{issue.book?.bookNumber ?? '-'}</td>
+	                              <td className="px-3 py-2">{formatDate(issue.issueDate)}</td>
+	                              <td className="px-3 py-2">{formatDate(issue.returnDate ?? issue.returnedAt)}</td>
+	                              <td className="px-3 py-2">{issue.status}</td>
+	                              <td className="px-3 py-2">
+	                                {canEditStudent && issue.status === 'ISSUED' ? (
+	                                  <button
+	                                    onClick={() => returnLibraryIssueMutation.mutate(issue.id)}
+	                                    disabled={returnLibraryIssueMutation.isPending}
+	                                    className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-1.5 text-xs font-bold text-emerald-700 disabled:opacity-50"
+	                                  >
+	                                    Return
+	                                  </button>
+	                                ) : '-'}
+	                              </td>
+	                            </tr>
+	                          )) : <tr><td colSpan={6} className="px-3 py-8 text-center text-slate-500">No library issues found for this student.</td></tr>}
+	                        </tbody>
+	                      </table>
+	                    </div>
+	                  </>
+	                ) : (
+	                  <div className="rounded-xl border border-dashed border-slate-200 p-8 text-center text-sm text-slate-500">
+	                    <p>This student is not registered as a library member.</p>
+	                    {canEditStudent ? (
+	                      <button
+	                        onClick={() => createLibraryMemberMutation.mutate()}
+	                        disabled={createLibraryMemberMutation.isPending}
+	                        className="mt-4 rounded-xl bg-violet-600 px-4 py-2 text-sm font-bold text-white disabled:opacity-50"
+	                      >
+	                        {createLibraryMemberMutation.isPending ? 'Registering...' : 'Register library member'}
+	                      </button>
+	                    ) : null}
+	                  </div>
+	                )}
               </section>
             )}
 

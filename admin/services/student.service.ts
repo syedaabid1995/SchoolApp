@@ -9,6 +9,7 @@ export { getStudentPhotoAsset, signedUploadUrl } from './upload-url';
 
 export type Student = {
   id: string;
+  schoolId?: string;
   admissionNo: string;
   rollNo?: string | null;
   academicSessionId?: string | null;
@@ -383,6 +384,10 @@ export const linkParent = async (studentId: string, parentId: string) => {
   return data;
 };
 
+export const unlinkParent = async (studentId: string, parentId: string) => {
+  await api.delete(`/students/students/${studentId}/parents/${parentId}`);
+};
+
 export const changeStudentStatus = async (studentId: string, status: 'TRANSFERRED' | 'EXITED', reason?: string) => {
   const { data } = await api.post(`/students/students/${studentId}/status`, { status, reason });
   return data;
@@ -403,6 +408,28 @@ export const lookupParentByPhone = async (phone: string) => {
 export const getParent = async (id: string) => {
   const { data } = await api.get(`/students/parents/${id}`);
   return data;
+};
+
+export const updateParent = async (
+  id: string,
+  payload: Partial<{
+    firstName: string;
+    lastName: string;
+    phone: string | null;
+    email: string | null;
+    userId: string | null;
+    schoolId: string;
+  }>,
+) => {
+  const { data } = await api.patch(`/students/parents/${id}`, payload);
+  return data as {
+    id: string;
+    firstName: string;
+    lastName: string;
+    phone?: string | null;
+    email?: string | null;
+    userId?: string | null;
+  };
 };
 
 export const createParent = async (payload: {

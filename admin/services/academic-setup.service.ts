@@ -222,7 +222,7 @@ const toClassRoutine = (entry: TimetableEntry): ClassRoutine => ({
 const isOverlappingPeriod = (candidate: { startTime: string; endTime: string }, existing: TimePeriod) =>
   candidate.startTime < existing.endTime && candidate.endTime > existing.startTime;
 
-export const listSetupClasses = async (params?: { search?: string }) => {
+export const listSetupClasses = async (params?: { schoolId?: string; search?: string }) => {
   const { data } = await api.get<AcademicClass[]>('/academic-setup/classes', { params: sanitizeParams(params) });
   return data;
 };
@@ -241,7 +241,7 @@ export const deleteSetupClass = async (id: string) => {
   await api.delete(`/academic-setup/classes/${id}`);
 };
 
-export const listSetupSections = async (params?: { search?: string; classId?: string }) => {
+export const listSetupSections = async (params?: { schoolId?: string; search?: string; classId?: string }) => {
   const { data } = await api.get<AcademicSection[]>('/academic-setup/sections', { params: sanitizeParams(params) });
   return data;
 };
