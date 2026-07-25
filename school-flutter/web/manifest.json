@@ -1,11 +1,11 @@
 {
-    "name": "Akademifyy",
-    "short_name": "Akademifyy",
+    "name": "SAAPT Teacher",
+    "short_name": "SAAPT Teacher",
     "start_url": ".",
     "display": "standalone",
     "background_color": "#0175C2",
     "theme_color": "#0175C2",
-    "description": "Akademifyy staff app for school operations.",
+    "description": "SAAPT Teacher app for school staff operations.",
     "orientation": "portrait-primary",
     "prefer_related_applications": false,
     "icons": [

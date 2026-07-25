@@ -231,12 +231,21 @@ class _Logo extends StatelessWidget {
       child: Container(
         width: 72,
         height: 72,
-        alignment: Alignment.center,
         decoration: BoxDecoration(
-          color: SaaptTheme.primary,
           borderRadius: BorderRadius.circular(18),
+          boxShadow: const [
+            BoxShadow(
+              color: Color(0x180F2C64),
+              blurRadius: 16,
+              offset: Offset(0, 8),
+            ),
+          ],
         ),
-        child: const Text('👨‍👩‍👧', style: TextStyle(fontSize: 26)),
+        clipBehavior: Clip.antiAlias,
+        child: Image.asset(
+          'assets/branding/saapt_parent_logo.png',
+          fit: BoxFit.cover,
+        ),
       ),
     );
   }

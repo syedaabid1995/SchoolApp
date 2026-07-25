@@ -70,18 +70,20 @@ class _SaaptLoginScreenState extends ConsumerState<SaaptLoginScreen> {
                   child: Container(
                     width: 72,
                     height: 72,
-                    alignment: Alignment.center,
                     decoration: BoxDecoration(
-                      color: SaaptTheme.primary,
                       borderRadius: BorderRadius.circular(8),
+                      boxShadow: const [
+                        BoxShadow(
+                          color: Color(0x180F2C64),
+                          blurRadius: 16,
+                          offset: Offset(0, 8),
+                        ),
+                      ],
                     ),
-                    child: const Text(
-                      'SA',
-                      style: TextStyle(
-                        color: Colors.white,
-                        fontSize: 28,
-                        fontWeight: FontWeight.w800,
-                      ),
+                    clipBehavior: Clip.antiAlias,
+                    child: Image.asset(
+                      'assets/branding/saapt_teacher_logo.png',
+                      fit: BoxFit.cover,
                     ),
                   ),
                 ),

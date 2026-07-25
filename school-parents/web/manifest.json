@@ -1,11 +1,11 @@
 {
-    "name": "Akademifyy",
-    "short_name": "Akademifyy",
+    "name": "SAAPT Parent",
+    "short_name": "SAAPT Parent",
     "start_url": ".",
     "display": "standalone",
     "background_color": "#0175C2",
     "theme_color": "#0175C2",
-    "description": "Akademifyy parent app for child attendance, reports, and alerts.",
+    "description": "SAAPT Parent app for child attendance, reports, and alerts.",
     "orientation": "portrait-primary",
     "prefer_related_applications": false,
     "icons": [
