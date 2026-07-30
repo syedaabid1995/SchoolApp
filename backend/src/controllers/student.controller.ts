@@ -11,6 +11,7 @@ export {
   deleteStudentPhoto,
   deleteStudentTimeline,
   downloadStudentImportSample,
+  downloadStudentReportWorkbook,
   getStudent,
   importStudents,
   linkParent,

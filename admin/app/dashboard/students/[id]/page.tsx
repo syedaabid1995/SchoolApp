@@ -17,6 +17,7 @@ import {
   deleteStudentPhoto,
   deleteStudentDocument,
   deleteStudentTimeline,
+  downloadStudentReport,
   getStudent,
   resolveStudentPhotoUrl,
   resolveUploadUrl,
@@ -95,6 +96,13 @@ const toMoney = (value?: string | number | null) => {
   if (Number.isNaN(amount)) return '-';
   return amount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 };
+
+const safeFilenamePart = (value?: string | null) =>
+  (value || 'student')
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '') || 'student';
 
 const sumInvoiceField = (items: FeeInvoice[], field: 'totalAmount' | 'discountAmount' | 'fineAmount' | 'paidAmount' | 'dueAmount') =>
   items.reduce((sum, item) => sum + Number(item[field] ?? 0), 0);
@@ -432,6 +440,22 @@ export default function StudentDetailPage() {
     onError: (error: any) => notify.error('Update failed', error?.response?.data?.error?.message ?? error?.message ?? 'Unable to update student.'),
   });
 
+  const downloadReportMutation = useMutation({
+    mutationFn: () => downloadStudentReport(studentId, effectiveStudentRequestParams),
+    onSuccess: (blob) => {
+      const url = URL.createObjectURL(blob);
+      const anchor = document.createElement('a');
+      anchor.href = url;
+      anchor.download = `${safeFilenamePart(displayName || student?.admissionNo)}-student-report.xlsx`;
+      document.body.appendChild(anchor);
+      anchor.click();
+      anchor.remove();
+      URL.revokeObjectURL(url);
+      notify.success('Report downloaded', 'Student workbook export was generated.');
+    },
+    onError: (error: any) => notify.error('Download failed', error?.response?.data?.error?.message ?? error?.message ?? 'Unable to download student report.'),
+  });
+
   const updateParentMutation = useMutation({
     mutationFn: async () => {
       if (!parentAccountEdit) throw new Error('Select a parent account to update.');
@@ -638,8 +662,16 @@ export default function StudentDetailPage() {
                 <InfoRow label="Gender" value={student.gender} />
                 <InfoRow label="Status" value={student.status} />
               </div>
-              <div className="mt-5 flex gap-2">
-                {canEditStudent ? <Link href={studentRoute('/edit')} className="flex-1 rounded-xl bg-[var(--theme-button-bg)] px-4 py-2 text-center text-sm font-bold text-[var(--theme-button-text)]">Edit</Link> : null}
+              <div className="mt-5 flex flex-wrap gap-2">
+                {canEditStudent ? <Link href={studentRoute('/edit')} className="min-w-20 flex-1 rounded-xl bg-[var(--theme-button-bg)] px-4 py-2 text-center text-sm font-bold text-[var(--theme-button-text)]">Edit</Link> : null}
+                <button
+                  type="button"
+                  onClick={() => downloadReportMutation.mutate()}
+                  disabled={downloadReportMutation.isPending}
+                  className="min-w-36 flex-1 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-2 text-sm font-bold text-emerald-700 disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  {downloadReportMutation.isPending ? 'Downloading...' : 'Download Report'}
+                </button>
                 <Link href="/dashboard/students" className="rounded-xl border border-slate-200 px-4 py-2 text-sm font-bold text-slate-700">Back</Link>
               </div>
             </div>

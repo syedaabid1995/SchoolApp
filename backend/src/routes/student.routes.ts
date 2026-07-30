@@ -21,6 +21,7 @@ import {
   addStudentTimeline,
   deleteStudentTimeline,
   downloadStudentImportSample,
+  downloadStudentReportWorkbook,
   importStudents,
   uploadStudentImportMiddleware,
 } from '../controllers/student.controller';
@@ -87,6 +88,7 @@ studentRouter.post('/disabled/:id/restore', restoreDisabledStudent);
 studentRouter.delete('/disabled/:id', deleteDisabledStudent);
 studentRouter.post('/students', createStudent);
 studentRouter.get('/students', listStudents);
+studentRouter.get('/students/:id/report.xlsx', downloadStudentReportWorkbook);
 studentRouter.get('/students/:id', getStudent);
 studentRouter.patch('/students/:id', updateStudent);
 studentRouter.delete('/students/:id', deleteStudent);

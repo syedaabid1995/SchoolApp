@@ -177,6 +177,11 @@ export const getStudent = async (id: string, params?: { schoolId?: string }) => 
   return data;
 };
 
+export const downloadStudentReport = async (id: string, params?: { schoolId?: string; academicSessionId?: string }) => {
+  const { data } = await api.get<Blob>(`/students/students/${id}/report.xlsx`, { params, responseType: 'blob' });
+  return data;
+};
+
 export const createStudent = async (payload: {
   admissionNo: string;
   rollNo?: string;

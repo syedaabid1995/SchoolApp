@@ -11,6 +11,10 @@ export {
 } from './profile/student-profile.service';
 
 export {
+  downloadStudentReportWorkbook,
+} from './profile/student-report.service';
+
+export {
   linkParent,
   unlinkParent,
 } from './parent/student-parent.service';
