@@ -6,7 +6,7 @@ import { StudentProfileRepository } from '../../repositories/profile.repository'
 import { StudentRepository } from '../../repositories/student.repository';
 import { HttpError } from '../../../../middlewares/error.middleware';
 import { resolveSchoolId } from '../../../../utils/tenant';
-import { attendanceReadService } from '../../../attendance/services/attendance-read.service';
+import { buildStudentAttendanceReport } from '../../../../services/attendanceStudentReport.service';
 
 const uuidSchema = z.string().uuid();
 
@@ -79,15 +79,89 @@ const addTableSheet = (
   return sheet;
 };
 
-const eachDate = (start: Date, end: Date) => {
-  const dates: Date[] = [];
-  const cursor = new Date(Date.UTC(start.getUTCFullYear(), start.getUTCMonth(), start.getUTCDate()));
-  const last = new Date(Date.UTC(end.getUTCFullYear(), end.getUTCMonth(), end.getUTCDate()));
-  while (cursor <= last) {
-    dates.push(new Date(cursor));
-    cursor.setUTCDate(cursor.getUTCDate() + 1);
+type AttendanceReportWorkbook = Awaited<ReturnType<typeof buildStudentAttendanceReport>>;
+
+const attendanceUnitHeader = (column: AttendanceReportWorkbook['columns'][number]) => {
+  const label = column.label === 'Day' ? 'Attendance Status' : column.label;
+  return column.startTime ? `${label} (${column.startTime}-${column.endTime ?? ''})` : label;
+};
+
+const attendanceCellValue = (cell: AttendanceReportWorkbook['rows'][number]['cells'][string]) =>
+  [
+    cell.status,
+    cell.subject ? `Subject: ${cell.subject}` : '',
+    cell.note ? `Note: ${cell.note}` : '',
+  ].filter(Boolean).join('\n');
+
+const addAttendanceSheet = (
+  workbook: ExcelJS.Workbook,
+  attendanceReport: AttendanceReportWorkbook | null,
+  fallback: { className?: string | null; sectionName?: string | null },
+) => {
+  if (!attendanceReport) {
+    return addTableSheet(workbook, 'Attendance', [
+      { header: 'Date', key: 'date', width: 14 },
+      { header: 'Day', key: 'day', width: 12 },
+      { header: 'Status', key: 'status', width: 18 },
+      { header: 'Class', key: 'class', width: 16 },
+      { header: 'Section', key: 'section', width: 16 },
+    ], [{
+      date: '',
+      day: '',
+      status: 'No attendance class/section found for this academic session',
+      class: fallback.className ?? '',
+      section: fallback.sectionName ?? '',
+    }]);
   }
-  return dates;
+
+  const statusKeys = ['PRESENT', 'LATE', 'ABSENT', 'EXCUSED', 'HOLIDAY', 'UNMARKED'] as const;
+  const unitColumns = attendanceReport.columns.map((column) => ({
+    header: attendanceUnitHeader(column),
+    key: `unit_${column.key.replace(/[^a-zA-Z0-9]+/g, '_')}`,
+    width: Math.max(18, Math.min(34, attendanceUnitHeader(column).length + 4)),
+    sourceKey: column.key,
+  }));
+  const rows = attendanceReport.rows.map((row) => {
+    const output: Record<string, unknown> = {
+      date: row.date,
+      day: row.day,
+      class: attendanceReport.class.name,
+      section: attendanceReport.section?.name ?? '',
+    };
+    const counts = statusKeys.reduce<Record<typeof statusKeys[number], number>>((acc, status) => {
+      acc[status] = 0;
+      return acc;
+    }, {} as Record<typeof statusKeys[number], number>);
+
+    unitColumns.forEach((column) => {
+      const cell = row.cells[column.sourceKey] ?? { status: 'UNMARKED' as const };
+      counts[cell.status] += 1;
+      output[column.key] = attendanceCellValue(cell);
+    });
+    statusKeys.forEach((status) => {
+      output[status.toLowerCase()] = counts[status];
+    });
+    output.summary = statusKeys
+      .filter((status) => counts[status] > 0)
+      .map((status) => `${counts[status]} ${status.toLowerCase()}`)
+      .join(' / ');
+    return output;
+  });
+
+  return addTableSheet(workbook, 'Attendance', [
+    { header: 'Date', key: 'date', width: 14 },
+    { header: 'Day', key: 'day', width: 12 },
+    ...unitColumns.map(({ header, key, width }) => ({ header, key, width })),
+    { header: 'Summary', key: 'summary', width: 36 },
+    { header: 'Present Units', key: 'present', width: 14 },
+    { header: 'Late Units', key: 'late', width: 12 },
+    { header: 'Absent Units', key: 'absent', width: 14 },
+    { header: 'Excused Units', key: 'excused', width: 14 },
+    { header: 'Holiday Units', key: 'holiday', width: 14 },
+    { header: 'Unmarked Units', key: 'unmarked', width: 16 },
+    { header: 'Class', key: 'class', width: 16 },
+    { header: 'Section', key: 'section', width: 16 },
+  ], rows);
 };
 
 export const downloadStudentReportWorkbook = async (req: Request, res: Response) => {
@@ -136,8 +210,7 @@ export const downloadStudentReportWorkbook = async (req: Request, res: Response)
   const transportRouteIds = transportAssignments.map((item) => item.routeId);
 
   const [
-    attendanceRecords,
-    holidays,
+    attendanceReport,
     feeInvoices,
     feeAssignments,
     applicableFeeStructures,
@@ -145,23 +218,15 @@ export const downloadStudentReportWorkbook = async (req: Request, res: Response)
     dormitoryAssignments,
     libraryMembers,
   ] = await Promise.all([
-    attendanceReadService.getStudentAttendance({
-      schoolId,
-      studentId: id,
-      academicSessionId: academicSession.id,
-      fromDate: academicSession.startDate,
-      toDate: academicSession.endDate,
-    }),
-    reportClassId && reportSectionId
-      ? attendanceReadService.getStudentAttendanceHolidays({
+    reportClassId
+      ? buildStudentAttendanceReport({
           schoolId,
-          academicSessionId: academicSession.id,
+          academicYearId: academicSession.id,
           classId: reportClassId,
           sectionId: reportSectionId,
-          fromDate: academicSession.startDate,
-          toDateExclusive: new Date(academicSession.endDate.getTime() + 24 * 60 * 60 * 1000),
+          studentId: id,
         })
-      : Promise.resolve([]),
+      : Promise.resolve(null),
     StudentProfileRepository.feeInvoice.findMany({
       where: { schoolId, studentId: id, academicSessionId: academicSession.id, deletedAt: null },
       include: {
@@ -345,29 +410,10 @@ export const downloadStudentReportWorkbook = async (req: Request, res: Response)
     },
   ].filter((row) => Object.values(row).some(Boolean)));
 
-  const attendanceByDate = new Map(attendanceRecords.map((record) => [record.date, record]));
-  const holidaysByDate = new Map(holidays.map((holiday) => [dateKey(holiday.holidayDate), holiday]));
-  const attendanceRows = eachDate(academicSession.startDate, academicSession.endDate).map((date) => {
-    const key = dateKey(date);
-    const record = attendanceByDate.get(key);
-    const holiday = holidaysByDate.get(key);
-    return {
-      date: key,
-      status: holiday ? 'HOLIDAY' : record?.status ?? 'UNMARKED',
-      note: holiday?.reason ?? record?.note ?? '',
-      source: holiday ? 'holiday' : record?.source ?? '',
-      class: sessionEnrollment?.class?.name ?? student.class?.name ?? '',
-      section: sessionEnrollment?.section?.name ?? student.section?.name ?? '',
-    };
+  addAttendanceSheet(workbook, attendanceReport, {
+    className: sessionEnrollment?.class?.name ?? student.class?.name,
+    sectionName: sessionEnrollment?.section?.name ?? student.section?.name,
   });
-  addTableSheet(workbook, 'Attendance', [
-    { header: 'Date', key: 'date', width: 14 },
-    { header: 'Status', key: 'status', width: 16 },
-    { header: 'Note', key: 'note', width: 36 },
-    { header: 'Source', key: 'source', width: 20 },
-    { header: 'Class', key: 'class', width: 16 },
-    { header: 'Section', key: 'section', width: 16 },
-  ], attendanceRows);
 
   addTableSheet(workbook, 'Fee Invoices', [
     { header: 'Invoice No', key: 'invoiceNumber', width: 20 },

@@ -196,10 +196,23 @@ export const buildStudentAttendanceReport = async (params: {
       where: {
         id: params.studentId,
         schoolId: params.schoolId,
-        academicSessionId: params.academicYearId,
-        classId: params.classId,
-        sectionId: params.sectionId ?? null,
         status: { not: 'DISABLED' },
+        OR: [
+          {
+            academicSessionId: params.academicYearId,
+            classId: params.classId,
+            sectionId: params.sectionId ?? null,
+          },
+          {
+            enrollments: {
+              some: {
+                academicSessionId: params.academicYearId,
+                classId: params.classId,
+                sectionId: params.sectionId ?? null,
+              },
+            },
+          },
+        ],
       },
       select: { id: true, admissionNo: true, rollNo: true, firstName: true, lastName: true, fullName: true },
     }),
