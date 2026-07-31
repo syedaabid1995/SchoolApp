@@ -25,6 +25,7 @@ import {
   overrideLegacyAttendanceSchema,
   resolveAttendanceConfigQuerySchema,
   saveAttendanceSheetSchema,
+  studentAttendanceReportQuerySchema,
   startLegacyAttendanceSessionSchema,
   teacherSelfAttendanceListQuerySchema,
   teacherSelfAttendanceSchema,
@@ -64,6 +65,7 @@ import {
 } from '../controllers/attendanceConfiguration.controller';
 import {
   getAttendanceSheetApi,
+  getStudentAttendanceReportApi,
   listAttendanceUnitsApi,
   lockAttendanceSheetApi,
   reopenAttendanceSheetApi,
@@ -118,6 +120,7 @@ attendanceRouter.post('/configurations/:id/deactivate', blockSuperAdminSchoolOpe
 attendanceRouter.patch('/configurations/:id/deactivate', blockSuperAdminSchoolOperations('Super Admin cannot manage attendance configuration'), requirePermission(P.attendanceEdit), validateParams(uuidParamsSchema), validateBody(attendanceConfigurationDeactivateSchema), deactivateAttendanceConfigurationApi);
 attendanceRouter.get('/config/resolve', requirePermission(P.attendanceView, P.attendanceEdit, P.attendanceCreate), validateQuery(resolveAttendanceConfigQuerySchema), resolveAttendanceConfigApi);
 attendanceRouter.get('/units', requirePermission(P.attendanceView, P.attendanceEdit, P.attendanceCreate), validateQuery(attendanceUnitsQuerySchema), listAttendanceUnitsApi);
+attendanceRouter.get('/student-report', requirePermission(P.attendanceView, P.attendanceReport, P.attendanceEdit, P.attendanceCreate), validateQuery(studentAttendanceReportQuerySchema), getStudentAttendanceReportApi);
 attendanceRouter.post('/ai/photos', blockSuperAdminSchoolOperations('Super Admin cannot manage student attendance'), requirePermission(P.attendanceCreate, P.attendanceEdit), aiRateLimit(), aiAttendanceUpload.any(), uploadAttendanceAiPhotosApi);
 attendanceRouter.post('/ai/recognize', blockSuperAdminSchoolOperations('Super Admin cannot manage student attendance'), requirePermission(P.attendanceCreate, P.attendanceEdit), aiRateLimit(), aiAttendanceUpload.any(), recognizeAttendanceAiApi);
 attendanceRouter.get('/sheet', requirePermission(P.attendanceView, P.attendanceEdit, P.attendanceCreate), validateQuery(attendanceSheetQuerySchema), getAttendanceSheetApi);

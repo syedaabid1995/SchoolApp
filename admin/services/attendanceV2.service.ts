@@ -5,6 +5,7 @@ export type AttendanceConfigurationScope = 'SCHOOL' | 'ACADEMIC_YEAR' | 'CLASS' 
 export type AttendanceUnitType = 'DAY' | 'SLOT' | 'PERIOD' | 'TIMETABLE_ENTRY';
 export type AttendanceSlotType = 'MORNING' | 'AFTERNOON';
 export type AttendanceStatus = 'PRESENT' | 'LATE' | 'ABSENT' | 'EXCUSED';
+export type AttendanceReportStatus = AttendanceStatus | 'UNMARKED' | 'HOLIDAY';
 
 export type AttendanceConfiguration = {
   id: string;
@@ -97,6 +98,53 @@ export type AttendanceSheet = {
   }>;
 };
 
+export type StudentAttendanceReport = {
+  academicYear: { id: string; name: string; startDate: string; endDate: string; isActive: boolean };
+  class: { id: string; name: string };
+  section?: { id: string; name: string } | null;
+  student: {
+    id: string;
+    admissionNo: string;
+    rollNo?: string | null;
+    firstName?: string | null;
+    lastName?: string | null;
+    fullName?: string | null;
+    name: string;
+  };
+  mode: AttendanceMode;
+  startDate: string;
+  endDate: string;
+  columns: Array<{
+    key: string;
+    label: string;
+    unitType: AttendanceUnitType;
+    startTime?: string | null;
+    endTime?: string | null;
+  }>;
+  rows: Array<{
+    date: string;
+    day: string;
+    cells: Record<string, {
+      status: AttendanceReportStatus;
+      note?: string | null;
+      sessionId?: string | null;
+      recordId?: string | null;
+      subject?: string | null;
+      unitLabel?: string | null;
+    }>;
+  }>;
+  summary: {
+    total: number;
+    present: number;
+    late: number;
+    absent: number;
+    excused: number;
+    holiday: number;
+    unmarked: number;
+    percentage: number;
+  };
+};
+
 export type AttendanceConfigurationInput = {
   schoolId?: string;
   academicYearId?: string | null;
@@ -137,6 +185,11 @@ export const resolveAttendanceUnits = async (params: AttendanceResolutionParams)
 
 export const loadAttendanceSheet = async (params: AttendanceUnitParams) => {
   const { data } = await api.get<AttendanceSheet>('/attendance/sheet', { params: cleanParams(params) });
+  return data;
+};
+
+export const getStudentAttendanceReportView = async (params: Omit<AttendanceResolutionParams, 'date'> & { studentId: string }) => {
+  const { data } = await api.get<StudentAttendanceReport>('/attendance/student-report', { params: cleanParams(params) });
   return data;
 };
 

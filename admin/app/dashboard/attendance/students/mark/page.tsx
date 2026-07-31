@@ -13,12 +13,15 @@ import { listAttendancePeriods } from '../../../../../services/attendance.servic
 import {
   loadAttendanceSheet,
   lockAttendanceSheet,
+  getStudentAttendanceReportView,
   resolveAttendanceConfiguration,
   resolveAttendanceUnits,
   saveAttendanceSheet,
+  type AttendanceReportStatus,
   type AttendanceStatus,
   type AttendanceUnitType,
   type ResolvedAttendanceUnit,
+  type StudentAttendanceReport,
 } from '../../../../../services/attendanceV2.service';
 
 type LegacyRow = { studentId: string; name: string; admissionNo: string; status: StudentAttendanceStatus; remarks: string };
@@ -40,7 +43,22 @@ const sheetStatusStyles: Record<AttendanceStatus, string> = {
   EXCUSED: 'bg-sky-50 border-sky-300 text-sky-700',
 };
 
+const reportStatusStyles: Record<AttendanceReportStatus, string> = {
+  PRESENT: 'border-emerald-200 bg-emerald-50 text-emerald-700',
+  LATE: 'border-amber-200 bg-amber-50 text-amber-700',
+  ABSENT: 'border-rose-200 bg-rose-50 text-rose-700',
+  EXCUSED: 'border-sky-200 bg-sky-50 text-sky-700',
+  HOLIDAY: 'border-violet-200 bg-violet-50 text-violet-700',
+  UNMARKED: 'border-slate-200 bg-slate-50 text-slate-500',
+};
+
 const today = () => new Date().toISOString().slice(0, 10);
+const formatDate = (value?: string | null) => {
+  if (!value) return '-';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return '-';
+  return date.toLocaleDateString();
+};
 const errorMessage = (error: any, fallback: string) =>
   error?.response?.data?.error?.message ?? error?.response?.data?.message ?? fallback;
 
@@ -62,6 +80,47 @@ const sectionsForClass = (sections: SectionOption[] | undefined, classId: string
   (sections ?? []).filter((section) =>
     classId ? section.classId === classId || section.classSections?.some((link) => link.classId === classId) : true,
   );
+
+function StudentAttendanceReportTable({ report }: { report: StudentAttendanceReport }) {
+  return (
+    <div className="mt-5 overflow-x-auto rounded-xl border border-slate-200">
+      <table className="min-w-full divide-y divide-slate-100 text-sm">
+        <thead className="bg-slate-50 text-left text-xs uppercase text-slate-500">
+          <tr>
+            <th className="sticky left-0 z-10 bg-slate-50 px-4 py-3">Date</th>
+            <th className="px-4 py-3">Day</th>
+            {report.columns.map((column) => (
+              <th key={column.key} className="min-w-36 px-4 py-3">
+                <span className="block font-black text-slate-600">{column.label}</span>
+                {column.startTime ? <span className="mt-1 block text-[11px] normal-case text-slate-400">{column.startTime}-{column.endTime ?? ''}</span> : null}
+              </th>
+            ))}
+          </tr>
+        </thead>
+        <tbody className="divide-y divide-slate-100">
+          {report.rows.map((row) => (
+            <tr key={row.date} className="align-top">
+              <td className="sticky left-0 z-10 whitespace-nowrap bg-white px-4 py-3 font-semibold text-slate-800">{formatDate(row.date)}</td>
+              <td className="whitespace-nowrap px-4 py-3 text-slate-500">{row.day}</td>
+              {report.columns.map((column) => {
+                const cell = row.cells[column.key] ?? { status: 'UNMARKED' as AttendanceReportStatus };
+                return (
+                  <td key={column.key} className="px-4 py-3">
+                    <div className={`min-h-14 rounded-lg border px-3 py-2 ${reportStatusStyles[cell.status]}`}>
+                      <p className="text-xs font-black">{cell.status}</p>
+                      {cell.subject ? <p className="mt-1 text-xs">{cell.subject}</p> : null}
+                      {cell.note ? <p className="mt-1 text-xs opacity-80">{cell.note}</p> : null}
+                    </div>
+                  </td>
+                );
+              })}
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
 
 function LegacyStudentAttendanceMarkPage({ onUseV2 }: { onUseV2: () => void }) {
   const { data: session } = useQuery({ queryKey: ['session'], queryFn: getSession });
@@ -268,15 +327,22 @@ function StudentAttendanceMarkV2Page({ onUseLegacy }: { onUseLegacy?: () => void
   const [selectedUnitKey, setSelectedUnitKey] = useState('');
   const [rows, setRows] = useState<SheetRow[]>([]);
   const [loadedSessionId, setLoadedSessionId] = useState('');
+  const [showReport, setShowReport] = useState(false);
+  const [reportCriteria, setReportCriteria] = useState({ academicYearId: '', classId: '', sectionId: '', studentId: '' });
 
   const activeYear = useMemo(
     () => (years ?? []).find((year: { isActive?: boolean }) => year.isActive) ?? (years ?? [])[0],
     [years],
   );
   const effectiveCriteria = { ...criteria, academicYearId: criteria.academicYearId || activeYear?.id || '' };
+  const effectiveReportCriteria = { ...reportCriteria, academicYearId: reportCriteria.academicYearId || activeYear?.id || '' };
   const sectionOptions = useMemo(() => sectionsForClass(sections, effectiveCriteria.classId), [sections, effectiveCriteria.classId]);
   const sectionRequired = sectionOptions.length > 0;
+  const reportSectionOptions = useMemo(() => sectionsForClass(sections, effectiveReportCriteria.classId), [sections, effectiveReportCriteria.classId]);
+  const reportSectionRequired = reportSectionOptions.length > 0;
   const canResolve = Boolean(schoolId && effectiveCriteria.academicYearId && effectiveCriteria.classId && effectiveCriteria.date && (!sectionRequired || effectiveCriteria.sectionId));
+  const canReport = role === 'SUPER_ADMIN' || hasPermission('attendance.report') || hasPermission('attendance.view') || hasPermission('attendance.edit') || hasPermission('attendance.create');
+  const canLoadReportStudents = Boolean(showReport && schoolId && effectiveReportCriteria.academicYearId && effectiveReportCriteria.classId && (!reportSectionRequired || effectiveReportCriteria.sectionId));
   const resetSheetState = () => {
     setRows([]);
     setLoadedSessionId('');
@@ -288,6 +354,33 @@ function StudentAttendanceMarkV2Page({ onUseLegacy }: { onUseLegacy?: () => void
     setCriteria({ ...criteria, classId, sectionId: sectionStillValid ? criteria.sectionId : '' });
     resetSheetState();
   };
+  const changeReportClass = (classId: string) => {
+    const options = sectionsForClass(sections, classId);
+    const sectionStillValid = Boolean(reportCriteria.sectionId && options.some((section) => section.id === reportCriteria.sectionId));
+    setReportCriteria({ ...reportCriteria, classId, sectionId: sectionStillValid ? reportCriteria.sectionId : '', studentId: '' });
+  };
+
+  const reportStudentsQuery = useQuery({
+    queryKey: ['attendance-report-students', schoolId, effectiveReportCriteria.academicYearId, effectiveReportCriteria.classId, effectiveReportCriteria.sectionId],
+    queryFn: () => listStudents({
+      schoolId,
+      academicSessionId: effectiveReportCriteria.academicYearId,
+      classId: effectiveReportCriteria.classId,
+      sectionId: effectiveReportCriteria.sectionId || undefined,
+    }),
+    enabled: canReport && canLoadReportStudents,
+  });
+
+  const reportMutation = useMutation({
+    mutationFn: () => getStudentAttendanceReportView({
+      schoolId,
+      academicYearId: effectiveReportCriteria.academicYearId,
+      classId: effectiveReportCriteria.classId,
+      sectionId: effectiveReportCriteria.sectionId || undefined,
+      studentId: effectiveReportCriteria.studentId,
+    }),
+    onError: (error: any) => notify.error('Unable to load report', errorMessage(error, 'Please check the selected student and try again.')),
+  });
 
   const resolutionQuery = useQuery({
     queryKey: ['attendance-v2-resolution', schoolId, effectiveCriteria],
@@ -383,6 +476,124 @@ function StudentAttendanceMarkV2Page({ onUseLegacy }: { onUseLegacy?: () => void
           breadcrumbs={[{ label: 'Dashboard', href: '/dashboard' }, { label: 'Attendance', href: '/dashboard/attendance/overview' }, { label: 'Students' }]}
           actions={onUseLegacy ? <Button variant="outline" size="sm" onClick={onUseLegacy}>Use Legacy Flow</Button> : null}
         />
+
+        {canReport ? (
+          <div className="mb-5 flex justify-end">
+            <Button variant="outline" size="sm" onClick={() => setShowReport((current) => !current)}>
+              {showReport ? 'Hide Report' : 'Show Report'}
+            </Button>
+          </div>
+        ) : null}
+
+        {showReport && canReport ? (
+          <section className="mb-5 rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+            <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <h2 className="text-lg font-bold text-slate-950">Students Attendance Report</h2>
+                <p className="text-sm text-slate-500">Select an academic year, class, section, and student to view unit-wise attendance for the full session.</p>
+              </div>
+              {reportMutation.data ? (
+                <span className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-bold text-slate-600">
+                  {reportMutation.data.startDate} to {reportMutation.data.endDate}
+                </span>
+              ) : null}
+            </div>
+
+            <div className="grid gap-3 md:grid-cols-5">
+              <select
+                value={effectiveReportCriteria.academicYearId}
+                onChange={(event) => {
+                  setReportCriteria({ ...reportCriteria, academicYearId: event.target.value, classId: '', sectionId: '', studentId: '' });
+                  reportMutation.reset();
+                }}
+                className="rounded-xl border border-slate-200 px-3 py-2 text-sm"
+              >
+                <option value="">Select academic year</option>
+                {(years ?? []).map((year: { id: string; name: string }) => <option key={year.id} value={year.id}>{year.name}</option>)}
+              </select>
+              <select
+                value={effectiveReportCriteria.classId}
+                onChange={(event) => {
+                  changeReportClass(event.target.value);
+                  reportMutation.reset();
+                }}
+                className="rounded-xl border border-slate-200 px-3 py-2 text-sm"
+              >
+                <option value="">Select class</option>
+                {(classes ?? []).map((item: { id: string; name: string }) => <option key={item.id} value={item.id}>{item.name}</option>)}
+              </select>
+              <select
+                value={effectiveReportCriteria.sectionId}
+                onChange={(event) => {
+                  setReportCriteria({ ...reportCriteria, sectionId: event.target.value, studentId: '' });
+                  reportMutation.reset();
+                }}
+                disabled={!effectiveReportCriteria.classId || !reportSectionRequired}
+                className="rounded-xl border border-slate-200 px-3 py-2 text-sm disabled:bg-slate-50"
+              >
+                <option value="">{!effectiveReportCriteria.classId ? 'Select class first' : reportSectionRequired ? 'Select section' : 'No section needed'}</option>
+                {reportSectionOptions.map((item: { id: string; name: string }) => <option key={item.id} value={item.id}>{item.name}</option>)}
+              </select>
+              <select
+                value={effectiveReportCriteria.studentId}
+                onChange={(event) => {
+                  setReportCriteria({ ...reportCriteria, studentId: event.target.value });
+                  reportMutation.reset();
+                }}
+                disabled={!canLoadReportStudents || reportStudentsQuery.isFetching}
+                className="rounded-xl border border-slate-200 px-3 py-2 text-sm disabled:bg-slate-50"
+              >
+                <option value="">{reportStudentsQuery.isFetching ? 'Loading students...' : 'Select student'}</option>
+                {(reportStudentsQuery.data ?? []).map((student) => (
+                  <option key={student.id} value={student.id}>
+                    {studentName(student)} {student.admissionNo ? `(${student.admissionNo})` : ''}
+                  </option>
+                ))}
+              </select>
+              <Button
+                variant="primary"
+                size="sm"
+                onClick={() => reportMutation.mutate()}
+                disabled={!effectiveReportCriteria.academicYearId || !effectiveReportCriteria.classId || (reportSectionRequired && !effectiveReportCriteria.sectionId) || !effectiveReportCriteria.studentId || reportMutation.isPending}
+                loading={reportMutation.isPending}
+              >
+                Load Reports
+              </Button>
+            </div>
+
+            {!reportStudentsQuery.isFetching && canLoadReportStudents && !(reportStudentsQuery.data ?? []).length ? (
+              <p className="mt-3 rounded-lg border border-amber-100 bg-amber-50 px-3 py-2 text-sm text-amber-800">No students found for the selected class and section.</p>
+            ) : null}
+
+            {reportMutation.data ? (
+              <>
+                <div className="mt-5 grid gap-3 md:grid-cols-4 xl:grid-cols-7">
+                  {[
+                    ['Present', reportMutation.data.summary.present],
+                    ['Late', reportMutation.data.summary.late],
+                    ['Absent', reportMutation.data.summary.absent],
+                    ['Excused', reportMutation.data.summary.excused],
+                    ['Holiday', reportMutation.data.summary.holiday],
+                    ['Unmarked', reportMutation.data.summary.unmarked],
+                    ['Attendance %', `${reportMutation.data.summary.percentage}%`],
+                  ].map(([label, value]) => (
+                    <div key={label} className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
+                      <p className="text-xs font-bold uppercase tracking-wide text-slate-500">{label}</p>
+                      <p className="mt-1 text-lg font-black text-slate-950">{value}</p>
+                    </div>
+                  ))}
+                </div>
+                <div className="mt-4 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600">
+                  <span className="font-bold text-slate-900">{reportMutation.data.student.name}</span>
+                  {' '}• Admission {reportMutation.data.student.admissionNo}
+                  {' '}• Mode {reportMutation.data.mode}
+                  {' '}• {reportMutation.data.columns.length} attendance unit{reportMutation.data.columns.length === 1 ? '' : 's'}
+                </div>
+                <StudentAttendanceReportTable report={reportMutation.data} />
+              </>
+            ) : null}
+          </section>
+        ) : null}
 
         <section className="mb-5 rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
           <div className="mb-4 grid gap-3 md:grid-cols-4">

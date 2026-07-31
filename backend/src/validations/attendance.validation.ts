@@ -107,6 +107,14 @@ export const attendanceSheetQuerySchema = attendanceSheetScopeSchema
   .merge(attendanceSheetUnitBaseSchema)
   .superRefine(requireAttendanceUnitReference);
 
+export const studentAttendanceReportQuerySchema = z.object({
+  schoolId: z.string().uuid().optional(),
+  academicYearId: z.string().uuid(),
+  classId: z.string().uuid(),
+  sectionId: z.string().uuid().optional(),
+  studentId: z.string().uuid(),
+});
+
 const modernAttendanceRecordSchema = z.object({
   studentId: z.string().uuid(),
   status: z.enum(['PRESENT', 'LATE', 'ABSENT', 'EXCUSED']),

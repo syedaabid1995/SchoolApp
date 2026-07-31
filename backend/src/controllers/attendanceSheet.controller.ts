@@ -8,6 +8,7 @@ import {
   attendanceUnitsQuerySchema,
   resolveAttendanceConfigQuerySchema,
   saveAttendanceSheetSchema,
+  studentAttendanceReportQuerySchema,
 } from '../validations/attendance.validation';
 import {
   getAttendanceSheet,
@@ -17,6 +18,7 @@ import {
   resolveAttendanceUnits,
   saveAttendanceSheet,
 } from '../services/attendanceSheet.service';
+import { buildStudentAttendanceReport } from '../services/attendanceStudentReport.service';
 
 const requireAuth = (req: Request) => {
   if (!req.auth) throw new HttpError(401, 'Unauthorized');
@@ -86,6 +88,22 @@ export const getAttendanceSheetApi = async (req: Request, res: Response) => {
     timetableEntryId: payload.timetableEntryId,
   });
   res.status(200).json(sheet);
+};
+
+export const getStudentAttendanceReportApi = async (req: Request, res: Response) => {
+  ensureAttendanceEnabled();
+  requireAuth(req);
+  const payload = studentAttendanceReportQuerySchema.parse(req.query);
+  const schoolId = resolveSchoolId(req, payload.schoolId);
+
+  const report = await buildStudentAttendanceReport({
+    schoolId,
+    academicYearId: payload.academicYearId,
+    classId: payload.classId,
+    sectionId: payload.sectionId,
+    studentId: payload.studentId,
+  });
+  res.status(200).json(report);
 };
 
 export const saveAttendanceSheetApi = async (req: Request, res: Response) => {
