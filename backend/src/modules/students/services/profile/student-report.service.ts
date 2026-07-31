@@ -82,7 +82,7 @@ const addTableSheet = (
 type AttendanceReportWorkbook = Awaited<ReturnType<typeof buildStudentAttendanceReport>>;
 
 const attendanceUnitHeader = (column: AttendanceReportWorkbook['columns'][number]) => {
-  const label = column.label === 'Day' ? 'Attendance Status' : column.label;
+  const label = column.label === 'Day' ? 'Daily' : column.label;
   return column.startTime ? `${label} (${column.startTime}-${column.endTime ?? ''})` : label;
 };
 
@@ -93,28 +93,35 @@ const attendanceCellValue = (cell: AttendanceReportWorkbook['rows'][number]['cel
     cell.note ? `Note: ${cell.note}` : '',
   ].filter(Boolean).join('\n');
 
+const attendanceFillByStatus: Partial<Record<string, ExcelJS.Fill>> = {
+  PRESENT: { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFD1FAE5' } },
+  LATE: { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFEF3C7' } },
+  ABSENT: { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFFE3B0' } },
+  EXCUSED: { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFFCACA' } },
+  HOLIDAY: { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFFCACA' } },
+  LEAVE: { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFFCACA' } },
+  UNMARKED: { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFE5E7EB' } },
+};
+
+const holidayRowFill: ExcelJS.Fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFFE2E2' } };
+const holidayStatuses = new Set(['EXCUSED', 'HOLIDAY', 'LEAVE', 'CASUAL_LEAVE', 'LOP']);
+
 const addAttendanceSheet = (
   workbook: ExcelJS.Workbook,
   attendanceReport: AttendanceReportWorkbook | null,
-  fallback: { className?: string | null; sectionName?: string | null },
 ) => {
   if (!attendanceReport) {
     return addTableSheet(workbook, 'Attendance', [
       { header: 'Date', key: 'date', width: 14 },
       { header: 'Day', key: 'day', width: 12 },
-      { header: 'Status', key: 'status', width: 18 },
-      { header: 'Class', key: 'class', width: 16 },
-      { header: 'Section', key: 'section', width: 16 },
+      { header: 'Daily', key: 'daily', width: 56 },
     ], [{
       date: '',
       day: '',
-      status: 'No attendance class/section found for this academic session',
-      class: fallback.className ?? '',
-      section: fallback.sectionName ?? '',
+      daily: 'No attendance class/section found for this academic session',
     }]);
   }
 
-  const statusKeys = ['PRESENT', 'LATE', 'ABSENT', 'EXCUSED', 'HOLIDAY', 'UNMARKED'] as const;
   const unitColumns = attendanceReport.columns.map((column) => ({
     header: attendanceUnitHeader(column),
     key: `unit_${column.key.replace(/[^a-zA-Z0-9]+/g, '_')}`,
@@ -125,43 +132,45 @@ const addAttendanceSheet = (
     const output: Record<string, unknown> = {
       date: row.date,
       day: row.day,
-      class: attendanceReport.class.name,
-      section: attendanceReport.section?.name ?? '',
     };
-    const counts = statusKeys.reduce<Record<typeof statusKeys[number], number>>((acc, status) => {
-      acc[status] = 0;
-      return acc;
-    }, {} as Record<typeof statusKeys[number], number>);
 
     unitColumns.forEach((column) => {
       const cell = row.cells[column.sourceKey] ?? { status: 'UNMARKED' as const };
-      counts[cell.status] += 1;
       output[column.key] = attendanceCellValue(cell);
     });
-    statusKeys.forEach((status) => {
-      output[status.toLowerCase()] = counts[status];
-    });
-    output.summary = statusKeys
-      .filter((status) => counts[status] > 0)
-      .map((status) => `${counts[status]} ${status.toLowerCase()}`)
-      .join(' / ');
     return output;
   });
 
-  return addTableSheet(workbook, 'Attendance', [
+  const columns = [
     { header: 'Date', key: 'date', width: 14 },
     { header: 'Day', key: 'day', width: 12 },
     ...unitColumns.map(({ header, key, width }) => ({ header, key, width })),
-    { header: 'Summary', key: 'summary', width: 36 },
-    { header: 'Present Units', key: 'present', width: 14 },
-    { header: 'Late Units', key: 'late', width: 12 },
-    { header: 'Absent Units', key: 'absent', width: 14 },
-    { header: 'Excused Units', key: 'excused', width: 14 },
-    { header: 'Holiday Units', key: 'holiday', width: 14 },
-    { header: 'Unmarked Units', key: 'unmarked', width: 16 },
-    { header: 'Class', key: 'class', width: 16 },
-    { header: 'Section', key: 'section', width: 16 },
-  ], rows);
+  ];
+  const sheet = addTableSheet(workbook, 'Attendance', columns, rows);
+
+  attendanceReport.rows.forEach((reportRow, rowIndex) => {
+    const excelRow = sheet.getRow(rowIndex + 2);
+    const hasHolidayOrLeave = unitColumns.some((column) =>
+      holidayStatuses.has(reportRow.cells[column.sourceKey]?.status ?? 'UNMARKED'),
+    );
+
+    if (hasHolidayOrLeave) {
+      for (let columnIndex = 1; columnIndex <= columns.length; columnIndex += 1) {
+        excelRow.getCell(columnIndex).fill = holidayRowFill;
+      }
+      return;
+    }
+
+    unitColumns.forEach((column, unitIndex) => {
+      const status = reportRow.cells[column.sourceKey]?.status ?? 'UNMARKED';
+      const fill = attendanceFillByStatus[status];
+      if (fill) {
+        excelRow.getCell(unitIndex + 3).fill = fill;
+      }
+    });
+  });
+
+  return sheet;
 };
 
 export const downloadStudentReportWorkbook = async (req: Request, res: Response) => {
@@ -410,10 +419,7 @@ export const downloadStudentReportWorkbook = async (req: Request, res: Response)
     },
   ].filter((row) => Object.values(row).some(Boolean)));
 
-  addAttendanceSheet(workbook, attendanceReport, {
-    className: sessionEnrollment?.class?.name ?? student.class?.name,
-    sectionName: sessionEnrollment?.section?.name ?? student.section?.name,
-  });
+  addAttendanceSheet(workbook, attendanceReport);
 
   addTableSheet(workbook, 'Fee Invoices', [
     { header: 'Invoice No', key: 'invoiceNumber', width: 20 },
