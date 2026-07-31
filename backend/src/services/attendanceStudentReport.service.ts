@@ -20,6 +20,14 @@ type ReportCell = {
   unitLabel?: string | null;
 };
 
+const MS_PER_DAY = 24 * 60 * 60 * 1000;
+const DEFAULT_MAX_REPORT_DAYS = 800;
+
+const maxReportDays = () => {
+  const configured = Number(process.env.STUDENT_ATTENDANCE_REPORT_MAX_DAYS);
+  return Number.isFinite(configured) && configured > 0 ? configured : DEFAULT_MAX_REPORT_DAYS;
+};
+
 const toDateOnly = (value: Date | string) => {
   const date = value instanceof Date ? new Date(value) : new Date(value);
   if (Number.isNaN(date.getTime())) throw new HttpError(400, 'Invalid date');
@@ -121,8 +129,13 @@ export const buildStudentAttendanceReport = async (params: {
 
   const startDate = toDateOnly(academicYear.startDate);
   const endDate = toDateOnly(academicYear.endDate);
-  if (endDate.getTime() - startDate.getTime() > 370 * 24 * 60 * 60 * 1000) {
-    throw new HttpError(400, 'Student attendance report is limited to a 370 day academic year');
+  if (endDate < startDate) {
+    throw new HttpError(400, 'Academic year end date must be after the start date');
+  }
+
+  const reportDays = Math.floor((endDate.getTime() - startDate.getTime()) / MS_PER_DAY) + 1;
+  if (reportDays > maxReportDays()) {
+    throw new HttpError(400, `Student attendance report is limited to a ${maxReportDays()} day academic year`);
   }
 
   const dates = eachDate(startDate, endDate);
