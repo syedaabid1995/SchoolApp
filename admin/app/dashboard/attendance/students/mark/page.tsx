@@ -27,6 +27,7 @@ import {
 type LegacyRow = { studentId: string; name: string; admissionNo: string; status: StudentAttendanceStatus; remarks: string };
 type SheetRow = { studentId: string; name: string; admissionNo: string; rollNo?: string | null; status: AttendanceStatus; note: string };
 type SectionOption = { id: string; name: string; classId?: string | null; classSections?: Array<{ classId: string }> };
+type ReportCalendarStatus = AttendanceReportStatus | 'MIXED';
 
 const legacyStatusStyles: Record<StudentAttendanceStatus, string> = {
   PRESENT: 'bg-emerald-50 border-emerald-300 text-emerald-700',
@@ -52,6 +53,19 @@ const reportStatusStyles: Record<AttendanceReportStatus, string> = {
   UNMARKED: 'border-slate-200 bg-slate-50 text-slate-500',
 };
 
+const calendarStatusStyles: Record<ReportCalendarStatus, string> = {
+  PRESENT: 'border-emerald-200 bg-emerald-50 text-emerald-700',
+  LATE: 'border-amber-200 bg-amber-50 text-amber-700',
+  ABSENT: 'border-rose-200 bg-rose-50 text-rose-700',
+  EXCUSED: 'border-sky-200 bg-sky-50 text-sky-700',
+  HOLIDAY: 'border-violet-200 bg-violet-50 text-violet-700',
+  UNMARKED: 'border-slate-200 bg-slate-50 text-slate-500',
+  MIXED: 'border-indigo-200 bg-indigo-50 text-indigo-700',
+};
+
+const calendarWeekDays = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+const reportStatusOrder: AttendanceReportStatus[] = ['PRESENT', 'LATE', 'ABSENT', 'EXCUSED', 'HOLIDAY', 'UNMARKED'];
+
 const today = () => new Date().toISOString().slice(0, 10);
 const formatDate = (value?: string | null) => {
   if (!value) return '-';
@@ -76,10 +90,128 @@ const buildUnitPayload = (unit: ResolvedAttendanceUnit) => ({
 const studentName = (student: { fullName?: string | null; firstName?: string | null; lastName?: string | null }) =>
   student.fullName || `${student.firstName ?? ''} ${student.lastName ?? ''}`.trim() || 'Unnamed student';
 
+const parseReportDate = (value: string) => new Date(`${value}T00:00:00`);
+
+const reportDateKey = (value: Date) => {
+  const year = value.getFullYear();
+  const month = String(value.getMonth() + 1).padStart(2, '0');
+  const day = String(value.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+};
+
 const sectionsForClass = (sections: SectionOption[] | undefined, classId: string) =>
   (sections ?? []).filter((section) =>
     classId ? section.classId === classId || section.classSections?.some((link) => link.classId === classId) : true,
   );
+
+const summarizeReportCalendarDay = (row: StudentAttendanceReport['rows'][number], columns: StudentAttendanceReport['columns']) => {
+  const cells = columns.map((column) => row.cells[column.key] ?? { status: 'UNMARKED' as AttendanceReportStatus });
+  const counts = reportStatusOrder.reduce<Record<AttendanceReportStatus, number>>((acc, status) => {
+    acc[status] = 0;
+    return acc;
+  }, {} as Record<AttendanceReportStatus, number>);
+  cells.forEach((cell) => {
+    counts[cell.status] += 1;
+  });
+
+  const note = cells.map((cell) => cell.note).find(Boolean) ?? null;
+  const activeStatuses = reportStatusOrder.filter((status) => counts[status] > 0);
+  const status: ReportCalendarStatus = activeStatuses.length === 1 ? activeStatuses[0] : activeStatuses.length ? 'MIXED' : 'UNMARKED';
+  const countLabel = activeStatuses
+    .filter((item) => item !== 'HOLIDAY' && item !== 'UNMARKED')
+    .map((item) => `${counts[item]} ${item.toLowerCase()}`)
+    .join(' / ');
+
+  const label = status === 'HOLIDAY'
+    ? note?.split(' - ')[0] || 'Holiday'
+    : countLabel || status;
+
+  return { status, label, note, counts, totalUnits: cells.length };
+};
+
+function StudentAttendanceReportCalendar({ report }: { report: StudentAttendanceReport }) {
+  const rowsByDate = useMemo(() => new Map(report.rows.map((row) => [row.date, row])), [report.rows]);
+  const months = useMemo(() => {
+    const result: Array<{ key: string; label: string; days: Array<Date | null> }> = [];
+    const start = parseReportDate(report.startDate);
+    const end = parseReportDate(report.endDate);
+    const cursor = new Date(start.getFullYear(), start.getMonth(), 1);
+    const last = new Date(end.getFullYear(), end.getMonth(), 1);
+
+    while (cursor <= last) {
+      const monthStart = new Date(cursor.getFullYear(), cursor.getMonth(), 1);
+      const monthEnd = new Date(cursor.getFullYear(), cursor.getMonth() + 1, 0);
+      const days: Array<Date | null> = [];
+      for (let i = 0; i < monthStart.getDay(); i += 1) days.push(null);
+      for (let day = 1; day <= monthEnd.getDate(); day += 1) {
+        const date = new Date(cursor.getFullYear(), cursor.getMonth(), day);
+        days.push(date >= start && date <= end ? date : null);
+      }
+      while (days.length % 7 !== 0) days.push(null);
+      result.push({
+        key: `${cursor.getFullYear()}-${cursor.getMonth()}`,
+        label: cursor.toLocaleString(undefined, { month: 'long', year: 'numeric' }),
+        days,
+      });
+      cursor.setMonth(cursor.getMonth() + 1);
+    }
+    return result;
+  }, [report.endDate, report.startDate]);
+
+  return (
+    <div className="mt-5 space-y-5">
+      <div className="flex flex-wrap gap-2">
+        {(['PRESENT', 'LATE', 'ABSENT', 'EXCUSED', 'HOLIDAY', 'UNMARKED', 'MIXED'] as ReportCalendarStatus[]).map((status) => (
+          <span key={status} className={`rounded-full border px-3 py-1 text-xs font-bold ${calendarStatusStyles[status]}`}>
+            {status}
+          </span>
+        ))}
+      </div>
+      <div className="grid gap-5 xl:grid-cols-2">
+        {months.map((month) => (
+          <section key={month.key} className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+            <h3 className="text-base font-black text-slate-950">{month.label}</h3>
+            <div className="mt-4 grid grid-cols-7 gap-2">
+              {calendarWeekDays.map((day) => (
+                <div key={day} className="py-2 text-center text-xs font-bold uppercase tracking-wide text-slate-500">
+                  {day}
+                </div>
+              ))}
+              {month.days.map((dateValue, index) => {
+                if (!dateValue) return <div key={`empty-${month.key}-${index}`} className="min-h-24 rounded-xl bg-slate-50/70" />;
+                const key = reportDateKey(dateValue);
+                const row = rowsByDate.get(key);
+                const summary = row ? summarizeReportCalendarDay(row, report.columns) : null;
+                const status = summary?.status ?? 'UNMARKED';
+                return (
+                  <div
+                    key={key}
+                    title={summary?.note ?? summary?.label ?? key}
+                    className={`min-h-24 rounded-xl border p-2 text-left ${calendarStatusStyles[status]}`}
+                  >
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="text-sm font-black">{dateValue.getDate()}</span>
+                      <span className="text-[10px] font-black uppercase">{status === 'MIXED' ? 'Units' : status}</span>
+                    </div>
+                    {summary ? (
+                      <>
+                        <p className="mt-2 text-xs font-bold capitalize leading-snug">{summary.label}</p>
+                        {summary.note ? <p className="mt-1 line-clamp-2 text-[11px] leading-snug opacity-80">{summary.note}</p> : null}
+                        {summary.totalUnits > 1 && status !== 'HOLIDAY' ? (
+                          <p className="mt-1 text-[11px] font-semibold opacity-80">{summary.totalUnits} unit{summary.totalUnits === 1 ? '' : 's'}</p>
+                        ) : null}
+                      </>
+                    ) : null}
+                  </div>
+                );
+              })}
+            </div>
+          </section>
+        ))}
+      </div>
+    </div>
+  );
+}
 
 function StudentAttendanceReportTable({ report }: { report: StudentAttendanceReport }) {
   return (
@@ -329,6 +461,7 @@ function StudentAttendanceMarkV2Page({ onUseLegacy }: { onUseLegacy?: () => void
   const [loadedSessionId, setLoadedSessionId] = useState('');
   const [showReport, setShowReport] = useState(false);
   const [reportCriteria, setReportCriteria] = useState({ academicYearId: '', classId: '', sectionId: '', studentId: '' });
+  const [reportView, setReportView] = useState<'table' | 'calendar'>('table');
 
   const activeYear = useMemo(
     () => (years ?? []).find((year: { isActive?: boolean }) => year.isActive) ?? (years ?? [])[0],
@@ -589,7 +722,27 @@ function StudentAttendanceMarkV2Page({ onUseLegacy }: { onUseLegacy?: () => void
                   {' '}• Mode {reportMutation.data.mode}
                   {' '}• {reportMutation.data.columns.length} attendance unit{reportMutation.data.columns.length === 1 ? '' : 's'}
                 </div>
-                <StudentAttendanceReportTable report={reportMutation.data} />
+                <div className="mt-4 flex flex-wrap justify-end gap-2">
+                  <Button
+                    variant={reportView === 'table' ? 'primary' : 'outline'}
+                    size="sm"
+                    onClick={() => setReportView('table')}
+                  >
+                    List View
+                  </Button>
+                  <Button
+                    variant={reportView === 'calendar' ? 'primary' : 'outline'}
+                    size="sm"
+                    onClick={() => setReportView('calendar')}
+                  >
+                    Calendar View
+                  </Button>
+                </div>
+                {reportView === 'calendar' ? (
+                  <StudentAttendanceReportCalendar report={reportMutation.data} />
+                ) : (
+                  <StudentAttendanceReportTable report={reportMutation.data} />
+                )}
               </>
             ) : null}
           </section>
