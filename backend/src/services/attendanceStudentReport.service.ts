@@ -1,4 +1,4 @@
-import type { AttendanceStatus, AttendanceUnitType } from '@prisma/client';
+import type { AttendanceStatus, AttendanceUnitType, Prisma } from '@prisma/client';
 import { prisma } from '../config/db';
 import { HttpError } from '../middlewares/error.middleware';
 import { resolveAttendanceUnits } from './attendanceSheet.service';
@@ -23,6 +23,28 @@ type ReportCell = {
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
 const DEFAULT_MAX_REPORT_DAYS = 800;
 
+type HolidayInfo = {
+  title: string;
+  details?: string | null;
+};
+
+const dayValueByKey = new Map([
+  ['saturday', 1],
+  ['sat', 1],
+  ['sunday', 2],
+  ['sun', 2],
+  ['monday', 3],
+  ['mon', 3],
+  ['tuesday', 4],
+  ['tue', 4],
+  ['wednesday', 5],
+  ['wed', 5],
+  ['thursday', 6],
+  ['thu', 6],
+  ['friday', 7],
+  ['fri', 7],
+]);
+
 const maxReportDays = () => {
   const configured = Number(process.env.STUDENT_ATTENDANCE_REPORT_MAX_DAYS);
   return Number.isFinite(configured) && configured > 0 ? configured : DEFAULT_MAX_REPORT_DAYS;
@@ -37,6 +59,11 @@ const toDateOnly = (value: Date | string) => {
 
 const toDateKey = (value: Date | string) => toDateOnly(value).toISOString().slice(0, 10);
 
+const routineDayValue = (date: Date) => {
+  const day = toDateOnly(date).getUTCDay();
+  return day === 6 ? 1 : day + 2;
+};
+
 const eachDate = (start: Date, end: Date) => {
   const dates: Date[] = [];
   const cursor = toDateOnly(start);
@@ -50,6 +77,62 @@ const eachDate = (start: Date, end: Date) => {
 
 const fullName = (student: { fullName?: string | null; firstName?: string | null; lastName?: string | null }) =>
   student.fullName || [student.firstName, student.lastName].filter(Boolean).join(' ').trim();
+
+const weekendValuesFromJson = (weekends: Prisma.JsonValue | null | undefined) => {
+  const values = new Set<number>();
+  if (!Array.isArray(weekends)) return new Set([7]);
+
+  for (const item of weekends) {
+    if (!item || typeof item !== 'object' || Array.isArray(item)) continue;
+    const row = item as Record<string, unknown>;
+    if (row.isWeekend !== true) continue;
+    const key = String(row.id ?? row.name ?? row.value ?? row.dayOfWeek ?? '').trim().toLowerCase();
+    const numeric = Number(key);
+    if (Number.isInteger(numeric) && numeric >= 1 && numeric <= 7) values.add(numeric);
+    const value = dayValueByKey.get(key);
+    if (value) values.add(value);
+  }
+
+  return values;
+};
+
+const applySystemHolidays = (
+  holidayByDate: Map<string, HolidayInfo>,
+  holidays: Prisma.JsonValue | null | undefined,
+  startDate: Date,
+  endDate: Date,
+) => {
+  const rows = Array.isArray(holidays) ? holidays : [];
+  for (const item of rows) {
+    if (!item || typeof item !== 'object' || Array.isArray(item)) continue;
+    const row = item as Record<string, unknown>;
+    const from = typeof row.fromDate === 'string' ? toDateOnly(row.fromDate) : null;
+    const to = typeof row.toDate === 'string' ? toDateOnly(row.toDate) : from;
+    if (!from || !to || to < startDate || from > endDate) continue;
+    const title = String(row.title ?? 'Holiday').trim() || 'Holiday';
+    const details = typeof row.details === 'string' && row.details.trim() ? row.details.trim() : null;
+    for (const day of eachDate(from < startDate ? startDate : from, to > endDate ? endDate : to)) {
+      holidayByDate.set(toDateKey(day), { title, details });
+    }
+  }
+};
+
+const applySystemWeekends = (
+  holidayByDate: Map<string, HolidayInfo>,
+  weekends: Prisma.JsonValue | null | undefined,
+  dates: Date[],
+) => {
+  const weekendValues = weekendValuesFromJson(weekends);
+  for (const day of dates) {
+    if (!weekendValues.has(routineDayValue(day))) continue;
+    const key = toDateKey(day);
+    if (!holidayByDate.has(key)) {
+      holidayByDate.set(key, { title: 'Weekend', details: 'Configured school weekend' });
+    }
+  }
+};
+
+const holidayNote = (holiday: HolidayInfo) => [holiday.title, holiday.details].filter(Boolean).join(' - ');
 
 const columnLabel = (unit: Awaited<ReturnType<typeof resolveAttendanceUnits>>['units'][number]) => {
   if (unit.unitType === 'TIMETABLE_ENTRY') {
@@ -170,7 +253,7 @@ export const buildStudentAttendanceReport = async (params: {
     expectedByDate.set(date, cells);
   }
 
-  const [sessions, holidays] = await Promise.all([
+  const [sessions, holidays, systemSettings] = await Promise.all([
     prisma.attendanceSession.findMany({
       where: {
         schoolId: params.schoolId,
@@ -208,15 +291,20 @@ export const buildStudentAttendanceReport = async (params: {
           select: { holidayDate: true, reason: true },
         })
       : Promise.resolve([]),
+    prisma.schoolSystemSetting.findUnique({
+      where: { schoolId: params.schoolId },
+      select: { holidays: true, weekends: true },
+    }),
   ]);
 
-  const holidayByDate = new Map(holidays.map((holiday) => [toDateKey(holiday.holidayDate), holiday]));
-  for (const [date, holiday] of holidayByDate) {
-    const cells = expectedByDate.get(date);
-    if (!cells) continue;
-    for (const [key, cell] of cells) {
-      cells.set(key, { ...cell, status: 'HOLIDAY', note: holiday.reason ?? null });
-    }
+  const holidayByDate = new Map<string, HolidayInfo>();
+  applySystemWeekends(holidayByDate, systemSettings?.weekends, dates);
+  applySystemHolidays(holidayByDate, systemSettings?.holidays, startDate, endDate);
+  for (const holiday of holidays) {
+    holidayByDate.set(toDateKey(holiday.holidayDate), {
+      title: holiday.reason ?? 'Holiday',
+      details: null,
+    });
   }
 
   for (const session of sessions) {
@@ -246,6 +334,14 @@ export const buildStudentAttendanceReport = async (params: {
     };
     if (!current || statusOrder[next.status] <= statusOrder[current.status]) {
       cells.set(key, next);
+    }
+  }
+
+  for (const [date, holiday] of holidayByDate) {
+    const cells = expectedByDate.get(date);
+    if (!cells) continue;
+    for (const [key, cell] of cells) {
+      cells.set(key, { ...cell, status: 'HOLIDAY', note: holidayNote(holiday) });
     }
   }
 
