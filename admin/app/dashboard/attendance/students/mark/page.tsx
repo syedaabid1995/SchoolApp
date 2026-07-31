@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import PageHeader from '../../../../../components/PageHeader';
 import Button from '../../../../../components/Button';
@@ -130,83 +130,110 @@ const summarizeReportCalendarDay = (row: StudentAttendanceReport['rows'][number]
 };
 
 function StudentAttendanceReportCalendar({ report }: { report: StudentAttendanceReport }) {
-  const rowsByDate = useMemo(() => new Map(report.rows.map((row) => [row.date, row])), [report.rows]);
-  const months = useMemo(() => {
-    const result: Array<{ key: string; label: string; days: Array<Date | null> }> = [];
+  const firstReportMonth = useMemo(() => {
+    const start = parseReportDate(report.startDate);
+    return new Date(start.getFullYear(), start.getMonth(), 1);
+  }, [report.startDate]);
+  const lastReportMonth = useMemo(() => {
+    const end = parseReportDate(report.endDate);
+    return new Date(end.getFullYear(), end.getMonth(), 1);
+  }, [report.endDate]);
+  const initialMonth = useMemo(() => {
     const start = parseReportDate(report.startDate);
     const end = parseReportDate(report.endDate);
-    const cursor = new Date(start.getFullYear(), start.getMonth(), 1);
-    const last = new Date(end.getFullYear(), end.getMonth(), 1);
+    const now = new Date();
+    const currentMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+    return now >= start && now <= end ? currentMonth : firstReportMonth;
+  }, [firstReportMonth, report.endDate, report.startDate]);
+  const [monthCursor, setMonthCursor] = useState(initialMonth);
 
-    while (cursor <= last) {
-      const monthStart = new Date(cursor.getFullYear(), cursor.getMonth(), 1);
-      const monthEnd = new Date(cursor.getFullYear(), cursor.getMonth() + 1, 0);
-      const days: Array<Date | null> = [];
-      for (let i = 0; i < monthStart.getDay(); i += 1) days.push(null);
-      for (let day = 1; day <= monthEnd.getDate(); day += 1) {
-        const date = new Date(cursor.getFullYear(), cursor.getMonth(), day);
-        days.push(date >= start && date <= end ? date : null);
-      }
-      while (days.length % 7 !== 0) days.push(null);
-      result.push({
-        key: `${cursor.getFullYear()}-${cursor.getMonth()}`,
-        label: cursor.toLocaleString(undefined, { month: 'long', year: 'numeric' }),
-        days,
-      });
-      cursor.setMonth(cursor.getMonth() + 1);
+  useEffect(() => {
+    setMonthCursor(initialMonth);
+  }, [initialMonth, report.student.id]);
+
+  const rowsByDate = useMemo(() => new Map(report.rows.map((row) => [row.date, row])), [report.rows]);
+  const monthLabel = monthCursor.toLocaleString(undefined, { month: 'long', year: 'numeric' });
+  const canGoPrevious = monthCursor > firstReportMonth;
+  const canGoNext = monthCursor < lastReportMonth;
+  const days = useMemo(() => {
+    const start = parseReportDate(report.startDate);
+    const end = parseReportDate(report.endDate);
+    const monthStart = new Date(monthCursor.getFullYear(), monthCursor.getMonth(), 1);
+    const monthEnd = new Date(monthCursor.getFullYear(), monthCursor.getMonth() + 1, 0);
+    const cells: Array<Date | null> = [];
+    for (let i = 0; i < monthStart.getDay(); i += 1) cells.push(null);
+    for (let day = 1; day <= monthEnd.getDate(); day += 1) {
+      const date = new Date(monthCursor.getFullYear(), monthCursor.getMonth(), day);
+      cells.push(date >= start && date <= end ? date : null);
     }
-    return result;
-  }, [report.endDate, report.startDate]);
+    while (cells.length % 7 !== 0) cells.push(null);
+    return cells;
+  }, [monthCursor, report.endDate, report.startDate]);
 
   return (
-    <div className="mt-5 space-y-5">
-      <div className="flex flex-wrap gap-2">
+    <div className="mt-5 space-y-5 rounded-2xl bg-white p-6 shadow-lg ring-1 ring-gray-200">
+      <div className="mb-6 flex items-center justify-between gap-3">
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => setMonthCursor(new Date(monthCursor.getFullYear(), monthCursor.getMonth() - 1, 1))}
+          disabled={!canGoPrevious}
+        >
+          Previous
+        </Button>
+        <h3 className="text-center text-2xl font-bold text-gray-900">{monthLabel}</h3>
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => setMonthCursor(new Date(monthCursor.getFullYear(), monthCursor.getMonth() + 1, 1))}
+          disabled={!canGoNext}
+        >
+          Next
+        </Button>
+      </div>
+
+      <div className="grid grid-cols-7 gap-2">
+        {calendarWeekDays.map((day) => (
+          <div key={day} className="py-3 text-center text-sm font-semibold uppercase tracking-wide text-gray-500">
+            {day}
+          </div>
+        ))}
+      </div>
+
+      <div className="grid grid-cols-7 gap-2">
+        {days.map((dateValue, index) => {
+          if (!dateValue) return <div key={`empty-${index}`} className="h-24 rounded-xl bg-gray-50/70" />;
+          const key = reportDateKey(dateValue);
+          const row = rowsByDate.get(key);
+          const summary = row ? summarizeReportCalendarDay(row, report.columns) : null;
+          const status = summary?.status ?? 'UNMARKED';
+          const isToday = reportDateKey(new Date()) === key;
+          return (
+            <div
+              key={key}
+              title={summary?.note ?? summary?.label ?? key}
+              className={`h-24 rounded-xl border-2 p-3 text-left transition-all ${calendarStatusStyles[status]} ${isToday ? 'ring-2 ring-purple-300' : ''}`}
+            >
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-sm font-black">{dateValue.getDate()}</span>
+                <span className="text-[10px] font-black uppercase">{status === 'MIXED' ? 'Units' : status}</span>
+              </div>
+              {summary ? (
+                <>
+                  <p className="mt-2 text-xs font-bold capitalize leading-snug">{summary.label}</p>
+                  {summary.note ? <p className="mt-1 line-clamp-2 text-[11px] leading-snug opacity-80">{summary.note}</p> : null}
+                </>
+              ) : null}
+            </div>
+          );
+        })}
+      </div>
+
+      <div className="flex flex-wrap gap-2 border-t border-slate-100 pt-4">
         {(['PRESENT', 'LATE', 'ABSENT', 'EXCUSED', 'HOLIDAY', 'UNMARKED', 'MIXED'] as ReportCalendarStatus[]).map((status) => (
           <span key={status} className={`rounded-full border px-3 py-1 text-xs font-bold ${calendarStatusStyles[status]}`}>
             {status}
           </span>
-        ))}
-      </div>
-      <div className="grid gap-5 xl:grid-cols-2">
-        {months.map((month) => (
-          <section key={month.key} className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-            <h3 className="text-base font-black text-slate-950">{month.label}</h3>
-            <div className="mt-4 grid grid-cols-7 gap-2">
-              {calendarWeekDays.map((day) => (
-                <div key={day} className="py-2 text-center text-xs font-bold uppercase tracking-wide text-slate-500">
-                  {day}
-                </div>
-              ))}
-              {month.days.map((dateValue, index) => {
-                if (!dateValue) return <div key={`empty-${month.key}-${index}`} className="min-h-24 rounded-xl bg-slate-50/70" />;
-                const key = reportDateKey(dateValue);
-                const row = rowsByDate.get(key);
-                const summary = row ? summarizeReportCalendarDay(row, report.columns) : null;
-                const status = summary?.status ?? 'UNMARKED';
-                return (
-                  <div
-                    key={key}
-                    title={summary?.note ?? summary?.label ?? key}
-                    className={`min-h-24 rounded-xl border p-2 text-left ${calendarStatusStyles[status]}`}
-                  >
-                    <div className="flex items-center justify-between gap-2">
-                      <span className="text-sm font-black">{dateValue.getDate()}</span>
-                      <span className="text-[10px] font-black uppercase">{status === 'MIXED' ? 'Units' : status}</span>
-                    </div>
-                    {summary ? (
-                      <>
-                        <p className="mt-2 text-xs font-bold capitalize leading-snug">{summary.label}</p>
-                        {summary.note ? <p className="mt-1 line-clamp-2 text-[11px] leading-snug opacity-80">{summary.note}</p> : null}
-                        {summary.totalUnits > 1 && status !== 'HOLIDAY' ? (
-                          <p className="mt-1 text-[11px] font-semibold opacity-80">{summary.totalUnits} unit{summary.totalUnits === 1 ? '' : 's'}</p>
-                        ) : null}
-                      </>
-                    ) : null}
-                  </div>
-                );
-              })}
-            </div>
-          </section>
         ))}
       </div>
     </div>
