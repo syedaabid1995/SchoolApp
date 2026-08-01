@@ -161,23 +161,62 @@ const getHomeworkOrThrow = async (schoolId: string, id: string) => {
 };
 
 type HomeworkWithMeta = Prisma.HomeworkGetPayload<{ include: typeof includeHomework }>;
+type HomeworkParentNotificationEvent = 'CREATED' | 'UPDATED' | 'EVALUATED';
 
 const parentName = (parent: { firstName: string; lastName: string; email?: string | null; phone?: string | null }) => {
   const name = [parent.firstName, parent.lastName].filter(Boolean).join(' ').trim();
   return name || parent.email || parent.phone || 'Parent';
 };
 
+const homeworkNotificationContent = (params: {
+  event: HomeworkParentNotificationEvent;
+  homework: HomeworkWithMeta;
+  studentName: string;
+  evaluation?: Pick<z.infer<typeof evaluationRowSchema>, 'completionStatus' | 'marks'>;
+}) => {
+  const dueDate = params.homework.submissionDate.toISOString().slice(0, 10);
+  switch (params.event) {
+    case 'UPDATED':
+      return {
+        subject: `Homework updated: ${params.homework.subject.name}`,
+        body: `${params.studentName}'s ${params.homework.subject.name} homework was updated. Due on ${dueDate}.`,
+      };
+    case 'EVALUATED': {
+      const completed = params.evaluation?.completionStatus === 'COMPLETED';
+      const status = completed ? 'completed' : 'not completed';
+      const marks = params.evaluation?.marks === undefined || params.evaluation?.marks === null ? '' : ` Marks: ${params.evaluation.marks}.`;
+      return {
+        subject: `Homework evaluated: ${params.homework.subject.name}`,
+        body: `${params.studentName}'s ${params.homework.subject.name} homework was marked ${status}.${marks}`,
+      };
+    }
+    case 'CREATED':
+    default:
+      return {
+        subject: `New homework: ${params.homework.subject.name}`,
+        body: `${params.studentName} has new ${params.homework.subject.name} homework due on ${dueDate}.`,
+      };
+  }
+};
+
 const sendHomeworkParentNotifications = async (params: {
   schoolId: string;
   actorId: string;
   homework: HomeworkWithMeta;
+  event: HomeworkParentNotificationEvent;
+  studentIds?: string[];
+  evaluationsByStudentId?: Map<string, Pick<z.infer<typeof evaluationRowSchema>, 'completionStatus' | 'marks'>>;
 }) => {
+  const studentIds = params.studentIds ? Array.from(new Set(params.studentIds)) : undefined;
+  if (studentIds && studentIds.length === 0) return;
+
   const students = await prisma.student.findMany({
     where: {
       schoolId: params.schoolId,
       classId: params.homework.classId,
       sectionId: params.homework.sectionId,
       status: { not: 'DISABLED' },
+      ...(studentIds ? { id: { in: studentIds } } : {}),
     },
     select: {
       id: true,
@@ -228,14 +267,20 @@ const sendHomeworkParentNotifications = async (params: {
       if (!link.parent.userId) continue;
 
       try {
+        const content = homeworkNotificationContent({
+          event: params.event,
+          homework: params.homework,
+          studentName: student.fullName,
+          evaluation: params.evaluationsByStudentId?.get(student.id),
+        });
         const result = await sendNotification({
           schoolId: params.schoolId,
           userId: params.actorId,
           channel: 'PUSH',
           data: {
             to: link.parent.userId,
-            subject: `New homework: ${params.homework.subject.name}`,
-            body: `${student.fullName} has new ${params.homework.subject.name} homework due on ${params.homework.submissionDate.toISOString().slice(0, 10)}.`,
+            subject: content.subject,
+            body: content.body,
             recipientName: parentName(link.parent),
             recipientType: 'PARENT',
             targetMode: 'STUDENT',
@@ -244,6 +289,7 @@ const sendHomeworkParentNotifications = async (params: {
             module: 'homework',
             category: 'homework',
             priority: 'high',
+            homeworkEvent: params.event,
             homeworkId: params.homework.id,
             childId: student.id,
             childName: student.fullName,
@@ -264,7 +310,12 @@ const sendHomeworkParentNotifications = async (params: {
         });
       } catch (error) {
         logger.warn(
-          { err: error, homeworkId: params.homework.id, studentId: student.id, parentId: link.parentId },
+          {
+            err: error,
+            homeworkId: params.homework.id,
+            studentId: student.id,
+            parentId: link.parentId,
+          },
           'homework parent push failed',
         );
       }
@@ -350,7 +401,12 @@ export const createHomework = async (req: Request, res: Response) => {
     afterState: item,
   });
 
-  await sendHomeworkParentNotifications({ schoolId, actorId: userId, homework: item });
+  await sendHomeworkParentNotifications({
+    schoolId,
+    actorId: userId,
+    homework: item,
+    event: 'CREATED',
+  });
 
   res.status(201).json(item);
 };
@@ -392,6 +448,13 @@ export const updateHomework = async (req: Request, res: Response) => {
     action: 'UPDATE',
     beforeState: existing,
     afterState: item,
+  });
+
+  await sendHomeworkParentNotifications({
+    schoolId,
+    actorId: userId,
+    homework: item,
+    event: 'UPDATED',
   });
 
   res.status(200).json(item);
@@ -619,6 +682,7 @@ export const saveHomeworkEvaluation = async (req: Request, res: Response) => {
     afterState: { evaluationDate: payload.evaluationDate, studentCount: payload.evaluations.length },
   });
 
+  const evaluationsByStudentId = new Map(payload.evaluations.map((item) => [item.studentId, { completionStatus: item.completionStatus, marks: item.marks }]));
   const [updatedHomework, studentsAfter, evaluationsAfter] = await Promise.all([
     getHomeworkOrThrow(schoolId, homeworkId),
     prisma.student.findMany({
@@ -633,6 +697,15 @@ export const saveHomeworkEvaluation = async (req: Request, res: Response) => {
     }),
     prisma.homeworkEvaluation.findMany({ where: { schoolId, homeworkId } }),
   ]);
+
+  await sendHomeworkParentNotifications({
+    schoolId,
+    actorId: userId,
+    homework: updatedHomework,
+    event: 'EVALUATED',
+    studentIds,
+    evaluationsByStudentId,
+  });
 
   const evaluationByStudent = new Map(evaluationsAfter.map((item) => [item.studentId, item]));
   res.status(200).json({

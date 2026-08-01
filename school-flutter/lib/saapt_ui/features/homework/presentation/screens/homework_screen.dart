@@ -648,6 +648,7 @@ class _HomeworkFormSheetState extends ConsumerState<_HomeworkFormSheet> {
                   child: _DateField(
                     label: 'Homework date',
                     date: _homeworkDate,
+                    firstDate: _todayDate(),
                     onChanged: (value) => setState(() {
                       _homeworkDate = value;
                       if (_submissionDate.isBefore(value)) {
@@ -661,7 +662,7 @@ class _HomeworkFormSheetState extends ConsumerState<_HomeworkFormSheet> {
                   child: _DateField(
                     label: 'Submission date',
                     date: _submissionDate,
-                    firstDate: _homeworkDate,
+                    firstDate: _dateOnly(_homeworkDate),
                     onChanged: (value) =>
                         setState(() => _submissionDate = value),
                   ),
@@ -1181,11 +1182,12 @@ class _DateField extends StatelessWidget {
     return InkWell(
       borderRadius: BorderRadius.circular(8),
       onTap: () async {
+        final minimumDate =
+            firstDate ?? DateTime.now().subtract(const Duration(days: 365));
         final picked = await showDatePicker(
           context: context,
-          initialDate: date,
-          firstDate:
-              firstDate ?? DateTime.now().subtract(const Duration(days: 365)),
+          initialDate: date.isBefore(minimumDate) ? minimumDate : date,
+          firstDate: minimumDate,
           lastDate: DateTime.now().add(const Duration(days: 365)),
         );
         if (picked != null) onChanged(picked);
@@ -1200,6 +1202,11 @@ class _DateField extends StatelessWidget {
     );
   }
 }
+
+DateTime _todayDate() => _dateOnly(DateTime.now());
+
+DateTime _dateOnly(DateTime value) =>
+    DateTime(value.year, value.month, value.day);
 
 class _NotificationHistorySheet extends ConsumerWidget {
   const _NotificationHistorySheet({required this.homework});
