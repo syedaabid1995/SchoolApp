@@ -67,10 +67,11 @@ test('credential email sender name follows login URL branding', () => {
   assert.equal(resolveCredentialSenderNameFromLoginUrl('not-a-url'), 'Akademifyy');
 });
 
-test('platform provider does not read tenant messaging configuration', () => {
+test('platform provider reads only platform email configuration', () => {
   const platformProvider = source('src/services/email/platformEmailProvider.ts');
   assert.match(platformProvider, /GOOGLE_SMTP_/);
-  assert.doesNotMatch(platformProvider, /GOOGLE_SMTP_USERNAME|GOOGLE_SMTP_PASSWORD|username:|password:/);
+  assert.match(platformProvider, /PLATFORM_SMTP_/);
+  assert.doesNotMatch(platformProvider, /GOOGLE_SMTP_USERNAME|GOOGLE_SMTP_PASSWORD/);
   assert.doesNotMatch(platformProvider, /schoolMessagingConfig|SchoolMessagingConfig|resolveSchoolMessagingProvider|ConfigEntry|configEntry/);
 });
 

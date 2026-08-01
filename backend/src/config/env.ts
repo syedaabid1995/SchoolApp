@@ -92,6 +92,15 @@ const envSchema = z.object({
   GOOGLE_SMTP_REPLY_TO: optionalEnvString(),
   GOOGLE_SMTP_EHLO_NAME: optionalEnvString(),
   GOOGLE_SMTP_DEBUG: boolEnv(false).default(false),
+  PLATFORM_SMTP_HOST: optionalEnvString(),
+  PLATFORM_SMTP_PORT: z.coerce.number().int().min(1).max(65535).optional(),
+  PLATFORM_SMTP_USERNAME: optionalEnvString(),
+  PLATFORM_SMTP_PASSWORD: optionalEnvString(),
+  PLATFORM_SMTP_FROM_NAME: optionalEnvString(),
+  PLATFORM_SMTP_FROM_EMAIL: optionalEnvString(),
+  PLATFORM_SMTP_REPLY_TO: optionalEnvString(),
+  PLATFORM_SMTP_EHLO_NAME: optionalEnvString(),
+  PLATFORM_SMTP_DEBUG: boolEnv(false).default(false),
   FIREBASE_PROJECT_ID: optionalEnvString(),
   FIREBASE_SERVICE_ACCOUNT_JSON: optionalEnvString(),
   FIREBASE_SERVICE_ACCOUNT_PATH: optionalEnvString(),
@@ -115,6 +124,14 @@ const REQUIRED_PRODUCTION_GOOGLE_SMTP_ENV = [
   'GOOGLE_SMTP_FROM_EMAIL',
   'GOOGLE_SMTP_FROM_NAME',
   'GOOGLE_SMTP_REPLY_TO',
+] as const;
+
+const REQUIRED_PRODUCTION_PLATFORM_SMTP_ENV = [
+  'PLATFORM_SMTP_HOST',
+  'PLATFORM_SMTP_PORT',
+  'PLATFORM_SMTP_FROM_EMAIL',
+  'PLATFORM_SMTP_FROM_NAME',
+  'PLATFORM_SMTP_REPLY_TO',
 ] as const;
 
 const emailEnvValuePattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -146,20 +163,41 @@ if (normalizedEnv.LOAD_TESTING_ENABLED && !normalizedEnv.LOAD_TESTING_SECRET) {
 
 if (normalizedEnv.NODE_ENV === 'production') {
   const missingGoogleSmtpEnv = REQUIRED_PRODUCTION_GOOGLE_SMTP_ENV.filter((key) => !normalizedEnv[key]);
-  if (missingGoogleSmtpEnv.length) {
+  const missingPlatformSmtpEnv = REQUIRED_PRODUCTION_PLATFORM_SMTP_ENV.filter((key) => !normalizedEnv[key]);
+  if (missingGoogleSmtpEnv.length && missingPlatformSmtpEnv.length) {
     throw new Error(
-      `Missing required Google SMTP environment variables for production: ${missingGoogleSmtpEnv.join(', ')}`,
+      `Missing required platform email environment variables for production. Configure either Google SMTP (${missingGoogleSmtpEnv.join(', ')}) or platform SMTP (${missingPlatformSmtpEnv.join(', ')}).`,
     );
   }
 
-  const invalidEmailEnv = [
-    ['GOOGLE_SMTP_FROM_EMAIL', normalizedEnv.GOOGLE_SMTP_FROM_EMAIL],
-    ['GOOGLE_SMTP_REPLY_TO', normalizedEnv.GOOGLE_SMTP_REPLY_TO],
-  ].filter(([, value]) => typeof value !== 'string' || !emailEnvValuePattern.test(value));
+  const emailEnvToValidate = [
+    ...(missingGoogleSmtpEnv.length
+      ? []
+      : [
+          ['GOOGLE_SMTP_FROM_EMAIL', normalizedEnv.GOOGLE_SMTP_FROM_EMAIL],
+          ['GOOGLE_SMTP_REPLY_TO', normalizedEnv.GOOGLE_SMTP_REPLY_TO],
+        ]),
+    ...(missingPlatformSmtpEnv.length
+      ? []
+      : [
+          ['PLATFORM_SMTP_FROM_EMAIL', normalizedEnv.PLATFORM_SMTP_FROM_EMAIL],
+          ['PLATFORM_SMTP_REPLY_TO', normalizedEnv.PLATFORM_SMTP_REPLY_TO],
+        ]),
+  ];
+  const invalidEmailEnv = emailEnvToValidate.filter(
+    ([, value]) => typeof value !== 'string' || !emailEnvValuePattern.test(value),
+  );
   if (invalidEmailEnv.length) {
     throw new Error(
-      `Invalid Google SMTP email environment variables for production: ${invalidEmailEnv.map(([key]) => key).join(', ')}`,
+      `Invalid platform email environment variables for production: ${invalidEmailEnv.map(([key]) => key).join(', ')}`,
     );
+  }
+
+  if (
+    normalizedEnv.PLATFORM_SMTP_HOST &&
+    Boolean(normalizedEnv.PLATFORM_SMTP_USERNAME) !== Boolean(normalizedEnv.PLATFORM_SMTP_PASSWORD)
+  ) {
+    throw new Error('PLATFORM_SMTP_USERNAME and PLATFORM_SMTP_PASSWORD must be configured together');
   }
 }
 
