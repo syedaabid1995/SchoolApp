@@ -44,7 +44,9 @@ class AuthRepositoryImpl implements AuthRepository {
         schoolCode: schoolCode,
         rememberMe: rememberMe,
       );
-      if (response.challengeId != null) return response.toSession();
+      if (response.challengeId != null || response.schoolSelectionRequired) {
+        return response.toSession();
+      }
       final accessToken = response.accessToken;
       final refreshToken = response.refreshToken;
       final user = response.user;

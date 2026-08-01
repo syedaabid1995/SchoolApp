@@ -18,7 +18,6 @@ class LoginScreen extends ConsumerStatefulWidget {
 class _LoginScreenState extends ConsumerState<LoginScreen> {
   final _identifierController = TextEditingController();
   final _passwordController = TextEditingController();
-  final _schoolCodeController = TextEditingController();
   final _mfaController = TextEditingController();
   bool _rememberMe = false;
 
@@ -26,18 +25,17 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
   void dispose() {
     _identifierController.dispose();
     _passwordController.dispose();
-    _schoolCodeController.dispose();
     _mfaController.dispose();
     super.dispose();
   }
 
-  Future<void> _submitLogin() async {
+  Future<void> _submitLogin({String? schoolCode}) async {
     await ref
         .read(authControllerProvider.notifier)
         .login(
           identifier: _identifierController.text.trim(),
           password: _passwordController.text,
-          schoolCode: _schoolCodeController.text.trim(),
+          schoolCode: schoolCode,
           rememberMe: _rememberMe,
         );
   }
@@ -59,9 +57,15 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     final isMfa =
         session?.status == AuthSessionStatus.mfaRequired &&
         session?.challengeId != null;
+    final isSchoolSelection = session?.requiresSchoolSelection ?? false;
 
     final colorScheme = Theme.of(context).colorScheme;
     final textTheme = Theme.of(context).textTheme;
+    final subtitle = isMfa
+        ? 'Two-factor verification'
+        : isSchoolSelection
+        ? (session?.message ?? 'Select your school to continue.')
+        : 'Sign in with your teacher account.';
 
     return Scaffold(
       body: Container(
@@ -70,9 +74,9 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
             begin: Alignment.topLeft,
             end: Alignment.bottomRight,
             colors: [
-              colorScheme.primary.withOpacity(0.12),
+              colorScheme.primary.withValues(alpha: 0.12),
               colorScheme.surface,
-              colorScheme.secondary.withOpacity(0.08),
+              colorScheme.secondary.withValues(alpha: 0.08),
             ],
           ),
         ),
@@ -94,14 +98,18 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                         shape: BoxShape.circle,
                         boxShadow: [
                           BoxShadow(
-                            color: colorScheme.primary.withOpacity(0.30),
+                            color: colorScheme.primary.withValues(alpha: 0.30),
                             blurRadius: 16,
                             offset: const Offset(0, 6),
                           ),
                         ],
                       ),
                       child: Icon(
-                        isMfa ? Icons.verified_user_outlined : Icons.school_outlined,
+                        isMfa
+                            ? Icons.verified_user_outlined
+                            : isSchoolSelection
+                            ? Icons.apartment_outlined
+                            : Icons.school_outlined,
                         color: colorScheme.onPrimary,
                         size: 36,
                       ),
@@ -120,9 +128,9 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                   const SizedBox(height: AppSpacing.xs),
                   Center(
                     child: Text(
-                      isMfa ? 'Two-factor verification' : 'Sign in with your staff account.',
+                      subtitle,
                       style: textTheme.bodyLarge?.copyWith(
-                        color: colorScheme.onSurface.withOpacity(0.60),
+                        color: colorScheme.onSurface.withValues(alpha: 0.60),
                       ),
                     ),
                   ),
@@ -134,7 +142,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                       borderRadius: BorderRadius.circular(20),
                       boxShadow: [
                         BoxShadow(
-                          color: colorScheme.shadow.withOpacity(0.08),
+                          color: colorScheme.shadow.withValues(alpha: 0.08),
                           blurRadius: 24,
                           offset: const Offset(0, 8),
                         ),
@@ -145,10 +153,21 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.stretch,
                         children: [
-                          if (!isMfa) ...[
+                          if (isSchoolSelection) ...[
+                            for (final school in session!.schoolOptions) ...[
+                              _SchoolOptionTile(
+                                school: school,
+                                onTap: auth.isLoading
+                                    ? null
+                                    : () =>
+                                          _submitLogin(schoolCode: school.code),
+                              ),
+                              const SizedBox(height: AppSpacing.sm),
+                            ],
+                          ] else if (!isMfa) ...[
                             AppTextField(
                               controller: _identifierController,
-                              label: 'Email or username',
+                              label: 'Email ID',
                               keyboardType: TextInputType.emailAddress,
                               textInputAction: TextInputAction.next,
                             ),
@@ -157,17 +176,12 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                               controller: _passwordController,
                               label: 'Password',
                               obscureText: true,
-                              textInputAction: TextInputAction.next,
-                            ),
-                            const SizedBox(height: AppSpacing.md),
-                            AppTextField(
-                              controller: _schoolCodeController,
-                              label: 'School code',
                               textInputAction: TextInputAction.done,
                             ),
                           ] else ...[
                             Text(
-                              session?.message ?? 'Enter your verification code.',
+                              session?.message ??
+                                  'Enter your verification code.',
                             ),
                             const SizedBox(height: AppSpacing.md),
                             AppTextField(
@@ -177,27 +191,29 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                               textInputAction: TextInputAction.done,
                             ),
                           ],
-                          const SizedBox(height: AppSpacing.xs),
-                          CheckboxListTile(
-                            contentPadding: EdgeInsets.zero,
-                            value: _rememberMe,
-                            onChanged: (value) =>
-                                setState(() => _rememberMe = value ?? false),
-                            title: const Text('Keep me signed in'),
-                          ),
-                          const SizedBox(height: AppSpacing.md),
-                          AppButton(
-                            label: isMfa ? 'Verify' : 'Sign in',
-                            icon: isMfa
-                                ? Icons.verified_user_outlined
-                                : Icons.login,
-                            isLoading: auth.isLoading,
-                            onPressed: auth.isLoading
-                                ? null
-                                : () => isMfa
-                                      ? _submitMfa(session!.challengeId!)
-                                      : _submitLogin(),
-                          ),
+                          if (!isSchoolSelection) ...[
+                            const SizedBox(height: AppSpacing.xs),
+                            CheckboxListTile(
+                              contentPadding: EdgeInsets.zero,
+                              value: _rememberMe,
+                              onChanged: (value) =>
+                                  setState(() => _rememberMe = value ?? false),
+                              title: const Text('Keep me signed in'),
+                            ),
+                            const SizedBox(height: AppSpacing.md),
+                            AppButton(
+                              label: isMfa ? 'Verify' : 'Sign in',
+                              icon: isMfa
+                                  ? Icons.verified_user_outlined
+                                  : Icons.login,
+                              isLoading: auth.isLoading,
+                              onPressed: auth.isLoading
+                                  ? null
+                                  : () => isMfa
+                                        ? _submitMfa(session!.challengeId!)
+                                        : _submitLogin(),
+                            ),
+                          ],
                           if (auth.hasError) ...[
                             const SizedBox(height: AppSpacing.md),
                             Container(
@@ -233,6 +249,69 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                 ],
               ),
             ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _SchoolOptionTile extends StatelessWidget {
+  const _SchoolOptionTile({required this.school, required this.onTap});
+
+  final SchoolLoginOption school;
+  final VoidCallback? onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+    final textTheme = Theme.of(context).textTheme;
+
+    return Material(
+      color: colorScheme.surfaceContainerHighest.withValues(alpha: 0.45),
+      borderRadius: BorderRadius.circular(12),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(12),
+        child: Padding(
+          padding: const EdgeInsets.all(AppSpacing.md),
+          child: Row(
+            children: [
+              Container(
+                width: 44,
+                height: 44,
+                decoration: BoxDecoration(
+                  color: colorScheme.primaryContainer,
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Icon(
+                  Icons.apartment_outlined,
+                  color: colorScheme.onPrimaryContainer,
+                ),
+              ),
+              const SizedBox(width: AppSpacing.md),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      school.name,
+                      style: textTheme.titleSmall?.copyWith(
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      'Code: ${school.code}',
+                      style: textTheme.bodySmall?.copyWith(
+                        color: colorScheme.onSurfaceVariant,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              Icon(Icons.chevron_right, color: colorScheme.onSurfaceVariant),
+            ],
           ),
         ),
       ),

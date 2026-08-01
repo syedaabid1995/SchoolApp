@@ -2,7 +2,28 @@ import 'package:equatable/equatable.dart';
 
 import 'staff_user.dart';
 
-enum AuthSessionStatus { unknown, unauthenticated, authenticated, mfaRequired }
+enum AuthSessionStatus {
+  unknown,
+  unauthenticated,
+  authenticated,
+  mfaRequired,
+  schoolSelectionRequired,
+}
+
+class SchoolLoginOption extends Equatable {
+  const SchoolLoginOption({
+    required this.id,
+    required this.name,
+    required this.code,
+  });
+
+  final String id;
+  final String name;
+  final String code;
+
+  @override
+  List<Object?> get props => [id, name, code];
+}
 
 class AuthSession extends Equatable {
   const AuthSession({
@@ -11,6 +32,7 @@ class AuthSession extends Equatable {
     this.challengeId,
     this.mfaMethod,
     this.message,
+    this.schoolOptions = const [],
   });
 
   const AuthSession.unknown() : this(status: AuthSessionStatus.unknown);
@@ -28,16 +50,35 @@ class AuthSession extends Equatable {
          mfaMethod: method,
          message: message,
        );
+  const AuthSession.schoolSelectionRequired({
+    required List<SchoolLoginOption> schools,
+    String? message,
+  }) : this(
+         status: AuthSessionStatus.schoolSelectionRequired,
+         schoolOptions: schools,
+         message: message,
+       );
 
   final AuthSessionStatus status;
   final StaffUser? user;
   final String? challengeId;
   final String? mfaMethod;
   final String? message;
+  final List<SchoolLoginOption> schoolOptions;
 
   bool get isAuthenticated =>
       status == AuthSessionStatus.authenticated && user != null;
+  bool get requiresSchoolSelection =>
+      status == AuthSessionStatus.schoolSelectionRequired &&
+      schoolOptions.isNotEmpty;
 
   @override
-  List<Object?> get props => [status, user, challengeId, mfaMethod, message];
+  List<Object?> get props => [
+    status,
+    user,
+    challengeId,
+    mfaMethod,
+    message,
+    schoolOptions,
+  ];
 }

@@ -133,6 +133,8 @@ const getSchoolAccessState = async (schoolId: string): Promise<'ACTIVE' | 'PAYME
   return 'SUSPENDED';
 };
 
+type SchoolAccessState = Awaited<ReturnType<typeof getSchoolAccessState>>;
+
 const ensureTeacherActive = async (userId: string, schoolId: string | null) => {
   const profile = await AuthLoginRepository.teacherProfile.findFirst({
     where: { userId, ...(schoolId ? { schoolId } : {}) },
@@ -193,6 +195,8 @@ const displayNameFromUser = (user: {
   const parentName = parent ? `${parent.firstName} ${parent.lastName}`.trim() : '';
   return teacherName || parentName || user.email;
 };
+
+const primaryRoleNameFromUser = (user: { roles?: Array<{ role: { name: string } }> }) => user.roles?.[0]?.role.name ?? null;
 
 const resolveLoginSchoolId = async (params: { schoolId?: string; schoolCode?: string }) => {
   const schoolId = params.schoolId?.trim();
@@ -447,6 +451,7 @@ export const login = async (req: Request, res: Response) => {
     schoolId: true,
     school: { select: { id: true, name: true, code: true } },
     status: true,
+    roles: { select: { role: { select: { name: true } } }, take: 1 },
     teacherProfile: { select: { firstName: true, lastName: true } },
     parentProfiles: { select: { firstName: true, lastName: true }, take: 1 },
     totpCredential: {
@@ -457,13 +462,17 @@ export const login = async (req: Request, res: Response) => {
     },
   } as const;
 
-  let user = await AuthLoginRepository.user.findFirst({
-    where: {
-      email: { equals: identifier, mode: 'insensitive' },
-      schoolId: selectedSchoolId,
-    },
-    select: loginUserSelect,
-  });
+  let selectedTeacherSchoolAccessState: SchoolAccessState | null = null;
+  let user =
+    selectedSchoolId || loginType !== 'teacher'
+      ? await AuthLoginRepository.user.findFirst({
+          where: {
+            email: { equals: identifier, mode: 'insensitive' },
+            schoolId: selectedSchoolId,
+          },
+          select: loginUserSelect,
+        })
+      : null;
 
   if (!user && !selectedSchoolId && loginType === 'parent') {
     const parentMatches = await AuthLoginRepository.user.findMany({
@@ -480,6 +489,67 @@ export const login = async (req: Request, res: Response) => {
     }
   }
 
+  if (!user && !selectedSchoolId && loginType === 'teacher' && email) {
+    const teacherMatches = await AuthLoginRepository.user.findMany({
+      where: {
+        email: { equals: identifier, mode: 'insensitive' },
+        roles: { some: { role: { name: 'TEACHER' } } },
+      },
+      select: loginUserSelect,
+    });
+    const validTeacherMatches: Array<{
+      user: (typeof teacherMatches)[number];
+      schoolAccessState: SchoolAccessState;
+    }> = [];
+
+    for (const teacherUser of teacherMatches) {
+      if (teacherUser.status !== 'ACTIVE') continue;
+      if (!(await verifyPassword(password, teacherUser.passwordHash))) continue;
+
+      const teacherRoleName = primaryRoleNameFromUser(teacherUser);
+      if (!isRoleAllowedForLoginType(loginType, teacherRoleName)) continue;
+
+      let candidateSchoolAccessState: SchoolAccessState;
+      try {
+        candidateSchoolAccessState = teacherUser.schoolId ? await getSchoolAccessState(teacherUser.schoolId) : 'ACTIVE';
+      } catch {
+        continue;
+      }
+      if (candidateSchoolAccessState === 'SUSPENDED') continue;
+
+      try {
+        await ensureTeacherActive(teacherUser.id, teacherUser.schoolId ?? null);
+      } catch {
+        continue;
+      }
+
+      validTeacherMatches.push({
+        user: teacherUser,
+        schoolAccessState: candidateSchoolAccessState,
+      });
+    }
+
+    if (validTeacherMatches.length > 1) {
+      await resetLoginFailureCounter(identifier.toLowerCase(), schoolScope);
+      res.status(200).json({
+        schoolSelectionRequired: true,
+        message: 'Select your school to continue.',
+        schools: validTeacherMatches.map(({ user: teacherUser }) => ({
+          id: teacherUser.school?.id ?? teacherUser.schoolId,
+          name: teacherUser.school?.name ?? 'School',
+          code: teacherUser.school?.code ?? '',
+        })),
+      });
+      return;
+    }
+
+    if (validTeacherMatches.length === 1) {
+      user = validTeacherMatches[0].user;
+      selectedTeacherSchoolAccessState = validTeacherMatches[0].schoolAccessState;
+      schoolScope = user.schoolId ?? schoolScope;
+    }
+  }
+
   if (!user) {
     await failLogin('user_not_found_or_wrong_school', { selectedSchoolId, loginType: loginType ?? null });
   }
@@ -488,9 +558,10 @@ export const login = async (req: Request, res: Response) => {
     await failLogin('user_not_active', { userId: user.id, selectedSchoolId, loginType: loginType ?? null }, user);
   }
 
-  let schoolAccessState: Awaited<ReturnType<typeof getSchoolAccessState>> = 'ACTIVE';
+  let schoolAccessState: SchoolAccessState = selectedTeacherSchoolAccessState ?? 'ACTIVE';
   try {
-    schoolAccessState = user.schoolId ? await getSchoolAccessState(user.schoolId) : 'ACTIVE';
+    schoolAccessState =
+      selectedTeacherSchoolAccessState ?? (user.schoolId ? await getSchoolAccessState(user.schoolId) : 'ACTIVE');
   } catch {
     await failLogin('school_not_found', { userId: user.id, schoolId: user.schoolId ?? null }, user);
   }

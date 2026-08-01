@@ -26,6 +26,7 @@ class AuthRemoteDataSource {
         if (schoolCode != null && schoolCode.trim().isNotEmpty)
           'schoolCode': schoolCode.trim(),
         'rememberMe': rememberMe,
+        'loginType': 'teacher',
       },
     );
     return AuthResponseModel.fromJson(

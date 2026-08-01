@@ -14,7 +14,6 @@ class SaaptLoginScreen extends ConsumerStatefulWidget {
 
 class _SaaptLoginScreenState extends ConsumerState<SaaptLoginScreen> {
   final _formKey = GlobalKey<FormState>();
-  final _schoolController = TextEditingController();
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
   final _mfaController = TextEditingController();
@@ -22,14 +21,25 @@ class _SaaptLoginScreenState extends ConsumerState<SaaptLoginScreen> {
 
   @override
   void dispose() {
-    _schoolController.dispose();
     _emailController.dispose();
     _passwordController.dispose();
     _mfaController.dispose();
     super.dispose();
   }
 
-  Future<void> _submit(AuthSession? session) async {
+  Future<void> _submit(AuthSession? session, {String? schoolCode}) async {
+    if (session?.status == AuthSessionStatus.schoolSelectionRequired) {
+      if (schoolCode == null || schoolCode.trim().isEmpty) return;
+      await ref
+          .read(authControllerProvider.notifier)
+          .login(
+            identifier: _emailController.text.trim(),
+            password: _passwordController.text,
+            schoolCode: schoolCode,
+            rememberMe: true,
+          );
+      return;
+    }
     if (!(_formKey.currentState?.validate() ?? false)) return;
     if (session?.status == AuthSessionStatus.mfaRequired) {
       await ref
@@ -46,7 +56,6 @@ class _SaaptLoginScreenState extends ConsumerState<SaaptLoginScreen> {
         .login(
           identifier: _emailController.text.trim(),
           password: _passwordController.text,
-          schoolCode: _schoolController.text.trim(),
           rememberMe: true,
         );
   }
@@ -56,6 +65,8 @@ class _SaaptLoginScreenState extends ConsumerState<SaaptLoginScreen> {
     final auth = ref.watch(authControllerProvider);
     final session = auth.value;
     final isMfa = session?.status == AuthSessionStatus.mfaRequired;
+    final isSchoolSelection =
+        session?.status == AuthSessionStatus.schoolSelectionRequired;
 
     return Scaffold(
       body: SafeArea(
@@ -89,7 +100,11 @@ class _SaaptLoginScreenState extends ConsumerState<SaaptLoginScreen> {
                 ),
                 const SizedBox(height: 30),
                 Text(
-                  isMfa ? 'Verify Login' : 'Teacher Login',
+                  isMfa
+                      ? 'Verify Login'
+                      : isSchoolSelection
+                      ? 'Select School'
+                      : 'Teacher Login',
                   style: const TextStyle(
                     fontSize: 34,
                     fontWeight: FontWeight.w800,
@@ -100,6 +115,8 @@ class _SaaptLoginScreenState extends ConsumerState<SaaptLoginScreen> {
                 Text(
                   isMfa
                       ? (session?.message ?? 'Enter your verification code.')
+                      : isSchoolSelection
+                      ? (session?.message ?? 'Select your school to continue.')
                       : 'Sign in with your school account.',
                   style: const TextStyle(
                     fontSize: 16,
@@ -128,61 +145,65 @@ class _SaaptLoginScreenState extends ConsumerState<SaaptLoginScreen> {
                       crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
                         if (!isMfa) ...[
-                          _FieldLabel('SCHOOL ID'),
-                          TextFormField(
-                            controller: _schoolController,
-                            textInputAction: TextInputAction.next,
-                            decoration: const InputDecoration(
-                              prefixIcon: Icon(Icons.school_outlined),
-                              hintText: '001',
+                          if (isSchoolSelection) ...[
+                            for (final school in session!.schoolOptions) ...[
+                              _SaaptSchoolOptionTile(
+                                school: school,
+                                onTap: auth.isLoading
+                                    ? null
+                                    : () => _submit(
+                                        session,
+                                        schoolCode: school.code,
+                                      ),
+                              ),
+                              const SizedBox(height: 12),
+                            ],
+                          ] else ...[
+                            _FieldLabel('EMAIL ID'),
+                            TextFormField(
+                              controller: _emailController,
+                              keyboardType: TextInputType.emailAddress,
+                              textInputAction: TextInputAction.next,
+                              decoration: const InputDecoration(
+                                prefixIcon: Icon(Icons.mail_outline),
+                                hintText: 'teacher@school.com',
+                              ),
+                              validator: (value) {
+                                if (_required(value) case final error?) {
+                                  return error;
+                                }
+                                return value!.contains('@')
+                                    ? null
+                                    : 'Enter a valid email address';
+                              },
                             ),
-                            validator: _required,
-                          ),
-                          const SizedBox(height: 16),
-                          _FieldLabel('EMAIL ID'),
-                          TextFormField(
-                            controller: _emailController,
-                            keyboardType: TextInputType.emailAddress,
-                            textInputAction: TextInputAction.next,
-                            decoration: const InputDecoration(
-                              prefixIcon: Icon(Icons.mail_outline),
-                              hintText: 'teacher@school.com',
-                            ),
-                            validator: (value) {
-                              if (_required(value) case final error?) {
-                                return error;
-                              }
-                              return value!.contains('@')
-                                  ? null
-                                  : 'Enter a valid email address';
-                            },
-                          ),
-                          const SizedBox(height: 16),
-                          _FieldLabel('PASSWORD'),
-                          TextFormField(
-                            controller: _passwordController,
-                            obscureText: _obscurePassword,
-                            textInputAction: TextInputAction.done,
-                            onFieldSubmitted: (_) => _submit(session),
-                            decoration: InputDecoration(
-                              prefixIcon: const Icon(Icons.lock_outline),
-                              hintText: 'Enter password',
-                              suffixIcon: IconButton(
-                                tooltip: _obscurePassword
-                                    ? 'Show password'
-                                    : 'Hide password',
-                                onPressed: () => setState(
-                                  () => _obscurePassword = !_obscurePassword,
-                                ),
-                                icon: Icon(
-                                  _obscurePassword
-                                      ? Icons.visibility_outlined
-                                      : Icons.visibility_off_outlined,
+                            const SizedBox(height: 16),
+                            _FieldLabel('PASSWORD'),
+                            TextFormField(
+                              controller: _passwordController,
+                              obscureText: _obscurePassword,
+                              textInputAction: TextInputAction.done,
+                              onFieldSubmitted: (_) => _submit(session),
+                              decoration: InputDecoration(
+                                prefixIcon: const Icon(Icons.lock_outline),
+                                hintText: 'Enter password',
+                                suffixIcon: IconButton(
+                                  tooltip: _obscurePassword
+                                      ? 'Show password'
+                                      : 'Hide password',
+                                  onPressed: () => setState(
+                                    () => _obscurePassword = !_obscurePassword,
+                                  ),
+                                  icon: Icon(
+                                    _obscurePassword
+                                        ? Icons.visibility_outlined
+                                        : Icons.visibility_off_outlined,
+                                  ),
                                 ),
                               ),
+                              validator: _required,
                             ),
-                            validator: _required,
-                          ),
+                          ],
                         ] else ...[
                           _FieldLabel('VERIFICATION CODE'),
                           TextFormField(
@@ -197,39 +218,41 @@ class _SaaptLoginScreenState extends ConsumerState<SaaptLoginScreen> {
                             validator: _required,
                           ),
                         ],
-                        const SizedBox(height: 22),
-                        FilledButton.icon(
-                          style: FilledButton.styleFrom(
-                            minimumSize: const Size.fromHeight(54),
-                            backgroundColor: SaaptTheme.primary,
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(8),
+                        if (!isSchoolSelection) ...[
+                          const SizedBox(height: 22),
+                          FilledButton.icon(
+                            style: FilledButton.styleFrom(
+                              minimumSize: const Size.fromHeight(54),
+                              backgroundColor: SaaptTheme.primary,
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(8),
+                              ),
                             ),
-                          ),
-                          onPressed: auth.isLoading
-                              ? null
-                              : () => _submit(session),
-                          icon: auth.isLoading
-                              ? const SizedBox.square(
-                                  dimension: 18,
-                                  child: CircularProgressIndicator(
-                                    strokeWidth: 2,
-                                    color: Colors.white,
+                            onPressed: auth.isLoading
+                                ? null
+                                : () => _submit(session),
+                            icon: auth.isLoading
+                                ? const SizedBox.square(
+                                    dimension: 18,
+                                    child: CircularProgressIndicator(
+                                      strokeWidth: 2,
+                                      color: Colors.white,
+                                    ),
+                                  )
+                                : Icon(
+                                    isMfa
+                                        ? Icons.verified_user_outlined
+                                        : Icons.login,
                                   ),
-                                )
-                              : Icon(
-                                  isMfa
-                                      ? Icons.verified_user_outlined
-                                      : Icons.login,
-                                ),
-                          label: Text(
-                            isMfa ? 'Verify' : 'Sign In',
-                            style: const TextStyle(
-                              fontSize: 16,
-                              fontWeight: FontWeight.w700,
+                            label: Text(
+                              isMfa ? 'Verify' : 'Sign In',
+                              style: const TextStyle(
+                                fontSize: 16,
+                                fontWeight: FontWeight.w700,
+                              ),
                             ),
                           ),
-                        ),
+                        ],
                         if (auth.hasError) ...[
                           const SizedBox(height: 14),
                           Text(
@@ -271,4 +294,66 @@ class _FieldLabel extends StatelessWidget {
       ),
     ),
   );
+}
+
+class _SaaptSchoolOptionTile extends StatelessWidget {
+  const _SaaptSchoolOptionTile({required this.school, required this.onTap});
+
+  final SchoolLoginOption school;
+  final VoidCallback? onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: const Color(0xFFF6F8FC),
+      borderRadius: BorderRadius.circular(8),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(8),
+        child: Padding(
+          padding: const EdgeInsets.all(14),
+          child: Row(
+            children: [
+              Container(
+                width: 44,
+                height: 44,
+                decoration: BoxDecoration(
+                  color: const Color(0xFFE7EFFD),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: const Icon(
+                  Icons.apartment_outlined,
+                  color: SaaptTheme.primary,
+                ),
+              ),
+              const SizedBox(width: 14),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      school.name,
+                      style: const TextStyle(
+                        fontWeight: FontWeight.w800,
+                        color: SaaptTheme.navy,
+                      ),
+                    ),
+                    const SizedBox(height: 3),
+                    Text(
+                      'Code: ${school.code}',
+                      style: const TextStyle(
+                        color: Color(0xFF60708F),
+                        fontSize: 13,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const Icon(Icons.chevron_right, color: Color(0xFF8A9AB8)),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
 }
