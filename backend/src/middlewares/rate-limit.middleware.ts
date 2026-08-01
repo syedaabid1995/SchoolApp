@@ -98,6 +98,11 @@ export const loginFailureKey = (identifier: string, schoolScope: string) =>
 
 const loginIpKey = (req: Request) => `auth:rate:login:ip:${hashPart(requestIp(req))}`;
 
+const FORGOT_PASSWORD_IP_LIMIT = 60;
+const FORGOT_PASSWORD_IP_WINDOW_SECONDS = 60 * 60;
+const FORGOT_PASSWORD_IDENTITY_LIMIT = 6;
+const FORGOT_PASSWORD_IDENTITY_WINDOW_SECONDS = 15 * 60;
+
 const forgotIdentityKey = (identifier: string, schoolScope: string) =>
   `auth:rate:forgot:identity:${hashPart(`${identifier}|${schoolScope}`)}`;
 
@@ -342,7 +347,7 @@ export const loginIpRateLimit = () => async (req: Request, _res: Response, next:
 
 export const forgotPasswordRateLimit = () => async (req: Request, _res: Response, next: NextFunction) => {
   try {
-    const ipResult = await consumeAuthBucket(forgotIpKey(req), 10, 60 * 60);
+    const ipResult = await consumeAuthBucket(forgotIpKey(req), FORGOT_PASSWORD_IP_LIMIT, FORGOT_PASSWORD_IP_WINDOW_SECONDS);
     if (ipResult.limited) {
       await auditRateLimitTriggered(req, 'FORGOT_PASSWORD');
       return rejectAuthRateLimit(ipResult, next);
@@ -351,7 +356,11 @@ export const forgotPasswordRateLimit = () => async (req: Request, _res: Response
     const identifier = normalizeIdentifier((req.body as Record<string, unknown> | undefined)?.email);
     if (identifier) {
       const schoolScope = (await schoolIdFromBody(req.body)) ?? authLimiterSchoolScope(req.body);
-      const identityResult = await consumeAuthBucket(forgotIdentityKey(identifier, schoolScope), 3, 60 * 60);
+      const identityResult = await consumeAuthBucket(
+        forgotIdentityKey(identifier, schoolScope),
+        FORGOT_PASSWORD_IDENTITY_LIMIT,
+        FORGOT_PASSWORD_IDENTITY_WINDOW_SECONDS,
+      );
       if (identityResult.limited) {
         await auditRateLimitTriggered(req, 'FORGOT_PASSWORD');
         return rejectAuthRateLimit(identityResult, next);
