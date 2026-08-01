@@ -11,6 +11,9 @@ final authControllerProvider =
     AsyncNotifierProvider<AuthController, AuthSession>(AuthController.new);
 
 class AuthController extends AsyncNotifier<AuthSession> {
+  String? _pendingLoginIdentifier;
+  String? _pendingLoginPassword;
+
   @override
   Future<AuthSession> build() async {
     ref.listen<int>(authSessionExpiredProvider, (previous, next) {
@@ -25,20 +28,50 @@ class AuthController extends AsyncNotifier<AuthSession> {
   Future<void> login({
     required String identifier,
     required String password,
+    String? schoolId,
     String? schoolCode,
     bool rememberMe = false,
   }) async {
+    final normalizedSchoolId = schoolId?.trim();
+    final normalizedSchoolCode = schoolCode?.trim();
+    final isSchoolSelection =
+        (normalizedSchoolId?.isNotEmpty ?? false) ||
+        (normalizedSchoolCode?.isNotEmpty ?? false);
+    final effectiveIdentifier = isSchoolSelection && identifier.trim().isEmpty
+        ? (_pendingLoginIdentifier ?? '')
+        : identifier.trim();
+    final effectivePassword = isSchoolSelection && password.isEmpty
+        ? (_pendingLoginPassword ?? '')
+        : password;
+
+    if (!isSchoolSelection &&
+        effectiveIdentifier.isNotEmpty &&
+        effectivePassword.isNotEmpty) {
+      _pendingLoginIdentifier = effectiveIdentifier;
+      _pendingLoginPassword = effectivePassword;
+    }
+
     state = const AsyncLoading();
-    state = await AsyncValue.guard(
+    final nextState = await AsyncValue.guard(
       () => ref
           .read(authRepositoryProvider)
           .login(
-            identifier: identifier,
-            password: password,
-            schoolCode: schoolCode,
+            identifier: effectiveIdentifier,
+            password: effectivePassword,
+            schoolId: normalizedSchoolId?.isNotEmpty == true
+                ? normalizedSchoolId
+                : null,
+            schoolCode: normalizedSchoolCode?.isNotEmpty == true
+                ? normalizedSchoolCode
+                : null,
             rememberMe: rememberMe,
           ),
     );
+    state = nextState;
+    final session = _currentSession();
+    if (nextState.hasError || (session?.isAuthenticated ?? false)) {
+      _clearPendingLogin();
+    }
     _syncPushIfAuthenticated(_currentSession());
   }
 
@@ -48,7 +81,7 @@ class AuthController extends AsyncNotifier<AuthSession> {
     bool rememberMe = false,
   }) async {
     state = const AsyncLoading();
-    state = await AsyncValue.guard(
+    final nextState = await AsyncValue.guard(
       () => ref
           .read(authRepositoryProvider)
           .verifyMfa(
@@ -57,6 +90,10 @@ class AuthController extends AsyncNotifier<AuthSession> {
             rememberMe: rememberMe,
           ),
     );
+    state = nextState;
+    if (nextState.hasError || (_currentSession()?.isAuthenticated ?? false)) {
+      _clearPendingLogin();
+    }
     _syncPushIfAuthenticated(_currentSession());
   }
 
@@ -71,6 +108,7 @@ class AuthController extends AsyncNotifier<AuthSession> {
 
   Future<void> logout() async {
     state = const AsyncLoading();
+    _clearPendingLogin();
     await ref.read(authRepositoryProvider).logout();
     state = const AsyncData(AuthSession.unauthenticated());
   }
@@ -84,5 +122,10 @@ class AuthController extends AsyncNotifier<AuthSession> {
     if (session?.isAuthenticated ?? false) {
       unawaited(ref.read(notificationServiceProvider).syncDeviceToken());
     }
+  }
+
+  void _clearPendingLogin() {
+    _pendingLoginIdentifier = null;
+    _pendingLoginPassword = null;
   }
 }

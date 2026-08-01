@@ -20,6 +20,8 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
   final _passwordController = TextEditingController();
   final _mfaController = TextEditingController();
   bool _rememberMe = false;
+  String? _pendingIdentifier;
+  String? _pendingPassword;
 
   @override
   void dispose() {
@@ -29,13 +31,33 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     super.dispose();
   }
 
-  Future<void> _submitLogin({String? schoolCode}) async {
+  Future<void> _submitLogin({String? schoolId, String? schoolCode}) async {
+    final selectedSchoolId = schoolId?.trim();
+    final selectedSchoolCode = schoolCode?.trim();
+    final isSelectingSchool =
+        (selectedSchoolId?.isNotEmpty ?? false) ||
+        (selectedSchoolCode?.isNotEmpty ?? false);
+    final identifier = !isSelectingSchool
+        ? _identifierController.text.trim()
+        : (_pendingIdentifier ?? _identifierController.text.trim());
+    final password = !isSelectingSchool
+        ? _passwordController.text
+        : (_pendingPassword ?? _passwordController.text);
+    if (!isSelectingSchool) {
+      _pendingIdentifier = identifier;
+      _pendingPassword = password;
+    }
     await ref
         .read(authControllerProvider.notifier)
         .login(
-          identifier: _identifierController.text.trim(),
-          password: _passwordController.text,
-          schoolCode: schoolCode,
+          identifier: identifier,
+          password: password,
+          schoolId: selectedSchoolId?.isNotEmpty == true
+              ? selectedSchoolId
+              : null,
+          schoolCode: selectedSchoolCode?.isNotEmpty == true
+              ? selectedSchoolCode
+              : null,
           rememberMe: _rememberMe,
         );
   }
@@ -159,8 +181,10 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                                 school: school,
                                 onTap: auth.isLoading
                                     ? null
-                                    : () =>
-                                          _submitLogin(schoolCode: school.code),
+                                    : () => _submitLogin(
+                                        schoolId: school.id,
+                                        schoolCode: school.code,
+                                      ),
                               ),
                               const SizedBox(height: AppSpacing.sm),
                             ],

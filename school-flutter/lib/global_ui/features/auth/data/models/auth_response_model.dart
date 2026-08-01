@@ -10,9 +10,9 @@ class SchoolLoginOptionModel extends SchoolLoginOption {
 
   factory SchoolLoginOptionModel.fromJson(Map<String, dynamic> json) {
     return SchoolLoginOptionModel(
-      id: json['id']?.toString() ?? '',
+      id: (json['id'] ?? json['schoolId'])?.toString() ?? '',
       name: json['name']?.toString() ?? 'School',
-      code: json['code']?.toString() ?? '',
+      code: (json['code'] ?? json['schoolCode'])?.toString() ?? '',
     );
   }
 }

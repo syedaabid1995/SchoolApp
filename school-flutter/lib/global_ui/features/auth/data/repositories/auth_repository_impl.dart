@@ -34,6 +34,7 @@ class AuthRepositoryImpl implements AuthRepository {
   Future<AuthSession> login({
     required String identifier,
     required String password,
+    String? schoolId,
     String? schoolCode,
     bool rememberMe = false,
   }) async {
@@ -41,6 +42,7 @@ class AuthRepositoryImpl implements AuthRepository {
       final response = await _remoteDataSource.login(
         identifier: identifier,
         password: password,
+        schoolId: schoolId,
         schoolCode: schoolCode,
         rememberMe: rememberMe,
       );

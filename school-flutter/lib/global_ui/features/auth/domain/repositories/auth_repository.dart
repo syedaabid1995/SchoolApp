@@ -6,6 +6,7 @@ abstract class AuthRepository {
   Future<AuthSession> login({
     required String identifier,
     required String password,
+    String? schoolId,
     String? schoolCode,
     bool rememberMe,
   });

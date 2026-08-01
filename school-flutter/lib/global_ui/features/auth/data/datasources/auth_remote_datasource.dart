@@ -12,6 +12,7 @@ class AuthRemoteDataSource {
   Future<AuthResponseModel> login({
     required String identifier,
     required String password,
+    String? schoolId,
     String? schoolCode,
     bool rememberMe = false,
   }) async {
@@ -23,6 +24,8 @@ class AuthRemoteDataSource {
         else
           'username': identifier,
         'password': password,
+        if (schoolId != null && schoolId.trim().isNotEmpty)
+          'schoolId': schoolId.trim(),
         if (schoolCode != null && schoolCode.trim().isNotEmpty)
           'schoolCode': schoolCode.trim(),
         'rememberMe': rememberMe,
