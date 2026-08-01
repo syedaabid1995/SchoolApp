@@ -15,6 +15,7 @@ enum _ProfilePanel {
   menu,
   viewProfile,
   editProfile,
+  schoolProfile,
   children,
   changePassword,
   info,
@@ -33,6 +34,7 @@ class _ParentProfileScreenState extends ConsumerState<ParentProfileScreen> {
   String _infoTitle = '';
   String _infoBody = '';
   String? _selectedChildId;
+  String? _selectedSchoolProfileId;
   final _firstNameController = TextEditingController();
   final _lastNameController = TextEditingController();
   final _emailController = TextEditingController();
@@ -145,6 +147,13 @@ class _ParentProfileScreenState extends ConsumerState<ParentProfileScreen> {
                               saving: _savingProfile,
                               onSave: _saveProfile,
                             ),
+                            _ProfilePanel.schoolProfile => _SchoolProfilePanel(
+                              profile: profile,
+                              selectedSchoolId: _selectedSchoolProfileId,
+                              onSelectSchool: (schoolId) => setState(
+                                () => _selectedSchoolProfileId = schoolId,
+                              ),
+                            ),
                             _ProfilePanel.changePassword =>
                               _ChangePasswordPanel(
                                 currentPasswordController:
@@ -174,6 +183,13 @@ class _ParentProfileScreenState extends ConsumerState<ParentProfileScreen> {
                               onOpenEdit: () => setState(
                                 () => _panel = _ProfilePanel.editProfile,
                               ),
+                              onOpenSchoolProfile: () => setState(() {
+                                _selectedSchoolProfileId =
+                                    profile.schoolProfiles.isNotEmpty
+                                    ? profile.schoolProfiles.first.id
+                                    : null;
+                                _panel = _ProfilePanel.schoolProfile;
+                              }),
                               onOpenChildren: () => setState(() {
                                 _selectedChildId = null;
                                 _panel = _ProfilePanel.children;
@@ -202,6 +218,7 @@ class _ParentProfileScreenState extends ConsumerState<ParentProfileScreen> {
     return switch (_panel) {
       _ProfilePanel.editProfile => 'Edit Profile',
       _ProfilePanel.viewProfile => 'Profile',
+      _ProfilePanel.schoolProfile => 'School Profile',
       _ProfilePanel.children =>
         _selectedChildId == null ? 'Children' : 'Child Profile',
       _ProfilePanel.changePassword => 'Change Password',
@@ -214,6 +231,7 @@ class _ParentProfileScreenState extends ConsumerState<ParentProfileScreen> {
     return switch (_panel) {
       _ProfilePanel.editProfile => 'Update parent contact details',
       _ProfilePanel.viewProfile => 'Parent account details',
+      _ProfilePanel.schoolProfile => 'School contact information',
       _ProfilePanel.children =>
         _selectedChildId == null
             ? 'Mapped child profiles'
@@ -233,6 +251,7 @@ class _ParentProfileScreenState extends ConsumerState<ParentProfileScreen> {
       setState(() {
         _panel = _ProfilePanel.menu;
         _selectedChildId = null;
+        _selectedSchoolProfileId = null;
       });
     }
   }
@@ -351,6 +370,7 @@ class _ProfileMenuPanel extends StatelessWidget {
     required this.pushState,
     required this.onOpenProfile,
     required this.onOpenEdit,
+    required this.onOpenSchoolProfile,
     required this.onOpenChildren,
     required this.onOpenPassword,
     required this.onTogglePush,
@@ -362,6 +382,7 @@ class _ProfileMenuPanel extends StatelessWidget {
   final AsyncValue<bool> pushState;
   final VoidCallback onOpenProfile;
   final VoidCallback onOpenEdit;
+  final VoidCallback onOpenSchoolProfile;
   final VoidCallback onOpenChildren;
   final VoidCallback onOpenPassword;
   final ValueChanged<bool> onTogglePush;
@@ -444,6 +465,14 @@ class _ProfileMenuPanel extends StatelessWidget {
                 title: 'Edit Profile',
                 subtitle: 'Name, email, and mobile number',
                 onTap: onOpenEdit,
+              ),
+              _MenuTile(
+                icon: Icons.apartment_outlined,
+                title: 'School Profile',
+                subtitle: profile.schoolProfiles.length > 1
+                    ? '${profile.schoolProfiles.length} school contact profiles'
+                    : 'School address and contact information',
+                onTap: onOpenSchoolProfile,
               ),
               _MenuTile(
                 icon: Icons.family_restroom_outlined,
@@ -638,6 +667,187 @@ class _ChildrenPanel extends StatelessWidget {
                 ),
               ),
             ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _SchoolProfilePanel extends StatelessWidget {
+  const _SchoolProfilePanel({
+    required this.profile,
+    required this.selectedSchoolId,
+    required this.onSelectSchool,
+  });
+
+  final ParentProfile profile;
+  final String? selectedSchoolId;
+  final ValueChanged<String> onSelectSchool;
+
+  @override
+  Widget build(BuildContext context) {
+    if (profile.schoolProfiles.isEmpty) {
+      return const EmptyPanel(message: 'No school profile details available.');
+    }
+
+    final selected = profile.schoolProfiles.firstWhere(
+      (school) => school.id == selectedSchoolId,
+      orElse: () => profile.schoolProfiles.first,
+    );
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        if (profile.schoolProfiles.length > 1) ...[
+          ParentCard(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'Select School',
+                  style: TextStyle(
+                    color: SaaptTheme.navy,
+                    fontSize: 16,
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
+                const SizedBox(height: 12),
+                ...profile.schoolProfiles.map((school) {
+                  final active = school.id == selected.id;
+                  return Padding(
+                    padding: const EdgeInsets.only(bottom: 10),
+                    child: InkWell(
+                      borderRadius: BorderRadius.circular(12),
+                      onTap: () => onSelectSchool(school.id),
+                      child: Container(
+                        padding: const EdgeInsets.all(14),
+                        decoration: BoxDecoration(
+                          color: active
+                              ? const Color(0xFFEAF1FF)
+                              : const Color(0xFFF7FAFF),
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(
+                            color: active
+                                ? SaaptTheme.primary
+                                : const Color(0xFFDDE5F2),
+                          ),
+                        ),
+                        child: Row(
+                          children: [
+                            const Icon(
+                              Icons.school_outlined,
+                              color: SaaptTheme.primary,
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    school.name,
+                                    style: const TextStyle(
+                                      color: SaaptTheme.navy,
+                                      fontWeight: FontWeight.w900,
+                                    ),
+                                  ),
+                                  if (school.code.isNotEmpty)
+                                    Text(
+                                      school.code,
+                                      style: const TextStyle(
+                                        color: Color(0xFF60708F),
+                                        fontWeight: FontWeight.w700,
+                                      ),
+                                    ),
+                                ],
+                              ),
+                            ),
+                            if (active)
+                              const Icon(
+                                Icons.check_circle,
+                                color: SaaptTheme.primary,
+                              ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  );
+                }),
+              ],
+            ),
+          ),
+          const SizedBox(height: 14),
+        ],
+        ParentCard(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              _DetailRow(label: 'School Name', value: selected.name),
+              _DetailRow(
+                label: 'School Code',
+                value: selected.code.isNotEmpty ? selected.code : '-',
+              ),
+              _DetailRow(label: 'Email', value: selected.email ?? '-'),
+              _DetailRow(
+                label: 'Mobile Number',
+                value: selected.mobileNumber ?? '-',
+              ),
+              _DetailRow(
+                label: 'Address',
+                value: selected.address ?? '-',
+                last: selected.contacts.isEmpty,
+              ),
+              if (selected.contacts.isNotEmpty) ...[
+                const Text(
+                  'Contact Information',
+                  style: TextStyle(
+                    color: SaaptTheme.navy,
+                    fontSize: 16,
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
+                const SizedBox(height: 12),
+                ...selected.contacts.map(
+                  (contact) => Container(
+                    margin: const EdgeInsets.only(bottom: 10),
+                    padding: const EdgeInsets.all(14),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFF7FAFF),
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: const Color(0xFFDDE5F2)),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          contact.department,
+                          style: const TextStyle(
+                            color: SaaptTheme.primary,
+                            fontWeight: FontWeight.w900,
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          contact.name,
+                          style: const TextStyle(
+                            color: SaaptTheme.navy,
+                            fontWeight: FontWeight.w800,
+                          ),
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          contact.contactNumber,
+                          style: const TextStyle(
+                            color: Color(0xFF60708F),
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
+            ],
           ),
         ),
       ],

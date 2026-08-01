@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../app/theme/app_spacing.dart';
 import '../../../../core/widgets/app_scaffold.dart';
 import '../../../../core/widgets/async_state_view.dart';
+import '../../../auth/domain/entities/staff_user.dart';
 import '../providers/profile_providers.dart';
 
 class ProfileScreen extends ConsumerWidget {
@@ -41,7 +42,7 @@ class ProfileScreen extends ConsumerWidget {
                   borderRadius: BorderRadius.circular(20),
                   boxShadow: [
                     BoxShadow(
-                      color: colorScheme.shadow.withOpacity(0.07),
+                      color: colorScheme.shadow.withValues(alpha: 0.07),
                       blurRadius: 16,
                       offset: const Offset(0, 4),
                     ),
@@ -93,7 +94,7 @@ class ProfileScreen extends ConsumerWidget {
                   borderRadius: BorderRadius.circular(16),
                   boxShadow: [
                     BoxShadow(
-                      color: colorScheme.shadow.withOpacity(0.07),
+                      color: colorScheme.shadow.withValues(alpha: 0.07),
                       blurRadius: 12,
                       offset: const Offset(0, 4),
                     ),
@@ -109,7 +110,9 @@ class ProfileScreen extends ConsumerWidget {
                     if (user.schoolName != null) ...[
                       Divider(
                         height: 1,
-                        color: colorScheme.outlineVariant.withOpacity(0.4),
+                        color: colorScheme.outlineVariant.withValues(
+                          alpha: 0.4,
+                        ),
                       ),
                       _InfoRow(
                         icon: Icons.school_outlined,
@@ -121,9 +124,146 @@ class ProfileScreen extends ConsumerWidget {
                 ),
               ),
               const SizedBox(height: AppSpacing.md),
+              if (user.schoolProfile != null) ...[
+                _ContactInformationCard(school: user.schoolProfile!),
+                const SizedBox(height: AppSpacing.md),
+              ],
             ],
           );
         },
+      ),
+    );
+  }
+}
+
+class _ContactInformationCard extends StatelessWidget {
+  const _ContactInformationCard({required this.school});
+
+  final SchoolProfileDetails school;
+
+  @override
+  Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+    final textTheme = Theme.of(context).textTheme;
+    return Container(
+      decoration: BoxDecoration(
+        color: colorScheme.surface,
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(
+            color: colorScheme.shadow.withValues(alpha: 0.07),
+            blurRadius: 12,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: ExpansionTile(
+        tilePadding: const EdgeInsets.symmetric(horizontal: AppSpacing.md),
+        childrenPadding: const EdgeInsets.fromLTRB(
+          AppSpacing.md,
+          0,
+          AppSpacing.md,
+          AppSpacing.md,
+        ),
+        leading: Icon(Icons.contact_phone_outlined, color: colorScheme.primary),
+        title: Text(
+          'Contact Information',
+          style: textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700),
+        ),
+        subtitle: Text(school.name),
+        children: [
+          _ContactDetail(label: 'School Code', value: school.code),
+          _ContactDetail(label: 'Email', value: school.email ?? '-'),
+          _ContactDetail(
+            label: 'Mobile Number',
+            value: school.mobileNumber ?? '-',
+          ),
+          _ContactDetail(label: 'Address', value: school.address ?? '-'),
+          if (school.contacts.isNotEmpty) ...[
+            const Divider(height: AppSpacing.lg),
+            ...school.contacts.map(
+              (contact) => _ContactBlock(contact: contact),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+class _ContactDetail extends StatelessWidget {
+  const _ContactDetail({required this.label, required this.value});
+
+  final String label;
+  final String value;
+
+  @override
+  Widget build(BuildContext context) {
+    final textTheme = Theme.of(context).textTheme;
+    return Padding(
+      padding: const EdgeInsets.only(bottom: AppSpacing.sm),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SizedBox(
+            width: 120,
+            child: Text(
+              label,
+              style: textTheme.labelMedium?.copyWith(
+                color: Theme.of(
+                  context,
+                ).colorScheme.onSurface.withValues(alpha: 0.55),
+              ),
+            ),
+          ),
+          Expanded(
+            child: Text(
+              value.isNotEmpty ? value : '-',
+              style: textTheme.bodyMedium?.copyWith(
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ContactBlock extends StatelessWidget {
+  const _ContactBlock({required this.contact});
+
+  final SchoolContactDetail contact;
+
+  @override
+  Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+    return Container(
+      width: double.infinity,
+      margin: const EdgeInsets.only(bottom: AppSpacing.sm),
+      padding: const EdgeInsets.all(AppSpacing.md),
+      decoration: BoxDecoration(
+        color: colorScheme.surfaceContainerHighest.withValues(alpha: 0.45),
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            contact.department,
+            style: TextStyle(
+              color: colorScheme.primary,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            contact.name,
+            style: const TextStyle(fontWeight: FontWeight.w700),
+          ),
+          const SizedBox(height: 2),
+          Text(contact.contactNumber),
+        ],
       ),
     );
   }
@@ -165,7 +305,7 @@ class _InfoRow extends StatelessWidget {
                 Text(
                   label,
                   style: textTheme.labelSmall?.copyWith(
-                    color: colorScheme.onSurface.withOpacity(0.50),
+                    color: colorScheme.onSurface.withValues(alpha: 0.50),
                     letterSpacing: 0.4,
                   ),
                 ),

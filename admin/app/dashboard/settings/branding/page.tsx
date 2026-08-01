@@ -16,6 +16,12 @@ import {
   type BrandingAssetType,
   type LoginBranding,
 } from '../../../../services/branding.service';
+import {
+  getSchoolSystemSettings,
+  updateSchoolSystemSettings,
+  type GeneralSchoolSettings,
+  type SchoolContactDetail,
+} from '../../../../services/system-settings.service';
 
 const hexPattern = /^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/;
 const logoSizeOptions = [
@@ -41,10 +47,11 @@ const colorFields: Array<{ key: keyof LoginBranding; label: string }> = [
   { key: 'successColor', label: 'Success' },
 ];
 
-type BrandingSectionId = 'identity' | 'loginText' | 'features' | 'colors' | 'design';
+type BrandingSectionId = 'identity' | 'schoolDetails' | 'loginText' | 'features' | 'colors' | 'design';
 
 const brandingSections: Array<{ id: BrandingSectionId; label: string; helper: string }> = [
   { id: 'identity', label: 'Basic Identity', helper: 'Name, school name, logo, favicon' },
+  { id: 'schoolDetails', label: 'School Details', helper: 'Address, code, email, mobile, staff contacts' },
   { id: 'loginText', label: 'Login Text', helper: 'Headings, footer, support text' },
   { id: 'features', label: 'Feature Highlights', helper: 'Login page bullet points' },
   { id: 'colors', label: 'Colors', helper: 'Brand and login colors' },
@@ -121,6 +128,23 @@ function TextField({
       ) : (
         <input className={fieldClass} value={value} placeholder={placeholder} onChange={(event) => onChange(event.target.value)} />
       )}
+    </label>
+  );
+}
+
+function ContactField({
+  label,
+  value,
+  onChange,
+}: {
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+}) {
+  return (
+    <label className="space-y-1.5">
+      <span className="text-xs font-bold uppercase tracking-wide text-slate-500">{label}</span>
+      <input className={fieldClass} value={value} onChange={(event) => onChange(event.target.value)} />
     </label>
   );
 }
@@ -260,6 +284,7 @@ export default function LoginBrandingSettingsPage({ embedded = false }: { embedd
   const [selectedSchoolId, setSelectedSchoolId] = useState('');
   const [activeSection, setActiveSection] = useState<BrandingSectionId>('identity');
   const [form, setForm] = useState<LoginBranding>(defaultLoginBranding);
+  const [schoolGeneral, setSchoolGeneral] = useState<GeneralSchoolSettings | null>(null);
   const [error, setError] = useState('');
   const [message, setMessage] = useState('');
 
@@ -273,6 +298,7 @@ export default function LoginBrandingSettingsPage({ embedded = false }: { embedd
   const role = sessionQuery.data?.role;
   const isAllowed = role === 'SUPER_ADMIN' || role === 'SCHOOL_ADMIN';
   const params = role === 'SUPER_ADMIN' && selectedSchoolId ? { schoolId: selectedSchoolId } : undefined;
+  const schoolSettingsReady = role === 'SCHOOL_ADMIN' || (role === 'SUPER_ADMIN' && Boolean(selectedSchoolId));
 
   useEffect(() => {
     if (!sessionQuery.isLoading && role && !isAllowed) {
@@ -296,9 +322,22 @@ export default function LoginBrandingSettingsPage({ embedded = false }: { embedd
     staleTime: 30_000,
   });
 
+  const schoolSettingsQuery = useQuery({
+    queryKey: ['school-system-settings', role === 'SUPER_ADMIN' ? selectedSchoolId : sessionQuery.data?.schoolId],
+    queryFn: () => getSchoolSystemSettings(params),
+    enabled: isAllowed && schoolSettingsReady,
+    refetchOnWindowFocus: false,
+    staleTime: 30_000,
+  });
+
   useEffect(() => {
     if (brandingQuery.data) setForm(normalizeBranding(brandingQuery.data));
   }, [brandingQuery.data]);
+
+  useEffect(() => {
+    if (schoolSettingsQuery.data) setSchoolGeneral(schoolSettingsQuery.data.general);
+    if (!schoolSettingsReady) setSchoolGeneral(null);
+  }, [schoolSettingsQuery.data, schoolSettingsReady]);
 
   const saveMutation = useMutation({
     mutationFn: () => updateLoginBranding(normalizeBranding(form), params),
@@ -311,10 +350,75 @@ export default function LoginBrandingSettingsPage({ embedded = false }: { embedd
     onError: (err: any) => setError(err?.response?.data?.error?.message || err?.response?.data?.message || 'Unable to save branding.'),
   });
 
-  const isBusy = brandingQuery.isLoading || saveMutation.isPending;
+  const saveSchoolDetailsMutation = useMutation({
+    mutationFn: () => {
+      if (!schoolGeneral) throw new Error('School details are not loaded.');
+      return updateSchoolSystemSettings({ general: schoolGeneral, ...(params ?? {}) });
+    },
+    onSuccess: (next) => {
+      setSchoolGeneral(next.general);
+      setMessage('School details saved.');
+      setError('');
+      queryClient.invalidateQueries({ queryKey: ['school-system-settings'] });
+    },
+    onError: (err: any) => setError(err?.response?.data?.error?.message || err?.response?.data?.message || err?.message || 'Unable to save school details.'),
+  });
+
+  const isBusy = brandingQuery.isLoading || schoolSettingsQuery.isLoading || saveMutation.isPending || saveSchoolDetailsMutation.isPending;
 
   const updateField = <K extends keyof LoginBranding>(key: K, value: LoginBranding[K]) => {
     setForm((current) => ({ ...current, [key]: value }));
+    setError('');
+    setMessage('');
+  };
+
+  const updateSchoolGeneralField = <K extends keyof GeneralSchoolSettings>(key: K, value: GeneralSchoolSettings[K]) => {
+    setSchoolGeneral((current) => (current ? { ...current, [key]: value } : current));
+    setError('');
+    setMessage('');
+  };
+
+  const updateContact = <K extends keyof SchoolContactDetail>(id: string, key: K, value: SchoolContactDetail[K]) => {
+    setSchoolGeneral((current) =>
+      current
+        ? {
+            ...current,
+            contacts: (current.contacts ?? []).map((contact) => (contact.id === id ? { ...contact, [key]: value } : contact)),
+          }
+        : current,
+    );
+    setError('');
+    setMessage('');
+  };
+
+  const addContact = () => {
+    const nextContact: SchoolContactDetail = {
+      id: `contact-${Date.now()}`,
+      department: '',
+      name: '',
+      contactNumber: '',
+    };
+    setSchoolGeneral((current) =>
+      current
+        ? {
+            ...current,
+            contacts: [...(current.contacts ?? []), nextContact],
+          }
+        : current,
+    );
+    setError('');
+    setMessage('');
+  };
+
+  const removeContact = (id: string) => {
+    setSchoolGeneral((current) =>
+      current
+        ? {
+            ...current,
+            contacts: (current.contacts ?? []).filter((contact) => contact.id !== id),
+          }
+        : current,
+    );
     setError('');
     setMessage('');
   };
@@ -328,6 +432,20 @@ export default function LoginBrandingSettingsPage({ embedded = false }: { embedd
   };
 
   const validationError = useMemo(() => {
+    if (activeSection === 'schoolDetails') {
+      if (!schoolSettingsReady) return 'Select a school before editing school details.';
+      if (!schoolGeneral) return 'School details are loading.';
+      if (!schoolGeneral.schoolName.trim()) return 'School name is required.';
+      if (!schoolGeneral.schoolCode.trim()) return 'School code is required.';
+      if (schoolGeneral.email.trim() && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(schoolGeneral.email.trim())) return 'Enter a valid school email.';
+      const incompleteContact = (schoolGeneral.contacts ?? []).find(
+        (contact) =>
+          Boolean(contact.department.trim() || contact.name.trim() || contact.contactNumber.trim()) &&
+          (!contact.department.trim() || !contact.name.trim() || !contact.contactNumber.trim()),
+      );
+      if (incompleteContact) return 'Each added contact needs department, name, and contact number.';
+      return '';
+    }
     if (!form.appName.trim()) return 'App name is required.';
     if (!form.loginHeading.trim()) return 'Login heading is required.';
     if (!form.loginSubtitle.trim()) return 'Login subtitle is required.';
@@ -341,11 +459,15 @@ export default function LoginBrandingSettingsPage({ embedded = false }: { embedd
     if ((form.footerText ?? '').length > 180) return 'Footer text is too long.';
     if ((form.supportText ?? '').length > 180) return 'Support text is too long.';
     return '';
-  }, [form]);
+  }, [activeSection, form, schoolGeneral, schoolSettingsReady]);
 
   const save = () => {
     setError(validationError);
     if (validationError) return;
+    if (activeSection === 'schoolDetails') {
+      saveSchoolDetailsMutation.mutate();
+      return;
+    }
     saveMutation.mutate();
   };
 
@@ -392,6 +514,76 @@ export default function LoginBrandingSettingsPage({ embedded = false }: { embedd
               External logo links and SVG uploads are blocked. Uploaded files are renamed before storage.
             </p>
           </>
+        );
+      case 'schoolDetails':
+        if (!schoolSettingsReady) {
+          return (
+            <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-semibold text-amber-800">
+              Select a school to manage its address and mobile app contact details.
+            </div>
+          );
+        }
+        if (!schoolGeneral) {
+          return <p className="text-sm font-semibold text-slate-500">Loading school details...</p>;
+        }
+        return (
+          <div className="space-y-6">
+            <div className="grid gap-4 md:grid-cols-2">
+              <TextField label="School name" value={schoolGeneral.schoolName} onChange={(value) => updateSchoolGeneralField('schoolName', value)} />
+              <TextField label="School code" value={schoolGeneral.schoolCode} onChange={(value) => updateSchoolGeneralField('schoolCode', value)} />
+              <TextField label="Email" value={schoolGeneral.email} onChange={(value) => updateSchoolGeneralField('email', value)} />
+              <TextField label="Mobile number" value={schoolGeneral.phone} onChange={(value) => updateSchoolGeneralField('phone', value)} />
+              <div className="md:col-span-2">
+                <TextField label="Address" value={schoolGeneral.address} onChange={(value) => updateSchoolGeneralField('address', value)} multiline />
+              </div>
+            </div>
+
+            <div className="space-y-3">
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                <div>
+                  <h3 className="text-base font-bold text-slate-950">Important Contacts</h3>
+                  <p className="mt-1 text-sm text-slate-500">These rows are shown to parents and staff in the mobile apps.</p>
+                </div>
+                <Button size="sm" variant="outline" onClick={addContact}>
+                  Add Contact
+                </Button>
+              </div>
+
+              {(schoolGeneral.contacts ?? []).length ? (
+                <div className="space-y-3">
+                  {schoolGeneral.contacts.map((contact, index) => (
+                    <div key={contact.id} className="grid gap-3 rounded-lg border border-slate-200 bg-slate-50 p-3 lg:grid-cols-[1fr_1fr_1fr_auto]">
+                      <ContactField
+                        label="Department"
+                        value={contact.department}
+                        onChange={(value) => updateContact(contact.id, 'department', value)}
+                      />
+                      <ContactField
+                        label="Name"
+                        value={contact.name}
+                        onChange={(value) => updateContact(contact.id, 'name', value)}
+                      />
+                      <ContactField
+                        label="Contact number"
+                        value={contact.contactNumber}
+                        onChange={(value) => updateContact(contact.id, 'contactNumber', value)}
+                      />
+                      <div className="flex items-end">
+                        <Button size="sm" variant="danger" onClick={() => removeContact(contact.id)} className="w-full lg:w-auto">
+                          Remove
+                        </Button>
+                      </div>
+                      <span className="sr-only">Contact row {index + 1}</span>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="rounded-lg border border-dashed border-slate-300 bg-slate-50 px-4 py-6 text-center text-sm font-semibold text-slate-500">
+                  No additional contacts added.
+                </div>
+              )}
+            </div>
+          </div>
         );
       case 'loginText':
         return (

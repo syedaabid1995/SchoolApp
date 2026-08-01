@@ -50,6 +50,7 @@ import { checkSubscriptionStatus } from '../../../../services/subscription.servi
 import { hashPassword, verifyPassword } from '../../../../utils/password';
 import { schoolIdentifierWhere } from '../../../../utils/schoolDomain';
 import { hashToken } from '../../../../utils/token';
+import { getSchoolProfilesByIds } from '../../../../services/schoolProfile.service';
 import {
   changePasswordSchema,
   forgotPasswordSchema,
@@ -444,6 +445,7 @@ export const login = async (req: Request, res: Response) => {
     mfaEnabled: true,
     mfaMethod: true,
     schoolId: true,
+    school: { select: { id: true, name: true, code: true } },
     status: true,
     teacherProfile: { select: { firstName: true, lastName: true } },
     parentProfiles: { select: { firstName: true, lastName: true }, take: 1 },
@@ -648,6 +650,9 @@ export const login = async (req: Request, res: Response) => {
   const permissions = user.schoolId
     ? await AuthorizationService.getEffectivePermissionCodesForUser(user.schoolId, user.id, roleName)
     : [];
+  const schoolProfile = user.schoolId
+    ? (await getSchoolProfilesByIds([user.schoolId]))[0] ?? null
+    : null;
 
   const accessToken = signToken({ ...payloadBase, typ: 'access' }, ACCESS_TOKEN_TTL);
   const refreshTokenMaxAge = rememberMe ? REMEMBER_ME_REFRESH_TOKEN_TTL_SECONDS : REFRESH_TOKEN_TTL_SECONDS;
@@ -706,6 +711,9 @@ export const login = async (req: Request, res: Response) => {
       email: user.email,
       role: payloadBase.role,
       schoolId: user.schoolId ?? null,
+      schoolName: user.school?.name ?? null,
+      school: user.school ?? null,
+      schoolProfile,
       permissions,
     },
   });

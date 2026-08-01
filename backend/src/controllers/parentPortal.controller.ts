@@ -19,6 +19,7 @@ import {
 } from '../services/studentLeave.service';
 import { parseLimit } from '../utils/pagination';
 import { noticeAudienceMatchesRole } from '../utils/noticeAudience';
+import { getSchoolProfilesByIds } from '../services/schoolProfile.service';
 
 const resolveParentProfiles = async (userId: string) => {
   return prisma.parentProfile.findMany({
@@ -661,6 +662,9 @@ export const getParentProfile = async (req: Request, res: Response) => {
   const parents = await resolveParentProfiles(auth.userId);
   const profile = parents[0];
   const children = await resolveChildren(auth.userId);
+  const schoolProfiles = await getSchoolProfilesByIds(
+    children.map((child) => child.schoolId),
+  );
   res.status(200).json({
     name: profile
       ? `${profile.firstName} ${profile.lastName}`.trim()
@@ -672,6 +676,7 @@ export const getParentProfile = async (req: Request, res: Response) => {
     schoolName: children[0]?.schoolName ?? null,
     academicYear: null,
     children,
+    schoolProfiles,
   });
 };
 

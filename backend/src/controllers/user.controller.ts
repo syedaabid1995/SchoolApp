@@ -19,6 +19,7 @@ import { PermissionCacheService } from '../services/permissionCache.service';
 import { timetableReadService } from '../modules/timetable/services/timetable-read.service';
 import { toLegacyClassRoutineRow } from '../modules/timetable/services/timetable-response-mapper';
 import { PermissionCodes as P } from '../permissions/permission-manifest';
+import { getSchoolProfilesByIds } from '../services/schoolProfile.service';
 
 const bankDetailsSchema = z
   .object({
@@ -170,6 +171,9 @@ export const getMe = async (req: Request, res: Response) => {
     user.schoolId && role
       ? await AuthorizationService.getEffectivePermissionCodesForUser(user.schoolId, user.id, role)
       : [];
+  const schoolProfile = user.schoolId
+    ? (await getSchoolProfilesByIds([user.schoolId]))[0] ?? null
+    : null;
 
   res.status(200).json({
     id: user.id,
@@ -181,6 +185,7 @@ export const getMe = async (req: Request, res: Response) => {
     permissionCodes,
     teacherProfile: user.teacherProfile,
     employeeProfile: user.teacherProfile,
+    schoolProfile,
   });
 };
 

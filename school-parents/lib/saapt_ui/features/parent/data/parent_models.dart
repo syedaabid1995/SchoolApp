@@ -115,11 +115,71 @@ class ParentChildDetail {
   }
 }
 
+class SchoolContactDetail {
+  const SchoolContactDetail({
+    required this.id,
+    required this.department,
+    required this.name,
+    required this.contactNumber,
+  });
+
+  final String id;
+  final String department;
+  final String name;
+  final String contactNumber;
+
+  factory SchoolContactDetail.fromJson(Map<String, dynamic> json) {
+    return SchoolContactDetail(
+      id: json['id']?.toString() ?? '',
+      department: json['department']?.toString() ?? '',
+      name: json['name']?.toString() ?? '',
+      contactNumber: json['contactNumber']?.toString() ?? '',
+    );
+  }
+}
+
+class SchoolProfileDetails {
+  const SchoolProfileDetails({
+    required this.id,
+    required this.name,
+    required this.code,
+    required this.contacts,
+    this.address,
+    this.email,
+    this.mobileNumber,
+  });
+
+  final String id;
+  final String name;
+  final String code;
+  final String? address;
+  final String? email;
+  final String? mobileNumber;
+  final List<SchoolContactDetail> contacts;
+
+  factory SchoolProfileDetails.fromJson(Map<String, dynamic> json) {
+    return SchoolProfileDetails(
+      id: json['id']?.toString() ?? '',
+      name: json['name']?.toString() ?? 'School',
+      code: json['code']?.toString() ?? '',
+      address: json['address']?.toString(),
+      email: json['email']?.toString(),
+      mobileNumber: json['mobileNumber']?.toString(),
+      contacts: (json['contacts'] as List? ?? const [])
+          .map(_jsonMap)
+          .where((item) => item.isNotEmpty)
+          .map(SchoolContactDetail.fromJson)
+          .toList(),
+    );
+  }
+}
+
 class ParentProfile {
   const ParentProfile({
     required this.name,
     required this.email,
     required this.children,
+    required this.schoolProfiles,
     this.firstName,
     this.lastName,
     this.phone,
@@ -133,6 +193,7 @@ class ParentProfile {
   final String? phone;
   final String? schoolName;
   final List<ParentChild> children;
+  final List<SchoolProfileDetails> schoolProfiles;
 
   factory ParentProfile.fromJson(Map<String, dynamic> json) {
     return ParentProfile(
@@ -145,6 +206,11 @@ class ParentProfile {
       children: (json['children'] as List? ?? const [])
           .whereType<Map<String, dynamic>>()
           .map(ParentChild.fromJson)
+          .toList(),
+      schoolProfiles: (json['schoolProfiles'] as List? ?? const [])
+          .map(_jsonMap)
+          .where((item) => item.isNotEmpty)
+          .map(SchoolProfileDetails.fromJson)
           .toList(),
     );
   }

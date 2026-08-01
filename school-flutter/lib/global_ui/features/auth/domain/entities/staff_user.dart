@@ -1,5 +1,53 @@
 import 'package:equatable/equatable.dart';
 
+class SchoolContactDetail extends Equatable {
+  const SchoolContactDetail({
+    required this.id,
+    required this.department,
+    required this.name,
+    required this.contactNumber,
+  });
+
+  final String id;
+  final String department;
+  final String name;
+  final String contactNumber;
+
+  @override
+  List<Object?> get props => [id, department, name, contactNumber];
+}
+
+class SchoolProfileDetails extends Equatable {
+  const SchoolProfileDetails({
+    required this.id,
+    required this.name,
+    required this.code,
+    required this.contacts,
+    this.address,
+    this.email,
+    this.mobileNumber,
+  });
+
+  final String id;
+  final String name;
+  final String code;
+  final String? address;
+  final String? email;
+  final String? mobileNumber;
+  final List<SchoolContactDetail> contacts;
+
+  @override
+  List<Object?> get props => [
+    id,
+    name,
+    code,
+    address,
+    email,
+    mobileNumber,
+    contacts,
+  ];
+}
+
 class StaffUser extends Equatable {
   const StaffUser({
     required this.id,
@@ -10,6 +58,7 @@ class StaffUser extends Equatable {
     this.schoolId,
     this.schoolName,
     this.photoUrl,
+    this.schoolProfile,
   });
 
   final String id;
@@ -20,6 +69,7 @@ class StaffUser extends Equatable {
   final String? schoolId;
   final String? schoolName;
   final String? photoUrl;
+  final SchoolProfileDetails? schoolProfile;
 
   @override
   List<Object?> get props => [
@@ -31,5 +81,6 @@ class StaffUser extends Equatable {
     schoolId,
     schoolName,
     photoUrl,
+    schoolProfile,
   ];
 }

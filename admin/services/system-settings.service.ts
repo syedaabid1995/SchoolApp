@@ -7,12 +7,20 @@ export type GeneralSchoolSettings = {
   phone: string;
   email: string;
   schoolCode: string;
+  contacts: SchoolContactDetail[];
   currentSession: string;
   language: string;
   dateFormat: string;
   currency: string;
   currencySymbol: string;
   timezone: string;
+};
+
+export type SchoolContactDetail = {
+  id: string;
+  department: string;
+  name: string;
+  contactNumber: string;
 };
 
 export type PaymentGatewaySettings = {

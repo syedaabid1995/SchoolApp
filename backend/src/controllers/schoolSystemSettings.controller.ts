@@ -5,6 +5,7 @@ import { prisma } from '../config/db';
 import { HttpError } from '../middlewares/error.middleware';
 import { resolveSchoolId } from '../utils/tenant';
 import { logAudit } from '../utils/audit';
+import { normalizeSchoolContacts } from '../services/schoolProfile.service';
 
 const jsonRecord = z.record(z.unknown());
 const jsonArray = z.array(z.unknown());
@@ -34,6 +35,7 @@ const defaultGeneral = {
   currency: 'USD',
   currencySymbol: '$',
   timezone: 'Asia/Dhaka',
+  contacts: [],
 };
 
 const defaultPaymentGateways = [
@@ -147,6 +149,14 @@ const toJson = (value: unknown): Prisma.InputJsonValue => value as Prisma.InputJ
 const mergeRecord = (base: Record<string, unknown>, value: unknown) =>
   value && typeof value === 'object' && !Array.isArray(value) ? { ...base, ...(value as Record<string, unknown>) } : base;
 
+const normalizeGeneral = (value: unknown) => {
+  const merged = mergeRecord(defaultGeneral, value);
+  return {
+    ...merged,
+    contacts: normalizeSchoolContacts(merged.contacts),
+  };
+};
+
 const normalizeSetting = (setting: {
   id: string;
   schoolId: string;
@@ -162,7 +172,7 @@ const normalizeSetting = (setting: {
   updatedAt: Date;
 }) => ({
   ...setting,
-  general: mergeRecord(defaultGeneral, setting.general),
+  general: normalizeGeneral(setting.general),
   paymentGateways: Array.isArray(setting.paymentGateways) && setting.paymentGateways.length ? setting.paymentGateways : defaultPaymentGateways,
   baseSetups: mergeRecord(defaultBaseSetups, setting.baseSetups),
   sessions: Array.isArray(setting.sessions) && setting.sessions.length ? setting.sessions : defaultSessions,
@@ -208,7 +218,7 @@ export const updateSchoolSystemSettings = async (req: Request, res: Response) =>
   }
 
   const data: Prisma.SchoolSystemSettingUpdateInput = {};
-  if (payload.general) data.general = toJson(mergeRecord(defaultGeneral, payload.general));
+  if (payload.general) data.general = toJson(normalizeGeneral(payload.general));
   if (payload.paymentGateways) data.paymentGateways = toJson(payload.paymentGateways);
   if (payload.baseSetups) data.baseSetups = toJson(mergeRecord(defaultBaseSetups, payload.baseSetups));
   if (payload.sessions) data.sessions = toJson(payload.sessions);
