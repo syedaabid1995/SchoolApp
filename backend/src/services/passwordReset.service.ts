@@ -722,20 +722,7 @@ export const resetPasswordWithOtp = async (req: Request, input: ResetPasswordOtp
     rejectInvalidResetToken('school_not_found_or_mismatch');
   }
 
-  const user = await prisma.user.findFirst({
-    where: {
-      email: { equals: input.email, mode: 'insensitive' },
-      ...(selectedSchoolId ? { schoolId: selectedSchoolId } : {}),
-      status: 'ACTIVE',
-    },
-    select: {
-      id: true,
-      email: true,
-      schoolId: true,
-      status: true,
-      roles: { select: { role: { select: { name: true } } } },
-    },
-  });
+  const { user, matchedLoginType } = await findPasswordResetUser(input, selectedSchoolId);
 
   if (!user) {
     await logPasswordResetFailedAudit({
@@ -747,8 +734,7 @@ export const resetPasswordWithOtp = async (req: Request, input: ResetPasswordOtp
     rejectInvalidResetToken('account_not_found_or_inactive');
   }
 
-  const roleNames = user.roles.map((entry) => entry.role.name);
-  if (!isRoleAllowedForLoginType(input.loginType, roleNames)) {
+  if (!matchedLoginType) {
     await logPasswordResetFailedAudit({
       req,
       userId: user.id,

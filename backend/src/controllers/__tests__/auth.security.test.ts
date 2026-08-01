@@ -15,11 +15,12 @@ import {
   refreshToken,
   resendTwoFactor,
   resetPassword,
+  resetPasswordOtp,
   verifyTwoFactor,
 } from '../auth.controller';
 import { HttpError } from '../../middlewares/error.middleware';
 import { loginIpRateLimit } from '../../middlewares/rate-limit.middleware';
-import { hashPassword } from '../../utils/password';
+import { hashPassword, verifyPassword } from '../../utils/password';
 import { hashToken } from '../../utils/token';
 import { hashOtp } from '../../utils/otp';
 import { createMockRequest } from '../../__tests__/test-utils/mock-request';
@@ -355,6 +356,12 @@ const patchPrisma = () => {
       ...token,
       user: findUserById(token.userId),
     };
+  });
+  patchMethod(prisma.passwordResetToken as any, 'findFirst', async ({ where }: any) => {
+    const token =
+      Array.from(resetTokens.values()).find((entry) => matchesResetTokenWhere(entry, where ?? {})) ?? null;
+    if (!token) return null;
+    return token;
   });
   patchMethod(prisma.passwordResetToken as any, 'updateMany', async ({ where, data }: any) => {
     let count = 0;
@@ -1140,6 +1147,45 @@ test('forgot password OTP uses account matching requested login type when email 
   assert.equal(res.statusCode, 200);
   assert.equal(resetTokens.size, 1);
   assert.equal(Array.from(resetTokens.values())[0].userId, parentUser.id);
+});
+
+test('reset password OTP uses account matching requested login type when email is reused', async () => {
+  const parentUser = await addUser({
+    id: SECOND_USER_ID,
+    email: EMAIL,
+    schoolId: null,
+    role: 'PARENT',
+  });
+  const resetTokenId = 'parent-reset-token';
+  const otp = '123456';
+  const token: TestResetToken = {
+    id: resetTokenId,
+    userId: parentUser.id,
+    schoolId: null,
+    tokenHash: hashToken(`${parentUser.id}:${resetTokenId}:${otp}`),
+    expiresAt: new Date(Date.now() + 10 * 60 * 1000),
+    usedAt: null,
+    createdAt: new Date(),
+  };
+  resetTokens.set(token.tokenHash, token);
+
+  const res = await invoke(
+    resetPasswordOtp,
+    createRequest({
+      body: {
+        email: EMAIL,
+        otp,
+        newPassword: NEW_PASSWORD,
+        confirmPassword: NEW_PASSWORD,
+        loginType: 'parent',
+      },
+      originalUrl: '/api/v1/auth/reset-password/otp',
+    }),
+  );
+
+  assert.equal(res.statusCode, 200);
+  assert.equal(await verifyPassword(NEW_PASSWORD, findUserById(parentUser.id)?.passwordHash ?? ''), true);
+  assert.equal(Array.from(resetTokens.values()).find((entry) => entry.id === resetTokenId)?.usedAt instanceof Date, true);
 });
 
 test('reset password works, revokes sessions, rejects old password, and accepts new password', async () => {
