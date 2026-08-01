@@ -29,9 +29,12 @@ class ParentRepository {
           mustChangePassword: profile.mustChangePassword,
         ),
       );
-    } catch (_) {
-      await _tokenStorage.clear();
-      return const ParentSession.unauthenticated();
+    } catch (error) {
+      if (error is DioException && error.response?.statusCode == 401) {
+        await _tokenStorage.clear();
+        return const ParentSession.unauthenticated();
+      }
+      return const ParentSession.authenticated(ParentUser(id: '', email: ''));
     }
   }
 

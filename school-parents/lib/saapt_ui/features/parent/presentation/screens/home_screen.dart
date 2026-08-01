@@ -61,11 +61,14 @@ class _DashboardContent extends ConsumerWidget {
       );
     }
     final selected = ref.watch(selectedChildProvider) ?? children.first;
+    final now = DateTime.now();
+    final currentMonth = DateTime(now.year, now.month);
+    final today = DateTime(now.year, now.month, now.day);
     final attendanceState = ref.watch(
       parentMonthlyAttendanceProvider((
         childId: selected.id,
-        month: DateTime.now(),
-        date: DateTime.now(),
+        month: currentMonth,
+        date: today,
       )),
     );
 
@@ -115,7 +118,7 @@ class _DashboardContent extends ConsumerWidget {
               ),
               const SizedBox(height: 22),
               ParentAttendanceCalendar(
-                month: DateTime.now(),
+                month: currentMonth,
                 attendance: attendance,
                 childName: selected.name,
               ),

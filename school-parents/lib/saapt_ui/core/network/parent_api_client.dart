@@ -20,6 +20,7 @@ final parentRawDioProvider = Provider<Dio>((ref) {
 
 final parentDioProvider = Provider<Dio>((ref) {
   final storage = ref.watch(parentTokenStorageProvider);
+  final refreshClient = ref.watch(parentRawDioProvider);
   final dio = Dio(
     BaseOptions(
       baseUrl: ParentAppConfig.apiBaseUrl,
@@ -32,9 +33,43 @@ final parentDioProvider = Provider<Dio>((ref) {
     ),
   );
 
+  Future<String?>? refreshFuture;
+  Future<String?> refreshSession() async {
+    final refreshToken = await storage.readRefreshToken();
+    if (refreshToken == null || refreshToken.isEmpty) {
+      await storage.clear();
+      return null;
+    }
+
+    final response = await refreshClient.post<Map<String, dynamic>>(
+      '/auth/refresh',
+      data: {'refreshToken': refreshToken},
+      options: Options(
+        headers: {
+          'Accept': 'application/json',
+          'x-client-platform': ParentAppConfig.clientPlatform,
+        },
+      ),
+    );
+    final data = response.data ?? const <String, dynamic>{};
+    final nextAccessToken = data['accessToken'] as String?;
+    final nextRefreshToken = data['refreshToken'] as String?;
+    if (nextAccessToken == null || nextRefreshToken == null) {
+      await storage.clear();
+      return null;
+    }
+
+    await storage.saveTokens(
+      accessToken: nextAccessToken,
+      refreshToken: nextRefreshToken,
+    );
+    return nextAccessToken;
+  }
+
   dio.interceptors.add(
     InterceptorsWrapper(
       onRequest: (options, handler) async {
+        options.headers['x-client-platform'] = ParentAppConfig.clientPlatform;
         final token = await storage.readAccessToken();
         if (token != null && token.isNotEmpty) {
           options.headers['Authorization'] = 'Bearer $token';
@@ -42,15 +77,51 @@ final parentDioProvider = Provider<Dio>((ref) {
         handler.next(options);
       },
       onError: (error, handler) async {
-        if (error.response?.statusCode == 401) {
-          await storage.clear();
+        final statusCode = error.response?.statusCode;
+        final path = error.requestOptions.path;
+        final shouldRefresh =
+            statusCode == 401 && !_isParentPublicAuthPath(path);
+        if (!shouldRefresh) {
+          handler.next(error);
+          return;
         }
-        handler.next(error);
+
+        try {
+          refreshFuture ??= refreshSession().whenComplete(() {
+            refreshFuture = null;
+          });
+          final nextAccessToken = await refreshFuture;
+
+          if (nextAccessToken == null || nextAccessToken.isEmpty) {
+            handler.next(error);
+            return;
+          }
+          final retryOptions = error.requestOptions;
+          retryOptions.headers['Authorization'] = 'Bearer $nextAccessToken';
+          retryOptions.headers['x-client-platform'] =
+              ParentAppConfig.clientPlatform;
+          final retryResponse = await refreshClient.fetch<dynamic>(
+            retryOptions,
+          );
+          handler.resolve(retryResponse);
+        } catch (_) {
+          await storage.clear();
+          handler.next(error);
+        }
       },
     ),
   );
   return dio;
 });
+
+bool _isParentPublicAuthPath(String path) {
+  final uriPath = Uri.tryParse(path)?.path ?? path;
+  return uriPath.endsWith('/auth/login') ||
+      uriPath.endsWith('/auth/refresh') ||
+      uriPath.endsWith('/auth/forgot-password/otp') ||
+      uriPath.endsWith('/auth/reset-password/otp') ||
+      uriPath.endsWith('/auth/verify-2fa');
+}
 
 String parentApiError(
   Object error, [
