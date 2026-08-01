@@ -1236,18 +1236,18 @@ export const getParentAttendance = async (req: Request, res: Response) => {
       where: { schoolId: child.schoolId },
       select: { weekends: true, holidays: true },
     }),
-    prisma.attendanceHoliday.findMany({
-      where: {
-        schoolId: child.schoolId,
-        holidayDate: { gte: start, lte: endInclusive },
-        OR: [
-          { classId: null, sectionId: null },
-          ...(child.classId ? [{ classId: child.classId, sectionId: null }] : []),
-          ...(child.classId && child.sectionId ? [{ classId: child.classId, sectionId: child.sectionId }] : []),
-        ],
-      },
-      select: { holidayDate: true, reason: true },
-    }),
+    child.classId && child.sectionId
+      ? prisma.attendanceHoliday.findMany({
+          where: {
+            schoolId: child.schoolId,
+            classId: child.classId,
+            sectionId: child.sectionId,
+            ...(child.academicYearId ? { academicSessionId: child.academicYearId } : {}),
+            holidayDate: { gte: start, lte: endInclusive },
+          },
+          select: { holidayDate: true, reason: true },
+        })
+      : Promise.resolve([]),
     prisma.studentLeaveRequest.findMany({
       where: {
         schoolId: child.schoolId,
@@ -1415,7 +1415,7 @@ export const getParentAttendance = async (req: Request, res: Response) => {
       startTime: 'startTime' in unit ? (unit.startTime ?? null) : null,
       endTime: 'endTime' in unit ? (unit.endTime ?? null) : null,
       status: record ? normalizeStatus(record.status) : (selectedDayStatus?.status ?? 'Unmarked'),
-      remark: record?.note ?? selectedDayStatus?.remark ?? null,
+      remark: record ? (record.note ?? null) : (selectedDayStatus?.remark ?? null),
       sequence: index + 1,
     };
   });
