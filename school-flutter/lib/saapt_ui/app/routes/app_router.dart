@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../../global_ui/app/routes/router_refresh_notifier.dart';
 import '../../../global_ui/features/auth/presentation/providers/auth_controller.dart';
+import '../../../global_ui/features/homework/presentation/screens/homework_list_screen.dart';
 import '../../features/attendance/presentation/screens/my_attendance_screen.dart';
 import '../../features/auth/presentation/screens/force_change_password_screen.dart';
 import '../../features/auth/presentation/screens/forgot_password_screen.dart';
@@ -90,6 +91,14 @@ final saaptRouterProvider = Provider<GoRouter>((ref) {
           StatefulShellBranch(
             routes: [
               GoRoute(
+                path: '/homework',
+                builder: (_, _) => const HomeworkListScreen(),
+              ),
+            ],
+          ),
+          StatefulShellBranch(
+            routes: [
+              GoRoute(
                 path: '/reports',
                 builder: (_, _) => const SaaptReportsScreen(),
               ),
@@ -132,6 +141,11 @@ class _SaaptShell extends StatelessWidget {
             icon: Icon(Icons.groups_outlined),
             selectedIcon: Icon(Icons.groups),
             label: 'Students',
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.assignment_outlined),
+            selectedIcon: Icon(Icons.assignment),
+            label: 'Homework',
           ),
           NavigationDestination(
             icon: Icon(Icons.bar_chart_outlined),

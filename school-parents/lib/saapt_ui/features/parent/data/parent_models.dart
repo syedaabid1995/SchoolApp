@@ -464,6 +464,68 @@ class ParentNotice {
   }
 }
 
+class ParentHomework {
+  const ParentHomework({
+    required this.id,
+    required this.classId,
+    required this.sectionId,
+    required this.subjectId,
+    required this.homeworkDate,
+    required this.submissionDate,
+    required this.marks,
+    required this.description,
+    this.className,
+    this.sectionName,
+    this.subjectName,
+    this.attachmentUrl,
+    this.attachmentName,
+  });
+
+  final String id;
+  final String classId;
+  final String sectionId;
+  final String subjectId;
+  final DateTime homeworkDate;
+  final DateTime submissionDate;
+  final num marks;
+  final String description;
+  final String? className;
+  final String? sectionName;
+  final String? subjectName;
+  final String? attachmentUrl;
+  final String? attachmentName;
+
+  bool get hasAttachment =>
+      attachmentUrl != null && attachmentUrl!.trim().isNotEmpty;
+
+  factory ParentHomework.fromJson(Map<String, dynamic> json) {
+    final classJson = _jsonMap(json['class']);
+    final sectionJson = _jsonMap(json['section']);
+    final subjectJson = _jsonMap(json['subject']);
+    return ParentHomework(
+      id: json['id']?.toString() ?? '',
+      classId: json['classId']?.toString() ?? classJson['id']?.toString() ?? '',
+      sectionId:
+          json['sectionId']?.toString() ?? sectionJson['id']?.toString() ?? '',
+      subjectId:
+          json['subjectId']?.toString() ?? subjectJson['id']?.toString() ?? '',
+      homeworkDate:
+          DateTime.tryParse(json['homeworkDate']?.toString() ?? '') ??
+          DateTime.now(),
+      submissionDate:
+          DateTime.tryParse(json['submissionDate']?.toString() ?? '') ??
+          DateTime.now(),
+      marks: num.tryParse(json['marks']?.toString() ?? '') ?? 0,
+      description: json['description']?.toString() ?? '',
+      className: classJson['name']?.toString(),
+      sectionName: sectionJson['name']?.toString(),
+      subjectName: subjectJson['name']?.toString(),
+      attachmentUrl: json['attachmentUrl']?.toString(),
+      attachmentName: json['attachmentName']?.toString(),
+    );
+  }
+}
+
 class ParentFeeSummary {
   const ParentFeeSummary({
     required this.total,

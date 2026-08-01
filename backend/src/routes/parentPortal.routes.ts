@@ -13,6 +13,7 @@ import {
   getParentResults,
   listParentSubjects,
   getParentAttendance,
+  listParentHomeworks,
   listParentNotices,
   listParentTimetable,
   listParentFees,
@@ -34,6 +35,7 @@ parentPortalRouter.get('/exams', listParentExams);
 parentPortalRouter.get('/results', getParentResults);
 parentPortalRouter.get('/subjects', listParentSubjects);
 parentPortalRouter.get('/attendance', getParentAttendance);
+parentPortalRouter.get('/homework', listParentHomeworks);
 parentPortalRouter.get('/notices', listParentNotices);
 parentPortalRouter.get('/timetable', listParentTimetable);
 parentPortalRouter.get('/fees', listParentFees);

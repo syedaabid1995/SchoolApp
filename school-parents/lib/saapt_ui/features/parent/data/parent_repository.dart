@@ -274,6 +274,22 @@ class ParentRepository {
         .toList();
   }
 
+  Future<List<ParentHomework>> getHomeworks({
+    required String childId,
+    required DateTime date,
+  }) async {
+    String dateValue(DateTime value) =>
+        '${value.year.toString().padLeft(4, '0')}-${value.month.toString().padLeft(2, '0')}-${value.day.toString().padLeft(2, '0')}';
+    final response = await _dio.get<Map<String, dynamic>>(
+      '/parents/portal/homework',
+      queryParameters: {'childId': childId, 'date': dateValue(date)},
+    );
+    return (response.data?['items'] as List? ?? const [])
+        .whereType<Map<String, dynamic>>()
+        .map(ParentHomework.fromJson)
+        .toList();
+  }
+
   Future<ParentLeaveCenter> getLeaveRequests({String? childId}) async {
     final response = await _dio.get<Map<String, dynamic>>(
       '/parents/portal/leave-requests',

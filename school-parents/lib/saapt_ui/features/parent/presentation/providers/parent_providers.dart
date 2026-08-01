@@ -140,6 +140,16 @@ final parentNoticesProvider = FutureProvider.autoDispose
       return ref.watch(parentRepositoryProvider).getNotices(childId: child?.id);
     });
 
+typedef ParentHomeworkQuery = ({ParentChild child, DateTime date});
+
+final parentHomeworksProvider = FutureProvider.autoDispose
+    .family<List<ParentHomework>, ParentHomeworkQuery>((ref, query) {
+      final date = DateTime(query.date.year, query.date.month, query.date.day);
+      return ref
+          .watch(parentRepositoryProvider)
+          .getHomeworks(childId: query.child.id, date: date);
+    });
+
 final parentLeaveCenterProvider = FutureProvider.autoDispose
     .family<ParentLeaveCenter, ParentChild?>((ref, child) {
       return ref

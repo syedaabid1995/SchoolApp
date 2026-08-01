@@ -137,6 +137,18 @@ const studentLeaveSchema = z.object({
   reason: z.string().trim().min(3).max(1000),
 });
 
+const parentHomeworkQuerySchema = z.object({
+  childId: z.string().uuid(),
+  date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+});
+
+const dateRange = (value: string) => {
+  const start = new Date(`${value}T00:00:00.000Z`);
+  const end = new Date(start);
+  end.setUTCDate(end.getUTCDate() + 1);
+  return { start, end };
+};
+
 const parentProfileUpdateSchema = z.object({
   firstName: z.string().trim().min(1).max(80),
   lastName: z.string().trim().min(1).max(80),
@@ -1428,6 +1440,37 @@ export const getParentAttendance = async (req: Request, res: Response) => {
     mode: attendanceUnits.configuration.mode,
     sessions,
   });
+};
+
+export const listParentHomeworks = async (req: Request, res: Response) => {
+  const auth = requireAuth(req);
+  const query = parentHomeworkQuerySchema.parse(req.query);
+  const { child } = await requireChildAccess(auth.userId, query.childId);
+
+  if (!child.classId || !child.sectionId) {
+    return res.status(200).json({ items: [] });
+  }
+
+  const selectedDate = query.date ?? new Date().toISOString().slice(0, 10);
+  const range = dateRange(selectedDate);
+  const items = await prisma.homework.findMany({
+    where: {
+      schoolId: child.schoolId,
+      classId: child.classId,
+      sectionId: child.sectionId,
+      homeworkDate: { gte: range.start, lt: range.end },
+    },
+    include: {
+      class: { select: { id: true, name: true } },
+      section: { select: { id: true, name: true } },
+      subject: { select: { id: true, name: true, code: true } },
+      createdBy: { select: { id: true, email: true } },
+      _count: { select: { evaluations: true } },
+    },
+    orderBy: [{ subject: { name: 'asc' } }, { createdAt: 'desc' }],
+  });
+
+  res.status(200).json({ items, selectedDate });
 };
 
 export const listParentNotices = async (req: Request, res: Response) => {
