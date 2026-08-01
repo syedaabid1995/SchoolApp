@@ -85,6 +85,7 @@ class AuthRemoteDataSource {
         'email': email,
         if (schoolCode != null && schoolCode.trim().isNotEmpty)
           'schoolCode': schoolCode.trim(),
+        'loginType': 'teacher',
       },
     );
   }
