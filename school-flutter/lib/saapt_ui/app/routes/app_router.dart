@@ -4,11 +4,11 @@ import 'package:go_router/go_router.dart';
 
 import '../../../global_ui/app/routes/router_refresh_notifier.dart';
 import '../../../global_ui/features/auth/presentation/providers/auth_controller.dart';
-import '../../../global_ui/features/homework/presentation/screens/homework_list_screen.dart';
 import '../../features/attendance/presentation/screens/my_attendance_screen.dart';
 import '../../features/auth/presentation/screens/force_change_password_screen.dart';
 import '../../features/auth/presentation/screens/forgot_password_screen.dart';
 import '../../features/auth/presentation/screens/login_screen.dart';
+import '../../features/homework/presentation/screens/homework_screen.dart';
 import '../../features/auth/presentation/screens/splash_screen.dart';
 import '../../features/notifications/presentation/screens/saapt_push_notifications_screen.dart';
 import '../../features/profile/presentation/screens/profile_screen.dart';
@@ -92,7 +92,7 @@ final saaptRouterProvider = Provider<GoRouter>((ref) {
             routes: [
               GoRoute(
                 path: '/homework',
-                builder: (_, _) => const HomeworkListScreen(),
+                builder: (_, _) => const SaaptHomeworkScreen(),
               ),
             ],
           ),
