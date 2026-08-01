@@ -20,7 +20,9 @@ export {
 export {
   changePassword,
   forgotPassword,
+  forgotPasswordOtp,
   resetPassword,
+  resetPasswordOtp,
 } from './password-reset/password-reset.service';
 
 export type { AuthTokenPayload } from './token/token.service';

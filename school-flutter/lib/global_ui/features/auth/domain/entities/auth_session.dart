@@ -68,6 +68,7 @@ class AuthSession extends Equatable {
 
   bool get isAuthenticated =>
       status == AuthSessionStatus.authenticated && user != null;
+  bool get mustChangePassword => user?.mustChangePassword ?? false;
   bool get requiresSchoolSelection =>
       status == AuthSessionStatus.schoolSelectionRequired &&
       schoolOptions.isNotEmpty;

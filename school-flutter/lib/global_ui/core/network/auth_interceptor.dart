@@ -104,6 +104,8 @@ class AuthInterceptor extends Interceptor {
     return uriPath.endsWith(ApiEndpoints.login) ||
         uriPath.endsWith(ApiEndpoints.refresh) ||
         uriPath.endsWith(ApiEndpoints.forgotPassword) ||
+        uriPath.endsWith(ApiEndpoints.forgotPasswordOtp) ||
+        uriPath.endsWith(ApiEndpoints.resetPasswordOtp) ||
         uriPath.endsWith(ApiEndpoints.verifyTwoFactor) ||
         uriPath.endsWith(ApiEndpoints.resendTwoFactor);
   }

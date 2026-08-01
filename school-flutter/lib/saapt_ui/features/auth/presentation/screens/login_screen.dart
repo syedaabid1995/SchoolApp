@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 
 import '../../../../../global_ui/features/auth/domain/entities/auth_session.dart';
 import '../../../../../global_ui/features/auth/presentation/providers/auth_controller.dart';
@@ -202,6 +203,15 @@ class _SaaptLoginScreenState extends ConsumerState<SaaptLoginScreen> {
                                 ),
                               ),
                               validator: _required,
+                            ),
+                            Align(
+                              alignment: Alignment.centerRight,
+                              child: TextButton(
+                                onPressed: auth.isLoading
+                                    ? null
+                                    : () => context.go('/forgot-password'),
+                                child: const Text('Forgot password?'),
+                              ),
                             ),
                           ],
                         ] else ...[

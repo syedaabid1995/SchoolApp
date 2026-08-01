@@ -48,7 +48,11 @@ class AuthResponseModel {
       accessToken: json['accessToken'] as String?,
       refreshToken: json['refreshToken'] as String?,
       user: json['user'] is Map<String, dynamic>
-          ? StaffUserModel.fromJson(json['user'] as Map<String, dynamic>)
+          ? StaffUserModel.fromJson({
+              ...(json['user'] as Map<String, dynamic>),
+              if (json['mustChangePassword'] != null)
+                'mustChangePassword': json['mustChangePassword'],
+            })
           : null,
       challengeId: (json['challengeId'] ?? json['mfaChallengeId'])?.toString(),
       mfaMethod: (json['method'] ?? json['mfaMethod'])?.toString(),

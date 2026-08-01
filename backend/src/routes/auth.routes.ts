@@ -11,7 +11,9 @@ import {
   logout,
   changePassword,
   forgotPassword,
+  forgotPasswordOtp,
   resetPassword,
+  resetPasswordOtp,
   listSessions,
   revokeSession,
   logoutAll,
@@ -19,17 +21,14 @@ import {
 import { getPublicLoginExperience } from '../controllers/loginExperience.controller';
 import { authMiddleware } from '../middlewares/auth.middleware';
 import { validateBody, validateParams } from '../middlewares/validation.middleware';
-import {
-  forgotPasswordRateLimit,
-  loginIpRateLimit,
-  mfaResendIpRateLimit,
-  mfaVerifyRateLimit,
-} from '../middlewares/rate-limit.middleware';
+import { forgotPasswordRateLimit, loginIpRateLimit, mfaResendIpRateLimit, mfaVerifyRateLimit } from '../middlewares/rate-limit.middleware';
 import {
   changePasswordSchema,
+  forgotPasswordOtpSchema,
   forgotPasswordSchema,
   loginSchema,
   refreshSchema,
+  resetPasswordOtpSchema,
   resendTwoFactorSchema,
   resetPasswordSchema,
   revokeSessionParamsSchema,
@@ -59,7 +58,11 @@ authRouter.post('/totp/verify-login', mfaVerifyRateLimit(), validateBody(totpVer
 
 authRouter.post('/forgot-password', forgotPasswordRateLimit(), validateBody(forgotPasswordSchema), forgotPassword);
 
+authRouter.post('/forgot-password/otp', forgotPasswordRateLimit(), validateBody(forgotPasswordOtpSchema), forgotPasswordOtp);
+
 authRouter.post('/reset-password', validateBody(resetPasswordSchema), resetPassword);
+
+authRouter.post('/reset-password/otp', mfaVerifyRateLimit(), validateBody(resetPasswordOtpSchema), resetPasswordOtp);
 
 authRouter.post('/refresh', validateBody(refreshSchema), refreshToken);
 

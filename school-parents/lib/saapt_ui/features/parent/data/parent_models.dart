@@ -12,12 +12,14 @@ class ParentUser {
     required this.email,
     this.name,
     this.schoolId,
+    this.mustChangePassword = false,
   });
 
   final String id;
   final String email;
   final String? name;
   final String? schoolId;
+  final bool mustChangePassword;
 
   factory ParentUser.fromJson(Map<String, dynamic> json) {
     return ParentUser(
@@ -25,6 +27,7 @@ class ParentUser {
       email: json['email']?.toString() ?? '',
       name: (json['name'] ?? json['displayName'])?.toString(),
       schoolId: json['schoolId']?.toString(),
+      mustChangePassword: json['mustChangePassword'] == true,
     );
   }
 }
@@ -58,6 +61,7 @@ class ParentSession {
   final String? mfaMessage;
 
   bool get requiresMfa => mfaChallengeId != null;
+  bool get mustChangePassword => user?.mustChangePassword ?? false;
 }
 
 class ParentChild {
@@ -187,6 +191,7 @@ class ParentProfile {
     this.lastName,
     this.phone,
     this.schoolName,
+    this.mustChangePassword = false,
   });
 
   final String name;
@@ -195,6 +200,7 @@ class ParentProfile {
   final String? lastName;
   final String? phone;
   final String? schoolName;
+  final bool mustChangePassword;
   final List<ParentChild> children;
   final List<SchoolProfileDetails> schoolProfiles;
 
@@ -206,6 +212,7 @@ class ParentProfile {
       lastName: json['lastName']?.toString(),
       phone: json['phone']?.toString(),
       schoolName: json['schoolName']?.toString(),
+      mustChangePassword: json['mustChangePassword'] == true,
       children: (json['children'] as List? ?? const [])
           .whereType<Map<String, dynamic>>()
           .map(ParentChild.fromJson)

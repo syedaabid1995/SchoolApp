@@ -19,6 +19,13 @@ abstract class AuthRepository {
     required String email,
     String? schoolCode,
   });
+  Future<void> requestPasswordResetOtp({required String email});
+  Future<void> resetPasswordWithOtp({
+    required String email,
+    required String otp,
+    required String newPassword,
+    required String confirmPassword,
+  });
   Future<void> changePassword({
     required String currentPassword,
     required String newPassword,

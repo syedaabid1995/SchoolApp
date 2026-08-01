@@ -89,6 +89,31 @@ class AuthRemoteDataSource {
     );
   }
 
+  Future<void> requestPasswordResetOtp({required String email}) async {
+    await _dio.post<void>(
+      ApiEndpoints.forgotPasswordOtp,
+      data: {'email': email, 'loginType': 'teacher'},
+    );
+  }
+
+  Future<void> resetPasswordWithOtp({
+    required String email,
+    required String otp,
+    required String newPassword,
+    required String confirmPassword,
+  }) async {
+    await _dio.post<void>(
+      ApiEndpoints.resetPasswordOtp,
+      data: {
+        'email': email,
+        'otp': otp,
+        'newPassword': newPassword,
+        'confirmPassword': confirmPassword,
+        'loginType': 'teacher',
+      },
+    );
+  }
+
   Future<void> changePassword({
     required String currentPassword,
     required String newPassword,

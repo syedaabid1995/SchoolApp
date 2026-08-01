@@ -176,11 +176,36 @@ class _FakeAuthRepository implements AuthRepository {
   }) async {}
 
   @override
+  Future<void> requestPasswordResetOtp({required String email}) async {}
+
+  @override
+  Future<void> resetPasswordWithOtp({
+    required String email,
+    required String otp,
+    required String newPassword,
+    required String confirmPassword,
+  }) async {}
+
+  @override
   Future<void> changePassword({
     required String currentPassword,
     required String newPassword,
     required String confirmPassword,
   }) async {}
+
+  @override
+  Future<StaffUser> updateProfile({
+    required String firstName,
+    required String lastName,
+    required String email,
+    String? phone,
+  }) async => user;
+
+  @override
+  Future<bool> getPushEnabled() async => false;
+
+  @override
+  Future<bool> updatePushEnabled(bool enabled) async => enabled;
 }
 
 class _CountingAttendanceRepository implements AttendanceRepository {

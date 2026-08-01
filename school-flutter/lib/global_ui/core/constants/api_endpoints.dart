@@ -8,6 +8,8 @@ class ApiEndpoints {
   static const pushPreferencesMe = '/notifications/push/preferences/me';
   static const changePassword = '/auth/change-password';
   static const forgotPassword = '/auth/forgot-password';
+  static const forgotPasswordOtp = '/auth/forgot-password/otp';
+  static const resetPasswordOtp = '/auth/reset-password/otp';
   static const verifyTwoFactor = '/auth/verify-2fa';
   static const resendTwoFactor = '/auth/resend-2fa';
   static const teacherTimetable = '/academics/timetable/teacher';

@@ -657,7 +657,7 @@ export const getParentProfile = async (req: Request, res: Response) => {
   const auth = requireAuth(req);
   const user = await prisma.user.findUnique({
     where: { id: auth.userId },
-    select: { email: true },
+    select: { email: true, mustChangePassword: true },
   });
   const parents = await resolveParentProfiles(auth.userId);
   const profile = parents[0];
@@ -673,6 +673,7 @@ export const getParentProfile = async (req: Request, res: Response) => {
     lastName: profile?.lastName ?? '',
     phone: profile?.phone ?? null,
     email: profile?.email ?? user?.email ?? null,
+    mustChangePassword: user?.mustChangePassword ?? false,
     schoolName: children[0]?.schoolName ?? null,
     academicYear: null,
     children,

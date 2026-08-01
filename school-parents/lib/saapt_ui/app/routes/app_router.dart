@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../features/auth/presentation/screens/force_change_password_screen.dart';
+import '../../features/auth/presentation/screens/forgot_password_screen.dart';
 import '../../features/auth/presentation/screens/login_screen.dart';
 import '../../features/auth/presentation/screens/splash_screen.dart';
 import '../../features/parent/presentation/providers/parent_providers.dart';
@@ -30,10 +32,14 @@ final saaptRouterProvider = Provider<GoRouter>((ref) {
     refreshListenable: refresh,
     redirect: (context, state) {
       final auth = ref.read(parentAuthControllerProvider);
-      final authenticated = auth.value?.isAuthenticated ?? false;
+      final session = auth.value;
+      final authenticated = session?.isAuthenticated ?? false;
+      final mustChangePassword = session?.mustChangePassword ?? false;
       final publicRoute =
           state.matchedLocation == '/login' ||
+          state.matchedLocation == '/forgot-password' ||
           state.matchedLocation == '/splash';
+      final changePasswordRoute = state.matchedLocation == '/change-password';
       if (auth.isLoading && state.matchedLocation != '/splash') {
         return '/splash';
       }
@@ -43,12 +49,25 @@ final saaptRouterProvider = Provider<GoRouter>((ref) {
           state.matchedLocation == '/splash') {
         return '/login';
       }
-      if (authenticated && publicRoute) return '/home';
+      if (authenticated && mustChangePassword && !changePasswordRoute) {
+        return '/change-password';
+      }
+      if (authenticated && publicRoute) {
+        return mustChangePassword ? '/change-password' : '/home';
+      }
       return null;
     },
     routes: [
       GoRoute(path: '/splash', builder: (_, _) => const SaaptSplashScreen()),
       GoRoute(path: '/login', builder: (_, _) => const SaaptLoginScreen()),
+      GoRoute(
+        path: '/forgot-password',
+        builder: (_, _) => const SaaptForgotPasswordScreen(),
+      ),
+      GoRoute(
+        path: '/change-password',
+        builder: (_, _) => const SaaptForceChangePasswordScreen(),
+      ),
       GoRoute(path: '/profile', builder: (_, _) => const ParentProfileScreen()),
       StatefulShellRoute.indexedStack(
         builder: (context, state, shell) => _SaaptShell(shell: shell),

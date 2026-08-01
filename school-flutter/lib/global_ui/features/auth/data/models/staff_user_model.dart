@@ -71,6 +71,7 @@ class StaffUserModel extends StaffUser {
     super.firstName,
     super.lastName,
     super.phone,
+    super.mustChangePassword,
   });
 
   factory StaffUserModel.fromJson(Map<String, dynamic> json) {
@@ -121,6 +122,7 @@ class StaffUserModel extends StaffUser {
       firstName: teacherProfile?['firstName']?.toString(),
       lastName: teacherProfile?['lastName']?.toString(),
       phone: teacherProfile?['phone']?.toString(),
+      mustChangePassword: nestedUser['mustChangePassword'] == true,
     );
   }
 }

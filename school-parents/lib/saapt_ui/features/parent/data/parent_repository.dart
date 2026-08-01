@@ -26,6 +26,7 @@ class ParentRepository {
           email: profile.email,
           name: profile.name,
           schoolId: profile.children.firstOrNull?.schoolId,
+          mustChangePassword: profile.mustChangePassword,
         ),
       );
     } catch (_) {
@@ -71,7 +72,13 @@ class ParentRepository {
       accessToken: accessToken,
       refreshToken: refreshToken,
     );
-    return ParentSession.authenticated(ParentUser.fromJson(userJson));
+    return ParentSession.authenticated(
+      ParentUser.fromJson({
+        ...userJson,
+        if (data['mustChangePassword'] != null)
+          'mustChangePassword': data['mustChangePassword'],
+      }),
+    );
   }
 
   Future<ParentSession> verifyMfa({
@@ -97,7 +104,13 @@ class ParentRepository {
       accessToken: accessToken,
       refreshToken: refreshToken,
     );
-    return ParentSession.authenticated(ParentUser.fromJson(userJson));
+    return ParentSession.authenticated(
+      ParentUser.fromJson({
+        ...userJson,
+        if (data['mustChangePassword'] != null)
+          'mustChangePassword': data['mustChangePassword'],
+      }),
+    );
   }
 
   Future<void> logout() async {
@@ -159,6 +172,31 @@ class ParentRepository {
         'currentPassword': currentPassword,
         'newPassword': newPassword,
         'confirmPassword': confirmPassword,
+      },
+    );
+  }
+
+  Future<void> requestPasswordResetOtp({required String email}) async {
+    await _dio.post<Map<String, dynamic>>(
+      '/auth/forgot-password/otp',
+      data: {'email': email, 'loginType': 'parent'},
+    );
+  }
+
+  Future<void> resetPasswordWithOtp({
+    required String email,
+    required String otp,
+    required String newPassword,
+    required String confirmPassword,
+  }) async {
+    await _dio.post<Map<String, dynamic>>(
+      '/auth/reset-password/otp',
+      data: {
+        'email': email,
+        'otp': otp,
+        'newPassword': newPassword,
+        'confirmPassword': confirmPassword,
+        'loginType': 'parent',
       },
     );
   }

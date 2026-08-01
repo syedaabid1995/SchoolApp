@@ -2,8 +2,7 @@ import { z } from 'zod';
 
 export const loginTypeSchema = z.enum(['admin', 'staff', 'teacher', 'student', 'parent']);
 
-const emptyStringToUndefined = (value: unknown) =>
-  typeof value === 'string' && value.trim() === '' ? undefined : value;
+const emptyStringToUndefined = (value: unknown) => (typeof value === 'string' && value.trim() === '' ? undefined : value);
 
 export const loginSchema = z
   .object({
@@ -31,7 +30,10 @@ export const refreshSchema = z.object({
 
 export const verifyTwoFactorSchema = z.object({
   challengeId: z.string().trim().uuid(),
-  otp: z.string().trim().regex(/^\d{6}$/),
+  otp: z
+    .string()
+    .trim()
+    .regex(/^\d{6}$/),
   rememberMe: z.boolean().optional().default(false),
 });
 
@@ -40,7 +42,10 @@ export const resendTwoFactorSchema = z.object({
 });
 
 export const totpVerifySetupSchema = z.object({
-  code: z.string().trim().regex(/^\d{6}$/),
+  code: z
+    .string()
+    .trim()
+    .regex(/^\d{6}$/),
 });
 
 export const totpDisableSchema = z.object({
@@ -107,13 +112,40 @@ export const resetPasswordSchema = z
     }
   });
 
+export const forgotPasswordOtpSchema = forgotPasswordSchema;
+
+export const resetPasswordOtpSchema = z
+  .object({
+    email: z.string().trim().email(),
+    otp: z
+      .string()
+      .trim()
+      .regex(/^\d{6}$/),
+    newPassword: strongPasswordSchema,
+    confirmPassword: z.string().min(1),
+    schoolId: z.string().trim().uuid().optional(),
+    schoolCode: z.string().trim().min(1).max(64).optional(),
+    loginType: loginTypeSchema.optional(),
+  })
+  .superRefine((value, ctx) => {
+    if (value.newPassword !== value.confirmPassword) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['confirmPassword'],
+        message: 'Passwords do not match.',
+      });
+    }
+  });
+
 export const revokeSessionParamsSchema = z.object({
   sessionId: z.string().trim().uuid(),
 });
 
 export type LoginType = z.infer<typeof loginTypeSchema>;
 export type ForgotPasswordInput = z.infer<typeof forgotPasswordSchema>;
+export type ForgotPasswordOtpInput = z.infer<typeof forgotPasswordOtpSchema>;
 export type ResetPasswordInput = z.infer<typeof resetPasswordSchema>;
+export type ResetPasswordOtpInput = z.infer<typeof resetPasswordOtpSchema>;
 export type VerifyTwoFactorInput = z.infer<typeof verifyTwoFactorSchema>;
 export type ResendTwoFactorInput = z.infer<typeof resendTwoFactorSchema>;
 export type TotpVerifySetupInput = z.infer<typeof totpVerifySetupSchema>;

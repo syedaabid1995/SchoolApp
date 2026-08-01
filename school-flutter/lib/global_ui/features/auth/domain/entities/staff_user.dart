@@ -64,6 +64,7 @@ class StaffUser extends Equatable {
     this.firstName,
     this.lastName,
     this.phone,
+    this.mustChangePassword = false,
   });
 
   final String id;
@@ -78,6 +79,7 @@ class StaffUser extends Equatable {
   final String? firstName;
   final String? lastName;
   final String? phone;
+  final bool mustChangePassword;
 
   @override
   List<Object?> get props => [
@@ -93,5 +95,6 @@ class StaffUser extends Equatable {
     firstName,
     lastName,
     phone,
+    mustChangePassword,
   ];
 }

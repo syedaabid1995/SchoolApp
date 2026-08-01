@@ -127,6 +127,7 @@ export const getMe = async (req: Request, res: Response) => {
     select: {
       id: true,
       email: true,
+      mustChangePassword: true,
       schoolId: true,
       school: { select: { id: true, name: true, code: true, status: true, domainUrl: true, subdomain: true } },
       teacherProfile: {
@@ -185,6 +186,7 @@ export const getMe = async (req: Request, res: Response) => {
   res.status(200).json({
     id: user.id,
     email: user.email,
+    mustChangePassword: user.mustChangePassword,
     schoolId: user.schoolId,
     school: user.school,
     role,

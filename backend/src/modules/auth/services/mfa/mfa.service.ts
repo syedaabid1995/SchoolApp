@@ -81,8 +81,7 @@ export type AuthTokenPayload = {
   typ: 'access' | 'refresh';
 };
 
-const signToken = (payload: AuthTokenPayload, expiresIn: SignOptions['expiresIn']) =>
-  jwt.sign(payload, jwtSecret, { expiresIn });
+const signToken = (payload: AuthTokenPayload, expiresIn: SignOptions['expiresIn']) => jwt.sign(payload, jwtSecret, { expiresIn });
 
 const refreshCookieOptions = (maxAgeSeconds: number): CookieOptions => ({
   httpOnly: true,
@@ -146,7 +145,9 @@ const ensureParentActive = async (userId: string) => {
   const parentIds = parents.map((p) => p.id);
   const links = await AuthMfaRepository.studentParent.findMany({
     where: { parentId: { in: parentIds } },
-    select: { student: { select: { school: { select: { id: true, status: true } } } } },
+    select: {
+      student: { select: { school: { select: { id: true, status: true } } } },
+    },
   });
   const hasActiveSchool = links.some((link) => link.student.school?.status === 'ACTIVE');
   if (!hasActiveSchool) {
@@ -178,9 +179,7 @@ const displayNameFromUser = (user: {
   teacherProfile?: { firstName: string; lastName: string } | null;
   parentProfiles?: Array<{ firstName: string; lastName: string }>;
 }) => {
-  const teacherName = user.teacherProfile
-    ? `${user.teacherProfile.firstName} ${user.teacherProfile.lastName}`.trim()
-    : '';
+  const teacherName = user.teacherProfile ? `${user.teacherProfile.firstName} ${user.teacherProfile.lastName}`.trim() : '';
   const parent = user.parentProfiles?.[0];
   const parentName = parent ? `${parent.firstName} ${parent.lastName}`.trim() : '';
   return teacherName || parentName || user.email;
@@ -197,7 +196,10 @@ const resolveLoginSchoolId = async (params: { schoolId?: string; schoolCode?: st
   });
 
   if (!school) {
-    rejectLogin('school_not_found_or_mismatch', { schoolId: schoolId ?? null, schoolCode: schoolCode ?? null });
+    rejectLogin('school_not_found_or_mismatch', {
+      schoolId: schoolId ?? null,
+      schoolCode: schoolCode ?? null,
+    });
   }
 
   return school.id;
@@ -306,7 +308,6 @@ const currentRefreshTokenHashFromRequest = (req: Request) => {
   return token ? hashToken(token) : null;
 };
 
-
 export const verifyTwoFactor = async (req: Request, res: Response) => {
   const parsed = verifyTwoFactorSchema.safeParse(req.body);
   if (!parsed.success) {
@@ -405,10 +406,7 @@ export const verifyTwoFactor = async (req: Request, res: Response) => {
   const accessToken = signToken({ ...payloadBase, typ: 'access' }, ACCESS_TOKEN_TTL);
   const refreshTokenMaxAge = parsed.data.rememberMe ? REMEMBER_ME_REFRESH_TOKEN_TTL_SECONDS : REFRESH_TOKEN_TTL_SECONDS;
   const refreshTokenExpiresAt = new Date(Date.now() + refreshTokenMaxAge * 1000);
-  const refreshToken = signToken(
-    { ...payloadBase, jti: crypto.randomUUID(), typ: 'refresh' },
-    refreshTokenMaxAge,
-  );
+  const refreshToken = signToken({ ...payloadBase, jti: crypto.randomUUID(), typ: 'refresh' }, refreshTokenMaxAge);
 
   await createRefreshSession({
     req,
@@ -446,6 +444,7 @@ export const verifyTwoFactor = async (req: Request, res: Response) => {
     refreshTokenMaxAge,
     refreshTokenExpiresAt: refreshTokenExpiresAt.toISOString(),
     ...(shouldReturnTokensInBody(req) ? { accessToken, refreshToken } : {}),
+    mustChangePassword: user.mustChangePassword,
     user: {
       id: user.id,
       name: displayNameFromUser(user),
@@ -611,10 +610,7 @@ export const verifyTotpLogin = async (req: Request, res: Response) => {
   const accessToken = signToken({ ...payloadBase, typ: 'access' }, ACCESS_TOKEN_TTL);
   const refreshTokenMaxAge = parsed.data.rememberMe ? REMEMBER_ME_REFRESH_TOKEN_TTL_SECONDS : REFRESH_TOKEN_TTL_SECONDS;
   const refreshTokenExpiresAt = new Date(Date.now() + refreshTokenMaxAge * 1000);
-  const refreshToken = signToken(
-    { ...payloadBase, jti: crypto.randomUUID(), typ: 'refresh' },
-    refreshTokenMaxAge,
-  );
+  const refreshToken = signToken({ ...payloadBase, jti: crypto.randomUUID(), typ: 'refresh' }, refreshTokenMaxAge);
 
   await createRefreshSession({
     req,
@@ -654,6 +650,7 @@ export const verifyTotpLogin = async (req: Request, res: Response) => {
     refreshTokenMaxAge,
     refreshTokenExpiresAt: refreshTokenExpiresAt.toISOString(),
     ...(shouldReturnTokensInBody(req) ? { accessToken, refreshToken } : {}),
+    mustChangePassword: user.mustChangePassword,
     user: {
       id: user.id,
       name: displayNameFromUser(user),

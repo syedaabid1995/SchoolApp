@@ -25,6 +25,8 @@ import {
   PASSWORD_RESET_PUBLIC_RESPONSE,
   PASSWORD_RESET_SUCCESS_RESPONSE,
   requestPasswordReset,
+  requestPasswordResetOtp,
+  resetPasswordWithOtp,
   resetPasswordWithToken,
 } from '../../../../services/passwordReset.service';
 import {
@@ -51,9 +53,11 @@ import { schoolIdentifierWhere } from '../../../../utils/schoolDomain';
 import { hashToken } from '../../../../utils/token';
 import {
   changePasswordSchema,
+  forgotPasswordOtpSchema,
   forgotPasswordSchema,
   loginSchema,
   refreshSchema,
+  resetPasswordOtpSchema,
   resendTwoFactorSchema,
   resetPasswordSchema,
   totpDisableSchema,
@@ -81,8 +85,7 @@ export type AuthTokenPayload = {
   typ: 'access' | 'refresh';
 };
 
-const signToken = (payload: AuthTokenPayload, expiresIn: SignOptions['expiresIn']) =>
-  jwt.sign(payload, jwtSecret, { expiresIn });
+const signToken = (payload: AuthTokenPayload, expiresIn: SignOptions['expiresIn']) => jwt.sign(payload, jwtSecret, { expiresIn });
 
 const refreshCookieOptions = (maxAgeSeconds: number): CookieOptions => ({
   httpOnly: true,
@@ -146,7 +149,9 @@ const ensureParentActive = async (userId: string) => {
   const parentIds = parents.map((p) => p.id);
   const links = await AuthPasswordResetRepository.studentParent.findMany({
     where: { parentId: { in: parentIds } },
-    select: { student: { select: { school: { select: { id: true, status: true } } } } },
+    select: {
+      student: { select: { school: { select: { id: true, status: true } } } },
+    },
   });
   const hasActiveSchool = links.some((link) => link.student.school?.status === 'ACTIVE');
   if (!hasActiveSchool) {
@@ -178,9 +183,7 @@ const displayNameFromUser = (user: {
   teacherProfile?: { firstName: string; lastName: string } | null;
   parentProfiles?: Array<{ firstName: string; lastName: string }>;
 }) => {
-  const teacherName = user.teacherProfile
-    ? `${user.teacherProfile.firstName} ${user.teacherProfile.lastName}`.trim()
-    : '';
+  const teacherName = user.teacherProfile ? `${user.teacherProfile.firstName} ${user.teacherProfile.lastName}`.trim() : '';
   const parent = user.parentProfiles?.[0];
   const parentName = parent ? `${parent.firstName} ${parent.lastName}`.trim() : '';
   return teacherName || parentName || user.email;
@@ -197,7 +200,10 @@ const resolveLoginSchoolId = async (params: { schoolId?: string; schoolCode?: st
   });
 
   if (!school) {
-    rejectLogin('school_not_found_or_mismatch', { schoolId: schoolId ?? null, schoolCode: schoolCode ?? null });
+    rejectLogin('school_not_found_or_mismatch', {
+      schoolId: schoolId ?? null,
+      schoolCode: schoolCode ?? null,
+    });
   }
 
   return school.id;
@@ -306,7 +312,6 @@ const currentRefreshTokenHashFromRequest = (req: Request) => {
   return token ? hashToken(token) : null;
 };
 
-
 export const forgotPassword = async (req: Request, res: Response) => {
   const parsed = forgotPasswordSchema.safeParse(req.body);
   if (parsed.success) {
@@ -317,12 +322,36 @@ export const forgotPassword = async (req: Request, res: Response) => {
     }
   } else {
     logger.warn(
-      { fields: parsed.error.issues.map((issue) => issue.path.join('.')).filter(Boolean) },
+      {
+        fields: parsed.error.issues.map((issue) => issue.path.join('.')).filter(Boolean),
+      },
       'forgot password validation failed',
     );
   }
 
   res.status(200).json(PASSWORD_RESET_PUBLIC_RESPONSE);
+};
+
+export const forgotPasswordOtp = async (req: Request, res: Response) => {
+  const parsed = forgotPasswordOtpSchema.safeParse(req.body);
+  if (parsed.success) {
+    try {
+      await requestPasswordResetOtp(req, parsed.data);
+    } catch (err) {
+      logger.error({ err }, 'forgot password OTP processing failed');
+    }
+  } else {
+    logger.warn(
+      {
+        fields: parsed.error.issues.map((issue) => issue.path.join('.')).filter(Boolean),
+      },
+      'forgot password OTP validation failed',
+    );
+  }
+
+  res.status(200).json({
+    message: 'If an account exists, a password reset OTP has been sent.',
+  });
 };
 
 export const resetPassword = async (req: Request, res: Response) => {
@@ -337,6 +366,23 @@ export const resetPassword = async (req: Request, res: Response) => {
   }
 
   await resetPasswordWithToken(req, parsed.data);
+  clearAuthCookies(res);
+
+  res.status(200).json(PASSWORD_RESET_SUCCESS_RESPONSE);
+};
+
+export const resetPasswordOtp = async (req: Request, res: Response) => {
+  const parsed = resetPasswordOtpSchema.safeParse(req.body);
+  if (!parsed.success) {
+    const otpIssue = parsed.error.issues.find((issue) => issue.path[0] === 'otp');
+    if (otpIssue) {
+      throw new HttpError(400, INVALID_RESET_TOKEN_MESSAGE);
+    }
+
+    throw new HttpError(400, 'Invalid reset password request.', parsed.error.flatten().fieldErrors);
+  }
+
+  await resetPasswordWithOtp(req, parsed.data);
   clearAuthCookies(res);
 
   res.status(200).json(PASSWORD_RESET_SUCCESS_RESPONSE);
@@ -395,7 +441,9 @@ export const changePassword = async (req: Request, res: Response) => {
     userId: user.id,
     schoolId: user.schoolId ?? null,
     action: 'PASSWORD_CHANGE_SUCCESS',
-    afterState: { refreshSessionsRevoked: currentRefreshTokenHash ? 'others' : 'all' },
+    afterState: {
+      refreshSessionsRevoked: currentRefreshTokenHash ? 'others' : 'all',
+    },
   });
 
   res.status(200).json({ message: 'Password changed successfully.' });
@@ -404,5 +452,7 @@ export const changePassword = async (req: Request, res: Response) => {
 export const PasswordResetService = {
   changePassword,
   forgotPassword,
+  forgotPasswordOtp,
   resetPassword,
+  resetPasswordOtp,
 };
