@@ -4,6 +4,7 @@ import 'package:image_picker/image_picker.dart';
 
 import '../../../../../global_ui/features/attendance/domain/entities/attendance_summary.dart';
 import '../../../../../global_ui/features/attendance/presentation/providers/attendance_providers.dart';
+import '../../../../../global_ui/features/auth/presentation/providers/auth_controller.dart';
 import '../../../../../global_ui/features/classes/domain/entities/class_assignment.dart';
 import '../../../../../global_ui/features/classes/presentation/providers/class_assignment_providers.dart';
 import '../../../../app/theme/saapt_theme.dart';
@@ -23,10 +24,21 @@ class _SaaptStudentsScreenState extends ConsumerState<SaaptStudentsScreen> {
   String? _classId;
   String? _sectionId;
   String? _selectedUnitKey;
+  String? _schoolId;
   bool _openingCamera = false;
 
   @override
   Widget build(BuildContext context) {
+    final activeSchoolId = ref.watch(
+      authControllerProvider.select((state) => state.value?.user?.schoolId),
+    );
+    if (_schoolId != activeSchoolId) {
+      _schoolId = activeSchoolId;
+      _academicYearId = null;
+      _classId = null;
+      _sectionId = null;
+      _selectedUnitKey = null;
+    }
     final optionsState = ref.watch(studentAttendanceOptionsProvider);
     final assignmentsState = ref.watch(classAssignmentsProvider);
     return Scaffold(body: _buildBody(optionsState, assignmentsState));
@@ -135,9 +147,17 @@ class _SaaptStudentsScreenState extends ConsumerState<SaaptStudentsScreen> {
     List<StudentAttendanceOption> classes,
     ClassAssignments assignments,
   ) {
-    _academicYearId ??=
-        options.academicYears.where((item) => item.isActive).firstOrNull?.id ??
-        options.academicYears.firstOrNull?.id;
+    if (!options.academicYears.any((item) => item.id == _academicYearId)) {
+      _academicYearId =
+          options.academicYears
+              .where((item) => item.isActive)
+              .firstOrNull
+              ?.id ??
+          options.academicYears.firstOrNull?.id;
+      _classId = null;
+      _sectionId = null;
+      _selectedUnitKey = null;
+    }
     if (!classes.any((item) => item.id == _classId)) {
       _classId = classes.firstOrNull?.id;
       _sectionId = null;
@@ -575,27 +595,33 @@ class _SelectField extends StatelessWidget {
   final ValueChanged<String?> onChanged;
 
   @override
-  Widget build(BuildContext context) => Column(
-    crossAxisAlignment: CrossAxisAlignment.stretch,
-    children: [
-      Text(
-        label,
-        style: const TextStyle(
-          color: Color(0xFF91A0BA),
-          fontSize: 12,
-          fontWeight: FontWeight.w800,
+  Widget build(BuildContext context) {
+    final values = items.map((item) => item.value).whereType<String>().toSet();
+    final resolvedValue = value != null && values.contains(value)
+        ? value
+        : null;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Text(
+          label,
+          style: const TextStyle(
+            color: Color(0xFF91A0BA),
+            fontSize: 12,
+            fontWeight: FontWeight.w800,
+          ),
         ),
-      ),
-      const SizedBox(height: 7),
-      DropdownButtonFormField<String>(
-        key: ValueKey('$label:$value:${items.length}'),
-        initialValue: value,
-        isExpanded: true,
-        items: items,
-        onChanged: items.isEmpty ? null : onChanged,
-      ),
-    ],
-  );
+        const SizedBox(height: 7),
+        DropdownButtonFormField<String>(
+          key: ValueKey('$label:$resolvedValue:${items.length}'),
+          initialValue: resolvedValue,
+          isExpanded: true,
+          items: items,
+          onChanged: items.isEmpty ? null : onChanged,
+        ),
+      ],
+    );
+  }
 }
 
 class _CountCard extends StatelessWidget {
