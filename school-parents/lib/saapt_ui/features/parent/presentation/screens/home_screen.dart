@@ -1,10 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:intl/intl.dart';
 
 import '../../../../app/theme/saapt_theme.dart';
 import '../../data/parent_models.dart';
 import '../providers/parent_providers.dart';
+import 'parent_attendance_calendar.dart';
 import 'parent_screen_widgets.dart';
 
 class ParentHomeScreen extends ConsumerWidget {
@@ -35,7 +37,7 @@ class ParentHomeScreen extends ConsumerWidget {
                 child: childrenState.when(
                   loading: () => const LoadingPanel(),
                   error: (error, _) => EmptyPanel(message: error.toString()),
-                  data: (children) => _ChildrenContent(children: children),
+                  data: (children) => _DashboardContent(children: children),
                 ),
               ),
             ),
@@ -46,8 +48,8 @@ class ParentHomeScreen extends ConsumerWidget {
   }
 }
 
-class _ChildrenContent extends ConsumerWidget {
-  const _ChildrenContent({required this.children});
+class _DashboardContent extends ConsumerWidget {
+  const _DashboardContent({required this.children});
 
   final List<ParentChild> children;
 
@@ -58,12 +60,20 @@ class _ChildrenContent extends ConsumerWidget {
         message: 'No children are mapped to this parent account.',
       );
     }
+    final selected = ref.watch(selectedChildProvider) ?? children.first;
+    final attendanceState = ref.watch(
+      parentMonthlyAttendanceProvider((
+        childId: selected.id,
+        month: DateTime.now(),
+        date: DateTime.now(),
+      )),
+    );
+
     return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        for (final child in children) ...[
-          _ChildCard(child: child),
-          const SizedBox(height: 18),
-        ],
+        _SelectedChildCard(child: selected, children: children),
+        const SizedBox(height: 18),
         Row(
           children: [
             StatCard(value: children.length.toString(), label: 'Children'),
@@ -75,15 +85,65 @@ class _ChildrenContent extends ConsumerWidget {
             ),
           ],
         ),
+        const SizedBox(height: 22),
+        attendanceState.when(
+          loading: () => const LoadingPanel(),
+          error: (error, _) => EmptyPanel(message: error.toString()),
+          data: (attendance) => Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Row(
+                children: [
+                  StatCard(
+                    value: attendance.presentDays.toString(),
+                    label: 'Present',
+                    color: SaaptTheme.success,
+                  ),
+                  const SizedBox(width: 12),
+                  StatCard(
+                    value: attendance.absentDays.toString(),
+                    label: 'Absent',
+                    color: const Color(0xFFF24852),
+                  ),
+                  const SizedBox(width: 12),
+                  StatCard(
+                    value: attendance.leaveDays.toString(),
+                    label: 'Leave',
+                    color: const Color(0xFF8B5CF6),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 22),
+              ParentAttendanceCalendar(
+                month: DateTime.now(),
+                attendance: attendance,
+                childName: selected.name,
+              ),
+              const SizedBox(height: 12),
+              FilledButton.icon(
+                onPressed: () => context.go('/attendance'),
+                icon: const Icon(Icons.calendar_month_rounded),
+                label: const Text('Open Attendance'),
+                style: FilledButton.styleFrom(
+                  backgroundColor: SaaptTheme.primary,
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(vertical: 15),
+                  textStyle: const TextStyle(fontWeight: FontWeight.w900),
+                ),
+              ),
+            ],
+          ),
+        ),
       ],
     );
   }
 }
 
-class _ChildCard extends ConsumerWidget {
-  const _ChildCard({required this.child});
+class _SelectedChildCard extends ConsumerWidget {
+  const _SelectedChildCard({required this.child, required this.children});
 
   final ParentChild child;
+  final List<ParentChild> children;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -131,7 +191,7 @@ class _ChildCard extends ConsumerWidget {
               ],
             ),
           ),
-          OutlinedButton(
+          OutlinedButton.icon(
             style: OutlinedButton.styleFrom(
               foregroundColor: SaaptTheme.primary,
               backgroundColor: const Color(0xFFF1F6FF),
@@ -140,13 +200,11 @@ class _ChildCard extends ConsumerWidget {
                 borderRadius: BorderRadius.circular(22),
               ),
             ),
-            onPressed: () {
-              ref.read(selectedChildProvider.notifier).state = child;
-              context.go('/attendance');
-            },
-            child: const Text(
-              'Select',
-              style: TextStyle(fontWeight: FontWeight.w900),
+            onPressed: () => _showChildSheet(context, ref, children, child),
+            icon: const Icon(Icons.keyboard_arrow_down_rounded, size: 18),
+            label: Text(
+              children.length == 1 ? 'Selected' : 'Change',
+              style: const TextStyle(fontWeight: FontWeight.w900),
             ),
           ),
         ],
@@ -154,8 +212,126 @@ class _ChildCard extends ConsumerWidget {
     );
   }
 
+  void _showChildSheet(
+    BuildContext context,
+    WidgetRef ref,
+    List<ParentChild> children,
+    ParentChild selected,
+  ) {
+    showModalBottomSheet<void>(
+      context: context,
+      showDragHandle: true,
+      builder: (context) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(20, 4, 20, 20),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              const Text(
+                'Select Child',
+                style: TextStyle(
+                  color: SaaptTheme.navy,
+                  fontSize: 22,
+                  fontWeight: FontWeight.w900,
+                ),
+              ),
+              const SizedBox(height: 6),
+              Text(
+                DateFormat('d MMM yyyy').format(DateTime.now()),
+                style: const TextStyle(
+                  color: Color(0xFF60708F),
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+              const SizedBox(height: 18),
+              for (final child in children) ...[
+                _ChildOptionTile(
+                  child: child,
+                  selected: child.id == selected.id,
+                  onTap: () {
+                    ref.read(selectedChildProvider.notifier).state = child;
+                    Navigator.of(context).pop();
+                  },
+                ),
+                const SizedBox(height: 12),
+              ],
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
   String _avatarFor(String name) {
     final lower = name.toLowerCase();
     return lower.endsWith('a') || lower.contains('ananya') ? '👧' : '👦';
+  }
+}
+
+class _ChildOptionTile extends StatelessWidget {
+  const _ChildOptionTile({
+    required this.child,
+    required this.selected,
+    required this.onTap,
+  });
+
+  final ParentChild child;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: const Color(0xFFF6F8FC),
+      borderRadius: BorderRadius.circular(8),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(8),
+        child: Padding(
+          padding: const EdgeInsets.all(14),
+          child: Row(
+            children: [
+              Container(
+                width: 44,
+                height: 44,
+                decoration: BoxDecoration(
+                  color: const Color(0xFFE7EFFD),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Icon(
+                  selected ? Icons.check_circle_rounded : Icons.person_outline,
+                  color: SaaptTheme.primary,
+                ),
+              ),
+              const SizedBox(width: 14),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      child.name,
+                      style: const TextStyle(
+                        fontWeight: FontWeight.w800,
+                        color: SaaptTheme.navy,
+                      ),
+                    ),
+                    const SizedBox(height: 3),
+                    Text(
+                      child.classLabel,
+                      style: const TextStyle(
+                        color: Color(0xFF60708F),
+                        fontSize: 13,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const Icon(Icons.chevron_right, color: Color(0xFF8A9AB8)),
+            ],
+          ),
+        ),
+      ),
+    );
   }
 }

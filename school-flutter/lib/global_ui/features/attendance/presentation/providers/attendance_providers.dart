@@ -32,11 +32,12 @@ final attendanceSummaryProvider = FutureProvider.autoDispose<AttendanceSummary>(
 final teacherAttendanceHistoryProvider =
     FutureProvider.autoDispose<List<TeacherAttendanceRecord>>((ref) {
       final now = DateTime.now();
+      final monthEnd = DateTime(now.year, now.month + 1, 0);
       return ref
           .watch(attendanceRepositoryProvider)
           .getTeacherHistory(
             fromDate: DateTime(now.year, now.month, 1),
-            toDate: now,
+            toDate: monthEnd,
           );
     });
 

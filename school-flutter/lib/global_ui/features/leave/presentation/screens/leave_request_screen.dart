@@ -5,6 +5,8 @@ import 'package:intl/intl.dart';
 import '../../../../app/theme/app_spacing.dart';
 import '../../../../core/widgets/app_button.dart';
 import '../../../../core/widgets/app_scaffold.dart';
+import '../../../auth/domain/entities/auth_session.dart';
+import '../../../auth/presentation/providers/auth_controller.dart';
 import '../../domain/entities/leave_entities.dart';
 import '../providers/leave_providers.dart';
 
@@ -20,8 +22,10 @@ class LeaveRequestScreen extends ConsumerStatefulWidget {
 class _LeaveRequestScreenState extends ConsumerState<LeaveRequestScreen> {
   final _reasonController = TextEditingController();
   String? _leaveTypeId;
+  String? _schoolId;
   DateTime _fromDate = DateTime.now();
   DateTime _toDate = DateTime.now();
+  bool _switchingSchool = false;
 
   int get _durationDays => _toDate.difference(_fromDate).inDays + 1;
 
@@ -34,8 +38,31 @@ class _LeaveRequestScreenState extends ConsumerState<LeaveRequestScreen> {
   @override
   Widget build(BuildContext context) {
     final state = ref.watch(leaveRequestControllerProvider);
+    final auth = ref.watch(authControllerProvider).value;
+    final schoolsState = ref.watch(leaveAccessibleSchoolsProvider);
+    final refreshedLeaveHome = ref.watch(leaveHomeProvider);
+    final schools = schoolsState.maybeWhen(
+      data: (value) => value,
+      orElse: () => const <SchoolLoginOption>[],
+    );
+    final types = refreshedLeaveHome.maybeWhen(
+      data: (value) => value.types,
+      orElse: () => widget.types,
+    );
+    final currentSchoolId = auth?.user?.schoolId;
+    if (_schoolId == null && currentSchoolId?.trim().isNotEmpty == true) {
+      _schoolId = currentSchoolId;
+    }
+    if (_leaveTypeId != null && !types.any((type) => type.id == _leaveTypeId)) {
+      _leaveTypeId = null;
+    }
     final colorScheme = Theme.of(context).colorScheme;
     final textTheme = Theme.of(context).textTheme;
+    final selectedSchoolId = schools.any((school) => school.id == _schoolId)
+        ? _schoolId
+        : schools.any((school) => school.id == currentSchoolId)
+        ? currentSchoolId
+        : null;
 
     return AppScaffold(
       title: 'Request Leave',
@@ -44,6 +71,44 @@ class _LeaveRequestScreenState extends ConsumerState<LeaveRequestScreen> {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           const SizedBox(height: AppSpacing.md),
+
+          if (schools.length > 1) ...[
+            _SectionLabel(label: 'School'),
+            const SizedBox(height: AppSpacing.xs),
+            _FormCard(
+              child: DropdownButtonFormField<String>(
+                initialValue: selectedSchoolId,
+                decoration: InputDecoration(
+                  hintText: 'Select school',
+                  border: InputBorder.none,
+                  enabledBorder: InputBorder.none,
+                  focusedBorder: InputBorder.none,
+                  prefixIcon: Icon(
+                    Icons.apartment_outlined,
+                    color: colorScheme.primary,
+                  ),
+                  contentPadding: const EdgeInsets.symmetric(
+                    vertical: AppSpacing.sm,
+                  ),
+                ),
+                items: [
+                  for (final school in schools)
+                    DropdownMenuItem(
+                      value: school.id,
+                      child: Text('${school.name} (${school.code})'),
+                    ),
+                ],
+                onChanged: _switchingSchool
+                    ? null
+                    : (value) => _selectSchool(value, currentSchoolId),
+              ),
+            ),
+            if (_switchingSchool) ...[
+              const SizedBox(height: AppSpacing.xs),
+              const LinearProgressIndicator(minHeight: 2),
+            ],
+            const SizedBox(height: AppSpacing.md),
+          ],
 
           // ── Leave type ──────────────────────────────────────────────
           _SectionLabel(label: 'Leave Type'),
@@ -65,7 +130,7 @@ class _LeaveRequestScreenState extends ConsumerState<LeaveRequestScreen> {
                 ),
               ),
               items: [
-                for (final type in widget.types)
+                for (final type in types)
                   DropdownMenuItem(value: type.id, child: Text(type.name)),
               ],
               onChanged: (value) => setState(() => _leaveTypeId = value),
@@ -191,8 +256,11 @@ class _LeaveRequestScreenState extends ConsumerState<LeaveRequestScreen> {
               ),
               child: Row(
                 children: [
-                  Icon(Icons.error_outline,
-                      size: 16, color: colorScheme.onErrorContainer),
+                  Icon(
+                    Icons.error_outline,
+                    size: 16,
+                    color: colorScheme.onErrorContainer,
+                  ),
                   const SizedBox(width: AppSpacing.xs),
                   Expanded(
                     child: Text(
@@ -212,8 +280,8 @@ class _LeaveRequestScreenState extends ConsumerState<LeaveRequestScreen> {
           AppButton(
             label: 'Submit Request',
             icon: Icons.send_outlined,
-            isLoading: state.isLoading,
-            onPressed: _leaveTypeId == null
+            isLoading: state.isLoading || _switchingSchool,
+            onPressed: _leaveTypeId == null || _switchingSchool || types.isEmpty
                 ? null
                 : () async {
                     await ref
@@ -224,7 +292,10 @@ class _LeaveRequestScreenState extends ConsumerState<LeaveRequestScreen> {
                           toDate: _toDate,
                           reason: _reasonController.text,
                         );
-                    if (context.mounted) Navigator.of(context).pop();
+                    final result = ref.read(leaveRequestControllerProvider);
+                    if (context.mounted && !result.hasError) {
+                      Navigator.of(context).pop();
+                    }
                   },
           ),
 
@@ -232,6 +303,25 @@ class _LeaveRequestScreenState extends ConsumerState<LeaveRequestScreen> {
         ],
       ),
     );
+  }
+
+  Future<void> _selectSchool(String? schoolId, String? currentSchoolId) async {
+    if (schoolId == null || schoolId == _schoolId) return;
+    setState(() {
+      _schoolId = schoolId;
+      _leaveTypeId = null;
+      _switchingSchool = schoolId != currentSchoolId;
+    });
+    if (schoolId == currentSchoolId) return;
+    try {
+      await ref
+          .read(authControllerProvider.notifier)
+          .switchSchool(schoolId: schoolId);
+      ref.invalidate(leaveHomeProvider);
+      ref.invalidate(leaveAccessibleSchoolsProvider);
+    } finally {
+      if (mounted) setState(() => _switchingSchool = false);
+    }
   }
 }
 
@@ -246,10 +336,10 @@ class _SectionLabel extends StatelessWidget {
     return Text(
       label,
       style: Theme.of(context).textTheme.labelLarge?.copyWith(
-            color: colorScheme.onSurface.withValues(alpha: 0.6),
-            fontWeight: FontWeight.w600,
-            letterSpacing: 0.5,
-          ),
+        color: colorScheme.onSurface.withValues(alpha: 0.6),
+        fontWeight: FontWeight.w600,
+        letterSpacing: 0.5,
+      ),
     );
   }
 }
@@ -305,9 +395,7 @@ class _DateCard extends StatelessWidget {
         decoration: BoxDecoration(
           color: colorScheme.surface,
           borderRadius: BorderRadius.circular(16),
-          border: Border.all(
-            color: colorScheme.primary.withValues(alpha: 0.2),
-          ),
+          border: Border.all(color: colorScheme.primary.withValues(alpha: 0.2)),
           boxShadow: [
             BoxShadow(
               color: colorScheme.shadow.withValues(alpha: 0.06),

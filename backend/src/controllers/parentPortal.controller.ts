@@ -1182,14 +1182,87 @@ export const getParentAttendance = async (req: Request, res: Response) => {
 
   const endInclusive = new Date(end);
   endInclusive.setDate(endInclusive.getDate() - 1);
-  const records = await attendanceReadService.getStudentAttendance({
-    schoolId: child.schoolId,
-    studentId: child.id,
-    fromDate: start,
-    toDate: endInclusive,
-  });
+  const dateKey = (value: Date) => value.toISOString().slice(0, 10);
+  const dayStart = (value: string | Date) => {
+    const next = value instanceof Date ? new Date(value) : new Date(`${value}T00:00:00.000Z`);
+    next.setUTCHours(0, 0, 0, 0);
+    return next;
+  };
+  const enumerateDays = (fromDate: Date, toDate: Date) => {
+    const days: Date[] = [];
+    const cursor = dayStart(fromDate);
+    while (cursor <= toDate) {
+      days.push(new Date(cursor));
+      cursor.setUTCDate(cursor.getUTCDate() + 1);
+    }
+    return days;
+  };
+  const routineDayValue = (value: Date) => {
+    const day = value.getUTCDay();
+    return day === 0 ? 7 : day;
+  };
+  const weekendValuesFromJson = (weekends: Prisma.JsonValue | null | undefined) => {
+    const values = new Set<number>();
+    const rows = Array.isArray(weekends) ? weekends : [];
+    for (const row of rows) {
+      if (!row || typeof row !== 'object') continue;
+      const item = row as Record<string, unknown>;
+      if (item.isWeekend === false) continue;
+      const raw = String(item.value ?? item.dayOfWeek ?? item.id ?? item.name ?? '').trim().toLowerCase();
+      const numeric = Number(raw);
+      if (Number.isInteger(numeric) && numeric >= 1 && numeric <= 7) values.add(numeric);
+      if (raw.includes('monday')) values.add(1);
+      if (raw.includes('tuesday')) values.add(2);
+      if (raw.includes('wednesday')) values.add(3);
+      if (raw.includes('thursday')) values.add(4);
+      if (raw.includes('friday')) values.add(5);
+      if (raw.includes('saturday')) values.add(6);
+      if (raw.includes('sunday')) values.add(7);
+    }
+    if (!values.size) {
+      values.add(6);
+      values.add(7);
+    }
+    return values;
+  };
+  const [records, settings, attendanceHolidays, leaveRequests] = await Promise.all([
+    attendanceReadService.getStudentAttendance({
+      schoolId: child.schoolId,
+      studentId: child.id,
+      fromDate: start,
+      toDate: endInclusive,
+    }),
+    prisma.schoolSystemSetting.findUnique({
+      where: { schoolId: child.schoolId },
+      select: { weekends: true, holidays: true },
+    }),
+    prisma.attendanceHoliday.findMany({
+      where: {
+        schoolId: child.schoolId,
+        holidayDate: { gte: start, lte: endInclusive },
+        OR: [
+          { classId: null, sectionId: null },
+          ...(child.classId ? [{ classId: child.classId, sectionId: null }] : []),
+          ...(child.classId && child.sectionId ? [{ classId: child.classId, sectionId: child.sectionId }] : []),
+        ],
+      },
+      select: { holidayDate: true, reason: true },
+    }),
+    prisma.studentLeaveRequest.findMany({
+      where: {
+        schoolId: child.schoolId,
+        studentId: child.id,
+        status: { in: ['PENDING', 'APPROVED'] },
+        fromDate: { lte: endInclusive },
+        toDate: { gte: start },
+      },
+      select: { id: true, leaveType: true, fromDate: true, toDate: true, status: true, skippedDays: true },
+    }),
+  ]);
 
   const statusRank: Record<string, number> = {
+    Leave: 6,
+    Holiday: 5,
     Absent: 4,
     Late: 3,
     'Half Day': 2,
@@ -1199,9 +1272,10 @@ export const getParentAttendance = async (req: Request, res: Response) => {
     if (status === 'ABSENT') return 'Absent';
     if (status === 'LATE') return 'Late';
     if (status === 'HALF_DAY') return 'Half Day';
+    if (status === 'HOLIDAY') return 'Holiday';
+    if (status === 'LEAVE') return 'Leave';
     return 'Present';
   };
-  const dateKey = (value: Date) => value.toISOString().slice(0, 10);
   const selectedDate =
     typeof date === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(date)
       ? date
@@ -1241,22 +1315,60 @@ export const getParentAttendance = async (req: Request, res: Response) => {
   };
 
   const byDate = new Map<string, { status: string; remark?: string | null }>();
-  records.forEach((record) => {
-    const key = record.date;
-    const nextStatus = normalizeStatus(record.status);
+  const setDayStatus = (key: string, status: string, remark?: string | null) => {
     const existing = byDate.get(key);
-    const nextRank = statusRank[nextStatus] ?? 0;
+    const nextRank = statusRank[status] ?? 0;
     const existingRank = existing ? (statusRank[existing.status] ?? 0) : 0;
     if (
       !existing ||
       nextRank > existingRank ||
-      (nextRank === existingRank && !existing.remark && record.note)
+      (nextRank === existingRank && !existing.remark && remark)
     ) {
-      byDate.set(key, { status: nextStatus, remark: record.note ?? null });
+      byDate.set(key, { status, remark: remark ?? null });
     }
+  };
+
+  records.forEach((record) => {
+    setDayStatus(record.date, normalizeStatus(record.status), record.note ?? null);
   });
 
-  const calendar = Array.from(byDate.entries()).map(([date, entry]) => ({
+  const weekends = weekendValuesFromJson(settings?.weekends);
+  for (const day of enumerateDays(start, endInclusive)) {
+    if (weekends.has(routineDayValue(day))) {
+      setDayStatus(dateKey(day), 'Holiday', 'Weekend');
+    }
+  }
+  const systemHolidays = Array.isArray(settings?.holidays) ? settings.holidays : [];
+  for (const row of systemHolidays) {
+    if (!row || typeof row !== 'object') continue;
+    const item = row as Record<string, unknown>;
+    const from = typeof item.fromDate === 'string' ? dayStart(item.fromDate) : null;
+    const to = typeof item.toDate === 'string' ? dayStart(item.toDate) : from;
+    if (!from || !to || to < start || from > endInclusive) continue;
+    const title = String(item.title ?? 'Holiday');
+    for (const day of enumerateDays(from < start ? start : from, to > endInclusive ? endInclusive : to)) {
+      setDayStatus(dateKey(day), 'Holiday', title);
+    }
+  }
+  for (const holiday of attendanceHolidays) {
+    setDayStatus(dateKey(holiday.holidayDate), 'Holiday', holiday.reason ?? 'Holiday');
+  }
+  for (const request of leaveRequests) {
+    const skipped = new Set(
+      skippedDaysArray(request.skippedDays)
+        .map((item) => dateKey(dayStart(item.date)))
+        .filter(Boolean),
+    );
+    const from = request.fromDate < start ? start : request.fromDate;
+    const to = request.toDate > endInclusive ? endInclusive : request.toDate;
+    for (const day of enumerateDays(from, to)) {
+      const key = dateKey(day);
+      if (skipped.has(key)) continue;
+      setDayStatus(key, 'Leave', `${request.leaveType} - ${request.status.toLowerCase()}`);
+    }
+  }
+
+  const calendar = Array.from(byDate.entries()).sort(([left], [right]) => left.localeCompare(right)).map(([date, entry]) => ({
     date,
     status: entry.status,
     remark: entry.remark ?? null,
@@ -1285,6 +1397,7 @@ export const getParentAttendance = async (req: Request, res: Response) => {
   const selectedRecords = records.filter(
     (record) => record.date === selectedDate,
   );
+  const selectedDayStatus = byDate.get(selectedDate);
   const sessions = attendanceUnits.units.map((unit, index) => {
     const record = selectedRecords.find((entry) => matchesUnit(entry, unit));
     return {
@@ -1301,8 +1414,8 @@ export const getParentAttendance = async (req: Request, res: Response) => {
             : unit.label,
       startTime: 'startTime' in unit ? (unit.startTime ?? null) : null,
       endTime: 'endTime' in unit ? (unit.endTime ?? null) : null,
-      status: record ? normalizeStatus(record.status) : 'Unmarked',
-      remark: record?.note ?? null,
+      status: record ? normalizeStatus(record.status) : (selectedDayStatus?.status ?? 'Unmarked'),
+      remark: record?.note ?? selectedDayStatus?.remark ?? null,
       sequence: index + 1,
     };
   });

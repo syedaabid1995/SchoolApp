@@ -108,14 +108,19 @@ final parentAttendanceProvider = FutureProvider.autoDispose
           .getAttendance(childId: child.id, month: DateTime.now());
     });
 
-typedef ParentAttendanceReportQuery = ({String childId, DateTime month});
+typedef ParentAttendanceReportQuery = ({
+  String childId,
+  DateTime month,
+  DateTime date,
+});
 
 final parentMonthlyAttendanceProvider = FutureProvider.autoDispose
     .family<ParentAttendance, ParentAttendanceReportQuery>((ref, query) {
       final month = DateTime(query.month.year, query.month.month);
+      final date = DateTime(query.date.year, query.date.month, query.date.day);
       return ref
           .watch(parentRepositoryProvider)
-          .getAttendance(childId: query.childId, month: month, date: month);
+          .getAttendance(childId: query.childId, month: month, date: date);
     });
 
 final parentResultsProvider = FutureProvider.autoDispose

@@ -5,6 +5,8 @@ import 'package:intl/intl.dart';
 import '../../../../../global_ui/features/attendance/domain/entities/attendance_summary.dart';
 import '../../../../../global_ui/features/attendance/presentation/providers/attendance_providers.dart';
 import '../../../../../global_ui/features/auth/presentation/providers/auth_controller.dart';
+import '../../../../../global_ui/features/leave/domain/entities/leave_entities.dart';
+import '../../../../../global_ui/features/leave/presentation/providers/leave_providers.dart';
 import '../../../../../global_ui/features/notices/domain/entities/notice.dart';
 import '../../../../../global_ui/features/notices/presentation/providers/notice_providers.dart';
 import '../../../../../global_ui/features/notifications/domain/entities/staff_notification.dart';
@@ -23,6 +25,7 @@ class MyAttendanceScreen extends ConsumerWidget {
     final today = DateTime(now.year, now.month, now.day);
     final options = ref.watch(selfAttendanceOptionsProvider(today));
     final history = ref.watch(teacherAttendanceHistoryProvider);
+    final leaveHome = ref.watch(leaveHomeProvider);
     final notices = ref.watch(noticeBoardProvider);
     final pushNotifications = ref.watch(pushNotificationCenterProvider);
     final user = ref.watch(authControllerProvider).value?.user;
@@ -76,6 +79,10 @@ class MyAttendanceScreen extends ConsumerWidget {
                           .where((record) => _sameDate(record.date, today))
                           .toList(),
                       monthRecords: records,
+                      leaveApplications: leaveHome.maybeWhen(
+                        data: (value) => value.applications,
+                        orElse: () => const [],
+                      ),
                     ),
                   ),
                 ),
@@ -360,15 +367,21 @@ class _AttendanceContent extends ConsumerWidget {
     required this.options,
     required this.todayRecords,
     required this.monthRecords,
+    required this.leaveApplications,
   });
 
   final DateTime date;
   final SelfAttendanceOptions options;
   final List<TeacherAttendanceRecord> todayRecords;
   final List<TeacherAttendanceRecord> monthRecords;
+  final List<LeaveApplication> leaveApplications;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final calendarRecords = _withLeaveApplications(
+      monthRecords,
+      leaveApplications,
+    );
     final byUnit = {for (final record in todayRecords) record.unitKey: record};
     final completed = options.units
         .where((unit) => byUnit.containsKey(unit.identityPart))
@@ -389,7 +402,7 @@ class _AttendanceContent extends ConsumerWidget {
           const SizedBox(height: 18),
           _MonthlyAttendanceCalendar(
             date: date,
-            records: monthRecords,
+            records: calendarRecords,
             teacherName: 'My',
           ),
         ],
@@ -512,7 +525,7 @@ class _AttendanceContent extends ConsumerWidget {
         const SizedBox(height: 18),
         _MonthlyAttendanceCalendar(
           date: date,
-          records: monthRecords,
+          records: calendarRecords,
           teacherName: 'My',
         ),
       ],
@@ -592,6 +605,65 @@ class _AttendanceContent extends ConsumerWidget {
       ),
     );
   }
+
+  List<TeacherAttendanceRecord> _withLeaveApplications(
+    List<TeacherAttendanceRecord> records,
+    List<LeaveApplication> applications,
+  ) {
+    final next = [...records];
+    final existingLeaveDates = {
+      for (final record in records)
+        if (record.status == 'LEAVE') _dateKey(record.date),
+    };
+    for (final application in applications) {
+      final status = application.status.toUpperCase();
+      if (status != 'PENDING' && status != 'APPROVED' && status != 'QUEUED') {
+        continue;
+      }
+      var cursor = DateTime(
+        application.fromDate.year,
+        application.fromDate.month,
+        application.fromDate.day,
+      );
+      final end = DateTime(
+        application.toDate.year,
+        application.toDate.month,
+        application.toDate.day,
+      );
+      while (!cursor.isAfter(end)) {
+        final key = _dateKey(cursor);
+        if (!existingLeaveDates.contains(key)) {
+          next.add(
+            TeacherAttendanceRecord(
+              id: 'leave-${application.id}-$key',
+              date: DateTime(cursor.year, cursor.month, cursor.day),
+              status: 'LEAVE',
+              overrideReason:
+                  '${application.leaveType?.name ?? 'Leave'} - ${_titleCase(status)}',
+              unitType: AttendanceUnitType.day,
+              unitKey: 'LEAVE',
+              periodName: 'Leave',
+            ),
+          );
+          existingLeaveDates.add(key);
+        }
+        cursor = cursor.add(const Duration(days: 1));
+      }
+    }
+    return next;
+  }
+}
+
+String _dateKey(DateTime date) =>
+    '${date.year.toString().padLeft(4, '0')}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}';
+
+String _titleCase(String value) {
+  final normalized = value.toLowerCase().replaceAll('_', ' ');
+  return normalized
+      .split(' ')
+      .where((part) => part.isNotEmpty)
+      .map((part) => '${part[0].toUpperCase()}${part.substring(1)}')
+      .join(' ');
 }
 
 class _Metric extends StatelessWidget {

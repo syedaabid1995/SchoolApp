@@ -4,6 +4,8 @@ import '../../../../core/network/dio_client.dart';
 import '../../../../core/storage/hive_cache_service.dart';
 import '../../../../core/sync/mutation_queue_service.dart';
 import '../../../../core/sync/sync_manager.dart';
+import '../../../auth/domain/entities/auth_session.dart';
+import '../../../auth/presentation/providers/auth_providers.dart';
 import '../../data/datasources/leave_remote_datasource.dart';
 import '../../data/repositories/leave_repository_impl.dart';
 import '../../domain/entities/leave_entities.dart';
@@ -24,6 +26,11 @@ final leaveRepositoryProvider = Provider<LeaveRepository>((ref) {
 final leaveHomeProvider = FutureProvider.autoDispose<LeaveHomeData>((ref) {
   return ref.watch(leaveRepositoryProvider).getHomeData();
 });
+
+final leaveAccessibleSchoolsProvider =
+    FutureProvider.autoDispose<List<SchoolLoginOption>>((ref) {
+      return ref.watch(authRepositoryProvider).listAccessibleSchools();
+    });
 
 final leaveApplicationDetailProvider = FutureProvider.autoDispose
     .family<LeaveApplication, String>((ref, id) {

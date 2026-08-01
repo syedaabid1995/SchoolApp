@@ -2,10 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../app/theme/app_spacing.dart';
-import '../../../../core/permissions/permission_registry.dart';
 import '../../../../core/widgets/app_scaffold.dart';
 import '../../../../core/widgets/async_state_view.dart';
-import '../../../auth/presentation/providers/current_permission_provider.dart';
 import '../../domain/entities/leave_entities.dart';
 import '../providers/leave_providers.dart';
 import 'leave_history_screen.dart';
@@ -17,10 +15,6 @@ class LeaveHomeScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final data = ref.watch(leaveHomeProvider);
-    final checker = ref.watch(currentPermissionCheckerProvider);
-    final canRequest = checker.canPerformAction(
-      PermissionActionIds.requestLeave,
-    );
 
     return AppScaffold(
       title: 'Leave',
@@ -36,23 +30,16 @@ class LeaveHomeScreen extends ConsumerWidget {
       ],
       child: AsyncStateView(
         value: data,
-        data: (value) => _LeaveHomeContent(
-          value: value,
-          canRequest: canRequest,
-        ),
+        data: (value) => _LeaveHomeContent(value: value),
       ),
     );
   }
 }
 
 class _LeaveHomeContent extends StatelessWidget {
-  const _LeaveHomeContent({
-    required this.value,
-    required this.canRequest,
-  });
+  const _LeaveHomeContent({required this.value});
 
   final LeaveHomeData value;
-  final bool canRequest;
 
   @override
   Widget build(BuildContext context) {
@@ -101,25 +88,24 @@ class _LeaveHomeContent extends StatelessWidget {
             LeaveHistoryScreen(applications: value.applications),
 
             // Bottom padding for FAB
-            if (canRequest) const SizedBox(height: 80),
+            const SizedBox(height: 80),
           ],
         ),
 
         // ── Floating action button ───────────────────────────────────────
-        if (canRequest)
-          Positioned(
-            bottom: AppSpacing.lg,
-            right: 0,
-            child: FloatingActionButton.extended(
-              onPressed: () => Navigator.of(context).push(
-                MaterialPageRoute<void>(
-                  builder: (_) => LeaveRequestScreen(types: value.types),
-                ),
+        Positioned(
+          bottom: AppSpacing.lg,
+          right: 0,
+          child: FloatingActionButton.extended(
+            onPressed: () => Navigator.of(context).push(
+              MaterialPageRoute<void>(
+                builder: (_) => LeaveRequestScreen(types: value.types),
               ),
-              icon: const Icon(Icons.add),
-              label: const Text('Request Leave'),
             ),
+            icon: const Icon(Icons.add),
+            label: const Text('Request Leave'),
           ),
+        ),
       ],
     );
   }
@@ -134,7 +120,9 @@ class _SummaryBanner extends StatelessWidget {
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
     final pending = value.pendingCount;
-    final approved = value.applications.where((a) => a.status == 'APPROVED').length;
+    final approved = value.applications
+        .where((a) => a.status == 'APPROVED')
+        .length;
     final totalUsed = value.balances.fold(0, (sum, b) => sum + b.usedDays);
 
     return Container(
@@ -190,7 +178,9 @@ class _Divider extends StatelessWidget {
     return Container(
       width: 1,
       height: 40,
-      color: Theme.of(context).colorScheme.onPrimaryContainer.withValues(alpha: 0.2),
+      color: Theme.of(
+        context,
+      ).colorScheme.onPrimaryContainer.withValues(alpha: 0.2),
     );
   }
 }
@@ -217,15 +207,15 @@ class _StatItem extends StatelessWidget {
         Text(
           value,
           style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                color: color,
-                fontWeight: FontWeight.w800,
-              ),
+            color: color,
+            fontWeight: FontWeight.w800,
+          ),
         ),
         Text(
           label,
           style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                color: color.withValues(alpha: 0.75),
-              ),
+            color: color.withValues(alpha: 0.75),
+          ),
         ),
       ],
     );
@@ -241,8 +231,9 @@ class _BalanceCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
     final textTheme = Theme.of(context).textTheme;
-    final progress =
-        balance.totalDays > 0 ? balance.usedDays / balance.totalDays : 0.0;
+    final progress = balance.totalDays > 0
+        ? balance.usedDays / balance.totalDays
+        : 0.0;
     final isLow = balance.remainingDays <= 2;
 
     return Container(
@@ -366,8 +357,8 @@ class _EmptyCard extends StatelessWidget {
         child: Text(
           message,
           style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                color: colorScheme.onSurface.withValues(alpha: 0.5),
-              ),
+            color: colorScheme.onSurface.withValues(alpha: 0.5),
+          ),
         ),
       ),
     );

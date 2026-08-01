@@ -40,7 +40,7 @@ final saaptRouterProvider = Provider<GoRouter>((ref) {
           state.matchedLocation == '/forgot-password' ||
           state.matchedLocation == '/splash';
       final changePasswordRoute = state.matchedLocation == '/change-password';
-      if (auth.isLoading && state.matchedLocation != '/splash') {
+      if (auth.isLoading && !publicRoute) {
         return '/splash';
       }
       if (!auth.isLoading && !authenticated && !publicRoute) return '/login';

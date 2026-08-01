@@ -311,6 +311,8 @@ class _ParentLeaveScreenState extends ConsumerState<ParentLeaveScreen> {
             reason: reason,
           );
       ref.invalidate(parentLeaveCenterProvider);
+      ref.invalidate(parentMonthlyAttendanceProvider);
+      ref.invalidate(parentAttendanceProvider);
       _reasonController.clear();
       if (!mounted) return;
       setState(() => _applying = false);

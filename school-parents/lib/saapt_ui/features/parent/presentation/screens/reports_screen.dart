@@ -46,6 +46,7 @@ class _SaaptReportsScreenState extends ConsumerState<SaaptReportsScreen> {
                   parentMonthlyAttendanceProvider((
                     childId: selectedChild.id,
                     month: _selectedMonth,
+                    date: _selectedMonth,
                   )),
                 );
               }
@@ -390,6 +391,7 @@ class _AttendanceReportView extends ConsumerWidget {
       parentMonthlyAttendanceProvider((
         childId: child.id,
         month: selectedMonth,
+        date: selectedMonth,
       )),
     );
     return Column(
