@@ -61,6 +61,7 @@ model School {
   studentPromotionHistories      StudentPromotionHistory[]
   disabledStudentLogs            DisabledStudentLog[]
   studentDocuments               StudentDocument[]
+  schoolDocuments                SchoolDocument[]
   studentTimelines               StudentTimeline[]
   studentSiblings                StudentSibling[]
   studentImportLogs              StudentImportLog[]
@@ -260,6 +261,7 @@ model User {
   totpBackupCodes                        TotpBackupCode[]
   demoRequestsApproved                   DemoRequest[]                   @relation("DemoRequestApprovedBy")
   studentDocumentsUploaded               StudentDocument[]               @relation("StudentDocumentUploadedBy")
+  schoolDocumentsUploaded                SchoolDocument[]                @relation("SchoolDocumentUploadedBy")
   studentTimelinesCreated                StudentTimeline[]               @relation("StudentTimelineCreatedBy")
   studentImportLogsCreated               StudentImportLog[]              @relation("StudentImportLogCreatedBy")
   staffDocumentsUploaded                 StaffDocument[]                 @relation("StaffDocumentUploadedBy")
@@ -1440,17 +1442,18 @@ model DisabledStudentLog {
 }
 
 model StudentDocument {
-  id           String   @id @default(uuid()) @db.Uuid
-  schoolId     String   @map("school_id") @db.Uuid
-  studentId    String   @map("student_id") @db.Uuid
-  title        String
-  url          String
-  fileName     String?  @map("file_name")
-  mimeType     String?  @map("mime_type")
-  sizeBytes    Int?     @map("size_bytes")
-  uploadedById String?  @map("uploaded_by_id") @db.Uuid
-  createdAt    DateTime @default(now()) @map("created_at")
-  updatedAt    DateTime @updatedAt @map("updated_at")
+  id             String   @id @default(uuid()) @db.Uuid
+  schoolId       String   @map("school_id") @db.Uuid
+  studentId      String   @map("student_id") @db.Uuid
+  title          String
+  documentNumber String?  @map("document_number")
+  url            String
+  fileName       String?  @map("file_name")
+  mimeType       String?  @map("mime_type")
+  sizeBytes      Int?     @map("size_bytes")
+  uploadedById   String?  @map("uploaded_by_id") @db.Uuid
+  createdAt      DateTime @default(now()) @map("created_at")
+  updatedAt      DateTime @updatedAt @map("updated_at")
 
   school     School  @relation(fields: [schoolId], references: [id], onDelete: Cascade)
   student    Student @relation(fields: [studentId], references: [id], onDelete: Cascade)
@@ -1762,16 +1765,17 @@ model StaffSocialLink {
 }
 
 model StaffDocument {
-  id           String   @id @default(uuid()) @db.Uuid
-  schoolId     String   @map("school_id") @db.Uuid
-  staffId      String   @map("staff_id") @db.Uuid
-  title        String
-  fileUrl      String   @map("file_url")
-  fileName     String?  @map("file_name")
-  fileType     String?  @map("file_type")
-  uploadedById String   @map("uploaded_by_id") @db.Uuid
-  createdAt    DateTime @default(now()) @map("created_at")
-  updatedAt    DateTime @updatedAt @map("updated_at")
+  id             String   @id @default(uuid()) @db.Uuid
+  schoolId       String   @map("school_id") @db.Uuid
+  staffId        String   @map("staff_id") @db.Uuid
+  title          String
+  documentNumber String?  @map("document_number")
+  fileUrl        String   @map("file_url")
+  fileName       String?  @map("file_name")
+  fileType       String?  @map("file_type")
+  uploadedById   String   @map("uploaded_by_id") @db.Uuid
+  createdAt      DateTime @default(now()) @map("created_at")
+  updatedAt      DateTime @updatedAt @map("updated_at")
 
   school     School         @relation(fields: [schoolId], references: [id], onDelete: Cascade)
   staff      TeacherProfile @relation(fields: [staffId], references: [id], onDelete: Cascade)
@@ -1781,6 +1785,27 @@ model StaffDocument {
   @@index([staffId])
   @@index([uploadedById])
   @@map("staff_documents")
+}
+
+model SchoolDocument {
+  id             String   @id @default(uuid()) @db.Uuid
+  schoolId       String   @map("school_id") @db.Uuid
+  title          String
+  documentNumber String?  @map("document_number")
+  fileUrl        String   @map("file_url")
+  fileName       String?  @map("file_name")
+  fileType       String?  @map("file_type")
+  sizeBytes      Int?     @map("size_bytes")
+  uploadedById   String   @map("uploaded_by_id") @db.Uuid
+  createdAt      DateTime @default(now()) @map("created_at")
+  updatedAt      DateTime @updatedAt @map("updated_at")
+
+  school     School @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  uploadedBy User   @relation("SchoolDocumentUploadedBy", fields: [uploadedById], references: [id], onDelete: Restrict)
+
+  @@index([schoolId])
+  @@index([uploadedById])
+  @@map("school_documents")
 }
 
 model StaffTimeline {

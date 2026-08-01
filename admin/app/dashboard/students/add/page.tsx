@@ -6,17 +6,18 @@ import { useMutation, useQuery } from '@tanstack/react-query';
 import { useRouter } from 'next/navigation';
 import FullPageLoader from '../../../../components/FullPageLoader';
 import PageHeader from '../../../../components/PageHeader';
+import DocumentCollectionCard, { initialDocumentRows, type DocumentCollectionRow } from '../../../../components/DocumentCollectionCard';
 import { useNotify } from '../../../../components/NotificationProvider';
 import { getSession } from '../../../../services/auth.service';
 import { listAcademicYears } from '../../../../services/academic.service';
 import { listSetupClasses, listSetupSections } from '../../../../services/academic-setup.service';
 import { listFeeDiscounts, listFeeGroups, listFeeMasters, type FeeDiscount, type FeeMaster } from '../../../../services/fee-management.service';
-import { createParent, createStudent, linkParent, listStudents, uploadStudentPhoto } from '../../../../services/student.service';
+import { createParent, createStudent, linkParent, listStudents, uploadAndAddStudentDocument, uploadStudentPhoto } from '../../../../services/student.service';
 import { getSchoolSystemSettings } from '../../../../services/system-settings.service';
 
 const categories = ['Regular', 'RTE', 'Management', 'Scholarship', 'Transport'];
 type ParentLoginSource = 'father' | 'mother' | 'guardian';
-type AdmissionStep = 'academic' | 'fees' | 'student' | 'parents' | 'photos' | 'address' | 'review';
+type AdmissionStep = 'academic' | 'fees' | 'student' | 'parents' | 'photos' | 'documents' | 'address' | 'review';
 
 const admissionSteps: Array<{ key: AdmissionStep; label: string; description: string }> = [
   { key: 'academic', label: 'Academic', description: 'Session, class, roll number' },
@@ -24,6 +25,7 @@ const admissionSteps: Array<{ key: AdmissionStep; label: string; description: st
   { key: 'student', label: 'Student', description: 'Profile and base setup details' },
   { key: 'parents', label: 'Parents', description: 'Guardian and login access' },
   { key: 'photos', label: 'Photos', description: 'Student and parent photos' },
+  { key: 'documents', label: 'Documents', description: 'IDs and certificates' },
   { key: 'address', label: 'Address', description: 'Address and sibling linking' },
   { key: 'review', label: 'Review', description: 'Check and save admission' },
 ];
@@ -173,6 +175,7 @@ export default function AddStudentPage() {
   const [sameAddress, setSameAddress] = useState(false);
   const [siblingFilters, setSiblingFilters] = useState({ classId: '', sectionId: '', search: '' });
   const [selectedSiblingSummaries, setSelectedSiblingSummaries] = useState<Record<string, SelectedSiblingSummary>>({});
+  const [documentRows, setDocumentRows] = useState<DocumentCollectionRow[]>(initialDocumentRows);
 
   const { data: session, isLoading: isSessionLoading } = useQuery({ queryKey: ['session'], queryFn: getSession });
   const isSchoolAdmin = session?.role === 'SCHOOL_ADMIN';
@@ -389,6 +392,21 @@ export default function AddStudentPage() {
         generateInvoices: form.generateFeeInvoices,
       });
 
+      const pendingDocuments = documentRows.filter((row) => row.title.trim() || row.documentNumber.trim() || row.files.length);
+      if (pendingDocuments.length) {
+        await Promise.all(
+          pendingDocuments.flatMap((row) =>
+            row.files.map((file) =>
+              uploadAndAddStudentDocument(student.id, {
+                title: row.title.trim(),
+                documentNumber: row.documentNumber.trim() || null,
+                file,
+              }),
+            ),
+          ),
+        );
+      }
+
       let parentLogin: Awaited<ReturnType<typeof createParent>> | null = null;
       let parentLoginError: unknown = null;
       if (form.createParentLogin) {
@@ -497,6 +515,10 @@ export default function AddStudentPage() {
     if (!form.fatherName.trim() && !form.motherName.trim() && !form.guardianName.trim()) return 'At least one parent or guardian name is required.';
     if (form.createParentLogin && !(form.parentLoginPhone || form.parentPhone || form.fatherPhone || form.motherPhone).trim()) return 'Parent login phone is required.';
     if (!form.presentAddress.trim()) return 'Present address is required.';
+    const invalidDocument = documentRows
+      .filter((row) => row.title.trim() || row.documentNumber.trim() || row.files.length)
+      .find((row) => !row.title.trim() || !row.files.length);
+    if (invalidDocument) return 'Each document row needs a document name and at least one file.';
     if (form.discountIds.length && !form.feeGroupIds.length) return 'Select at least one fee master before selecting discounts.';
     if (new Set(form.feeGroupIds).size !== form.feeGroupIds.length) return 'Duplicate fee masters are not allowed.';
     if (new Set(form.discountIds).size !== form.discountIds.length) return 'Duplicate fee discounts are not allowed.';
@@ -529,6 +551,12 @@ export default function AddStudentPage() {
       if (selectedDiscounts.some((discount) => isExpired(discount.expiryDate ?? discount.validTo))) return 'Expired discounts cannot be selected.';
     }
     if (currentStep === 'address' && !form.presentAddress.trim()) return 'Present address is required.';
+    if (currentStep === 'documents') {
+      const invalidDocument = documentRows
+        .filter((row) => row.title.trim() || row.documentNumber.trim() || row.files.length)
+        .find((row) => !row.title.trim() || !row.files.length);
+      if (invalidDocument) return 'Each document row needs a document name and at least one file.';
+    }
     return '';
   };
 
@@ -595,7 +623,7 @@ export default function AddStudentPage() {
         />
 
         <section className="mb-5 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-          <div className="grid gap-2 md:grid-cols-7">
+          <div className="grid gap-2 md:grid-cols-4 xl:grid-cols-8">
             {admissionSteps.map((step, index) => {
               const isActive = step.key === currentStep;
               const isComplete = index < currentStepIndex;
@@ -991,6 +1019,15 @@ export default function AddStudentPage() {
               </div>
             </section> : null}
 
+            {currentStep === 'documents' ? (
+              <DocumentCollectionCard
+                rows={documentRows}
+                onChange={setDocumentRows}
+                onError={(message) => notify.error('Invalid document', message)}
+                title="Student Documents"
+              />
+            ) : null}
+
             {currentStep === 'address' ? <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
               <h2 className="mb-4 text-lg font-bold text-slate-950">Address & Siblings</h2>
               <div className="grid gap-4 md:grid-cols-2">
@@ -1120,6 +1157,11 @@ export default function AddStudentPage() {
                   <h3 className="mb-3 font-bold text-slate-950">Address & Links</h3>
                   <p className="text-sm text-slate-600">Present address: <span className="font-semibold text-slate-900">{form.presentAddress || '-'}</span></p>
                   <p className="text-sm text-slate-600">Siblings selected: <span className="font-semibold text-slate-900">{form.siblingIds.length}</span></p>
+                </div>
+                <div className="rounded-xl border border-slate-100 bg-slate-50 p-4">
+                  <h3 className="mb-3 font-bold text-slate-950">Documents</h3>
+                  <p className="text-sm text-slate-600">Document groups: <span className="font-semibold text-slate-900">{documentRows.filter((row) => row.title.trim() && row.files.length).length}</span></p>
+                  <p className="text-sm text-slate-600">Files selected: <span className="font-semibold text-slate-900">{documentRows.reduce((sum, row) => sum + row.files.length, 0)}</span></p>
                 </div>
               </div>
             </section> : null}

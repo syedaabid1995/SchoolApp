@@ -15,6 +15,7 @@ import { AuthorizationService } from '../services/authorization.service';
 import { PermissionCodes as P } from '../permissions/permission-manifest';
 import { sendAccountCreatedWhatsapp } from '../services/accountOnboardingWhatsapp.service';
 import { resolveSchoolId } from '../utils/tenant';
+import { isAllowedDocumentMimeType, validateUploadedDocumentFile } from '../utils/documentUploadValidation';
 
 const staffRoles = ['SCHOOL_ADMIN', 'TEACHER', 'ACCOUNTANT', 'LIBRARIAN', 'STAFF'] as const;
 const attendanceStatuses = ['PRESENT', 'LATE', 'ABSENT', 'HOLIDAY', 'HALF_DAY', 'LEAVE', 'LOP', 'CASUAL_LEAVE'] as const;
@@ -244,7 +245,7 @@ const staffPayloadSchema = z.object({
   dateOfJoining: optionalDate,
   phone: z.string().trim().max(40).optional().nullable(),
   emergencyMobile: z.string().trim().max(40).optional().nullable(),
-  photoUrl: z.string().trim().url().optional().nullable(),
+  photoUrl: z.string().trim().min(1).max(1000).optional().nullable(),
   drivingLicense: z.string().trim().max(120).optional().nullable(),
   currentAddress: z.string().trim().max(1000).optional().nullable(),
   permanentAddress: z.string().trim().max(1000).optional().nullable(),
@@ -787,8 +788,7 @@ export const deleteStaff = async (req: Request, res: Response) => {
 const docUpload = multer({
   storage: multer.memoryStorage(),
   fileFilter: (_req, file, cb) => {
-    const allowed = ['application/pdf', 'application/msword', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document', 'image/jpeg', 'image/png', 'image/webp'];
-    if (!allowed.includes(file.mimetype)) {
+    if (!isAllowedDocumentMimeType(file.mimetype)) {
       cb(new Error('Unsupported document type'));
       return;
     }
@@ -804,13 +804,15 @@ export const addStaffDocument = async (req: Request, res: Response) => {
   const staff = await prisma.teacherProfile.findFirst({ where: { id: req.params.id, schoolId }, select: { id: true } });
   if (!staff) throw new HttpError(404, 'Staff not found');
   const title = z.string().trim().min(1).max(160).parse(req.body.title ?? req.query.title);
+  const documentNumber = z.string().trim().max(120).optional().nullable().parse(req.body.documentNumber ?? req.query.documentNumber);
   if (!req.file) throw new HttpError(400, 'No file uploaded');
+  validateUploadedDocumentFile(req.file);
   const ext = path.extname(req.file.originalname);
   const name = `${crypto.randomUUID()}${ext || ''}`;
   const key = `schools/${schoolId}/staff/${staff.id}/documents/${name}`;
   const uploaded = await uploadBuffer({ key, body: req.file.buffer, contentType: req.file.mimetype });
   const doc = await prisma.staffDocument.create({
-    data: { schoolId, staffId: staff.id, title, fileUrl: uploaded.url, fileName: req.file.originalname, fileType: req.file.mimetype, uploadedById: userId },
+    data: { schoolId, staffId: staff.id, title, documentNumber: normalizeNullable(documentNumber), fileUrl: uploaded.url, fileName: req.file.originalname, fileType: req.file.mimetype, uploadedById: userId },
   });
   res.status(201).json(doc);
 };

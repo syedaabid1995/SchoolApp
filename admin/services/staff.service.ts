@@ -79,6 +79,7 @@ export type StaffListResponse = { items: Staff[]; page: number; limit: number; t
 export type StaffDocument = {
   id: string;
   title: string;
+  documentNumber?: string | null;
   fileUrl: string;
   fileName?: string | null;
   fileType?: string | null;
@@ -228,6 +229,9 @@ export const getStaff = async (id: string) => {
 export const resolveStaffUploadUrl = (value?: string | null, asset?: SignedUploadAssetRef | null) =>
   resolveUploadUrlWithBase(value, asset, env.apiBaseUrl);
 
+export const resolveStaffPhotoUrl = (staff?: Pick<Staff, 'id' | 'photoUrl'> | null) =>
+  resolveUploadUrlWithBase(staff?.photoUrl, staff?.id ? { type: 'staff-photo', id: staff.id } : null, env.apiBaseUrl);
+
 export const updateStaff = async (id: string, payload: Partial<StaffPayload>) => {
   const { data } = await api.patch<Staff>(`/staff/${id}`, payload);
   return data;
@@ -247,10 +251,11 @@ export const uploadStaffPhoto = async (file: File) => {
   return data;
 };
 
-export const uploadStaffDocument = async (staffId: string, title: string, file: File) => {
+export const uploadStaffDocument = async (staffId: string, title: string, file: File, documentNumber?: string | null) => {
   const form = new FormData();
   form.append('file', file);
   form.append('title', title);
+  if (documentNumber) form.append('documentNumber', documentNumber);
   const { data } = await api.post<StaffDocument>(`/staff/${staffId}/documents`, form, {
     headers: { 'Content-Type': 'multipart/form-data' },
   });

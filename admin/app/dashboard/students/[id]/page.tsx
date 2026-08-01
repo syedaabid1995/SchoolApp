@@ -11,7 +11,6 @@ import { getSession } from '../../../../services/auth.service';
 import { listAcademicYears } from '../../../../services/academic.service';
 import { listSetupClasses, listSetupSections } from '../../../../services/academic-setup.service';
 import {
-  addStudentDocument,
   addStudentPhoto,
   addStudentTimeline,
   deleteStudentPhoto,
@@ -25,7 +24,7 @@ import {
   type Student,
   updateParent,
   updateStudent,
-  uploadStudentDocument,
+  uploadAndAddStudentDocument,
   uploadStudentPhoto,
 } from '../../../../services/student.service';
 import {
@@ -205,7 +204,7 @@ export default function StudentDetailPage() {
     phone: string;
     email: string;
   } | null>(null);
-  const [documentForm, setDocumentForm] = useState({ title: '', file: null as File | null });
+  const [documentForm, setDocumentForm] = useState({ title: '', documentNumber: '', files: [] as File[] });
   const [timelineForm, setTimelineForm] = useState({ title: '', description: '', timelineDate: new Date().toISOString().slice(0, 10) });
   const [photoUploadTarget, setPhotoUploadTarget] = useState<'student' | 'gallery' | 'face' | null>(null);
 
@@ -565,20 +564,17 @@ export default function StudentDetailPage() {
 
   const documentMutation = useMutation({
     mutationFn: async () => {
-      if (!documentForm.file) throw new Error('Select a document.');
+      if (!documentForm.files.length) throw new Error('Select at least one document.');
       if (!documentForm.title.trim()) throw new Error('Document title is required.');
-      const uploaded = await uploadStudentDocument(documentForm.file, studentId, effectiveStudentRequestParams);
-      return addStudentDocument(studentId, {
+      return Promise.all(documentForm.files.map((file) => uploadAndAddStudentDocument(studentId, {
         title: documentForm.title.trim(),
-        url: uploaded.url,
-        fileName: uploaded.filename,
-        mimeType: documentForm.file.type,
-        sizeBytes: documentForm.file.size,
-      }, effectiveStudentRequestParams);
+        documentNumber: documentForm.documentNumber.trim() || null,
+        file,
+      }, effectiveStudentRequestParams)));
     },
     onSuccess: () => {
       notify.success('Document uploaded', 'Student document was added.');
-      setDocumentForm({ title: '', file: null });
+      setDocumentForm({ title: '', documentNumber: '', files: [] });
       queryClient.invalidateQueries({ queryKey: ['student', studentId] });
     },
     onError: (error: any) => notify.error('Upload failed', error?.response?.data?.error?.message ?? error.message ?? 'Unable to upload document.'),
@@ -1429,9 +1425,10 @@ export default function StudentDetailPage() {
             {tab === 'documents' && (
               <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
                 <h2 className="mb-4 text-lg font-bold text-slate-950">Documents</h2>
-                {canCreateDocument ? <div className="mb-5 grid gap-3 md:grid-cols-[1fr_1fr_auto]">
+                {canCreateDocument ? <div className="mb-5 grid gap-3 md:grid-cols-[1fr_1fr_1fr_auto]">
                   <input value={documentForm.title} onChange={(event) => setDocumentForm({ ...documentForm, title: event.target.value })} placeholder="Document title" className="rounded-xl border border-slate-200 px-3 py-2 text-sm" />
-                  <input type="file" accept=".pdf,.doc,.docx,image/*" onChange={(event) => setDocumentForm({ ...documentForm, file: event.target.files?.[0] ?? null })} className="rounded-xl border border-slate-200 px-3 py-2 text-sm" />
+                  <input value={documentForm.documentNumber} onChange={(event) => setDocumentForm({ ...documentForm, documentNumber: event.target.value })} placeholder="Document number" className="rounded-xl border border-slate-200 px-3 py-2 text-sm" />
+                  <input type="file" multiple accept=".pdf,.doc,.docx,image/jpeg,image/png,image/webp" onChange={(event) => setDocumentForm({ ...documentForm, files: Array.from(event.target.files ?? []) })} className="rounded-xl border border-slate-200 px-3 py-2 text-sm" />
                   <button onClick={() => documentMutation.mutate()} disabled={documentMutation.isPending} className="rounded-xl bg-violet-600 px-4 py-2 text-sm font-bold text-white disabled:opacity-50">Upload</button>
                 </div> : null}
                 <div className="grid gap-3">
@@ -1439,7 +1436,7 @@ export default function StudentDetailPage() {
                     <div key={document.id} className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-slate-100 p-3">
                       <div>
                         <p className="font-semibold text-slate-900">{document.title}</p>
-                        <p className="text-xs text-slate-500">{formatDate(document.createdAt)}</p>
+                        <p className="text-xs text-slate-500">{document.documentNumber ? `${document.documentNumber} - ` : ''}{document.fileName ?? formatDate(document.createdAt)}</p>
                       </div>
                       <div className="flex gap-2">
                         <a href={resolveUploadUrl(document.url, { type: 'student-document', id: document.id }) ?? undefined} target="_blank" rel="noreferrer" className="rounded-lg border border-slate-200 px-3 py-2 text-sm font-semibold text-slate-700">Download</a>

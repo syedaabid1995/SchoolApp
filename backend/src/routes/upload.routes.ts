@@ -20,6 +20,7 @@ import {
   isBrandingMimeType,
   validateBrandingImage,
 } from '../utils/brandingAssets';
+import { isAllowedDocumentMimeType, validateUploadedDocumentFile } from '../utils/documentUploadValidation';
 
 const imageOnlyFilter: multer.Options['fileFilter'] = (_req, file, cb) => {
   if (file.mimetype.startsWith('image/')) {
@@ -30,15 +31,7 @@ const imageOnlyFilter: multer.Options['fileFilter'] = (_req, file, cb) => {
 };
 
 const documentFilter: multer.Options['fileFilter'] = (_req, file, cb) => {
-  const allowed = [
-    'application/pdf',
-    'application/msword',
-    'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-    'image/jpeg',
-    'image/png',
-    'image/webp',
-  ];
-  if (allowed.includes(file.mimetype)) {
+  if (isAllowedDocumentMimeType(file.mimetype)) {
     cb(null, true);
   } else {
     cb(new Error('Unsupported document type'));
@@ -115,7 +108,7 @@ uploadRouter.get('/local-signed', requireValidLocalSignedStorageUrl, async (_req
 uploadRouter.use(authMiddleware);
 
 const signedAssetQuerySchema = z.object({
-  type: z.enum(['student-document', 'student-photo', 'staff-document', 'attendance-evidence']),
+  type: z.enum(['student-document', 'student-photo', 'staff-document', 'staff-photo', 'school-document', 'attendance-evidence']),
   id: z.string().uuid(),
 });
 
@@ -177,6 +170,26 @@ const resolveSignedAsset = async (req: Request) => {
     return document.fileUrl;
   }
 
+  if (payload.type === 'staff-photo') {
+    const staff = await prisma.teacherProfile.findFirst({
+      where: { id: payload.id },
+      select: { schoolId: true, photoUrl: true },
+    });
+    if (!staff?.photoUrl) throw new HttpError(404, 'Asset not found');
+    await assertSignedAssetPermission(req, staff.schoolId, P.staffView);
+    return staff.photoUrl;
+  }
+
+  if (payload.type === 'school-document') {
+    const document = await prisma.schoolDocument.findFirst({
+      where: { id: payload.id },
+      select: { schoolId: true, fileUrl: true },
+    });
+    if (!document) throw new HttpError(404, 'Asset not found');
+    await assertSignedAssetPermission(req, document.schoolId, P.settingsAccess);
+    return document.fileUrl;
+  }
+
   const evidence = await prisma.attendanceEvidence.findFirst({
     where: { id: payload.id },
     select: {
@@ -189,7 +202,7 @@ const resolveSignedAsset = async (req: Request) => {
   return evidence.imageUrl;
 };
 
-uploadRouter.get('/signed', requirePermission(P.studentDocumentView, P.staffDocumentView, P.attendanceView), async (req, res) => {
+uploadRouter.get('/signed', requirePermission(P.studentDocumentView, P.staffDocumentView, P.staffView, P.settingsAccess, P.attendanceView), async (req, res) => {
   const storedUrl = await resolveSignedAsset(req);
   try {
     const signed = await getSignedUrlForStoredUrl({ url: storedUrl });
@@ -321,6 +334,13 @@ const docUpload = multer({
 uploadRouter.post('/documents', requirePermission(P.studentDocumentCreate), blockSuperAdminDailyAssetUpload, docUpload.single('file'), (req, res) => {
   if (!req.file) {
     res.status(400).json({ error: { message: 'No file uploaded', details: null } });
+    return;
+  }
+  try {
+    validateUploadedDocumentFile(req.file);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Invalid document upload';
+    res.status(error instanceof HttpError ? error.statusCode : 400).json({ error: { message, details: null } });
     return;
   }
   const schoolId = resolveSchoolId(req, req.query.schoolId as string | undefined);

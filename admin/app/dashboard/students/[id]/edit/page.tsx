@@ -6,17 +6,18 @@ import { useMutation, useQuery } from '@tanstack/react-query';
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import FullPageLoader from '../../../../../components/FullPageLoader';
 import PageHeader from '../../../../../components/PageHeader';
+import DocumentCollectionCard, { initialDocumentRows, type DocumentCollectionRow } from '../../../../../components/DocumentCollectionCard';
 import { useNotify } from '../../../../../components/NotificationProvider';
 import { getSession } from '../../../../../services/auth.service';
 import { listAcademicYears } from '../../../../../services/academic.service';
 import { listSetupClasses, listSetupSections } from '../../../../../services/academic-setup.service';
 import { listFeeDiscounts, listFeeGroups, listFeeMasters, type FeeDiscount, type FeeMaster } from '../../../../../services/fee-management.service';
-import { createParent, getStudent, linkParent, listStudents, updateStudent, uploadStudentPhoto } from '../../../../../services/student.service';
+import { createParent, getStudent, linkParent, listStudents, resolveUploadUrl, updateStudent, uploadAndAddStudentDocument, uploadStudentPhoto } from '../../../../../services/student.service';
 import { getSchoolSystemSettings } from '../../../../../services/system-settings.service';
 
 const categories = ['Regular', 'RTE', 'Management', 'Scholarship', 'Transport'];
 type ParentLoginSource = 'father' | 'mother' | 'guardian';
-type AdmissionStep = 'academic' | 'fees' | 'student' | 'parents' | 'photos' | 'address' | 'review';
+type AdmissionStep = 'academic' | 'fees' | 'student' | 'parents' | 'photos' | 'documents' | 'address' | 'review';
 
 const admissionSteps: Array<{ key: AdmissionStep; label: string; description: string }> = [
   { key: 'academic', label: 'Academic', description: 'Session, class, roll number' },
@@ -24,6 +25,7 @@ const admissionSteps: Array<{ key: AdmissionStep; label: string; description: st
   { key: 'student', label: 'Student', description: 'Profile and base setup details' },
   { key: 'parents', label: 'Parents', description: 'Guardian and login access' },
   { key: 'photos', label: 'Photos', description: 'Student and parent photos' },
+  { key: 'documents', label: 'Documents', description: 'IDs and certificates' },
   { key: 'address', label: 'Address', description: 'Address and sibling linking' },
   { key: 'review', label: 'Review', description: 'Check and update student' },
 ];
@@ -185,6 +187,7 @@ export default function EditStudentPage() {
   const [sameAddress, setSameAddress] = useState(false);
   const [siblingFilters, setSiblingFilters] = useState({ classId: '', sectionId: '', search: '' });
   const [selectedSiblingSummaries, setSelectedSiblingSummaries] = useState<Record<string, SelectedSiblingSummary>>({});
+  const [documentRows, setDocumentRows] = useState<DocumentCollectionRow[]>(initialDocumentRows);
 
   const { data: session, isLoading: isSessionLoading } = useQuery({ queryKey: ['session'], queryFn: getSession });
   const isSuperAdmin = session?.role === 'SUPER_ADMIN';
@@ -486,6 +489,21 @@ export default function EditStudentPage() {
         effectiveStudentRequestParams,
       );
 
+      const pendingDocuments = documentRows.filter((row) => row.title.trim() || row.documentNumber.trim() || row.files.length);
+      if (pendingDocuments.length) {
+        await Promise.all(
+          pendingDocuments.flatMap((row) =>
+            row.files.map((file) =>
+              uploadAndAddStudentDocument(studentId, {
+                title: row.title.trim(),
+                documentNumber: row.documentNumber.trim() || null,
+                file,
+              }, effectiveStudentRequestParams),
+            ),
+          ),
+        );
+      }
+
       let parentLogin: Awaited<ReturnType<typeof createParent>> | null = null;
       let parentLoginError: unknown = null;
       if (form.createParentLogin) {
@@ -595,6 +613,10 @@ export default function EditStudentPage() {
     if (!form.fatherName.trim() && !form.motherName.trim() && !form.guardianName.trim()) return 'At least one parent or guardian name is required.';
     if (form.createParentLogin && !(form.parentLoginPhone || form.parentPhone || form.fatherPhone || form.motherPhone).trim()) return 'Parent login phone is required.';
     if (!form.presentAddress.trim()) return 'Present address is required.';
+    const invalidDocument = documentRows
+      .filter((row) => row.title.trim() || row.documentNumber.trim() || row.files.length)
+      .find((row) => !row.title.trim() || !row.files.length);
+    if (invalidDocument) return 'Each document row needs a document name and at least one file.';
     if (form.discountIds.length && !form.feeGroupIds.length) return 'Select at least one fee master before selecting discounts.';
     if (new Set(form.feeGroupIds).size !== form.feeGroupIds.length) return 'Duplicate fee masters are not allowed.';
     if (new Set(form.discountIds).size !== form.discountIds.length) return 'Duplicate fee discounts are not allowed.';
@@ -627,6 +649,12 @@ export default function EditStudentPage() {
       if (selectedDiscounts.some((discount) => isExpired(discount.expiryDate ?? discount.validTo))) return 'Expired discounts cannot be selected.';
     }
     if (currentStep === 'address' && !form.presentAddress.trim()) return 'Present address is required.';
+    if (currentStep === 'documents') {
+      const invalidDocument = documentRows
+        .filter((row) => row.title.trim() || row.documentNumber.trim() || row.files.length)
+        .find((row) => !row.title.trim() || !row.files.length);
+      if (invalidDocument) return 'Each document row needs a document name and at least one file.';
+    }
     return '';
   };
 
@@ -700,7 +728,7 @@ export default function EditStudentPage() {
         />
 
         <section className="mb-5 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-          <div className="grid gap-2 md:grid-cols-7">
+          <div className="grid gap-2 md:grid-cols-4 xl:grid-cols-8">
             {admissionSteps.map((step, index) => {
               const isActive = step.key === currentStep;
               const isComplete = index < currentStepIndex;
@@ -1095,6 +1123,31 @@ export default function EditStudentPage() {
                 )}
               </div>
             </section> : null}
+
+            {currentStep === 'documents' ? (
+              <>
+                <DocumentCollectionCard
+                  rows={documentRows}
+                  onChange={setDocumentRows}
+                  onError={(message) => notify.error('Invalid document', message)}
+                  title="Student Documents"
+                />
+                <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+                  <h2 className="mb-4 text-lg font-bold text-slate-950">Uploaded Documents</h2>
+                  <div className="grid gap-3">
+                    {student.documents?.length ? student.documents.map((document) => (
+                      <div key={document.id} className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-slate-100 bg-slate-50 px-4 py-3">
+                        <div>
+                          <p className="font-semibold text-slate-900">{document.title}</p>
+                          <p className="text-xs text-slate-500">{document.documentNumber || document.fileName || formatDate(document.createdAt)}</p>
+                        </div>
+                        <a href={resolveUploadUrl(document.url, { type: 'student-document', id: document.id }) ?? undefined} target="_blank" rel="noreferrer" className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-700">View</a>
+                      </div>
+                    )) : <p className="rounded-xl border border-dashed border-slate-200 p-8 text-center text-sm text-slate-500">No documents uploaded.</p>}
+                  </div>
+                </section>
+              </>
+            ) : null}
 
             {currentStep === 'address' ? <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
               <h2 className="mb-4 text-lg font-bold text-slate-950">Address & Siblings</h2>

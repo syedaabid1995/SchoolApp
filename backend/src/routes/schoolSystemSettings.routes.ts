@@ -1,5 +1,12 @@
 import { Router } from 'express';
-import { getSchoolSystemSettings, updateSchoolSystemSettings } from '../controllers/schoolSystemSettings.controller';
+import {
+  addSchoolDocument,
+  deleteSchoolDocument,
+  getSchoolSystemSettings,
+  listSchoolDocuments,
+  updateSchoolSystemSettings,
+  uploadSchoolDocumentMiddleware,
+} from '../controllers/schoolSystemSettings.controller';
 import { authMiddleware } from '../middlewares/auth.middleware';
 import { requireSchoolAdminOrSuperAdmin } from '../middlewares/rbac.middleware';
 
@@ -10,3 +17,6 @@ schoolSystemSettingsRouter.use(requireSchoolAdminOrSuperAdmin);
 
 schoolSystemSettingsRouter.get('/school', getSchoolSystemSettings);
 schoolSystemSettingsRouter.put('/school', updateSchoolSystemSettings);
+schoolSystemSettingsRouter.get('/school/documents', listSchoolDocuments);
+schoolSystemSettingsRouter.post('/school/documents', uploadSchoolDocumentMiddleware, addSchoolDocument);
+schoolSystemSettingsRouter.delete('/school/documents/:documentId', deleteSchoolDocument);

@@ -6,6 +6,7 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import FullPageLoader from '../../../../components/FullPageLoader';
 import PageHeader from '../../../../components/PageHeader';
+import DocumentCollectionCard, { initialDocumentRows, type DocumentCollectionRow } from '../../../../components/DocumentCollectionCard';
 import { useNotify } from '../../../../components/NotificationProvider';
 import { getSession } from '../../../../services/auth.service';
 import { listLeaveDefines, listLeaveTypes } from '../../../../services/leave.service';
@@ -18,7 +19,10 @@ import {
   listDesignations,
   seedStaffDefaults,
   updateStaff,
+  uploadStaffDocument,
   uploadStaffPhoto,
+  resolveStaffPhotoUrl,
+  resolveStaffUploadUrl,
   type Department,
   type Designation,
   type StaffPayload,
@@ -124,6 +128,8 @@ export default function AddStaffPage() {
   const [newDesignation, setNewDesignation] = useState('');
   const [createdLogin, setCreatedLogin] = useState<{ email: string; password?: string | null } | null>(null);
   const [appliedPresetKey, setAppliedPresetKey] = useState('');
+  const [autoSetupRequested, setAutoSetupRequested] = useState(false);
+  const [documentRows, setDocumentRows] = useState<DocumentCollectionRow[]>(initialDocumentRows);
 
   const { data: session, isLoading: sessionLoading } = useQuery({ queryKey: ['session'], queryFn: getSession });
   const isSchoolAdmin = session?.role === 'SCHOOL_ADMIN';
@@ -156,6 +162,8 @@ export default function AddStaffPage() {
   const profileName = fullName(form) || 'New employee';
   const baseSalary = Number(form.payrollInfo?.basicSalary ?? 0);
   const hasHrSetup = Boolean((departmentsQuery.data?.length ?? 0) && (designationsQuery.data?.length ?? 0) && (leaveTypesQuery.data?.length ?? 0));
+  const resolvedPhotoUrl = editId ? resolveStaffPhotoUrl({ id: editId, photoUrl: form.photoUrl }) : resolveStaffUploadUrl(form.photoUrl);
+  const existingDocuments = staffQuery.data?.documents?.filter((doc) => !doc.fileUrl.startsWith('/dashboard/')) ?? [];
 
   useEffect(() => {
     if (!staffQuery.data) return;
@@ -207,6 +215,25 @@ export default function AddStaffPage() {
     onError: (error: any) => notify.error('Setup failed', error?.response?.data?.error?.message ?? 'Unable to prepare staff setup.'),
   });
 
+  useEffect(() => {
+    if (editId || autoSetupRequested || setupMutation.isPending) return;
+    if (departmentsQuery.isLoading || designationsQuery.isLoading || leaveTypesQuery.isLoading) return;
+    const missingHrSetup = !(departmentsQuery.data?.length ?? 0) || !(designationsQuery.data?.length ?? 0) || !(leaveTypesQuery.data?.length ?? 0);
+    if (!missingHrSetup) return;
+    setAutoSetupRequested(true);
+    setupMutation.mutate();
+  }, [
+    autoSetupRequested,
+    departmentsQuery.data?.length,
+    departmentsQuery.isLoading,
+    designationsQuery.data?.length,
+    designationsQuery.isLoading,
+    editId,
+    leaveTypesQuery.data?.length,
+    leaveTypesQuery.isLoading,
+    setupMutation,
+  ]);
+
   const addDepartmentMutation = useMutation({
     mutationFn: () => createDepartment({ name: newDepartment.trim() }),
     onSuccess: (item) => {
@@ -237,6 +264,10 @@ export default function AddStaffPage() {
     if (!form.designationId) return 'Designation is required.';
     if (!form.departmentId) return 'Department is required.';
     if (baseSalary < 0) return 'Salary cannot be negative.';
+    const invalidDocument = documentRows
+      .filter((row) => row.title.trim() || row.documentNumber.trim() || row.files.length)
+      .find((row) => !row.title.trim() || !row.files.length);
+    if (invalidDocument) return 'Each document row needs a document name and at least one file.';
     return '';
   };
 
@@ -262,7 +293,19 @@ export default function AddStaffPage() {
       const error = validate();
       if (error) throw new Error(error);
       const payload = buildPayload();
-      return editId ? updateStaff(editId, payload) : createStaff(payload);
+      const result = editId ? await updateStaff(editId, payload) : await createStaff(payload);
+      const savedStaffId = editId || (result as any)?.staff?.id || (result as any)?.id;
+      const pendingDocuments = documentRows.filter((row) => row.title.trim() || row.documentNumber.trim() || row.files.length);
+      const invalidDocument = pendingDocuments.find((row) => !row.title.trim() || !row.files.length);
+      if (invalidDocument) throw new Error('Each document row needs a document name and at least one file.');
+      if (savedStaffId && pendingDocuments.length) {
+        await Promise.all(
+          pendingDocuments.flatMap((row) =>
+            row.files.map((file) => uploadStaffDocument(savedStaffId, row.title.trim(), file, row.documentNumber.trim() || null)),
+          ),
+        );
+      }
+      return result;
     },
     onSuccess: (result: any) => {
       queryClient.invalidateQueries({ queryKey: ['staff'] });
@@ -270,6 +313,7 @@ export default function AddStaffPage() {
       if (result?.tempPassword || !editId) {
         setCreatedLogin({ email: result?.staff?.user?.email ?? form.email, password: result?.tempPassword ?? null });
       }
+      setDocumentRows(initialDocumentRows());
       notify.success(editId ? 'Employee updated' : 'Employee created', 'Profile, login, payroll, and leave details were saved.');
       if (editId) router.push(`/dashboard/staff/${editId}`);
     },
@@ -296,7 +340,7 @@ export default function AddStaffPage() {
       designationId: designationId || current.designationId,
       payrollInfo: { ...current.payrollInfo, basicSalary: preset.basicSalary, contractType: preset.contractType, paymentMode: current.payrollInfo?.paymentMode || 'Bank Transfer' },
     }));
-    if (!departmentId || !designationId) notify.info('Preset selected', 'Use Load HR Presets once to create missing departments and designations.');
+    if (!departmentId || !designationId) notify.info('Preset selected', 'HR defaults are being prepared automatically if setup values are missing.');
   };
 
   useEffect(() => {
@@ -341,17 +385,6 @@ export default function AddStaffPage() {
           title={editId ? 'Edit Employee' : 'Add Employee'}
           subtitle="Create staff records with login access, designation, salary, leave, bank, and profile details."
           breadcrumbs={[{ label: 'Dashboard', href: '/dashboard' }, { label: 'Staff', href: '/dashboard/staff' }, { label: editId ? 'Edit' : 'Add' }]}
-          actions={
-            <button
-              type="button"
-              onClick={() => setupMutation.mutate()}
-              disabled={setupMutation.isPending}
-              className="inline-flex items-center gap-2 rounded-xl border border-violet-200 bg-white px-4 py-2 text-sm font-bold text-violet-700 shadow-sm disabled:opacity-50"
-            >
-              <Icon name="spark" />
-              Load HR Presets
-            </button>
-          }
         />
 
         <div className="grid gap-5 xl:grid-cols-[340px_minmax(0,1fr)]">
@@ -360,7 +393,7 @@ export default function AddStaffPage() {
               <div className="h-28 bg-gradient-to-br from-slate-950 via-violet-700 to-cyan-500" />
               <div className="-mt-14 px-5 pb-5">
                 <div className="grid h-28 w-28 place-items-center overflow-hidden rounded-2xl border-4 border-white bg-violet-100 text-3xl font-black text-violet-700 shadow-lg">
-                  {form.photoUrl ? <img src={form.photoUrl} alt={profileName} className="h-full w-full object-cover" /> : profileName.slice(0, 2).toUpperCase()}
+                  {resolvedPhotoUrl ? <img src={resolvedPhotoUrl} alt={profileName} className="h-full w-full object-cover" /> : profileName.slice(0, 2).toUpperCase()}
                 </div>
                 <h2 className="mt-4 text-xl font-black text-slate-950">{profileName}</h2>
                 <p className="text-sm font-semibold text-slate-500">{selectedDesignation?.name ?? labelForRole(form.roleName)}</p>
@@ -386,7 +419,7 @@ export default function AddStaffPage() {
                 <SummaryRow label="Department" value={selectedDepartment?.name ?? '-'} />
                 <SummaryRow label="Designation" value={selectedDesignation?.name ?? '-'} />
                 <SummaryRow label="Salary" value={money(baseSalary)} />
-                <SummaryRow label="Leave types" value={leaveRows.length ? String(leaveRows.length) : hasHrSetup ? '0' : 'Run presets'} />
+                <SummaryRow label="Leave types" value={leaveRows.length ? String(leaveRows.length) : hasHrSetup ? '0' : setupMutation.isPending ? 'Preparing' : 'Pending'} />
               </div>
             </section>
           </aside>
@@ -628,6 +661,30 @@ export default function AddStaffPage() {
                 ))}
               </div>
             </section>
+
+            <DocumentCollectionCard
+              rows={documentRows}
+              onChange={setDocumentRows}
+              onError={(message) => notify.error('Invalid document', message)}
+              title="Staff Documents"
+            />
+
+            {editId ? (
+              <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+                <h2 className="mb-4 text-lg font-black text-slate-950">Uploaded Documents</h2>
+                <div className="grid gap-3">
+                  {existingDocuments.length ? existingDocuments.map((doc) => (
+                    <div key={doc.id} className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-slate-100 bg-slate-50 px-4 py-3">
+                      <div>
+                        <p className="font-semibold text-slate-950">{doc.title}</p>
+                        <p className="text-xs text-slate-500">{doc.documentNumber || doc.fileName || 'Document'}</p>
+                      </div>
+                      <a href={resolveStaffUploadUrl(doc.fileUrl, { type: 'staff-document', id: doc.id }) ?? undefined} target="_blank" rel="noreferrer" className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-bold">View</a>
+                    </div>
+                  )) : <p className="rounded-xl border border-dashed border-slate-200 py-8 text-center text-sm text-slate-500">No uploaded documents found.</p>}
+                </div>
+              </section>
+            ) : null}
 
             <div className="flex flex-wrap justify-end gap-2">
               <Link href="/dashboard/staff" className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-bold text-slate-700">Cancel</Link>

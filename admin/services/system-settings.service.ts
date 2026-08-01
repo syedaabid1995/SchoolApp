@@ -95,6 +95,17 @@ export type FeeChallanBankSetting = {
   isActive: boolean;
 };
 
+export type SchoolDocument = {
+  id: string;
+  title: string;
+  documentNumber?: string | null;
+  fileUrl: string;
+  fileName?: string | null;
+  fileType?: string | null;
+  sizeBytes?: number | null;
+  createdAt: string;
+};
+
 export type SchoolSystemSettings = {
   id: string;
   schoolId: string;
@@ -127,4 +138,28 @@ export const getSchoolSystemSettings = async (params?: { schoolId?: string }) =>
 export const updateSchoolSystemSettings = async (payload: UpdateSchoolSystemSettingsInput) => {
   const { data } = await api.put<SchoolSystemSettings>('/system-settings/school', payload);
   return data;
+};
+
+export const listSchoolDocuments = async (params?: { schoolId?: string }) => {
+  const { data } = await api.get<SchoolDocument[]>('/system-settings/school/documents', { params });
+  return data;
+};
+
+export const uploadSchoolDocument = async (
+  payload: { title: string; documentNumber?: string | null; file: File },
+  params?: { schoolId?: string },
+) => {
+  const form = new FormData();
+  form.append('title', payload.title);
+  if (payload.documentNumber) form.append('documentNumber', payload.documentNumber);
+  form.append('file', payload.file);
+  const { data } = await api.post<SchoolDocument>('/system-settings/school/documents', form, {
+    headers: { 'Content-Type': 'multipart/form-data' },
+    params,
+  });
+  return data;
+};
+
+export const deleteSchoolDocument = async (documentId: string, params?: { schoolId?: string }) => {
+  await api.delete(`/system-settings/school/documents/${documentId}`, { params });
 };

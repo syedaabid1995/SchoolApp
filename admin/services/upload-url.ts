@@ -2,6 +2,8 @@ export type SignedUploadAssetType =
   | 'student-document'
   | 'student-photo'
   | 'staff-document'
+  | 'staff-photo'
+  | 'school-document'
   | 'attendance-evidence';
 
 export type SignedUploadAssetRef = {

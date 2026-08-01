@@ -124,6 +124,8 @@ The admin dev server is configured to run on port `3001`.
 cd school-flutter
 flutter pub get
 flutter run --dart-define=API_BASE_URL=http://127.0.0.1:4000/api/v1
+flutter run --dart-define=API_BASE_URL=https://api.saapttech.com/api/v1
+flutter run --dart-define=API_BASE_URL=https://api.akademifyy.in/api/v1
 ```
 
 ## Environment Variables

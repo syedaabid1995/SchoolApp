@@ -4,8 +4,10 @@ import Link from 'next/link';
 import { useEffect, useState, type ChangeEvent } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import FullPageLoader from '../../../components/FullPageLoader';
+import { documentAccept, validateDocumentFiles } from '../../../components/DocumentCollectionCard';
 import { getSession } from '../../../services/auth.service';
 import { listSchools } from '../../../services/school.service';
+import { resolveUploadUrl } from '../../../services/student.service';
 import {
   type BaseSetups,
   type FeeChallanBankSetting,
@@ -15,11 +17,16 @@ import {
   type SchoolSessionSetting,
   type SmsSystemSettings,
   getSchoolSystemSettings,
+  listSchoolDocuments,
+  uploadSchoolDocument,
+  deleteSchoolDocument,
   updateSchoolSystemSettings,
+  type SchoolDocument,
 } from '../../../services/system-settings.service';
 
 export type SetupSection =
   | 'general'
+  | 'documents'
   | 'payments'
   | 'roles'
   | 'base'
@@ -42,6 +49,7 @@ const dangerButtonClass =
 
 const setupTabs: Array<{ id: SetupSection; label: string; metric: string }> = [
   { id: 'general', label: 'General', metric: 'Institution' },
+  { id: 'documents', label: 'Documents', metric: 'Certificates' },
   { id: 'payments', label: 'Payments', metric: 'Gateways' },
   { id: 'roles', label: 'Roles', metric: 'Permissions' },
   { id: 'base', label: 'Base Setup', metric: 'Master data' },
@@ -239,6 +247,7 @@ export default function SystemSetupTab({
   const [feeChallanBanks, setFeeChallanBanks] = useState<FeeChallanBankSetting[]>([]);
   const [feeChallanBankDraft, setFeeChallanBankDraft] = useState<FeeChallanBankSetting>({ ...emptyFeeChallanBankDraft });
   const [bankLogoError, setBankLogoError] = useState('');
+  const [schoolDocumentForm, setSchoolDocumentForm] = useState({ title: '', documentNumber: '', files: [] as File[] });
 
   const { data: session, isLoading: sessionLoading } = useQuery({
     queryKey: ['session'],
@@ -267,6 +276,14 @@ export default function SystemSetupTab({
   const settingsQuery = useQuery({
     queryKey: ['school-system-settings', isSuperAdmin ? selectedSchoolId : session?.schoolId],
     queryFn: () => getSchoolSystemSettings(schoolParams),
+    enabled: schoolScopeReady,
+    refetchOnWindowFocus: false,
+    staleTime: 30_000,
+  });
+
+  const schoolDocumentsQuery = useQuery({
+    queryKey: ['school-documents', isSuperAdmin ? selectedSchoolId : session?.schoolId],
+    queryFn: () => listSchoolDocuments(schoolParams),
     enabled: schoolScopeReady,
     refetchOnWindowFocus: false,
     staleTime: 30_000,
@@ -305,10 +322,53 @@ export default function SystemSetupTab({
     },
   });
 
+  const schoolDocumentMutation = useMutation({
+    mutationFn: async () => {
+      if (!schoolDocumentForm.title.trim()) throw new Error('Document title is required.');
+      if (!schoolDocumentForm.files.length) throw new Error('Select at least one document.');
+      const invalid = validateDocumentFiles(schoolDocumentForm.files);
+      if (invalid) throw new Error(invalid);
+      return Promise.all(
+        schoolDocumentForm.files.map((file) =>
+          uploadSchoolDocument({
+            title: schoolDocumentForm.title.trim(),
+            documentNumber: schoolDocumentForm.documentNumber.trim() || null,
+            file,
+          }, schoolParams),
+        ),
+      );
+    },
+    onSuccess: () => {
+      setSchoolDocumentForm({ title: '', documentNumber: '', files: [] });
+      setMessage('School document uploaded.');
+      setError('');
+      queryClient.invalidateQueries({ queryKey: ['school-documents'] });
+    },
+    onError: (mutationError: any) => {
+      setMessage('');
+      setError(mutationError?.response?.data?.error?.message || mutationError?.message || 'Unable to upload school document.');
+    },
+  });
+
+  const deleteSchoolDocumentMutation = useMutation({
+    mutationFn: (documentId: string) => deleteSchoolDocument(documentId, schoolParams),
+    onSuccess: () => {
+      setMessage('School document deleted.');
+      setError('');
+      queryClient.invalidateQueries({ queryKey: ['school-documents'] });
+    },
+    onError: (mutationError: any) => {
+      setMessage('');
+      setError(mutationError?.response?.data?.error?.message || 'Unable to delete school document.');
+    },
+  });
+
   const busy =
     sessionLoading ||
     settingsQuery.isLoading ||
-    updateMutation.isPending;
+    updateMutation.isPending ||
+    schoolDocumentMutation.isPending ||
+    deleteSchoolDocumentMutation.isPending;
 
   const selectedGateway = paymentGateways.find((gateway) => gateway.id === selectedGatewayId) ?? paymentGateways[0];
   const enabledGateways = paymentGateways.filter((gateway) => gateway.enabled).length;
@@ -658,6 +718,109 @@ export default function SystemSetupTab({
           </div>
         </SectionPanel>
       </div>
+    );
+  };
+
+  const renderDocuments = () => {
+    const documents: SchoolDocument[] = schoolDocumentsQuery.data ?? [];
+    return (
+      <SectionPanel
+        title="School Documents"
+        subtitle="Institution certificates, registration files, and other school-level records."
+        actions={
+          <button className={primaryButtonClass} onClick={() => schoolDocumentMutation.mutate()} disabled={schoolDocumentMutation.isPending}>
+            Upload Documents
+          </button>
+        }
+      >
+        <div className="grid gap-5 xl:grid-cols-[24rem_minmax(0,1fr)]">
+          <div className="rounded-2xl border border-[var(--shell-border)] bg-[var(--shell-subtle)] p-4">
+            <div className="space-y-4">
+              <Field label="Document name" required>
+                <input
+                  className={inputClass}
+                  value={schoolDocumentForm.title}
+                  onChange={(event) => setSchoolDocumentForm((current) => ({ ...current, title: event.target.value }))}
+                  placeholder="Registration certificate"
+                />
+              </Field>
+              <Field label="Document number">
+                <input
+                  className={inputClass}
+                  value={schoolDocumentForm.documentNumber}
+                  onChange={(event) => setSchoolDocumentForm((current) => ({ ...current, documentNumber: event.target.value }))}
+                  placeholder="Certificate or reference number"
+                />
+              </Field>
+              <Field label="Files" required>
+                <input
+                  type="file"
+                  multiple
+                  accept={documentAccept}
+                  className="block w-full text-sm font-semibold text-[var(--shell-muted)] file:mr-3 file:rounded-xl file:border-0 file:bg-blue-600 file:px-3 file:py-2 file:text-xs file:font-black file:text-white hover:file:bg-blue-700"
+                  onChange={(event) => {
+                    const files = Array.from(event.target.files ?? []);
+                    const invalid = validateDocumentFiles(files);
+                    if (invalid) {
+                      setError(invalid);
+                      event.target.value = '';
+                      return;
+                    }
+                    setSchoolDocumentForm((current) => ({ ...current, files }));
+                  }}
+                />
+              </Field>
+              {schoolDocumentForm.files.length ? (
+                <div className="flex flex-wrap gap-2">
+                  {schoolDocumentForm.files.map((file) => (
+                    <span key={`${file.name}-${file.size}`} className="rounded-full border border-[var(--shell-border)] bg-[var(--shell-card)] px-3 py-1 text-xs font-bold text-[var(--shell-muted)]">
+                      {file.name}
+                    </span>
+                  ))}
+                </div>
+              ) : null}
+            </div>
+          </div>
+
+          <div className="rounded-2xl border border-[var(--shell-border)] bg-[var(--shell-subtle)] p-4">
+            {schoolDocumentsQuery.isLoading ? (
+              <EmptyState label="Loading school documents." />
+            ) : documents.length ? (
+              <div className="space-y-3">
+                {documents.map((document) => (
+                  <article key={document.id} className="flex flex-col gap-3 rounded-2xl border border-[var(--shell-border)] bg-[var(--shell-card)] p-4 sm:flex-row sm:items-center sm:justify-between">
+                    <div className="min-w-0">
+                      <h3 className="truncate text-sm font-black text-[var(--shell-text)]">{document.title}</h3>
+                      <p className="mt-1 text-xs font-semibold text-[var(--shell-muted)]">
+                        {document.documentNumber ? `${document.documentNumber} - ` : ''}{document.fileName ?? 'Document'}
+                      </p>
+                    </div>
+                    <div className="flex shrink-0 flex-wrap gap-2">
+                      <a
+                        href={resolveUploadUrl(document.fileUrl, { type: 'school-document', id: document.id }) ?? undefined}
+                        target="_blank"
+                        rel="noreferrer"
+                        className={subtleButtonClass}
+                      >
+                        View
+                      </a>
+                      <button
+                        type="button"
+                        className={dangerButtonClass}
+                        onClick={() => window.confirm('Delete this school document?') && deleteSchoolDocumentMutation.mutate(document.id)}
+                      >
+                        Delete
+                      </button>
+                    </div>
+                  </article>
+                ))}
+              </div>
+            ) : (
+              <EmptyState label="No school documents uploaded." />
+            )}
+          </div>
+        </div>
+      </SectionPanel>
     );
   };
 
@@ -1149,6 +1312,8 @@ export default function SystemSetupTab({
     switch (activeSection) {
       case 'general':
         return renderGeneral();
+      case 'documents':
+        return renderDocuments();
       case 'payments':
         return renderPayments();
       case 'roles':

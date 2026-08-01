@@ -13,6 +13,7 @@ import {
   deleteStaffDocument,
   deleteStaffTimeline,
   getStaff,
+  resolveStaffPhotoUrl,
   resolveStaffUploadUrl,
   uploadStaffDocument,
   type Payroll,
@@ -73,7 +74,7 @@ export default function StaffDetailPage() {
   const notify = useNotify();
   const queryClient = useQueryClient();
   const [tab, setTab] = useState<TabKey>('profile');
-  const [documentForm, setDocumentForm] = useState({ title: '', file: null as File | null });
+  const [documentForm, setDocumentForm] = useState({ title: '', documentNumber: '', files: [] as File[] });
   const [timelineForm, setTimelineForm] = useState({ title: '', description: '', date: today(), time: '09:00' });
 
   const { data: session, isLoading: sessionLoading } = useQuery({ queryKey: ['session'], queryFn: getSession });
@@ -94,12 +95,12 @@ export default function StaffDetailPage() {
   const documentMutation = useMutation({
     mutationFn: async () => {
       if (!documentForm.title.trim()) throw new Error('Document title is required.');
-      if (!documentForm.file) throw new Error('Select a document.');
-      return uploadStaffDocument(staffId, documentForm.title.trim(), documentForm.file);
+      if (!documentForm.files.length) throw new Error('Select at least one document.');
+      return Promise.all(documentForm.files.map((file) => uploadStaffDocument(staffId, documentForm.title.trim(), file, documentForm.documentNumber.trim() || null)));
     },
     onSuccess: () => {
       notify.success('Document uploaded', 'Staff document was added.');
-      setDocumentForm({ title: '', file: null });
+      setDocumentForm({ title: '', documentNumber: '', files: [] });
       queryClient.invalidateQueries({ queryKey: ['staff-detail', staffId] });
     },
     onError: (error: any) => notify.error('Upload failed', error?.response?.data?.error?.message ?? error.message ?? 'Unable to upload document.'),
@@ -155,6 +156,7 @@ export default function StaffDetailPage() {
   const documents = staff.documents ?? [];
   const offerDocument = documents.find((doc) => doc.fileUrl.startsWith('/dashboard/') && doc.title.toLowerCase().includes('offer'));
   const uploadedDocuments = documents.filter((doc) => doc.id !== offerDocument?.id);
+  const photoUrl = resolveStaffPhotoUrl(staff);
 
   return (
     <div className="min-h-screen bg-slate-100 pb-10">
@@ -171,7 +173,7 @@ export default function StaffDetailPage() {
             <div className="h-28 bg-gradient-to-r from-violet-600 to-indigo-600" />
             <div className="-mt-12 px-5 pb-5">
               <div className="grid h-24 w-24 place-items-center overflow-hidden rounded-2xl border-4 border-white bg-violet-100 text-2xl font-bold text-violet-700 shadow">
-                {staff.photoUrl ? <img src={staff.photoUrl} alt={name} className="h-full w-full object-cover" /> : name.slice(0, 2).toUpperCase()}
+                {photoUrl ? <img src={photoUrl} alt={name} className="h-full w-full object-cover" /> : name.slice(0, 2).toUpperCase()}
               </div>
               <h2 className="mt-4 text-xl font-bold text-slate-950">{name}</h2>
               <p className="text-sm text-slate-500">{String(staff.role ?? staff.roleName ?? '').replace('_', ' ')}</p>
@@ -332,9 +334,10 @@ export default function StaffDetailPage() {
                     </Link>
                   </div>
                 </div>
-                {canCreateDocument ? <div className="grid gap-3 md:grid-cols-[1fr_1fr_auto]">
+                {canCreateDocument ? <div className="grid gap-3 md:grid-cols-[1fr_1fr_1fr_auto]">
                   <input value={documentForm.title} onChange={(event) => setDocumentForm({ ...documentForm, title: event.target.value })} placeholder="Document title" className="rounded-xl border border-slate-200 px-3 py-2 text-sm" />
-                  <input type="file" onChange={(event) => setDocumentForm({ ...documentForm, file: event.target.files?.[0] ?? null })} className="rounded-xl border border-slate-200 px-3 py-2 text-sm" />
+                  <input value={documentForm.documentNumber} onChange={(event) => setDocumentForm({ ...documentForm, documentNumber: event.target.value })} placeholder="Document number" className="rounded-xl border border-slate-200 px-3 py-2 text-sm" />
+                  <input type="file" multiple accept=".pdf,.doc,.docx,image/jpeg,image/png,image/webp" onChange={(event) => setDocumentForm({ ...documentForm, files: Array.from(event.target.files ?? []) })} className="rounded-xl border border-slate-200 px-3 py-2 text-sm" />
                   <button onClick={() => documentMutation.mutate()} disabled={documentMutation.isPending} className="rounded-xl bg-[var(--theme-button-bg)] px-4 py-2 text-sm font-bold text-[var(--theme-button-text)] disabled:opacity-50">Upload</button>
                 </div> : null}
                 <div className="grid gap-3">
@@ -344,7 +347,7 @@ export default function StaffDetailPage() {
                       <div key={doc.id} className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-slate-100 bg-slate-50 px-4 py-3">
                         <div>
                           <p className="font-semibold text-slate-950">{doc.title}</p>
-                          <p className="text-xs text-slate-500">{doc.fileName ?? 'Document'} - {formatDate(doc.createdAt)}</p>
+                          <p className="text-xs text-slate-500">{doc.documentNumber ? `${doc.documentNumber} - ` : ''}{doc.fileName ?? 'Document'} - {formatDate(doc.createdAt)}</p>
                         </div>
                         <div className="flex gap-2">
                           {isInternalDocument ? (

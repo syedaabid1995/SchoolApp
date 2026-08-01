@@ -186,6 +186,7 @@ const updateSchema = z.object({
 
 const documentSchema = z.object({
   title: z.string().min(1).max(160),
+  documentNumber: z.string().trim().max(120).optional().nullable(),
   url: z.string().min(1),
   fileName: z.string().max(255).optional().nullable(),
   mimeType: z.string().max(120).optional().nullable(),
@@ -431,6 +432,7 @@ export const addStudentDocument = async (req: Request, res: Response) => {
       schoolId,
       studentId: id,
       title: normalizeText(payload.title)!,
+      documentNumber: nullableText(payload.documentNumber),
       url: payload.url,
       fileName: payload.fileName ?? null,
       mimeType: payload.mimeType ?? null,
@@ -443,7 +445,7 @@ export const addStudentDocument = async (req: Request, res: Response) => {
     entityType: 'STUDENT_DOCUMENT',
     entityId: document.id,
     action: 'CREATE',
-    afterState: { studentId: id, title: document.title },
+    afterState: { studentId: id, title: document.title, documentNumber: document.documentNumber },
   });
   await invalidateStudentCache(schoolId, id);
   res.status(201).json(document);

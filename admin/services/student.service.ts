@@ -130,6 +130,7 @@ export type Student = {
 export type StudentDocument = {
   id: string;
   title: string;
+  documentNumber?: string | null;
   url: string;
   fileName?: string | null;
   mimeType?: string | null;
@@ -364,11 +365,27 @@ export const uploadStudentDocument = async (file: File, studentId: string, param
 
 export const addStudentDocument = async (
   studentId: string,
-  payload: { title: string; url: string; fileName?: string | null; mimeType?: string | null; sizeBytes?: number | null },
+  payload: { title: string; documentNumber?: string | null; url: string; fileName?: string | null; mimeType?: string | null; sizeBytes?: number | null },
   params?: { schoolId?: string },
 ) => {
   const { data } = await api.post<StudentDocument>(`/students/students/${studentId}/documents`, payload, { params });
   return data;
+};
+
+export const uploadAndAddStudentDocument = async (
+  studentId: string,
+  payload: { title: string; documentNumber?: string | null; file: File },
+  params?: { schoolId?: string },
+) => {
+  const uploaded = await uploadStudentDocument(payload.file, studentId, params);
+  return addStudentDocument(studentId, {
+    title: payload.title,
+    documentNumber: payload.documentNumber,
+    url: uploaded.url,
+    fileName: uploaded.filename,
+    mimeType: payload.file.type,
+    sizeBytes: payload.file.size,
+  }, params);
 };
 
 export const deleteStudentDocument = async (studentId: string, documentId: string, params?: { schoolId?: string }) => {

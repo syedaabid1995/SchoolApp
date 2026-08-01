@@ -1,14 +1,26 @@
 import type { Request, Response } from 'express';
 import type { Prisma } from '@prisma/client';
+import crypto from 'crypto';
+import multer from 'multer';
+import path from 'path';
 import { z } from 'zod';
 import { prisma } from '../config/db';
 import { HttpError } from '../middlewares/error.middleware';
 import { resolveSchoolId } from '../utils/tenant';
 import { logAudit } from '../utils/audit';
 import { normalizeSchoolContacts } from '../services/schoolProfile.service';
+import { uploadBuffer } from '../services/s3.service';
+import { isAllowedDocumentMimeType, validateUploadedDocumentFile } from '../utils/documentUploadValidation';
 
 const jsonRecord = z.record(z.unknown());
 const jsonArray = z.array(z.unknown());
+
+const normalizeText = (value?: string | null) => {
+  const trimmed = value?.trim().replace(/\s+/g, ' ');
+  return trimmed || undefined;
+};
+
+const normalizeNullable = (value?: string | null) => normalizeText(value) ?? null;
 
 const updateSchema = z.object({
   schoolId: z.string().uuid().optional(),
@@ -246,4 +258,78 @@ export const updateSchoolSystemSettings = async (req: Request, res: Response) =>
   });
 
   res.status(200).json(normalizeSetting(updated));
+};
+
+const schoolDocumentUpload = multer({
+  storage: multer.memoryStorage(),
+  fileFilter: (_req, file, cb) => {
+    if (!isAllowedDocumentMimeType(file.mimetype)) {
+      cb(new Error('Unsupported document type'));
+      return;
+    }
+    cb(null, true);
+  },
+  limits: { fileSize: 20 * 1024 * 1024 },
+});
+
+export const uploadSchoolDocumentMiddleware = schoolDocumentUpload.single('file');
+
+export const listSchoolDocuments = async (req: Request, res: Response) => {
+  const schoolId = resolveSchoolId(req, req.query.schoolId as string | undefined);
+  const documents = await prisma.schoolDocument.findMany({
+    where: { schoolId },
+    orderBy: { createdAt: 'desc' },
+  });
+  res.status(200).json(documents);
+};
+
+export const addSchoolDocument = async (req: Request, res: Response) => {
+  if (!req.auth?.userId) throw new HttpError(401, 'Unauthorized');
+  const schoolId = resolveSchoolId(req, (req.body.schoolId ?? req.query.schoolId) as string | undefined);
+  const title = z.string().trim().min(1).max(160).parse(req.body.title ?? req.query.title);
+  const documentNumber = z.string().trim().max(120).optional().nullable().parse(req.body.documentNumber ?? req.query.documentNumber);
+  if (!req.file) throw new HttpError(400, 'No file uploaded');
+  validateUploadedDocumentFile(req.file);
+
+  const extension = path.extname(req.file.originalname).toLowerCase();
+  const name = `${crypto.randomUUID()}${extension || ''}`;
+  const key = `schools/${schoolId}/school-documents/${name}`;
+  const uploaded = await uploadBuffer({ key, body: req.file.buffer, contentType: req.file.mimetype });
+  const document = await prisma.schoolDocument.create({
+    data: {
+      schoolId,
+      title,
+      documentNumber: normalizeNullable(documentNumber),
+      fileUrl: uploaded.url,
+      fileName: req.file.originalname,
+      fileType: req.file.mimetype,
+      sizeBytes: req.file.size,
+      uploadedById: req.auth.userId,
+    },
+  });
+
+  await logAudit(req, {
+    schoolId,
+    entityType: 'SCHOOL_DOCUMENT',
+    entityId: document.id,
+    action: 'CREATE',
+    afterState: { title: document.title, documentNumber: document.documentNumber },
+  });
+
+  res.status(201).json(document);
+};
+
+export const deleteSchoolDocument = async (req: Request, res: Response) => {
+  const schoolId = resolveSchoolId(req, req.query.schoolId as string | undefined);
+  const document = await prisma.schoolDocument.findFirst({ where: { id: req.params.documentId, schoolId } });
+  if (!document) throw new HttpError(404, 'Document not found');
+  await prisma.schoolDocument.delete({ where: { id: document.id } });
+  await logAudit(req, {
+    schoolId,
+    entityType: 'SCHOOL_DOCUMENT',
+    entityId: document.id,
+    action: 'DELETE',
+    beforeState: { title: document.title, documentNumber: document.documentNumber },
+  });
+  res.status(204).send();
 };
