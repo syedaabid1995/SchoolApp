@@ -141,11 +141,27 @@ export const revokeSessionParamsSchema = z.object({
   sessionId: z.string().trim().uuid(),
 });
 
+export const switchSchoolSchema = z
+  .object({
+    schoolId: z.preprocess(emptyStringToUndefined, z.string().trim().uuid().optional()),
+    schoolCode: z.preprocess(emptyStringToUndefined, z.string().trim().min(1).max(64).optional()),
+  })
+  .superRefine((value, ctx) => {
+    if (!value.schoolId && !value.schoolCode) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['schoolId'],
+        message: 'School is required.',
+      });
+    }
+  });
+
 export type LoginType = z.infer<typeof loginTypeSchema>;
 export type ForgotPasswordInput = z.infer<typeof forgotPasswordSchema>;
 export type ForgotPasswordOtpInput = z.infer<typeof forgotPasswordOtpSchema>;
 export type ResetPasswordInput = z.infer<typeof resetPasswordSchema>;
 export type ResetPasswordOtpInput = z.infer<typeof resetPasswordOtpSchema>;
+export type SwitchSchoolInput = z.infer<typeof switchSchoolSchema>;
 export type VerifyTwoFactorInput = z.infer<typeof verifyTwoFactorSchema>;
 export type ResendTwoFactorInput = z.infer<typeof resendTwoFactorSchema>;
 export type TotpVerifySetupInput = z.infer<typeof totpVerifySetupSchema>;

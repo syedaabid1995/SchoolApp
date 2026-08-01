@@ -1,6 +1,8 @@
 import { Router } from 'express';
 import {
   login,
+  listAccessibleSchools,
+  switchSchool,
   resendTwoFactor,
   startTotpSetup,
   verifyTotpSetup,
@@ -32,6 +34,7 @@ import {
   resendTwoFactorSchema,
   resetPasswordSchema,
   revokeSessionParamsSchema,
+  switchSchoolSchema,
   totpDisableSchema,
   totpVerifyLoginSchema,
   totpVerifySetupSchema,
@@ -69,6 +72,10 @@ authRouter.post('/refresh', validateBody(refreshSchema), refreshToken);
 authRouter.post('/logout', logout);
 
 authRouter.post('/change-password', authMiddleware, validateBody(changePasswordSchema), changePassword);
+
+authRouter.get('/schools', authMiddleware, listAccessibleSchools);
+
+authRouter.post('/switch-school', authMiddleware, validateBody(switchSchoolSchema), switchSchool);
 
 authRouter.get('/sessions', authMiddleware, listSessions);
 

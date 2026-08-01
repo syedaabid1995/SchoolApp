@@ -196,7 +196,8 @@ const selectSchool = (where: Record<string, any>) => {
 };
 
 const matchesRefreshSessionWhere = (session: TestRefreshSession, where: Record<string, any>) => {
-  if (where.userId && session.userId !== where.userId) return false;
+  if (where.userId?.in && !where.userId.in.includes(session.userId)) return false;
+  if (where.userId && !where.userId.in && session.userId !== where.userId) return false;
   if ('revokedAt' in where && session.revokedAt !== where.revokedAt) return false;
   if (where.tokenHash?.not && session.tokenHash === where.tokenHash.not) return false;
   return true;
@@ -204,10 +205,21 @@ const matchesRefreshSessionWhere = (session: TestRefreshSession, where: Record<s
 
 const matchesResetTokenWhere = (token: TestResetToken, where: Record<string, any>) => {
   if (where.id && token.id !== where.id) return false;
-  if (where.userId && token.userId !== where.userId) return false;
+  if (where.userId?.in && !where.userId.in.includes(token.userId)) return false;
+  if (where.userId && !where.userId.in && token.userId !== where.userId) return false;
   if ('schoolId' in where && (token.schoolId ?? null) !== (where.schoolId ?? null)) return false;
   if ('usedAt' in where && token.usedAt !== where.usedAt) return false;
   if (where.expiresAt?.gt && !(token.expiresAt > where.expiresAt.gt)) return false;
+  return true;
+};
+
+const matchesUserWhere = (user: TestUser, where: Record<string, any>) => {
+  if (where.id?.in && !where.id.in.includes(user.id)) return false;
+  if (where.id && !where.id.in && user.id !== where.id) return false;
+  const emailWhere = where.email as { equals?: string } | undefined;
+  if (emailWhere?.equals && user.email.toLowerCase() !== emailWhere.equals.toLowerCase()) return false;
+  if ('schoolId' in where && (user.schoolId ?? null) !== (where.schoolId as string | null)) return false;
+  if ('status' in where && user.status !== where.status) return false;
   return true;
 };
 
@@ -238,18 +250,7 @@ const patchPrisma = () => {
 
   patchMethod(prisma.user as any, 'findFirst', async ({ where }: any) => findUser(where));
   patchMethod(prisma.user as any, 'findMany', async ({ where }: any) => {
-    let result = Array.from(users.values());
-    const emailWhere = where.email as { equals?: string } | undefined;
-    if (emailWhere?.equals) {
-      result = result.filter((user) => user.email.toLowerCase() === emailWhere.equals!.toLowerCase());
-    }
-    if ('schoolId' in where) {
-      result = result.filter((user) => (user.schoolId ?? null) === (where.schoolId as string | null));
-    }
-    if ('status' in where) {
-      result = result.filter((user) => user.status === where.status);
-    }
-    return result;
+    return Array.from(users.values()).filter((user) => matchesUserWhere(user, where ?? {}));
   });
   patchMethod(prisma.user as any, 'findUnique', async ({ where }: any) => findUserById(where.id));
   patchMethod(prisma.user as any, 'update', async ({ where, data }: any) => {
@@ -257,6 +258,15 @@ const patchPrisma = () => {
     if (!user) throw new Error('user not found');
     Object.assign(user, data);
     return user;
+  });
+  patchMethod(prisma.user as any, 'updateMany', async ({ where, data }: any) => {
+    let count = 0;
+    for (const user of users.values()) {
+      if (!matchesUserWhere(user, where ?? {})) continue;
+      Object.assign(user, data);
+      count += 1;
+    }
+    return { count };
   });
 
   patchMethod(prisma.userRole as any, 'findFirst', async ({ where }: any) => {
@@ -1185,6 +1195,7 @@ test('reset password OTP uses account matching requested login type when email i
 
   assert.equal(res.statusCode, 200);
   assert.equal(await verifyPassword(NEW_PASSWORD, findUserById(parentUser.id)?.passwordHash ?? ''), true);
+  assert.equal(await verifyPassword(NEW_PASSWORD, findUserById(USER_ID)?.passwordHash ?? ''), true);
   assert.equal(Array.from(resetTokens.values()).find((entry) => entry.id === resetTokenId)?.usedAt instanceof Date, true);
 });
 

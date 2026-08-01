@@ -1,6 +1,7 @@
 import type { CookieOptions, Request, Response } from 'express';
 import crypto from 'crypto';
 import jwt, { type JwtPayload, type Secret, type SignOptions } from 'jsonwebtoken';
+import type { Prisma } from '@prisma/client';
 import { AuthLoginRepository } from '../../repositories/login.repository';
 import { env } from '../../../../config/env';
 import { logger } from '../../../../config/logger';
@@ -58,6 +59,7 @@ import {
   refreshSchema,
   resendTwoFactorSchema,
   resetPasswordSchema,
+  switchSchoolSchema,
   totpDisableSchema,
   totpVerifyLoginSchema,
   totpVerifySetupSchema,
@@ -318,6 +320,120 @@ const currentRefreshTokenHashFromRequest = (req: Request) => {
   return token ? hashToken(token) : null;
 };
 
+const schoolScopedRoleNames = ['SCHOOL_ADMIN', 'TEACHER', 'ACCOUNTANT', 'LIBRARIAN', 'STAFF'];
+
+const loginUserSelect = {
+  id: true,
+  email: true,
+  passwordHash: true,
+  mustChangePassword: true,
+  mfaEnabled: true,
+  mfaMethod: true,
+  schoolId: true,
+  school: { select: { id: true, name: true, code: true } },
+  status: true,
+  roles: { select: { role: { select: { name: true } } }, take: 1 },
+  teacherProfile: { select: { firstName: true, lastName: true } },
+  parentProfiles: { select: { firstName: true, lastName: true }, take: 1 },
+  totpCredential: {
+    select: {
+      enabledAt: true,
+      disabledAt: true,
+    },
+  },
+} as const;
+
+type LoginSelectedUser = Prisma.UserGetPayload<{ select: typeof loginUserSelect }>;
+
+const userSchoolOption = (user: NonNullable<LoginSelectedUser>) => ({
+  id: user.school?.id ?? user.schoolId ?? '',
+  name: user.school?.name ?? 'School',
+  code: user.school?.code ?? '',
+});
+
+const issueAuthenticatedResponse = async (params: {
+  req: Request;
+  res: Response;
+  user: NonNullable<LoginSelectedUser>;
+  roleName: string | null;
+  schoolAccessState: SchoolAccessState;
+  rememberMe: boolean;
+  auditLoginType: LoginType | 'switch-school' | undefined;
+}) => {
+  const { req, res, user, roleName, schoolAccessState, rememberMe, auditLoginType } = params;
+  const payloadBase = {
+    sub: user.id,
+    schoolId: user.schoolId ?? null,
+    role: roleName,
+    email: user.email,
+    subscriptionRestricted: schoolAccessState === 'PAYMENT_RESTRICTED',
+  };
+
+  const permissions = user.schoolId
+    ? await AuthorizationService.getEffectivePermissionCodesForUser(user.schoolId, user.id, roleName)
+    : [];
+  const schoolProfile = user.schoolId ? (await getSchoolProfilesByIds([user.schoolId]))[0] ?? null : null;
+
+  const accessToken = signToken({ ...payloadBase, typ: 'access' }, ACCESS_TOKEN_TTL);
+  const refreshTokenMaxAge = rememberMe ? REMEMBER_ME_REFRESH_TOKEN_TTL_SECONDS : REFRESH_TOKEN_TTL_SECONDS;
+  const refreshTokenExpiresAt = new Date(Date.now() + refreshTokenMaxAge * 1000);
+  const refreshToken = signToken(
+    { ...payloadBase, jti: crypto.randomUUID(), typ: 'refresh' },
+    refreshTokenMaxAge,
+  );
+
+  await createRefreshSession({
+    req,
+    userId: user.id,
+    schoolId: user.schoolId ?? null,
+    refreshToken,
+    expiresAt: refreshTokenExpiresAt,
+  });
+
+  await logAuthAudit({
+    req,
+    userId: user.id,
+    schoolId: user.schoolId ?? null,
+    action: 'LOGIN_SUCCESS',
+    afterState: {
+      loginType: auditLoginType ?? null,
+      rememberMe: Boolean(rememberMe),
+      role: payloadBase.role,
+      subscriptionRestricted: payloadBase.subscriptionRestricted,
+    },
+  });
+
+  res.cookie('access_token', accessToken, {
+    httpOnly: true,
+    sameSite: 'lax',
+    secure: env.NODE_ENV === 'production',
+    path: '/',
+    maxAge: ACCESS_TOKEN_COOKIE_MAX_AGE_SECONDS * 1000,
+  });
+  res.cookie('refresh_token', refreshToken, refreshCookieOptions(refreshTokenMaxAge));
+
+  res.status(200).json({
+    tokenType: 'Bearer',
+    expiresIn: ACCESS_TOKEN_TTL,
+    refreshTokenMaxAge,
+    refreshTokenExpiresAt: refreshTokenExpiresAt.toISOString(),
+    ...(shouldReturnTokensInBody(req) ? { accessToken, refreshToken } : {}),
+    mustChangePassword: user.mustChangePassword,
+    subscriptionRestricted: payloadBase.subscriptionRestricted,
+    user: {
+      id: user.id,
+      name: displayNameFromUser(user),
+      email: user.email,
+      role: payloadBase.role,
+      schoolId: user.schoolId ?? null,
+      schoolName: user.school?.name ?? null,
+      school: user.school ?? null,
+      schoolProfile,
+      permissions,
+    },
+  });
+};
+
 
 export const login = async (req: Request, res: Response) => {
   const parsed = loginSchema.safeParse(req.body);
@@ -440,27 +556,6 @@ export const login = async (req: Request, res: Response) => {
     }
     return rejectLogin(reason, meta);
   };
-
-  const loginUserSelect = {
-    id: true,
-    email: true,
-    passwordHash: true,
-    mustChangePassword: true,
-    mfaEnabled: true,
-    mfaMethod: true,
-    schoolId: true,
-    school: { select: { id: true, name: true, code: true } },
-    status: true,
-    roles: { select: { role: { select: { name: true } } }, take: 1 },
-    teacherProfile: { select: { firstName: true, lastName: true } },
-    parentProfiles: { select: { firstName: true, lastName: true }, take: 1 },
-    totpCredential: {
-      select: {
-        enabledAt: true,
-        disabledAt: true,
-      },
-    },
-  } as const;
 
   let selectedTeacherSchoolAccessState: SchoolAccessState | null = null;
   let user =
@@ -718,78 +813,132 @@ export const login = async (req: Request, res: Response) => {
     return;
   }
 
-  const permissions = user.schoolId
-    ? await AuthorizationService.getEffectivePermissionCodesForUser(user.schoolId, user.id, roleName)
-    : [];
-  const schoolProfile = user.schoolId
-    ? (await getSchoolProfilesByIds([user.schoolId]))[0] ?? null
-    : null;
-
-  const accessToken = signToken({ ...payloadBase, typ: 'access' }, ACCESS_TOKEN_TTL);
-  const refreshTokenMaxAge = rememberMe ? REMEMBER_ME_REFRESH_TOKEN_TTL_SECONDS : REFRESH_TOKEN_TTL_SECONDS;
-  const refreshTokenExpiresAt = new Date(Date.now() + refreshTokenMaxAge * 1000);
-  const refreshToken = signToken(
-    { ...payloadBase, jti: crypto.randomUUID(), typ: 'refresh' },
-    refreshTokenMaxAge,
-  );
-
-  await createRefreshSession({
-    req,
-    userId: user.id,
-    schoolId: user.schoolId ?? null,
-    refreshToken,
-    expiresAt: refreshTokenExpiresAt,
-  });
-
   await resetLoginFailureCounter(identifier.toLowerCase(), schoolScope);
   if (schoolScope !== submittedSchoolScope) {
     await resetLoginFailureCounter(identifier.toLowerCase(), submittedSchoolScope);
   }
 
-  await logAuthAudit({
+  await issueAuthenticatedResponse({
     req,
-    userId: user.id,
-    schoolId: user.schoolId ?? null,
-    action: 'LOGIN_SUCCESS',
-    afterState: {
-      loginType: loginType ?? null,
-      rememberMe: Boolean(rememberMe),
-      role: payloadBase.role,
-      subscriptionRestricted: payloadBase.subscriptionRestricted,
-    },
+    res,
+    user,
+    roleName,
+    schoolAccessState,
+    rememberMe: Boolean(rememberMe),
+    auditLoginType: loginType,
   });
+};
 
-  res.cookie('access_token', accessToken, {
-    httpOnly: true,
-    sameSite: 'lax',
-    secure: env.NODE_ENV === 'production',
-    path: '/',
-    maxAge: ACCESS_TOKEN_COOKIE_MAX_AGE_SECONDS * 1000,
+const accessibleSchoolMatchesForUser = async (params: { userId: string; roleName: string | null }) => {
+  if (!params.roleName || !schoolScopedRoleNames.includes(params.roleName)) {
+    throw new HttpError(403, 'School switching is not available for this account.');
+  }
+
+  const currentUser = await AuthLoginRepository.user.findUnique({
+    where: { id: params.userId },
+    select: { id: true, email: true, status: true },
   });
-  res.cookie('refresh_token', refreshToken, refreshCookieOptions(refreshTokenMaxAge));
+  if (!currentUser || currentUser.status !== 'ACTIVE') {
+    throw new HttpError(401, 'Unauthorized');
+  }
+
+  const matches = await AuthLoginRepository.user.findMany({
+    where: {
+      email: { equals: currentUser.email, mode: 'insensitive' },
+      status: 'ACTIVE',
+      roles: { some: { role: { name: params.roleName as any } } },
+    },
+    select: loginUserSelect,
+  }) as LoginSelectedUser[];
+
+  const validMatches: Array<{
+    user: LoginSelectedUser;
+    schoolAccessState: SchoolAccessState;
+  }> = [];
+  const seenSchoolIds = new Set<string>();
+
+  for (const user of matches) {
+    if (!user.schoolId || seenSchoolIds.has(user.schoolId)) continue;
+
+    let schoolAccessState: SchoolAccessState;
+    try {
+      schoolAccessState = await getSchoolAccessState(user.schoolId);
+    } catch {
+      continue;
+    }
+    if (schoolAccessState === 'SUSPENDED') continue;
+
+    if (params.roleName === 'TEACHER') {
+      try {
+        await ensureTeacherActive(user.id, user.schoolId);
+      } catch {
+        continue;
+      }
+    }
+
+    seenSchoolIds.add(user.schoolId);
+    validMatches.push({ user, schoolAccessState });
+  }
+
+  validMatches.sort((left, right) => userSchoolOption(left.user).name.localeCompare(userSchoolOption(right.user).name));
+  return validMatches;
+};
+
+export const listAccessibleSchools = async (req: Request, res: Response) => {
+  if (!req.auth?.userId) {
+    throw new HttpError(401, 'Unauthorized');
+  }
+
+  const matches = await accessibleSchoolMatchesForUser({
+    userId: req.auth.userId,
+    roleName: req.auth.role ?? null,
+  });
 
   res.status(200).json({
-    tokenType: 'Bearer',
-    expiresIn: ACCESS_TOKEN_TTL,
-    refreshTokenMaxAge,
-    refreshTokenExpiresAt: refreshTokenExpiresAt.toISOString(),
-    ...(shouldReturnTokensInBody(req) ? { accessToken, refreshToken } : {}),
-    mustChangePassword: user.mustChangePassword,
-    subscriptionRestricted: payloadBase.subscriptionRestricted,
-    user: {
-      id: user.id,
-      name: displayNameFromUser(user),
-      email: user.email,
-      role: payloadBase.role,
-      schoolId: user.schoolId ?? null,
-      schoolName: user.school?.name ?? null,
-      school: user.school ?? null,
-      schoolProfile,
-      permissions,
-    },
+    schools: matches.map(({ user }) => ({
+      ...userSchoolOption(user),
+      selected: user.schoolId === req.auth?.schoolId,
+    })),
+  });
+};
+
+export const switchSchool = async (req: Request, res: Response) => {
+  if (!req.auth?.userId) {
+    throw new HttpError(401, 'Unauthorized');
+  }
+
+  const parsed = switchSchoolSchema.safeParse(req.body);
+  if (!parsed.success) {
+    throw new HttpError(400, 'Invalid switch school request.', parsed.error.flatten().fieldErrors);
+  }
+
+  const selectedSchoolId = await resolveLoginSchoolId(parsed.data);
+  if (!selectedSchoolId) {
+    throw new HttpError(400, 'School is required.');
+  }
+
+  const matches = await accessibleSchoolMatchesForUser({
+    userId: req.auth.userId,
+    roleName: req.auth.role ?? null,
+  });
+  const selected = matches.find(({ user }) => user.schoolId === selectedSchoolId);
+  if (!selected) {
+    throw new HttpError(403, 'You do not have access to this school.');
+  }
+
+  await issueAuthenticatedResponse({
+    req,
+    res,
+    user: selected.user,
+    roleName: req.auth.role ?? null,
+    schoolAccessState: selected.schoolAccessState,
+    rememberMe: false,
+    auditLoginType: 'switch-school',
   });
 };
 
 export const LoginService = {
+  listAccessibleSchools,
   login,
+  switchSchool,
 };

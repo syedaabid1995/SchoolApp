@@ -2,6 +2,8 @@ class ApiEndpoints {
   const ApiEndpoints._();
 
   static const login = '/auth/login';
+  static const authSchools = '/auth/schools';
+  static const switchSchool = '/auth/switch-school';
   static const refresh = '/auth/refresh';
   static const logout = '/auth/logout';
   static const me = '/users/me';

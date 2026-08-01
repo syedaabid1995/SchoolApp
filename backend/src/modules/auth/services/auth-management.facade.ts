@@ -1,4 +1,4 @@
-export { login } from './login/login.service';
+export { listAccessibleSchools, login, switchSchool } from './login/login.service';
 
 export {
   listSessions,

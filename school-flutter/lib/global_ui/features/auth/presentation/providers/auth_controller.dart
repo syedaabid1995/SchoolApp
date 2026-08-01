@@ -60,6 +60,15 @@ class AuthController extends AsyncNotifier<AuthSession> {
     _syncPushIfAuthenticated(_currentSession());
   }
 
+  Future<AuthSession> switchSchool({required String schoolId}) async {
+    final session = await ref
+        .read(authRepositoryProvider)
+        .switchSchool(schoolId: schoolId);
+    state = AsyncData(session);
+    _syncPushIfAuthenticated(session);
+    return session;
+  }
+
   Future<void> logout() async {
     state = const AsyncLoading();
     await ref.read(authRepositoryProvider).logout();

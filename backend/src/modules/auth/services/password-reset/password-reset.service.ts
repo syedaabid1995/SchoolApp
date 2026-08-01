@@ -400,7 +400,7 @@ export const changePassword = async (req: Request, res: Response) => {
 
   const user = await AuthPasswordResetRepository.user.findUnique({
     where: { id: req.auth.userId },
-    select: { id: true, passwordHash: true, status: true, schoolId: true },
+    select: { id: true, email: true, passwordHash: true, status: true, schoolId: true },
   });
 
   if (!user || user.status !== 'ACTIVE') {
@@ -417,15 +417,23 @@ export const changePassword = async (req: Request, res: Response) => {
   const currentRefreshToken = getCookieValue(req, 'refresh_token') ?? getCookieValue(req, 'refreshToken');
   const currentRefreshTokenHash = currentRefreshToken ? hashToken(currentRefreshToken) : null;
   const now = new Date();
+  const sameEmailUsers = await AuthPasswordResetRepository.user.findMany({
+    where: {
+      email: { equals: user.email, mode: 'insensitive' },
+      status: 'ACTIVE',
+    },
+    select: { id: true },
+  });
+  const sameEmailUserIds = sameEmailUsers.map((item) => item.id);
 
   await AuthPasswordResetRepository.$transaction([
-    AuthPasswordResetRepository.user.update({
-      where: { id: user.id },
+    AuthPasswordResetRepository.user.updateMany({
+      where: { id: { in: sameEmailUserIds.length ? sameEmailUserIds : [user.id] } },
       data: { passwordHash: nextHash, mustChangePassword: false },
     }),
     AuthPasswordResetRepository.refreshSession.updateMany({
       where: {
-        userId: user.id,
+        userId: { in: sameEmailUserIds.length ? sameEmailUserIds : [user.id] },
         revokedAt: null,
         ...(currentRefreshTokenHash ? { tokenHash: { not: currentRefreshTokenHash } } : {}),
       },
@@ -443,6 +451,7 @@ export const changePassword = async (req: Request, res: Response) => {
     action: 'PASSWORD_CHANGE_SUCCESS',
     afterState: {
       refreshSessionsRevoked: currentRefreshTokenHash ? 'others' : 'all',
+      sameEmailAccountsUpdated: sameEmailUserIds.length || 1,
     },
   });
 

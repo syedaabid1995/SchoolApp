@@ -34,6 +34,34 @@ class AuthRemoteDataSource {
     );
   }
 
+  Future<List<SchoolLoginOptionModel>> listAccessibleSchools() async {
+    final response = await _dio.get<Map<String, dynamic>>(
+      ApiEndpoints.authSchools,
+    );
+    final schools = response.data?['schools'] is List
+        ? response.data!['schools'] as List
+        : const [];
+    return schools
+        .whereType<Map>()
+        .map(
+          (school) =>
+              school.map((key, value) => MapEntry(key.toString(), value)),
+        )
+        .map(SchoolLoginOptionModel.fromJson)
+        .where((school) => school.id.trim().isNotEmpty)
+        .toList();
+  }
+
+  Future<AuthResponseModel> switchSchool({required String schoolId}) async {
+    final response = await _dio.post<Map<String, dynamic>>(
+      ApiEndpoints.switchSchool,
+      data: {'schoolId': schoolId},
+    );
+    return AuthResponseModel.fromJson(
+      response.data ?? const <String, dynamic>{},
+    );
+  }
+
   Future<AuthResponseModel> verifyMfa({
     required String challengeId,
     required String code,

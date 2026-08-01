@@ -10,6 +10,7 @@ import '../../../../../global_ui/features/auth/domain/entities/staff_user.dart';
 import '../../../../../global_ui/features/auth/presentation/providers/auth_controller.dart';
 import '../../../../../global_ui/features/profile/presentation/providers/profile_providers.dart';
 import '../../../../app/theme/saapt_theme.dart';
+import '../widgets/school_switch_sheet.dart';
 
 enum _ProfilePanel {
   menu,
@@ -126,6 +127,8 @@ class _SaaptProfileScreenState extends ConsumerState<SaaptProfileScreen> {
                         onOpenPassword: () => setState(
                           () => _panel = _ProfilePanel.changePassword,
                         ),
+                        onChangeSchool: () =>
+                            showSaaptSchoolSwitchSheet(context, ref),
                         onTogglePush: _togglePush,
                         onOpenInfo: _openInfo,
                         onLogout: () =>
@@ -343,6 +346,7 @@ class _ProfileMenuPanel extends StatelessWidget {
     required this.onOpenEdit,
     required this.onOpenSchoolProfile,
     required this.onOpenPassword,
+    required this.onChangeSchool,
     required this.onTogglePush,
     required this.onOpenInfo,
     required this.onLogout,
@@ -354,6 +358,7 @@ class _ProfileMenuPanel extends StatelessWidget {
   final VoidCallback onOpenEdit;
   final VoidCallback onOpenSchoolProfile;
   final VoidCallback onOpenPassword;
+  final VoidCallback onChangeSchool;
   final ValueChanged<bool> onTogglePush;
   final void Function(String title, String body) onOpenInfo;
   final VoidCallback onLogout;
@@ -494,6 +499,12 @@ class _ProfileMenuPanel extends StatelessWidget {
                 icon: Icons.info_outline,
                 title: 'App Version',
                 subtitle: AppConfig.appVersion,
+              ),
+              _MenuTile(
+                icon: Icons.swap_horiz_rounded,
+                title: 'Change School',
+                subtitle: user.schoolName ?? 'Select school workspace',
+                onTap: onChangeSchool,
               ),
               _MenuTile(
                 icon: Icons.logout_rounded,

@@ -9,6 +9,8 @@ abstract class AuthRepository {
     String? schoolCode,
     bool rememberMe,
   });
+  Future<List<SchoolLoginOption>> listAccessibleSchools();
+  Future<AuthSession> switchSchool({required String schoolId});
   Future<AuthSession> verifyMfa({
     required String challengeId,
     required String code,

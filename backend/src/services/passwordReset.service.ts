@@ -1,5 +1,6 @@
 import type { Request } from 'express';
 import crypto from 'crypto';
+import type { Prisma } from '@prisma/client';
 import { prisma } from '../config/db';
 import { env } from '../config/env';
 import { logger } from '../config/logger';
@@ -53,6 +54,17 @@ const getRequestUserAgent = (req: Request) =>
 const generateRawResetToken = () => crypto.randomBytes(PASSWORD_RESET_TOKEN_BYTES).toString('hex');
 
 const hashPasswordResetOtp = (userId: string, resetTokenId: string, otp: string) => hashToken(`${userId}:${resetTokenId}:${otp}`);
+
+const sameEmailActiveUserIds = async (tx: Prisma.TransactionClient, email: string) => {
+  const users = await tx.user.findMany({
+    where: {
+      email: { equals: email, mode: 'insensitive' },
+      status: 'ACTIVE',
+    },
+    select: { id: true },
+  });
+  return users.map((user) => user.id);
+};
 
 const buildResetLink = (rawToken: string) => {
   const frontendUrl = env.FRONTEND_URL.replace(/\/+$/, '');
@@ -669,8 +681,10 @@ export const resetPasswordWithToken = async (req: Request, input: ResetPasswordI
       });
     }
 
-    await tx.user.update({
-      where: { id: resetToken.userId },
+    const sameEmailUserIds = await sameEmailActiveUserIds(tx, resetToken.user.email);
+
+    await tx.user.updateMany({
+      where: { id: { in: sameEmailUserIds.length ? sameEmailUserIds : [resetToken.userId] } },
       data: {
         passwordHash,
         mustChangePassword: false,
@@ -679,7 +693,7 @@ export const resetPasswordWithToken = async (req: Request, input: ResetPasswordI
 
     await tx.passwordResetToken.updateMany({
       where: {
-        userId: resetToken.userId,
+        userId: { in: sameEmailUserIds.length ? sameEmailUserIds : [resetToken.userId] },
         usedAt: null,
       },
       data: { usedAt: now },
@@ -687,7 +701,7 @@ export const resetPasswordWithToken = async (req: Request, input: ResetPasswordI
 
     await tx.refreshSession.updateMany({
       where: {
-        userId: resetToken.userId,
+        userId: { in: sameEmailUserIds.length ? sameEmailUserIds : [resetToken.userId] },
         revokedAt: null,
       },
       data: {
@@ -837,8 +851,10 @@ export const resetPasswordWithOtp = async (req: Request, input: ResetPasswordOtp
       });
     }
 
-    await tx.user.update({
-      where: { id: user.id },
+    const sameEmailUserIds = await sameEmailActiveUserIds(tx, user.email);
+
+    await tx.user.updateMany({
+      where: { id: { in: sameEmailUserIds.length ? sameEmailUserIds : [user.id] } },
       data: {
         passwordHash,
         mustChangePassword: false,
@@ -847,7 +863,7 @@ export const resetPasswordWithOtp = async (req: Request, input: ResetPasswordOtp
 
     await tx.passwordResetToken.updateMany({
       where: {
-        userId: user.id,
+        userId: { in: sameEmailUserIds.length ? sameEmailUserIds : [user.id] },
         usedAt: null,
       },
       data: { usedAt: now },
@@ -855,7 +871,7 @@ export const resetPasswordWithOtp = async (req: Request, input: ResetPasswordOtp
 
     await tx.refreshSession.updateMany({
       where: {
-        userId: user.id,
+        userId: { in: sameEmailUserIds.length ? sameEmailUserIds : [user.id] },
         revokedAt: null,
       },
       data: {

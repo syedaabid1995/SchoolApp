@@ -66,6 +66,37 @@ class AuthRepositoryImpl implements AuthRepository {
   }
 
   @override
+  Future<List<SchoolLoginOption>> listAccessibleSchools() async {
+    try {
+      return await _remoteDataSource.listAccessibleSchools();
+    } catch (error) {
+      throw ErrorHandler.fromDio(error);
+    }
+  }
+
+  @override
+  Future<AuthSession> switchSchool({required String schoolId}) async {
+    try {
+      final response = await _remoteDataSource.switchSchool(schoolId: schoolId);
+      final accessToken = response.accessToken;
+      final refreshToken = response.refreshToken;
+      final user = response.user;
+      if (accessToken == null || refreshToken == null || user == null) {
+        throw const AuthFailure(
+          'Switch school response did not include a mobile session.',
+        );
+      }
+      await _tokenStorage.saveTokens(
+        accessToken: accessToken,
+        refreshToken: refreshToken,
+      );
+      return AuthSession.authenticated(user);
+    } catch (error) {
+      throw ErrorHandler.fromDio(error);
+    }
+  }
+
+  @override
   Future<AuthSession> verifyMfa({
     required String challengeId,
     required String code,

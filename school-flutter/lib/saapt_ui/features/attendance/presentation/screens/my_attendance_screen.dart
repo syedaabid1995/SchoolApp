@@ -12,6 +12,7 @@ import '../../../../../global_ui/features/notifications/presentation/providers/n
 import '../../../../app/theme/saapt_theme.dart';
 import '../../../notices/presentation/screens/saapt_notice_board_screen.dart';
 import '../../../notifications/presentation/screens/saapt_push_notifications_screen.dart';
+import '../../../profile/presentation/widgets/school_switch_sheet.dart';
 
 class MyAttendanceScreen extends ConsumerWidget {
   const MyAttendanceScreen({super.key});
@@ -39,6 +40,8 @@ class MyAttendanceScreen extends ConsumerWidget {
             SliverToBoxAdapter(
               child: _Header(
                 name: user?.displayName ?? 'Teacher',
+                schoolName: user?.schoolName ?? 'School',
+                onChangeSchool: () => showSaaptSchoolSwitchSheet(context, ref),
                 notices: notices,
                 pushNotifications: pushNotifications,
               ),
@@ -93,10 +96,14 @@ class MyAttendanceScreen extends ConsumerWidget {
 class _Header extends StatelessWidget {
   const _Header({
     required this.name,
+    required this.schoolName,
+    required this.onChangeSchool,
     required this.notices,
     required this.pushNotifications,
   });
   final String name;
+  final String schoolName;
+  final VoidCallback onChangeSchool;
   final AsyncValue<NoticeBoardState> notices;
   final AsyncValue<NotificationCenterState> pushNotifications;
 
@@ -176,7 +183,9 @@ class _Header extends StatelessWidget {
               fontWeight: FontWeight.w800,
             ),
           ),
-          const SizedBox(height: 4),
+          const SizedBox(height: 10),
+          _SchoolSelectorPill(schoolName: schoolName, onTap: onChangeSchool),
+          const SizedBox(height: 10),
           Text(
             'Record attendance using your assigned daily units.',
             style: TextStyle(
@@ -188,6 +197,55 @@ class _Header extends StatelessWidget {
       ),
     );
   }
+}
+
+class _SchoolSelectorPill extends StatelessWidget {
+  const _SchoolSelectorPill({required this.schoolName, required this.onTap});
+
+  final String schoolName;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) => Align(
+    alignment: Alignment.centerLeft,
+    child: InkWell(
+      borderRadius: BorderRadius.circular(20),
+      onTap: onTap,
+      child: Container(
+        constraints: const BoxConstraints(maxWidth: 320),
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        decoration: BoxDecoration(
+          color: Colors.white.withValues(alpha: 0.14),
+          border: Border.all(color: Colors.white.withValues(alpha: 0.35)),
+          borderRadius: BorderRadius.circular(20),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Icon(Icons.apartment_rounded, color: Colors.white, size: 17),
+            const SizedBox(width: 7),
+            Flexible(
+              child: Text(
+                schoolName,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+            ),
+            const SizedBox(width: 4),
+            const Icon(
+              Icons.keyboard_arrow_down_rounded,
+              color: Colors.white,
+              size: 20,
+            ),
+          ],
+        ),
+      ),
+    ),
+  );
 }
 
 class _PushNotificationAction extends StatelessWidget {
