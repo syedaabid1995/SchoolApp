@@ -114,6 +114,8 @@ const updateLogFromDelivery = async (logId: string, delivery: EmailProviderDeliv
 
 const emailJobId = (scope: 'PLATFORM' | 'TENANT', logId: string) => `email-${scope.toLowerCase()}-${logId}`;
 
+const platformProviderCode = () => PlatformEmailProvider.getStatus().serviceCode ?? 'PLATFORM_EMAIL';
+
 const sentFacadeDeliveryFromLog = async (logId: string): Promise<EmailFacadeDeliveryResult | null> => {
   const log = await prisma.notificationLog.findUnique({
     where: { id: logId },
@@ -195,7 +197,7 @@ const enqueue = async (scope: 'PLATFORM' | 'TENANT', data: EmailQueueJobData): P
       data: { scheduledAt: null },
     });
     await updateLogPayload(data.logId, {
-      provider: scope === 'PLATFORM' ? 'GOOGLE_WORKSPACE' : 'SMTP',
+      provider: scope === 'PLATFORM' ? platformProviderCode() : 'SMTP',
       recipient: data.to,
       intent: data.intent,
       scope,
@@ -283,7 +285,7 @@ export const EmailService = {
       to: params.to,
       subject: rendered.subject,
       templateKey: rendered.templateKey,
-      provider: 'GOOGLE_WORKSPACE',
+      provider: platformProviderCode(),
       sender: sender.email,
       safePayload: {
         ...(params.safePayload ?? {}),
@@ -429,7 +431,7 @@ export const EmailService = {
       data.senderName,
     );
     const alreadySent = await sentProviderDeliveryFromLog(data.logId, {
-      provider: 'GOOGLE_WORKSPACE',
+      provider: platformProviderCode(),
       sender: sender.email,
     });
     if (alreadySent) return alreadySent;
@@ -446,7 +448,7 @@ export const EmailService = {
       },
     }).catch((error): EmailProviderDeliveryResult => ({
       status: 'FAILED',
-      provider: 'GOOGLE_WORKSPACE',
+      provider: platformProviderCode(),
       sender: sender.email,
       error: error instanceof Error ? error.message : 'Platform email failed',
       durationMs: 0,

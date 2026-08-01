@@ -8,7 +8,7 @@ class AppConfig {
 
   static const apiBaseUrl = String.fromEnvironment(
     'API_BASE_URL',
-    defaultValue: 'https://api.akademifyy.in/api/v1',
+    defaultValue: 'https://api.saapttech.com/api/v1',
     // defaultValue: 'http://10.0.2.2:3000/api/v1',
   );
 

@@ -9,6 +9,7 @@ import { prisma } from '../../config/db';
 import { redis } from '../../config/redis';
 import {
   forgotPassword,
+  forgotPasswordOtp,
   login,
   logout,
   refreshToken,
@@ -235,6 +236,20 @@ const patchPrisma = () => {
   patchMethod(prisma.school as any, 'findUnique', async ({ where }: any) => selectSchool(where));
 
   patchMethod(prisma.user as any, 'findFirst', async ({ where }: any) => findUser(where));
+  patchMethod(prisma.user as any, 'findMany', async ({ where }: any) => {
+    let result = Array.from(users.values());
+    const emailWhere = where.email as { equals?: string } | undefined;
+    if (emailWhere?.equals) {
+      result = result.filter((user) => user.email.toLowerCase() === emailWhere.equals!.toLowerCase());
+    }
+    if ('schoolId' in where) {
+      result = result.filter((user) => (user.schoolId ?? null) === (where.schoolId as string | null));
+    }
+    if ('status' in where) {
+      result = result.filter((user) => user.status === where.status);
+    }
+    return result;
+  });
   patchMethod(prisma.user as any, 'findUnique', async ({ where }: any) => findUserById(where.id));
   patchMethod(prisma.user as any, 'update', async ({ where, data }: any) => {
     const user = findUserById(where.id);
@@ -1104,6 +1119,27 @@ test('forgot password creates token only for valid user', async () => {
     }),
   );
   assert.equal(resetTokens.size, 1);
+});
+
+test('forgot password OTP uses account matching requested login type when email is reused', async () => {
+  const parentUser = await addUser({
+    id: SECOND_USER_ID,
+    email: EMAIL,
+    schoolId: null,
+    role: 'PARENT',
+  });
+
+  const res = await invoke(
+    forgotPasswordOtp,
+    createRequest({
+      body: { email: EMAIL, loginType: 'parent' },
+      originalUrl: '/api/v1/auth/forgot-password/otp',
+    }),
+  );
+
+  assert.equal(res.statusCode, 200);
+  assert.equal(resetTokens.size, 1);
+  assert.equal(Array.from(resetTokens.values())[0].userId, parentUser.id);
 });
 
 test('reset password works, revokes sessions, rejects old password, and accepts new password', async () => {

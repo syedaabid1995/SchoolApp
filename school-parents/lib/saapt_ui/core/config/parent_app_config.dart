@@ -7,7 +7,7 @@ class ParentAppConfig {
 
   static const apiBaseUrl = String.fromEnvironment(
     'API_BASE_URL',
-    defaultValue: 'https://api.akademifyy.in/api/v1',
+    defaultValue: 'https://api.saapttech.com/api/v1',
   );
 
   static const connectTimeout = Duration(seconds: 20);

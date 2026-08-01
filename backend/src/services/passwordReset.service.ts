@@ -79,6 +79,52 @@ const isRoleAllowedForLoginType = (loginType: LoginType | undefined, roleNames: 
   return expectedRoles.length > 0 && roleNames.some((role) => expectedRoles.includes(role));
 };
 
+type PasswordResetUser = {
+  id: string;
+  email: string;
+  schoolId: string | null;
+  roles: Array<{ role: { name: string } }>;
+};
+
+const findPasswordResetUser = async (
+  input: Pick<ForgotPasswordInput, 'email' | 'loginType'>,
+  selectedSchoolId: string | null,
+) => {
+  const users = await prisma.user.findMany({
+    where: {
+      email: { equals: input.email, mode: 'insensitive' },
+      ...(selectedSchoolId ? { schoolId: selectedSchoolId } : {}),
+      status: 'ACTIVE',
+    },
+    orderBy: { createdAt: 'asc' },
+    select: {
+      id: true,
+      email: true,
+      schoolId: true,
+      roles: { select: { role: { select: { name: true } } } },
+    },
+  });
+
+  if (!users.length) {
+    return { user: null, matchedLoginType: false };
+  }
+
+  if (!input.loginType) {
+    return { user: users[0], matchedLoginType: true };
+  }
+
+  const matchingUser = users.find((user) =>
+    isRoleAllowedForLoginType(
+      input.loginType,
+      user.roles.map((entry) => entry.role.name),
+    ),
+  );
+  return {
+    user: (matchingUser ?? users[0]) as PasswordResetUser,
+    matchedLoginType: Boolean(matchingUser),
+  };
+};
+
 const logForgotPasswordAudit = async (params: {
   req: Request;
   userId: string;
@@ -346,19 +392,7 @@ export const requestPasswordReset = async (req: Request, input: ForgotPasswordIn
     return;
   }
 
-  const user = await prisma.user.findFirst({
-    where: {
-      email: { equals: input.email, mode: 'insensitive' },
-      ...(selectedSchoolId ? { schoolId: selectedSchoolId } : {}),
-      status: 'ACTIVE',
-    },
-    select: {
-      id: true,
-      email: true,
-      schoolId: true,
-      roles: { select: { role: { select: { name: true } } } },
-    },
-  });
+  const { user, matchedLoginType } = await findPasswordResetUser(input, selectedSchoolId);
 
   if (!user) {
     await logForgotPasswordSkippedAudit({
@@ -370,8 +404,7 @@ export const requestPasswordReset = async (req: Request, input: ForgotPasswordIn
     return;
   }
 
-  const roleNames = user.roles.map((entry) => entry.role.name);
-  if (!isRoleAllowedForLoginType(input.loginType, roleNames)) {
+  if (!matchedLoginType) {
     await logForgotPasswordSkippedAudit({
       req,
       input,
@@ -440,19 +473,7 @@ export const requestPasswordResetOtp = async (req: Request, input: ForgotPasswor
     return;
   }
 
-  const user = await prisma.user.findFirst({
-    where: {
-      email: { equals: input.email, mode: 'insensitive' },
-      ...(selectedSchoolId ? { schoolId: selectedSchoolId } : {}),
-      status: 'ACTIVE',
-    },
-    select: {
-      id: true,
-      email: true,
-      schoolId: true,
-      roles: { select: { role: { select: { name: true } } } },
-    },
-  });
+  const { user, matchedLoginType } = await findPasswordResetUser(input, selectedSchoolId);
 
   if (!user) {
     await logForgotPasswordSkippedAudit({
@@ -464,8 +485,7 @@ export const requestPasswordResetOtp = async (req: Request, input: ForgotPasswor
     return;
   }
 
-  const roleNames = user.roles.map((entry) => entry.role.name);
-  if (!isRoleAllowedForLoginType(input.loginType, roleNames)) {
+  if (!matchedLoginType) {
     await logForgotPasswordSkippedAudit({
       req,
       input,
