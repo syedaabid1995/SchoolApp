@@ -142,6 +142,7 @@ model School {
   studentTransportAssignments    StudentTransportAssignment[]
   homeworks                      Homework[]
   homeworkEvaluations            HomeworkEvaluation[]
+  homeworkNotificationReceipts   HomeworkNotificationReceipt[]
   libraryBookCategories          LibraryBookCategory[]
   libraryBooks                   LibraryBook[]
   libraryMembers                 LibraryMember[]
@@ -273,6 +274,7 @@ model User {
   homeworksCreated                       Homework[]                      @relation("HomeworkCreatedBy")
   homeworksEvaluated                     Homework[]                      @relation("HomeworkEvaluatedBy")
   homeworkEvaluations                    HomeworkEvaluation[]            @relation("HomeworkEvaluationEvaluatedBy")
+  homeworkNotificationReceipts           HomeworkNotificationReceipt[]
   libraryIssuesCreated                   LibraryIssue[]                  @relation("LibraryIssueCreatedBy")
   libraryIssuesReturned                  LibraryIssue[]                  @relation("LibraryIssueReturnedBy")
   subscriptionPaymentsReceived           SubscriptionPayment[]           @relation("SubscriptionPaymentReceivedBy")
@@ -837,46 +839,47 @@ model Student {
   createdAt            DateTime      @default(now()) @map("created_at")
   updatedAt            DateTime      @updatedAt @map("updated_at")
 
-  school                   School                       @relation(fields: [schoolId], references: [id], onDelete: Cascade)
-  academicSession          AcademicYear?                @relation(fields: [academicSessionId], references: [id], onDelete: SetNull)
-  class                    Class?                       @relation(fields: [classId], references: [id], onDelete: SetNull)
-  section                  Section?                     @relation(fields: [sectionId], references: [id], onDelete: SetNull)
-  studentGroup             StudentGroup?                @relation(fields: [studentGroupId], references: [id], onDelete: SetNull)
-  studentCategory          StudentCategory?             @relation(fields: [studentCategoryId], references: [id], onDelete: SetNull)
-  guardians                ParentGuardian[]
-  enrollments              StudentEnrollment[]
-  promotionHistories       StudentPromotionHistory[]
-  disabledLogs             DisabledStudentLog[]
-  documents                StudentDocument[]
-  timelines                StudentTimeline[]
-  siblings                 StudentSibling[]             @relation("StudentSiblingOwner")
-  siblingOf                StudentSibling[]             @relation("StudentSiblingLinked")
-  parentLinks              StudentParent[]
-  leaveRequests            StudentLeaveRequest[]
-  statusEvents             StudentStatusHistory[]
-  transferRequests         StudentTransferRequest[]
-  faceProfile              FaceProfile?
-  attendanceRecords        AttendanceRecord[]
-  studentAttendanceRecords StudentAttendanceRecord[]
-  marks                    Mark[]
-  photos                   StudentPhoto[]
-  dormitoryAssignments     StudentDormitoryAssignment[]
-  transportAssignments     StudentTransportAssignment[]
-  homeworkEvaluations      HomeworkEvaluation[]
-  libraryMemberships       LibraryMember[]
-  feeAssignments           StudentFeeAssignment[]
-  feeGroupAssignments      StudentFeeGroupAssignment[]
-  feeInvoices              FeeInvoice[]
-  feePayments              FeePayment[]
-  feePaymentReversals      FeePaymentReversal[]
-  feeReceipts              FeeReceipt[]
-  feePaymentAllocations    FeePaymentAllocation[]
-  feeDiscounts             FeeDiscount[]
-  feeLedgers               FeeLedger[]
-  feeCarryForwards         FeeCarryForward[]
-  feeInvoiceGenerationJobs FeeInvoiceGenerationJob[]
-  feeNotifications         FeeNotification[]
-  examSeatingAllocations   ExamSeatingAllocation[]
+  school                       School                        @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  academicSession              AcademicYear?                 @relation(fields: [academicSessionId], references: [id], onDelete: SetNull)
+  class                        Class?                        @relation(fields: [classId], references: [id], onDelete: SetNull)
+  section                      Section?                      @relation(fields: [sectionId], references: [id], onDelete: SetNull)
+  studentGroup                 StudentGroup?                 @relation(fields: [studentGroupId], references: [id], onDelete: SetNull)
+  studentCategory              StudentCategory?              @relation(fields: [studentCategoryId], references: [id], onDelete: SetNull)
+  guardians                    ParentGuardian[]
+  enrollments                  StudentEnrollment[]
+  promotionHistories           StudentPromotionHistory[]
+  disabledLogs                 DisabledStudentLog[]
+  documents                    StudentDocument[]
+  timelines                    StudentTimeline[]
+  siblings                     StudentSibling[]              @relation("StudentSiblingOwner")
+  siblingOf                    StudentSibling[]              @relation("StudentSiblingLinked")
+  parentLinks                  StudentParent[]
+  leaveRequests                StudentLeaveRequest[]
+  statusEvents                 StudentStatusHistory[]
+  transferRequests             StudentTransferRequest[]
+  faceProfile                  FaceProfile?
+  attendanceRecords            AttendanceRecord[]
+  studentAttendanceRecords     StudentAttendanceRecord[]
+  marks                        Mark[]
+  photos                       StudentPhoto[]
+  dormitoryAssignments         StudentDormitoryAssignment[]
+  transportAssignments         StudentTransportAssignment[]
+  homeworkEvaluations          HomeworkEvaluation[]
+  homeworkNotificationReceipts HomeworkNotificationReceipt[]
+  libraryMemberships           LibraryMember[]
+  feeAssignments               StudentFeeAssignment[]
+  feeGroupAssignments          StudentFeeGroupAssignment[]
+  feeInvoices                  FeeInvoice[]
+  feePayments                  FeePayment[]
+  feePaymentReversals          FeePaymentReversal[]
+  feeReceipts                  FeeReceipt[]
+  feePaymentAllocations        FeePaymentAllocation[]
+  feeDiscounts                 FeeDiscount[]
+  feeLedgers                   FeeLedger[]
+  feeCarryForwards             FeeCarryForward[]
+  feeInvoiceGenerationJobs     FeeInvoiceGenerationJob[]
+  feeNotifications             FeeNotification[]
+  examSeatingAllocations       ExamSeatingAllocation[]
 
   @@unique([schoolId, admissionNo])
   @@index([academicSessionId])
@@ -1078,13 +1081,14 @@ model Homework {
   createdAt      DateTime  @default(now()) @map("created_at")
   updatedAt      DateTime  @updatedAt @map("updated_at")
 
-  school      School               @relation(fields: [schoolId], references: [id], onDelete: Cascade)
-  class       Class                @relation(fields: [classId], references: [id], onDelete: Restrict)
-  section     Section              @relation(fields: [sectionId], references: [id], onDelete: Restrict)
-  subject     Subject              @relation(fields: [subjectId], references: [id], onDelete: Restrict)
-  createdBy   User                 @relation("HomeworkCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
-  evaluatedBy User?                @relation("HomeworkEvaluatedBy", fields: [evaluatedById], references: [id], onDelete: SetNull)
-  evaluations HomeworkEvaluation[]
+  school               School                        @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  class                Class                         @relation(fields: [classId], references: [id], onDelete: Restrict)
+  section              Section                       @relation(fields: [sectionId], references: [id], onDelete: Restrict)
+  subject              Subject                       @relation(fields: [subjectId], references: [id], onDelete: Restrict)
+  createdBy            User                          @relation("HomeworkCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+  evaluatedBy          User?                         @relation("HomeworkEvaluatedBy", fields: [evaluatedById], references: [id], onDelete: SetNull)
+  evaluations          HomeworkEvaluation[]
+  notificationReceipts HomeworkNotificationReceipt[]
 
   @@index([schoolId])
   @@index([schoolId, homeworkDate])
@@ -1123,6 +1127,36 @@ model HomeworkEvaluation {
   @@index([evaluatedById])
   @@index([completionStatus])
   @@map("homework_evaluations")
+}
+
+model HomeworkNotificationReceipt {
+  id                String    @id @default(uuid()) @db.Uuid
+  schoolId          String    @map("school_id") @db.Uuid
+  homeworkId        String    @map("homework_id") @db.Uuid
+  studentId         String    @map("student_id") @db.Uuid
+  parentProfileId   String    @map("parent_profile_id") @db.Uuid
+  parentUserId      String?   @map("parent_user_id") @db.Uuid
+  notificationLogId String?   @map("notification_log_id") @db.Uuid
+  viewedAt          DateTime? @map("viewed_at")
+  createdAt         DateTime  @default(now()) @map("created_at")
+  updatedAt         DateTime  @updatedAt @map("updated_at")
+
+  school          School           @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  homework        Homework         @relation(fields: [homeworkId], references: [id], onDelete: Cascade)
+  student         Student          @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  parentProfile   ParentProfile    @relation(fields: [parentProfileId], references: [id], onDelete: Cascade)
+  parentUser      User?            @relation(fields: [parentUserId], references: [id], onDelete: SetNull)
+  notificationLog NotificationLog? @relation(fields: [notificationLogId], references: [id], onDelete: SetNull)
+
+  @@unique([homeworkId, studentId, parentProfileId], map: "homework_receipt_homework_student_parent_key")
+  @@index([schoolId])
+  @@index([homeworkId])
+  @@index([studentId])
+  @@index([parentProfileId])
+  @@index([parentUserId])
+  @@index([notificationLogId])
+  @@index([viewedAt])
+  @@map("homework_notification_receipts")
 }
 
 model LibraryBookCategory {
@@ -1546,10 +1580,11 @@ model ParentProfile {
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
-  user                 User?                 @relation(fields: [userId], references: [id], onDelete: SetNull)
-  links                StudentParent[]
-  consents             ConsentRecord[]
-  studentLeaveRequests StudentLeaveRequest[]
+  user                         User?                         @relation(fields: [userId], references: [id], onDelete: SetNull)
+  links                        StudentParent[]
+  consents                     ConsentRecord[]
+  studentLeaveRequests         StudentLeaveRequest[]
+  homeworkNotificationReceipts HomeworkNotificationReceipt[]
 
   @@unique([userId])
   @@index([userId])
@@ -4267,9 +4302,10 @@ model NotificationLog {
   createdAt   DateTime            @default(now()) @map("created_at")
   updatedAt   DateTime            @updatedAt @map("updated_at")
 
-  template NotificationTemplate? @relation(fields: [templateId], references: [id], onDelete: SetNull)
-  school   School?               @relation(fields: [schoolId], references: [id], onDelete: SetNull)
-  user     User?                 @relation(fields: [userId], references: [id], onDelete: SetNull)
+  template                     NotificationTemplate?         @relation(fields: [templateId], references: [id], onDelete: SetNull)
+  school                       School?                       @relation(fields: [schoolId], references: [id], onDelete: SetNull)
+  user                         User?                         @relation(fields: [userId], references: [id], onDelete: SetNull)
+  homeworkNotificationReceipts HomeworkNotificationReceipt[]
 
   @@index([schoolId])
   @@index([schoolId, createdAt])

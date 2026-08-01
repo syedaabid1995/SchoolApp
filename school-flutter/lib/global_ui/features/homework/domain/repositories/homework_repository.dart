@@ -15,6 +15,9 @@ abstract class HomeworkRepository {
     required String filename,
   });
   Future<HomeworkEvaluationDetail> getEvaluation(String id);
+  Future<List<HomeworkNotificationHistoryRow>> getNotificationHistory(
+    String id,
+  );
   Future<HomeworkEvaluationDetail> saveEvaluation({
     required String id,
     required DateTime evaluationDate,

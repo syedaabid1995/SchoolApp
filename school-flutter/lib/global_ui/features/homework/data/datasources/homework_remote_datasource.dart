@@ -73,6 +73,22 @@ class HomeworkRemoteDatasource {
     return HomeworkEvaluationDetailModel.fromJson(response.data ?? const {});
   }
 
+  Future<List<HomeworkNotificationHistoryRowModel>> getNotificationHistory(
+    String id,
+  ) async {
+    final response = await _dio.get<Map<String, dynamic>>(
+      '${ApiEndpoints.homework}/$id/notification-history',
+    );
+    final rows = response.data?['rows'] is List
+        ? response.data!['rows'] as List
+        : const [];
+    return [
+      for (final row in rows)
+        if (row is Map<String, dynamic>)
+          HomeworkNotificationHistoryRowModel.fromJson(row),
+    ];
+  }
+
   Future<HomeworkEvaluationDetailModel> saveEvaluation({
     required String id,
     required DateTime evaluationDate,

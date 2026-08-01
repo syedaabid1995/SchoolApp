@@ -115,6 +115,17 @@ class HomeworkRepositoryImpl implements HomeworkRepository {
   }
 
   @override
+  Future<List<HomeworkNotificationHistoryRow>> getNotificationHistory(
+    String id,
+  ) async {
+    try {
+      return await _remote.getNotificationHistory(id);
+    } catch (error) {
+      throw ErrorHandler.toFailure(error);
+    }
+  }
+
+  @override
   Future<HomeworkEvaluationDetail> saveEvaluation({
     required String id,
     required DateTime evaluationDate,

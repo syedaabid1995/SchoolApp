@@ -58,6 +58,11 @@ final homeworkEvaluationProvider = FutureProvider.autoDispose
       return ref.watch(homeworkRepositoryProvider).getEvaluation(id);
     });
 
+final homeworkNotificationHistoryProvider = FutureProvider.autoDispose
+    .family<List<HomeworkNotificationHistoryRow>, String>((ref, id) {
+      return ref.watch(homeworkRepositoryProvider).getNotificationHistory(id);
+    });
+
 final homeworkMutationProvider =
     AsyncNotifierProvider<HomeworkMutationController, Homework?>(
       HomeworkMutationController.new,

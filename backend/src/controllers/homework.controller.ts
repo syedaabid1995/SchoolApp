@@ -5,8 +5,10 @@ import path from 'path';
 import crypto from 'crypto';
 import { z } from 'zod';
 import { prisma } from '../config/db';
+import { logger } from '../config/logger';
 import { HttpError } from '../middlewares/error.middleware';
 import { logAudit } from '../utils/audit';
+import { sendNotification } from '../services/notification.service';
 import { uploadBuffer } from '../services/s3.service';
 
 const uuidSchema = z.string().uuid();
@@ -158,6 +160,118 @@ const getHomeworkOrThrow = async (schoolId: string, id: string) => {
   return homework;
 };
 
+type HomeworkWithMeta = Prisma.HomeworkGetPayload<{ include: typeof includeHomework }>;
+
+const parentName = (parent: { firstName: string; lastName: string; email?: string | null; phone?: string | null }) => {
+  const name = [parent.firstName, parent.lastName].filter(Boolean).join(' ').trim();
+  return name || parent.email || parent.phone || 'Parent';
+};
+
+const sendHomeworkParentNotifications = async (params: {
+  schoolId: string;
+  actorId: string;
+  homework: HomeworkWithMeta;
+}) => {
+  const students = await prisma.student.findMany({
+    where: {
+      schoolId: params.schoolId,
+      classId: params.homework.classId,
+      sectionId: params.homework.sectionId,
+      status: { not: 'DISABLED' },
+    },
+    select: {
+      id: true,
+      fullName: true,
+      admissionNo: true,
+      parentLinks: {
+        select: {
+          parentId: true,
+          parent: {
+            select: {
+              id: true,
+              userId: true,
+              firstName: true,
+              lastName: true,
+              email: true,
+              phone: true,
+            },
+          },
+        },
+      },
+    },
+    orderBy: [{ admissionNo: 'asc' }, { fullName: 'asc' }],
+  });
+
+  for (const student of students) {
+    for (const link of student.parentLinks) {
+      const receipt = await prisma.homeworkNotificationReceipt.upsert({
+        where: {
+          homeworkId_studentId_parentProfileId: {
+            homeworkId: params.homework.id,
+            studentId: student.id,
+            parentProfileId: link.parentId,
+          },
+        },
+        update: {
+          schoolId: params.schoolId,
+          parentUserId: link.parent.userId ?? null,
+        },
+        create: {
+          schoolId: params.schoolId,
+          homeworkId: params.homework.id,
+          studentId: student.id,
+          parentProfileId: link.parentId,
+          parentUserId: link.parent.userId ?? null,
+        },
+      });
+
+      if (!link.parent.userId) continue;
+
+      try {
+        const result = await sendNotification({
+          schoolId: params.schoolId,
+          userId: params.actorId,
+          channel: 'PUSH',
+          data: {
+            to: link.parent.userId,
+            subject: `New homework: ${params.homework.subject.name}`,
+            body: `${student.fullName} has new ${params.homework.subject.name} homework due on ${params.homework.submissionDate.toISOString().slice(0, 10)}.`,
+            recipientName: parentName(link.parent),
+            recipientType: 'PARENT',
+            targetMode: 'STUDENT',
+            recipientGroups: ['GUARDIANS'],
+            route: '/homework',
+            module: 'homework',
+            category: 'homework',
+            priority: 'high',
+            homeworkId: params.homework.id,
+            childId: student.id,
+            childName: student.fullName,
+            classId: params.homework.classId,
+            className: params.homework.class.name,
+            sectionId: params.homework.sectionId,
+            sectionName: params.homework.section.name,
+            subjectId: params.homework.subjectId,
+            subjectName: params.homework.subject.name,
+            homeworkDate: params.homework.homeworkDate.toISOString(),
+            submissionDate: params.homework.submissionDate.toISOString(),
+          },
+        });
+
+        await prisma.homeworkNotificationReceipt.update({
+          where: { id: receipt.id },
+          data: { notificationLogId: result.logId },
+        });
+      } catch (error) {
+        logger.warn(
+          { err: error, homeworkId: params.homework.id, studentId: student.id, parentId: link.parentId },
+          'homework parent push failed',
+        );
+      }
+    }
+  }
+};
+
 export const listHomeworks = async (req: Request, res: Response) => {
   const { schoolId, userId, role } = requireHomeworkManager(req, getRequestedSchoolId(req));
   const classId = typeof req.query.classId === 'string' ? req.query.classId : undefined;
@@ -235,6 +349,8 @@ export const createHomework = async (req: Request, res: Response) => {
     action: 'CREATE',
     afterState: item,
   });
+
+  await sendHomeworkParentNotifications({ schoolId, actorId: userId, homework: item });
 
   res.status(201).json(item);
 };
@@ -336,6 +452,103 @@ export const getHomeworkEvaluation = async (req: Request, res: Response) => {
       evaluation: evaluationByStudent.get(student.id) ?? null,
     })),
   });
+};
+
+export const getHomeworkNotificationHistory = async (req: Request, res: Response) => {
+  const { schoolId, userId, role } = requireHomeworkManager(req, getRequestedSchoolId(req));
+  const id = req.params.id;
+  const homework = await getHomeworkOrThrow(schoolId, id);
+  if (isTeacherRole(role)) {
+    await assertTeacherHomeworkScope({
+      schoolId,
+      userId,
+      classId: homework.classId,
+      sectionId: homework.sectionId,
+      subjectId: homework.subjectId,
+    });
+  }
+
+  const [students, receipts] = await Promise.all([
+    prisma.student.findMany({
+      where: {
+        schoolId,
+        classId: homework.classId,
+        sectionId: homework.sectionId,
+        status: { not: 'DISABLED' },
+      },
+      select: {
+        id: true,
+        admissionNo: true,
+        rollNo: true,
+        fullName: true,
+        parentLinks: {
+          select: {
+            parentId: true,
+            parent: {
+              select: {
+                id: true,
+                userId: true,
+                firstName: true,
+                lastName: true,
+                email: true,
+                phone: true,
+              },
+            },
+          },
+        },
+      },
+      orderBy: [{ admissionNo: 'asc' }, { fullName: 'asc' }],
+    }),
+    prisma.homeworkNotificationReceipt.findMany({
+      where: { schoolId, homeworkId: id },
+      include: {
+        notificationLog: {
+          select: {
+            id: true,
+            status: true,
+            error: true,
+            sentAt: true,
+            createdAt: true,
+          },
+        },
+      },
+    }),
+  ]);
+
+  const receiptByParent = new Map(
+    receipts.map((receipt) => [`${receipt.studentId}:${receipt.parentProfileId}`, receipt]),
+  );
+
+  const rows = students.flatMap((student) =>
+    student.parentLinks.map((link) => {
+      const receipt = receiptByParent.get(`${student.id}:${link.parentId}`);
+      const log = receipt?.notificationLog ?? null;
+      return {
+        student: {
+          id: student.id,
+          admissionNo: student.admissionNo,
+          rollNo: student.rollNo,
+          fullName: student.fullName,
+        },
+        parent: {
+          id: link.parent.id,
+          userId: link.parent.userId,
+          name: parentName(link.parent),
+          email: link.parent.email,
+          phone: link.parent.phone,
+        },
+        notificationLogId: log?.id ?? null,
+        notificationStatus: log?.status ?? 'NOT_SENT',
+        notificationError:
+          log?.error ?? (link.parent.userId ? null : 'Parent app account is not linked'),
+        sentAt: log?.sentAt?.toISOString() ?? null,
+        notificationCreatedAt: log?.createdAt?.toISOString() ?? null,
+        viewedAt: receipt?.viewedAt?.toISOString() ?? null,
+      };
+    }),
+  );
+
+  res.status(200).json({ homework, rows });
 };
 
 export const saveHomeworkEvaluation = async (req: Request, res: Response) => {

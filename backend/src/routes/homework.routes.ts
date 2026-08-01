@@ -4,6 +4,7 @@ import {
   deleteHomework,
   getHomeworkEvaluation,
   getHomeworkEvaluationReport,
+  getHomeworkNotificationHistory,
   homeworkAttachmentUpload,
   listHomeworks,
   saveHomeworkEvaluation,
@@ -25,5 +26,6 @@ homeworkRouter.get('/', listHomeworks);
 homeworkRouter.post('/', createHomework);
 homeworkRouter.patch('/:id', updateHomework);
 homeworkRouter.delete('/:id', deleteHomework);
+homeworkRouter.get('/:id/notification-history', getHomeworkNotificationHistory);
 homeworkRouter.get('/:id/evaluations', getHomeworkEvaluation);
 homeworkRouter.post('/:id/evaluations', saveHomeworkEvaluation);

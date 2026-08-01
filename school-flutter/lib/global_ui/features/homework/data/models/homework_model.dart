@@ -166,6 +166,55 @@ class HomeworkEvaluationDetailModel extends HomeworkEvaluationDetail {
   }
 }
 
+class HomeworkNotificationHistoryRowModel
+    extends HomeworkNotificationHistoryRow {
+  const HomeworkNotificationHistoryRowModel({
+    required super.studentId,
+    required super.studentName,
+    required super.parentId,
+    required super.parentName,
+    required super.notificationStatus,
+    super.admissionNo,
+    super.rollNo,
+    super.parentUserId,
+    super.parentEmail,
+    super.parentPhone,
+    super.notificationLogId,
+    super.notificationError,
+    super.sentAt,
+    super.notificationCreatedAt,
+    super.viewedAt,
+  });
+
+  factory HomeworkNotificationHistoryRowModel.fromJson(
+    Map<String, dynamic> json,
+  ) {
+    final student = json['student'] is Map<String, dynamic>
+        ? json['student'] as Map<String, dynamic>
+        : const <String, dynamic>{};
+    final parent = json['parent'] is Map<String, dynamic>
+        ? json['parent'] as Map<String, dynamic>
+        : const <String, dynamic>{};
+    return HomeworkNotificationHistoryRowModel(
+      studentId: student['id']?.toString() ?? '',
+      studentName: student['fullName']?.toString() ?? '',
+      admissionNo: student['admissionNo']?.toString(),
+      rollNo: student['rollNo']?.toString(),
+      parentId: parent['id']?.toString() ?? '',
+      parentName: parent['name']?.toString() ?? 'Parent',
+      parentUserId: parent['userId']?.toString(),
+      parentEmail: parent['email']?.toString(),
+      parentPhone: parent['phone']?.toString(),
+      notificationStatus: json['notificationStatus']?.toString() ?? 'NOT_SENT',
+      notificationLogId: json['notificationLogId']?.toString(),
+      notificationError: json['notificationError']?.toString(),
+      sentAt: _toNullableDate(json['sentAt']),
+      notificationCreatedAt: _toNullableDate(json['notificationCreatedAt']),
+      viewedAt: _toNullableDate(json['viewedAt']),
+    );
+  }
+}
+
 DateTime _toDate(Object? value) =>
     DateTime.tryParse(value?.toString() ?? '') ??
     DateTime.fromMillisecondsSinceEpoch(0, isUtc: true);

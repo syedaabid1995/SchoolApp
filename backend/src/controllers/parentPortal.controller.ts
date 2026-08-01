@@ -1470,6 +1470,44 @@ export const listParentHomeworks = async (req: Request, res: Response) => {
     orderBy: [{ subject: { name: 'asc' } }, { createdAt: 'desc' }],
   });
 
+  if (items.length > 0) {
+    const parentLinks = await prisma.studentParent.findMany({
+      where: {
+        studentId: child.id,
+        parent: { userId: auth.userId },
+      },
+      select: { parentId: true },
+    });
+    const parentIds = parentLinks.map((link) => link.parentId);
+    const homeworkIds = items.map((item) => item.id);
+
+    if (parentIds.length > 0) {
+      const viewedAt = new Date();
+      await prisma.homeworkNotificationReceipt.createMany({
+        data: homeworkIds.flatMap((homeworkId) =>
+          parentIds.map((parentProfileId) => ({
+            schoolId: child.schoolId,
+            homeworkId,
+            studentId: child.id,
+            parentProfileId,
+            parentUserId: auth.userId,
+            viewedAt,
+          })),
+        ),
+        skipDuplicates: true,
+      });
+      await prisma.homeworkNotificationReceipt.updateMany({
+        where: {
+          homeworkId: { in: homeworkIds },
+          studentId: child.id,
+          parentProfileId: { in: parentIds },
+          viewedAt: null,
+        },
+        data: { parentUserId: auth.userId, viewedAt },
+      });
+    }
+  }
+
   res.status(200).json({ items, selectedDate });
 };
 

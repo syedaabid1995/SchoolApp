@@ -23,6 +23,18 @@ const renderTemplate = (body: string, data: Record<string, unknown>) => {
   }, body);
 };
 
+const toPushData = (data: Record<string, unknown>) => {
+  const reserved = new Set(['to', 'subject', 'body', 'html']);
+  return Object.fromEntries(
+    Object.entries(data)
+      .filter(([key, value]) => {
+        if (reserved.has(key) || value === undefined || value === null) return false;
+        return ['string', 'number', 'boolean'].includes(typeof value);
+      })
+      .map(([key, value]) => [key, String(value)]),
+  ) as Record<string, string>;
+};
+
 export const resolveNotificationContent = (params: {
   channel: NotificationPayload['channel'];
   template?: Pick<NotificationTemplate, 'subject' | 'body'> | null;
@@ -116,6 +128,7 @@ export const sendNotification = async (payload: NotificationPayload) => {
           body: body ?? '',
           html,
           data: {
+            ...toPushData(resolvedPayload),
             route: payload.data.route ? String(payload.data.route) : undefined,
             module: payload.data.module ? String(payload.data.module) : undefined,
             category: payload.data.category ? String(payload.data.category) : undefined,

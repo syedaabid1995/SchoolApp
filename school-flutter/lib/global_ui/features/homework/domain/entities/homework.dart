@@ -174,6 +174,64 @@ class HomeworkEvaluationDetail extends Equatable {
   List<Object?> get props => [homework, rows];
 }
 
+class HomeworkNotificationHistoryRow extends Equatable {
+  const HomeworkNotificationHistoryRow({
+    required this.studentId,
+    required this.studentName,
+    required this.parentId,
+    required this.parentName,
+    required this.notificationStatus,
+    this.admissionNo,
+    this.rollNo,
+    this.parentUserId,
+    this.parentEmail,
+    this.parentPhone,
+    this.notificationLogId,
+    this.notificationError,
+    this.sentAt,
+    this.notificationCreatedAt,
+    this.viewedAt,
+  });
+
+  final String studentId;
+  final String studentName;
+  final String? admissionNo;
+  final String? rollNo;
+  final String parentId;
+  final String parentName;
+  final String? parentUserId;
+  final String? parentEmail;
+  final String? parentPhone;
+  final String notificationStatus;
+  final String? notificationLogId;
+  final String? notificationError;
+  final DateTime? sentAt;
+  final DateTime? notificationCreatedAt;
+  final DateTime? viewedAt;
+
+  bool get isViewed => viewedAt != null;
+  bool get isSent => notificationStatus == 'SENT';
+
+  @override
+  List<Object?> get props => [
+    studentId,
+    studentName,
+    admissionNo,
+    rollNo,
+    parentId,
+    parentName,
+    parentUserId,
+    parentEmail,
+    parentPhone,
+    notificationStatus,
+    notificationLogId,
+    notificationError,
+    sentAt,
+    notificationCreatedAt,
+    viewedAt,
+  ];
+}
+
 class HomeworkEvaluationDraftRow extends Equatable {
   const HomeworkEvaluationDraftRow({
     required this.studentId,

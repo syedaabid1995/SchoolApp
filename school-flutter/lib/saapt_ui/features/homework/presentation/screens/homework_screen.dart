@@ -93,6 +93,7 @@ class _SaaptHomeworkScreenState extends ConsumerState<SaaptHomeworkScreen> {
                               homework: homework,
                             ),
                             onEvaluate: _openEvaluation,
+                            onHistory: _openNotificationHistory,
                           ),
                         ),
                       ],
@@ -154,6 +155,15 @@ class _SaaptHomeworkScreenState extends ConsumerState<SaaptHomeworkScreen> {
       builder: (_) => _EvaluationSheet(homework: homework),
     );
     if (saved == true) ref.invalidate(homeworkListProvider);
+  }
+
+  Future<void> _openNotificationHistory(Homework homework) async {
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      useSafeArea: true,
+      builder: (_) => _NotificationHistorySheet(homework: homework),
+    );
   }
 }
 
@@ -313,11 +323,13 @@ class _HomeworkList extends StatelessWidget {
     required this.items,
     required this.onEdit,
     required this.onEvaluate,
+    required this.onHistory,
   });
 
   final List<Homework> items;
   final ValueChanged<Homework> onEdit;
   final ValueChanged<Homework> onEvaluate;
+  final ValueChanged<Homework> onHistory;
 
   @override
   Widget build(BuildContext context) {
@@ -333,6 +345,7 @@ class _HomeworkList extends StatelessWidget {
             homework: item,
             onEdit: () => onEdit(item),
             onEvaluate: () => onEvaluate(item),
+            onHistory: () => onHistory(item),
           ),
           const SizedBox(height: 12),
         ],
@@ -346,11 +359,13 @@ class _HomeworkCard extends StatelessWidget {
     required this.homework,
     required this.onEdit,
     required this.onEvaluate,
+    required this.onHistory,
   });
 
   final Homework homework;
   final VoidCallback onEdit;
   final VoidCallback onEvaluate;
+  final VoidCallback onHistory;
 
   @override
   Widget build(BuildContext context) {
@@ -486,6 +501,12 @@ class _HomeworkCard extends StatelessWidget {
                       ),
                     ),
                   ],
+                ),
+                const SizedBox(height: 10),
+                OutlinedButton.icon(
+                  onPressed: onHistory,
+                  icon: const Icon(Icons.visibility_rounded),
+                  label: const Text('Notification history'),
                 ),
               ],
             ),
@@ -1178,6 +1199,347 @@ class _DateField extends StatelessWidget {
       ),
     );
   }
+}
+
+class _NotificationHistorySheet extends ConsumerWidget {
+  const _NotificationHistorySheet({required this.homework});
+
+  final Homework homework;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final state = ref.watch(homeworkNotificationHistoryProvider(homework.id));
+    return SizedBox(
+      height: MediaQuery.sizeOf(context).height * 0.86,
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(20, 12, 20, 20),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            _SheetHandle(),
+            const SizedBox(height: 18),
+            Row(
+              children: [
+                Container(
+                  width: 44,
+                  height: 44,
+                  decoration: BoxDecoration(
+                    color: SaaptTheme.primary.withValues(alpha: 0.10),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: const Icon(
+                    Icons.visibility_rounded,
+                    color: SaaptTheme.primary,
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text(
+                        'Notification history',
+                        style: TextStyle(
+                          color: SaaptTheme.navy,
+                          fontSize: 20,
+                          fontWeight: FontWeight.w900,
+                        ),
+                      ),
+                      const SizedBox(height: 3),
+                      Text(
+                        '${homework.subjectName ?? 'Homework'} - ${DateFormat.MMMd().format(homework.homeworkDate)}',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          color: Color(0xFF667695),
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                IconButton(
+                  tooltip: 'Refresh',
+                  onPressed: () => ref.invalidate(
+                    homeworkNotificationHistoryProvider(homework.id),
+                  ),
+                  icon: const Icon(Icons.refresh_rounded),
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
+            Expanded(
+              child: state.when(
+                loading: () => const _LoadingPanel(),
+                error: (error, _) => _MessageCard(message: error.toString()),
+                data: (rows) {
+                  if (rows.isEmpty) {
+                    return const _MessageCard(
+                      message:
+                          'No parent notifications found for this homework.',
+                    );
+                  }
+                  final sentCount = rows.where((row) => row.isSent).length;
+                  final viewedCount = rows.where((row) => row.isViewed).length;
+                  final failedCount = rows
+                      .where((row) => row.notificationStatus == 'FAILED')
+                      .length;
+
+                  return Column(
+                    children: [
+                      Row(
+                        children: [
+                          Expanded(
+                            child: _HistorySummaryTile(
+                              label: 'Sent',
+                              value: '$sentCount/${rows.length}',
+                              color: SaaptTheme.success,
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: _HistorySummaryTile(
+                              label: 'Viewed',
+                              value: '$viewedCount',
+                              color: SaaptTheme.primary,
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: _HistorySummaryTile(
+                              label: 'Failed',
+                              value: '$failedCount',
+                              color: const Color(0xFFE5484D),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 12),
+                      Expanded(
+                        child: ListView.separated(
+                          itemCount: rows.length,
+                          separatorBuilder: (_, _) =>
+                              const SizedBox(height: 10),
+                          itemBuilder: (context, index) =>
+                              _NotificationHistoryRowTile(row: rows[index]),
+                        ),
+                      ),
+                    ],
+                  );
+                },
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _HistorySummaryTile extends StatelessWidget {
+  const _HistorySummaryTile({
+    required this.label,
+    required this.value,
+    required this.color,
+  });
+
+  final String label;
+  final String value;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) => Container(
+    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 12),
+    decoration: BoxDecoration(
+      color: color.withValues(alpha: 0.10),
+      borderRadius: BorderRadius.circular(12),
+      border: Border.all(color: color.withValues(alpha: 0.16)),
+    ),
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          label,
+          style: TextStyle(
+            color: color,
+            fontSize: 11,
+            fontWeight: FontWeight.w900,
+          ),
+        ),
+        const SizedBox(height: 4),
+        Text(
+          value,
+          style: const TextStyle(
+            color: SaaptTheme.navy,
+            fontSize: 18,
+            fontWeight: FontWeight.w900,
+          ),
+        ),
+      ],
+    ),
+  );
+}
+
+class _NotificationHistoryRowTile extends StatelessWidget {
+  const _NotificationHistoryRowTile({required this.row});
+
+  final HomeworkNotificationHistoryRow row;
+
+  @override
+  Widget build(BuildContext context) {
+    final statusColor = _notificationStatusColor(row.notificationStatus);
+    return _Card(
+      padding: const EdgeInsets.all(14),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      row.parentName,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        color: SaaptTheme.navy,
+                        fontSize: 15,
+                        fontWeight: FontWeight.w900,
+                      ),
+                    ),
+                    const SizedBox(height: 3),
+                    Text(
+                      '${row.studentName}${row.admissionNo == null ? '' : ' - ${row.admissionNo}'}',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        color: Color(0xFF667695),
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 8),
+              _StatusBadge(
+                label: _statusLabel(row.notificationStatus),
+                color: statusColor,
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              _HistoryChip(
+                icon: row.isViewed
+                    ? Icons.done_all_rounded
+                    : Icons.visibility_off_rounded,
+                label: row.isViewed ? 'Viewed' : 'Not viewed',
+                color: row.isViewed
+                    ? SaaptTheme.success
+                    : const Color(0xFF8A97AD),
+              ),
+              if (row.sentAt != null)
+                _HistoryChip(
+                  icon: Icons.notifications_active_rounded,
+                  label: _formatHistoryTime(row.sentAt),
+                  color: SaaptTheme.primary,
+                ),
+              if (row.viewedAt != null)
+                _HistoryChip(
+                  icon: Icons.schedule_rounded,
+                  label: _formatHistoryTime(row.viewedAt),
+                  color: SaaptTheme.success,
+                ),
+            ],
+          ),
+          if (row.notificationError?.trim().isNotEmpty == true) ...[
+            const SizedBox(height: 10),
+            Text(
+              row.notificationError!,
+              style: const TextStyle(
+                color: Color(0xFFE5484D),
+                fontSize: 12,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+class _HistoryChip extends StatelessWidget {
+  const _HistoryChip({
+    required this.icon,
+    required this.label,
+    required this.color,
+  });
+
+  final IconData icon;
+  final String label;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) => Container(
+    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+    decoration: BoxDecoration(
+      color: color.withValues(alpha: 0.10),
+      borderRadius: BorderRadius.circular(18),
+    ),
+    child: Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Icon(icon, size: 15, color: color),
+        const SizedBox(width: 5),
+        Text(
+          label,
+          style: TextStyle(
+            color: color,
+            fontSize: 11,
+            fontWeight: FontWeight.w900,
+          ),
+        ),
+      ],
+    ),
+  );
+}
+
+Color _notificationStatusColor(String status) {
+  switch (status) {
+    case 'SENT':
+      return SaaptTheme.success;
+    case 'FAILED':
+      return const Color(0xFFE5484D);
+    case 'QUEUED':
+      return const Color(0xFFE6A700);
+    default:
+      return const Color(0xFF8A97AD);
+  }
+}
+
+String _statusLabel(String status) {
+  switch (status) {
+    case 'SENT':
+      return 'Sent';
+    case 'FAILED':
+      return 'Failed';
+    case 'QUEUED':
+      return 'Queued';
+    default:
+      return 'Not sent';
+  }
+}
+
+String _formatHistoryTime(DateTime? value) {
+  if (value == null) return '';
+  return DateFormat.MMMd().add_jm().format(value.toLocal());
 }
 
 class _AttachmentPicker extends StatelessWidget {
