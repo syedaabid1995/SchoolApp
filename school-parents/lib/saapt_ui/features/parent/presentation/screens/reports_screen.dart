@@ -22,24 +22,21 @@ class SaaptReportsScreen extends ConsumerStatefulWidget {
 
 class _SaaptReportsScreenState extends ConsumerState<SaaptReportsScreen> {
   _ReportKind _kind = _ReportKind.performance;
-  String? _selectedChildId;
   String? _selectedExamId;
   DateTime _selectedMonth = DateTime(DateTime.now().year, DateTime.now().month);
   bool _savingReport = false;
 
   @override
   Widget build(BuildContext context) {
-    final childrenState = ref.watch(parentChildrenProvider);
+    final selectedChildState = ref.watch(effectiveSelectedChildProvider);
 
     return Scaffold(
-      body: childrenState.when(
+      body: selectedChildState.when(
         loading: () => const LoadingPanel(),
         error: (error, _) => EmptyPanel(message: error.toString()),
-        data: (children) {
-          final selectedChild = _selectedChild(children);
+        data: (selectedChild) {
           return RefreshIndicator(
             onRefresh: () async {
-              ref.invalidate(parentChildrenProvider);
               if (selectedChild != null) {
                 ref.invalidate(parentResultsProvider(selectedChild));
                 ref.invalidate(
@@ -77,31 +74,22 @@ class _SaaptReportsScreenState extends ConsumerState<SaaptReportsScreen> {
                         onChanged: (value) => setState(() => _kind = value),
                       ),
                       const SizedBox(height: 18),
-                      if (children.isEmpty)
+                      if (selectedChild == null)
                         const EmptyPanel(
-                          message:
-                              'No children are mapped to this parent account.',
-                        )
-                      else if (selectedChild == null)
-                        const EmptyPanel(
-                          message: 'Select a child to view reports.',
+                          message: 'Select a child from Home to view reports.',
                         )
                       else if (_kind == _ReportKind.performance)
                         _PerformanceReportView(
                           child: selectedChild,
-                          children: children,
                           selectedExamId: _selectedExamId,
-                          onChildChanged: _handleChildChanged,
                           onExamChanged: (examId) =>
                               setState(() => _selectedExamId = examId),
                         )
                       else
                         _AttendanceReportView(
                           child: selectedChild,
-                          children: children,
                           selectedMonth: _selectedMonth,
                           savingReport: _savingReport,
-                          onChildChanged: _handleChildChanged,
                           onMonthChanged: (month) => setState(
                             () => _selectedMonth = DateTime(
                               month.year,
@@ -119,28 +107,6 @@ class _SaaptReportsScreenState extends ConsumerState<SaaptReportsScreen> {
         },
       ),
     );
-  }
-
-  ParentChild? _selectedChild(List<ParentChild> children) {
-    if (children.isEmpty) return null;
-    final effective = ref.watch(selectedChildProvider);
-    final preferredId = _selectedChildId ?? effective?.id;
-    if (preferredId != null) {
-      for (final child in children) {
-        if (child.id == preferredId) return child;
-      }
-    }
-    return children.first;
-  }
-
-  void _handleChildChanged(String childId, List<ParentChild> children) {
-    final child = children.where((item) => item.id == childId).firstOrNull;
-    if (child == null) return;
-    setState(() {
-      _selectedChildId = child.id;
-      _selectedExamId = null;
-    });
-    ref.read(selectedChildProvider.notifier).state = child;
   }
 
   Future<void> _downloadAttendanceReport(
@@ -267,17 +233,12 @@ class _SwitchButton extends StatelessWidget {
 class _PerformanceReportView extends ConsumerWidget {
   const _PerformanceReportView({
     required this.child,
-    required this.children,
     required this.selectedExamId,
-    required this.onChildChanged,
     required this.onExamChanged,
   });
 
   final ParentChild child;
-  final List<ParentChild> children;
   final String? selectedExamId;
-  final void Function(String childId, List<ParentChild> children)
-  onChildChanged;
   final ValueChanged<String?> onExamChanged;
 
   @override
@@ -286,11 +247,7 @@ class _PerformanceReportView extends ConsumerWidget {
     return resultsState.when(
       loading: () => Column(
         children: [
-          _SelectionPanel(
-            child: child,
-            children: children,
-            onChildChanged: onChildChanged,
-          ),
+          _SelectionPanel(child: child),
           const SizedBox(height: 18),
           const LoadingPanel(),
         ],
@@ -303,10 +260,8 @@ class _PerformanceReportView extends ConsumerWidget {
           children: [
             _SelectionPanel(
               child: child,
-              children: children,
               results: results,
               selectedResult: selectedResult,
-              onChildChanged: onChildChanged,
               onExamChanged: onExamChanged,
             ),
             const SizedBox(height: 18),
@@ -367,20 +322,15 @@ class _PerformanceReportView extends ConsumerWidget {
 class _AttendanceReportView extends ConsumerWidget {
   const _AttendanceReportView({
     required this.child,
-    required this.children,
     required this.selectedMonth,
     required this.savingReport,
-    required this.onChildChanged,
     required this.onMonthChanged,
     required this.onDownload,
   });
 
   final ParentChild child;
-  final List<ParentChild> children;
   final DateTime selectedMonth;
   final bool savingReport;
-  final void Function(String childId, List<ParentChild> children)
-  onChildChanged;
   final ValueChanged<DateTime> onMonthChanged;
   final Future<void> Function(ParentChild child, ParentAttendance attendance)
   onDownload;
@@ -399,9 +349,7 @@ class _AttendanceReportView extends ConsumerWidget {
       children: [
         _SelectionPanel(
           child: child,
-          children: children,
           selectedMonth: selectedMonth,
-          onChildChanged: onChildChanged,
           onMonthChanged: onMonthChanged,
         ),
         const SizedBox(height: 18),
@@ -479,8 +427,6 @@ class _AttendanceReportView extends ConsumerWidget {
 class _SelectionPanel extends StatelessWidget {
   const _SelectionPanel({
     required this.child,
-    required this.children,
-    required this.onChildChanged,
     this.results = const [],
     this.selectedResult,
     this.selectedMonth,
@@ -489,12 +435,9 @@ class _SelectionPanel extends StatelessWidget {
   });
 
   final ParentChild child;
-  final List<ParentChild> children;
   final List<ParentResult> results;
   final ParentResult? selectedResult;
   final DateTime? selectedMonth;
-  final void Function(String childId, List<ParentChild> children)
-  onChildChanged;
   final ValueChanged<String?>? onExamChanged;
   final ValueChanged<DateTime>? onMonthChanged;
 
@@ -504,22 +447,7 @@ class _SelectionPanel extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          _FieldLabel('Select Child'),
-          const SizedBox(height: 10),
-          _DropdownField<String>(
-            value: child.id,
-            items: children
-                .map(
-                  (item) => DropdownMenuItem(
-                    value: item.id,
-                    child: Text('${item.name} - ${item.classLabel}'),
-                  ),
-                )
-                .toList(),
-            onChanged: (value) {
-              if (value != null) onChildChanged(value, children);
-            },
-          ),
+          _SelectedChildPanel(child: child),
           if (onExamChanged != null) ...[
             const SizedBox(height: 20),
             _FieldLabel('Select Exam'),
@@ -566,6 +494,77 @@ class _FieldLabel extends StatelessWidget {
         color: Color(0xFF9BADCA),
         fontSize: 12,
         fontWeight: FontWeight.w900,
+      ),
+    );
+  }
+}
+
+class _SelectedChildPanel extends StatelessWidget {
+  const _SelectedChildPanel({required this.child});
+
+  final ParentChild child;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: const Color(0xFFF7F9FE),
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: const Color(0xFFDCE7FA), width: 2),
+      ),
+      child: Row(
+        children: [
+          Container(
+            width: 44,
+            height: 44,
+            alignment: Alignment.center,
+            decoration: BoxDecoration(
+              color: const Color(0xFFEAF1FF),
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(color: const Color(0xFFD5E2FF)),
+            ),
+            child: const Icon(Icons.person_rounded, color: SaaptTheme.primary),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'Selected Child',
+                  style: TextStyle(
+                    color: Color(0xFF9BADCA),
+                    fontSize: 12,
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  child.name,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    color: SaaptTheme.navy,
+                    fontSize: 16,
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  child.classLabel,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    color: Color(0xFF60708F),
+                    fontSize: 13,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
       ),
     );
   }

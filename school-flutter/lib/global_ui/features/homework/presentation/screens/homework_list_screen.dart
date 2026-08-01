@@ -13,6 +13,7 @@ import '../../domain/entities/homework.dart';
 import '../providers/homework_providers.dart';
 import 'homework_create_screen.dart';
 import 'homework_detail_screen.dart';
+import 'homework_evaluation_screen.dart';
 
 class HomeworkListScreen extends ConsumerStatefulWidget {
   const HomeworkListScreen({super.key});
@@ -31,6 +32,9 @@ class _HomeworkListScreenState extends ConsumerState<HomeworkListScreen> {
     final checker = ref.watch(currentPermissionCheckerProvider);
     final canCreate = checker.canPerformAction(
       PermissionActionIds.createHomework,
+    );
+    final canEvaluate = checker.canPerformAction(
+      PermissionActionIds.editHomework,
     );
 
     return AppScaffold(
@@ -58,6 +62,7 @@ class _HomeworkListScreenState extends ConsumerState<HomeworkListScreen> {
           homeworks: homeworks,
           filter: _filter,
           canCreate: canCreate,
+          canEvaluate: canEvaluate,
           onFilterChanged: (f) => setState(() => _filter = f),
           onRefresh: () => ref.invalidate(homeworkListProvider(_filter)),
         ),
@@ -72,6 +77,7 @@ class _HomeworkContent extends StatelessWidget {
     required this.homeworks,
     required this.filter,
     required this.canCreate,
+    required this.canEvaluate,
     required this.onFilterChanged,
     required this.onRefresh,
   });
@@ -80,6 +86,7 @@ class _HomeworkContent extends StatelessWidget {
   final AsyncValue<List<Homework>> homeworks;
   final HomeworkFilter filter;
   final bool canCreate;
+  final bool canEvaluate;
   final ValueChanged<HomeworkFilter> onFilterChanged;
   final VoidCallback onRefresh;
 
@@ -102,6 +109,7 @@ class _HomeworkContent extends StatelessWidget {
               data: (items) => _HomeworkList(
                 items: items,
                 assignmentData: assignmentData,
+                canEvaluate: canEvaluate,
                 onRefresh: onRefresh,
               ),
             ),
@@ -145,10 +153,26 @@ class _FilterRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final sections = assignments.sectionsForClass(filter.classId);
+    final subjects = assignments.subjectsForClass(
+      filter.classId,
+      sectionId: filter.sectionId,
+    );
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
+        _DateFilterCard(
+          date: filter.homeworkDate,
+          onChanged: (date) => onChanged(
+            HomeworkFilter(
+              classId: filter.classId,
+              sectionId: filter.sectionId,
+              subjectId: filter.subjectId,
+              homeworkDate: date,
+            ),
+          ),
+        ),
+        const SizedBox(height: AppSpacing.sm),
         // Class chips
         SizedBox(
           height: 36,
@@ -158,13 +182,20 @@ class _FilterRow extends StatelessWidget {
               _FilterChip(
                 label: 'All Classes',
                 selected: filter.classId == null,
-                onTap: () => onChanged(const HomeworkFilter()),
+                onTap: () => onChanged(
+                  HomeworkFilter(homeworkDate: filter.homeworkDate),
+                ),
               ),
               for (final cls in assignments.classes)
                 _FilterChip(
                   label: cls.name,
                   selected: filter.classId == cls.id,
-                  onTap: () => onChanged(HomeworkFilter(classId: cls.id)),
+                  onTap: () => onChanged(
+                    HomeworkFilter(
+                      classId: cls.id,
+                      homeworkDate: filter.homeworkDate,
+                    ),
+                  ),
                 ),
             ],
           ),
@@ -179,7 +210,12 @@ class _FilterRow extends StatelessWidget {
                 _FilterChip(
                   label: 'All Sections',
                   selected: filter.sectionId == null,
-                  onTap: () => onChanged(HomeworkFilter(classId: filter.classId)),
+                  onTap: () => onChanged(
+                    HomeworkFilter(
+                      classId: filter.classId,
+                      homeworkDate: filter.homeworkDate,
+                    ),
+                  ),
                 ),
                 for (final sec in sections)
                   _FilterChip(
@@ -189,6 +225,44 @@ class _FilterRow extends StatelessWidget {
                       HomeworkFilter(
                         classId: filter.classId,
                         sectionId: sec.id,
+                        homeworkDate: filter.homeworkDate,
+                      ),
+                    ),
+                  ),
+              ],
+            ),
+          ),
+        ],
+        if (filter.classId != null &&
+            filter.sectionId != null &&
+            subjects.isNotEmpty) ...[
+          const SizedBox(height: AppSpacing.xs),
+          SizedBox(
+            height: 36,
+            child: ListView(
+              scrollDirection: Axis.horizontal,
+              children: [
+                _FilterChip(
+                  label: 'All Subjects',
+                  selected: filter.subjectId == null,
+                  onTap: () => onChanged(
+                    HomeworkFilter(
+                      classId: filter.classId,
+                      sectionId: filter.sectionId,
+                      homeworkDate: filter.homeworkDate,
+                    ),
+                  ),
+                ),
+                for (final subject in subjects)
+                  _FilterChip(
+                    label: subject.name,
+                    selected: filter.subjectId == subject.id,
+                    onTap: () => onChanged(
+                      HomeworkFilter(
+                        classId: filter.classId,
+                        sectionId: filter.sectionId,
+                        subjectId: subject.id,
+                        homeworkDate: filter.homeworkDate,
                       ),
                     ),
                   ),
@@ -197,6 +271,71 @@ class _FilterRow extends StatelessWidget {
           ),
         ],
       ],
+    );
+  }
+}
+
+class _DateFilterCard extends StatelessWidget {
+  const _DateFilterCard({required this.date, required this.onChanged});
+
+  final DateTime? date;
+  final ValueChanged<DateTime?> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+    final textTheme = Theme.of(context).textTheme;
+    return Container(
+      padding: const EdgeInsets.all(AppSpacing.sm),
+      decoration: BoxDecoration(
+        color: colorScheme.surface,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: colorScheme.outlineVariant),
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            child: InkWell(
+              borderRadius: BorderRadius.circular(12),
+              onTap: () async {
+                final picked = await showDatePicker(
+                  context: context,
+                  firstDate: DateTime.now().subtract(const Duration(days: 365)),
+                  lastDate: DateTime.now().add(const Duration(days: 365)),
+                  initialDate: date ?? DateTime.now(),
+                );
+                if (picked != null) onChanged(picked);
+              },
+              child: Padding(
+                padding: const EdgeInsets.symmetric(vertical: AppSpacing.xs),
+                child: Row(
+                  children: [
+                    Icon(
+                      Icons.calendar_month_outlined,
+                      color: colorScheme.primary,
+                    ),
+                    const SizedBox(width: AppSpacing.xs),
+                    Text(
+                      date == null
+                          ? 'All homework dates'
+                          : DateFormat.yMMMd().format(date!),
+                      style: textTheme.labelLarge?.copyWith(
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+          if (date != null)
+            IconButton(
+              tooltip: 'Clear date',
+              icon: const Icon(Icons.close),
+              onPressed: () => onChanged(null),
+            ),
+        ],
+      ),
     );
   }
 }
@@ -234,12 +373,11 @@ class _FilterChip extends StatelessWidget {
           child: Text(
             label,
             style: Theme.of(context).textTheme.labelMedium?.copyWith(
-                  color: selected
-                      ? colorScheme.onPrimary
-                      : colorScheme.onSurface.withValues(alpha: 0.7),
-                  fontWeight:
-                      selected ? FontWeight.w700 : FontWeight.w500,
-                ),
+              color: selected
+                  ? colorScheme.onPrimary
+                  : colorScheme.onSurface.withValues(alpha: 0.7),
+              fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
+            ),
           ),
         ),
       ),
@@ -251,11 +389,13 @@ class _HomeworkList extends StatelessWidget {
   const _HomeworkList({
     required this.items,
     required this.assignmentData,
+    required this.canEvaluate,
     required this.onRefresh,
   });
 
   final List<Homework> items;
   final ClassAssignments assignmentData;
+  final bool canEvaluate;
   final VoidCallback onRefresh;
 
   @override
@@ -269,6 +409,7 @@ class _HomeworkList extends StatelessWidget {
           _HomeworkCard(
             homework: item,
             assignmentData: assignmentData,
+            canEvaluate: canEvaluate,
             onRefresh: onRefresh,
           ),
           const SizedBox(height: AppSpacing.sm),
@@ -282,11 +423,13 @@ class _HomeworkCard extends StatelessWidget {
   const _HomeworkCard({
     required this.homework,
     required this.assignmentData,
+    required this.canEvaluate,
     required this.onRefresh,
   });
 
   final Homework homework;
   final ClassAssignments assignmentData;
+  final bool canEvaluate;
   final VoidCallback onRefresh;
 
   @override
@@ -297,19 +440,19 @@ class _HomeworkCard extends StatelessWidget {
     final isOverdue = homework.submissionDate.isBefore(
       DateTime(now.year, now.month, now.day),
     );
-    final isDueSoon = !isOverdue &&
-        homework.submissionDate.difference(now).inDays <= 2;
+    final isDueSoon =
+        !isOverdue && homework.submissionDate.difference(now).inDays <= 2;
 
     final dueBadgeColor = isOverdue
         ? colorScheme.errorContainer
         : isDueSoon
-            ? colorScheme.tertiaryContainer
-            : colorScheme.secondaryContainer;
+        ? colorScheme.tertiaryContainer
+        : colorScheme.secondaryContainer;
     final dueBadgeTextColor = isOverdue
         ? colorScheme.onErrorContainer
         : isDueSoon
-            ? colorScheme.onTertiaryContainer
-            : colorScheme.onSecondaryContainer;
+        ? colorScheme.onTertiaryContainer
+        : colorScheme.onSecondaryContainer;
 
     return InkWell(
       borderRadius: BorderRadius.circular(16),
@@ -377,9 +520,12 @@ class _HomeworkCard extends StatelessWidget {
                           borderRadius: BorderRadius.circular(6),
                         ),
                         child: Text(
-                          '${homework.className ?? ''} ${homework.sectionName ?? ''}'.trim(),
+                          '${homework.className ?? ''} ${homework.sectionName ?? ''}'
+                              .trim(),
                           style: textTheme.labelSmall?.copyWith(
-                            color: colorScheme.onSurface.withValues(alpha: 0.65),
+                            color: colorScheme.onSurface.withValues(
+                              alpha: 0.65,
+                            ),
                           ),
                         ),
                       ),
@@ -396,7 +542,9 @@ class _HomeworkCard extends StatelessWidget {
                         child: Text(
                           '${homework.marks} marks',
                           style: textTheme.labelSmall?.copyWith(
-                            color: colorScheme.onSurface.withValues(alpha: 0.65),
+                            color: colorScheme.onSurface.withValues(
+                              alpha: 0.65,
+                            ),
                           ),
                         ),
                       ),
@@ -420,6 +568,25 @@ class _HomeworkCard extends StatelessWidget {
                       ),
                     ],
                   ),
+                  if (canEvaluate) ...[
+                    const SizedBox(height: AppSpacing.xs),
+                    Align(
+                      alignment: Alignment.centerLeft,
+                      child: TextButton.icon(
+                        icon: const Icon(Icons.fact_check_outlined, size: 16),
+                        label: const Text('Evaluate'),
+                        onPressed: () async {
+                          await Navigator.of(context).push(
+                            MaterialPageRoute<void>(
+                              builder: (_) =>
+                                  HomeworkEvaluationScreen(homework: homework),
+                            ),
+                          );
+                          onRefresh();
+                        },
+                      ),
+                    ),
+                  ],
                 ],
               ),
             ),
@@ -433,7 +600,11 @@ class _HomeworkCard extends StatelessWidget {
                 borderRadius: BorderRadius.circular(8),
               ),
               child: Text(
-                isOverdue ? 'Overdue' : isDueSoon ? 'Due Soon' : 'Active',
+                isOverdue
+                    ? 'Overdue'
+                    : isDueSoon
+                    ? 'Due Soon'
+                    : 'Active',
                 style: textTheme.labelSmall?.copyWith(
                   color: dueBadgeTextColor,
                   fontWeight: FontWeight.w700,
@@ -469,8 +640,8 @@ class _EmptyState extends StatelessWidget {
           Text(
             'No homework found.',
             style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                  color: colorScheme.onSurface.withValues(alpha: 0.45),
-                ),
+              color: colorScheme.onSurface.withValues(alpha: 0.45),
+            ),
           ),
         ],
       ),

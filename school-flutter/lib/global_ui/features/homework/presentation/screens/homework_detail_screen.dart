@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../../../../app/theme/app_spacing.dart';
 import '../../../../core/permissions/permission_registry.dart';
@@ -11,6 +12,7 @@ import '../../../classes/domain/entities/class_assignment.dart';
 import '../../domain/entities/homework.dart';
 import '../providers/homework_providers.dart';
 import 'homework_create_screen.dart';
+import 'homework_evaluation_screen.dart';
 
 class HomeworkDetailScreen extends ConsumerWidget {
   const HomeworkDetailScreen({
@@ -26,7 +28,9 @@ class HomeworkDetailScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final checker = ref.watch(currentPermissionCheckerProvider);
     final canEdit = checker.canPerformAction(PermissionActionIds.editHomework);
-    final canDelete = checker.canPerformAction(PermissionActionIds.deleteHomework);
+    final canDelete = checker.canPerformAction(
+      PermissionActionIds.deleteHomework,
+    );
     final state = ref.watch(homeworkMutationProvider);
     final colorScheme = Theme.of(context).colorScheme;
     final textTheme = Theme.of(context).textTheme;
@@ -86,7 +90,8 @@ class HomeworkDetailScreen extends ConsumerWidget {
                       ),
                       const SizedBox(height: AppSpacing.xxs),
                       Text(
-                        '${homework.className ?? ''} ${homework.sectionName ?? ''}'.trim(),
+                        '${homework.className ?? ''} ${homework.sectionName ?? ''}'
+                            .trim(),
                         style: textTheme.bodyMedium?.copyWith(
                           color: colorScheme.onSurface.withValues(alpha: 0.65),
                         ),
@@ -158,7 +163,11 @@ class HomeworkDetailScreen extends ConsumerWidget {
             children: [
               Row(
                 children: [
-                  Icon(Icons.notes_outlined, size: 18, color: colorScheme.primary),
+                  Icon(
+                    Icons.notes_outlined,
+                    size: 18,
+                    color: colorScheme.primary,
+                  ),
                   const SizedBox(width: AppSpacing.xs),
                   Text(
                     'Description',
@@ -180,70 +189,111 @@ class HomeworkDetailScreen extends ConsumerWidget {
             ],
           ),
 
+          if (homework.attachmentUrl != null &&
+              homework.attachmentUrl!.trim().isNotEmpty) ...[
+            const SizedBox(height: AppSpacing.md),
+            _SectionCard(
+              children: [
+                ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  leading: Icon(
+                    Icons.attach_file_outlined,
+                    color: colorScheme.primary,
+                  ),
+                  title: Text(homework.attachmentName ?? 'Attachment'),
+                  trailing: const Icon(Icons.open_in_new),
+                  onTap: () => launchUrl(
+                    Uri.parse(homework.attachmentUrl!),
+                    mode: LaunchMode.externalApplication,
+                  ),
+                ),
+              ],
+            ),
+          ],
+
           // ── Actions ──────────────────────────────────────────────────
           if (canEdit || canDelete) ...[
             const SizedBox(height: AppSpacing.lg),
-            Row(
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                if (canEdit)
-                  Expanded(
-                    child: OutlinedButton.icon(
-                      icon: const Icon(Icons.edit_outlined),
-                      label: const Text('Edit'),
-                      style: OutlinedButton.styleFrom(
-                        padding: const EdgeInsets.symmetric(
-                          vertical: AppSpacing.sm,
-                        ),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                      ),
-                      onPressed: () => Navigator.of(context).push(
-                        MaterialPageRoute<void>(
-                          builder: (_) => HomeworkCreateScreen(
-                            assignments: assignments,
-                            homework: homework,
-                          ),
-                        ),
+                if (canEdit) ...[
+                  AppButton(
+                    label: 'Evaluate',
+                    icon: Icons.fact_check_outlined,
+                    onPressed: () => Navigator.of(context).push(
+                      MaterialPageRoute<void>(
+                        builder: (_) =>
+                            HomeworkEvaluationScreen(homework: homework),
                       ),
                     ),
                   ),
-                if (canEdit && canDelete) const SizedBox(width: AppSpacing.sm),
-                if (canDelete)
-                  Expanded(
-                    child: AppButton(
-                      label: 'Delete',
-                      icon: Icons.delete_outline,
-                      isLoading: state.isLoading,
-                      onPressed: () async {
-                        final confirmed = await showDialog<bool>(
-                          context: context,
-                          builder: (ctx) => AlertDialog(
-                            title: const Text('Delete Homework'),
-                            content: const Text(
-                              'Are you sure you want to delete this homework?',
+                  const SizedBox(height: AppSpacing.sm),
+                ],
+                Row(
+                  children: [
+                    if (canEdit)
+                      Expanded(
+                        child: OutlinedButton.icon(
+                          icon: const Icon(Icons.edit_outlined),
+                          label: const Text('Edit'),
+                          style: OutlinedButton.styleFrom(
+                            padding: const EdgeInsets.symmetric(
+                              vertical: AppSpacing.sm,
                             ),
-                            actions: [
-                              TextButton(
-                                onPressed: () => Navigator.pop(ctx, false),
-                                child: const Text('Cancel'),
-                              ),
-                              TextButton(
-                                onPressed: () => Navigator.pop(ctx, true),
-                                child: const Text('Delete'),
-                              ),
-                            ],
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(12),
+                            ),
                           ),
-                        );
-                        if (confirmed == true) {
-                          await ref
-                              .read(homeworkMutationProvider.notifier)
-                              .delete(homework.id);
-                          if (context.mounted) Navigator.of(context).pop();
-                        }
-                      },
-                    ),
-                  ),
+                          onPressed: () => Navigator.of(context).push(
+                            MaterialPageRoute<void>(
+                              builder: (_) => HomeworkCreateScreen(
+                                assignments: assignments,
+                                homework: homework,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                    if (canEdit && canDelete)
+                      const SizedBox(width: AppSpacing.sm),
+                    if (canDelete)
+                      Expanded(
+                        child: AppButton(
+                          label: 'Delete',
+                          icon: Icons.delete_outline,
+                          isLoading: state.isLoading,
+                          onPressed: () async {
+                            final confirmed = await showDialog<bool>(
+                              context: context,
+                              builder: (ctx) => AlertDialog(
+                                title: const Text('Delete Homework'),
+                                content: const Text(
+                                  'Are you sure you want to delete this homework?',
+                                ),
+                                actions: [
+                                  TextButton(
+                                    onPressed: () => Navigator.pop(ctx, false),
+                                    child: const Text('Cancel'),
+                                  ),
+                                  TextButton(
+                                    onPressed: () => Navigator.pop(ctx, true),
+                                    child: const Text('Delete'),
+                                  ),
+                                ],
+                              ),
+                            );
+                            if (confirmed == true) {
+                              await ref
+                                  .read(homeworkMutationProvider.notifier)
+                                  .delete(homework.id);
+                              if (context.mounted) Navigator.of(context).pop();
+                            }
+                          },
+                        ),
+                      ),
+                  ],
+                ),
               ],
             ),
           ],

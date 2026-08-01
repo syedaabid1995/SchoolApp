@@ -16,7 +16,6 @@ class ParentLeaveScreen extends ConsumerStatefulWidget {
 
 class _ParentLeaveScreenState extends ConsumerState<ParentLeaveScreen> {
   bool _applying = false;
-  String? _childId;
   String _leaveType = 'Sick Leave';
   DateTime _fromDate = DateTime.now();
   DateTime _toDate = DateTime.now();
@@ -31,56 +30,88 @@ class _ParentLeaveScreenState extends ConsumerState<ParentLeaveScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final childrenState = ref.watch(parentChildrenProvider);
-    final selectedChild = ref.watch(effectiveSelectedChildProvider).value;
-    final leaveCenter = ref.watch(parentLeaveCenterProvider(selectedChild));
+    final selectedChildState = ref.watch(effectiveSelectedChildProvider);
     return Scaffold(
-      body: RefreshIndicator(
-        onRefresh: () async {
-          ref.invalidate(parentLeaveCenterProvider(selectedChild));
-          await ref.read(parentLeaveCenterProvider(selectedChild).future);
+      body: selectedChildState.when(
+        loading: () => const LoadingPanel(),
+        error: (error, _) => EmptyPanel(message: parentApiError(error)),
+        data: (selectedChild) {
+          if (selectedChild == null) {
+            return const EmptyPanel(
+              message: 'Select a child from Home to view leave requests.',
+            );
+          }
+          final leaveCenter = ref.watch(
+            parentLeaveCenterProvider(selectedChild),
+          );
+          return RefreshIndicator(
+            onRefresh: () async {
+              ref.invalidate(parentLeaveCenterProvider(selectedChild));
+              await ref.read(parentLeaveCenterProvider(selectedChild).future);
+            },
+            child: CustomScrollView(
+              slivers: [
+                SliverToBoxAdapter(
+                  child: ParentHero(
+                    badge: _applying ? '📝 Leave Request' : '✅ Leave Status',
+                    title: _applying ? 'Request Leave' : 'Leave Requests',
+                    subtitle: _applying
+                        ? 'Submit leave request to school'
+                        : 'Track submitted leave requests',
+                    showDefaultTrailing: !_applying,
+                    leading: _applying
+                        ? IconButton(
+                            tooltip: 'Back',
+                            style: IconButton.styleFrom(
+                              backgroundColor: Colors.white.withValues(
+                                alpha: 0.16,
+                              ),
+                              foregroundColor: Colors.white,
+                            ),
+                            onPressed: _submitting
+                                ? null
+                                : () => setState(() => _applying = false),
+                            icon: const Icon(Icons.arrow_back_rounded),
+                          )
+                        : null,
+                  ),
+                ),
+                SliverPadding(
+                  padding: const EdgeInsets.fromLTRB(20, 20, 20, 28),
+                  sliver: SliverToBoxAdapter(
+                    child: _applying
+                        ? _buildApplyForm(selectedChild, leaveCenter.value)
+                        : _buildHistory(leaveCenter, selectedChild),
+                  ),
+                ),
+              ],
+            ),
+          );
         },
-        child: CustomScrollView(
-          slivers: [
-            SliverToBoxAdapter(
-              child: ParentHero(
-                badge: _applying ? '📝 Leave Request' : '✅ Leave Status',
-                title: _applying ? 'Request Leave' : 'Leave Requests',
-                subtitle: _applying
-                    ? 'Submit leave request to school'
-                    : 'Track submitted leave requests',
-              ),
-            ),
-            SliverPadding(
-              padding: const EdgeInsets.fromLTRB(20, 20, 20, 28),
-              sliver: SliverToBoxAdapter(
-                child: _applying
-                    ? _buildApplyForm(childrenState, leaveCenter.value)
-                    : _buildHistory(leaveCenter, selectedChild),
-              ),
-            ),
-          ],
-        ),
       ),
     );
   }
 
   Widget _buildHistory(
     AsyncValue<ParentLeaveCenter> leaveCenter,
-    ParentChild? selectedChild,
+    ParentChild selectedChild,
   ) {
     return leaveCenter.when(
       loading: () => const LoadingPanel(),
       error: (error, _) => EmptyPanel(message: parentApiError(error)),
       data: (center) {
-        final items = center.items;
+        final items = center.items
+            .where((item) => item.childId == selectedChild.id)
+            .toList();
         return Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
+            _SelectedChildPanel(child: selectedChild),
+            const SizedBox(height: 18),
             Row(
               children: [
                 StatCard(
-                  value: center.total.toString(),
+                  value: items.length.toString(),
                   label: 'Total Leave Requests',
                 ),
                 const SizedBox(width: 14),
@@ -103,14 +134,10 @@ class _ParentLeaveScreenState extends ConsumerState<ParentLeaveScreen> {
                   borderRadius: BorderRadius.circular(18),
                 ),
               ),
-              onPressed: selectedChild == null
-                  ? null
-                  : () => setState(() {
-                      _applying = true;
-                      _childId = selectedChild.id;
-                      _leaveType =
-                          center.leaveTypes.firstOrNull ?? 'Sick Leave';
-                    }),
+              onPressed: () => setState(() {
+                _applying = true;
+                _leaveType = center.leaveTypes.firstOrNull ?? 'Sick Leave';
+              }),
               child: const Text(
                 'Apply Leave',
                 style: TextStyle(fontWeight: FontWeight.w900),
@@ -131,146 +158,96 @@ class _ParentLeaveScreenState extends ConsumerState<ParentLeaveScreen> {
   }
 
   Widget _buildApplyForm(
-    AsyncValue<List<ParentChild>> childrenState,
+    ParentChild selectedChild,
     ParentLeaveCenter? leaveCenter,
   ) {
-    return childrenState.when(
-      loading: () => const LoadingPanel(),
-      error: (error, _) => EmptyPanel(message: parentApiError(error)),
-      data: (children) {
-        if (children.isEmpty) {
-          return const EmptyPanel(
-            message: 'No children are linked to this account.',
-          );
-        }
-        final selectedChild = children.firstWhere(
-          (child) => child.id == _childId,
-          orElse: () => children.first,
-        );
-        _childId ??= selectedChild.id;
-        final leaveTypes = leaveCenter?.leaveTypes.isNotEmpty == true
-            ? leaveCenter!.leaveTypes
-            : const [
-                'Sick Leave',
-                'Medical Leave',
-                'Family Function',
-                'Medical Checkup',
-                'Others',
-              ];
-        if (!leaveTypes.contains(_leaveType)) _leaveType = leaveTypes.first;
-        return Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            ParentCard(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  _FieldLabel('SELECT CHILD'),
-                  _SelectBox(
-                    child: DropdownButtonHideUnderline(
-                      child: DropdownButton<String>(
-                        value: _childId,
-                        isExpanded: true,
-                        items: children
-                            .map(
-                              (child) => DropdownMenuItem(
-                                value: child.id,
-                                child: Text(
-                                  '${child.name} - ${child.classLabel}',
-                                ),
-                              ),
-                            )
-                            .toList(),
-                        onChanged: (value) => setState(() => _childId = value),
-                      ),
-                    ),
+    final leaveTypes = leaveCenter?.leaveTypes.isNotEmpty == true
+        ? leaveCenter!.leaveTypes
+        : const [
+            'Sick Leave',
+            'Medical Leave',
+            'Family Function',
+            'Medical Checkup',
+            'Others',
+          ];
+    if (!leaveTypes.contains(_leaveType)) _leaveType = leaveTypes.first;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        ParentCard(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              _SelectedChildPanel(child: selectedChild),
+              const SizedBox(height: 18),
+              _FieldLabel('LEAVE TYPE'),
+              _SelectBox(
+                child: DropdownButtonHideUnderline(
+                  child: DropdownButton<String>(
+                    value: _leaveType,
+                    isExpanded: true,
+                    items: leaveTypes
+                        .map(
+                          (type) =>
+                              DropdownMenuItem(value: type, child: Text(type)),
+                        )
+                        .toList(),
+                    onChanged: (value) =>
+                        setState(() => _leaveType = value ?? _leaveType),
                   ),
-                  const SizedBox(height: 18),
-                  _FieldLabel('LEAVE TYPE'),
-                  _SelectBox(
-                    child: DropdownButtonHideUnderline(
-                      child: DropdownButton<String>(
-                        value: _leaveType,
-                        isExpanded: true,
-                        items: leaveTypes
-                            .map(
-                              (type) => DropdownMenuItem(
-                                value: type,
-                                child: Text(type),
-                              ),
-                            )
-                            .toList(),
-                        onChanged: (value) =>
-                            setState(() => _leaveType = value ?? _leaveType),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 18),
-                  _FieldLabel('FROM DATE'),
-                  _DateBox(
-                    date: _fromDate,
-                    onTap: () async {
-                      final picked = await _pickDate(_fromDate);
-                      if (picked == null) return;
-                      setState(() {
-                        _fromDate = picked;
-                        if (_toDate.isBefore(_fromDate)) _toDate = picked;
-                      });
-                    },
-                  ),
-                  const SizedBox(height: 18),
-                  _FieldLabel('TO DATE'),
-                  _DateBox(
-                    date: _toDate,
-                    onTap: () async {
-                      final picked = await _pickDate(_toDate);
-                      if (picked == null) return;
-                      setState(() => _toDate = picked);
-                    },
-                  ),
-                  const SizedBox(height: 18),
-                  _FieldLabel('REASON'),
-                  TextField(
-                    controller: _reasonController,
-                    minLines: 4,
-                    maxLines: 6,
-                    decoration: _inputDecoration('Enter leave reason'),
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(height: 18),
-            ElevatedButton(
-              style: ElevatedButton.styleFrom(
-                minimumSize: const Size.fromHeight(54),
-                backgroundColor: SaaptTheme.primary,
-                foregroundColor: Colors.white,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(18),
                 ),
               ),
-              onPressed: _submitting ? null : _submit,
-              child: Text(
-                _submitting ? 'Submitting...' : 'Submit Leave Request',
-                style: const TextStyle(fontWeight: FontWeight.w900),
+              const SizedBox(height: 18),
+              _FieldLabel('FROM DATE'),
+              _DateBox(
+                date: _fromDate,
+                onTap: () async {
+                  final picked = await _pickDate(_fromDate);
+                  if (picked == null) return;
+                  setState(() {
+                    _fromDate = picked;
+                    if (_toDate.isBefore(_fromDate)) _toDate = picked;
+                  });
+                },
               ),
-            ),
-            const SizedBox(height: 10),
-            OutlinedButton(
-              style: OutlinedButton.styleFrom(
-                minimumSize: const Size.fromHeight(50),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(18),
-                ),
+              const SizedBox(height: 18),
+              _FieldLabel('TO DATE'),
+              _DateBox(
+                date: _toDate,
+                onTap: () async {
+                  final picked = await _pickDate(_toDate);
+                  if (picked == null) return;
+                  setState(() => _toDate = picked);
+                },
               ),
-              onPressed: _submitting
-                  ? null
-                  : () => setState(() => _applying = false),
-              child: const Text('Back to Leave Requests'),
+              const SizedBox(height: 18),
+              _FieldLabel('REASON'),
+              TextField(
+                controller: _reasonController,
+                minLines: 4,
+                maxLines: 6,
+                decoration: _inputDecoration('Enter leave reason'),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 18),
+        ElevatedButton(
+          style: ElevatedButton.styleFrom(
+            minimumSize: const Size.fromHeight(54),
+            backgroundColor: SaaptTheme.primary,
+            foregroundColor: Colors.white,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(18),
             ),
-          ],
-        );
-      },
+          ),
+          onPressed: _submitting ? null : () => _submit(selectedChild),
+          child: Text(
+            _submitting ? 'Submitting...' : 'Submit Leave Request',
+            style: const TextStyle(fontWeight: FontWeight.w900),
+          ),
+        ),
+      ],
     );
   }
 
@@ -284,13 +261,9 @@ class _ParentLeaveScreenState extends ConsumerState<ParentLeaveScreen> {
     );
   }
 
-  Future<void> _submit() async {
-    final childId = _childId;
+  Future<void> _submit(ParentChild selectedChild) async {
+    final childId = selectedChild.id;
     final reason = _reasonController.text.trim();
-    if (childId == null || childId.isEmpty) {
-      _showSnack('Select a child.');
-      return;
-    }
     if (_toDate.isBefore(_fromDate)) {
       _showSnack('To date must be after from date.');
       return;
@@ -470,6 +443,77 @@ class _FieldLabel extends StatelessWidget {
           fontWeight: FontWeight.w900,
           letterSpacing: 0,
         ),
+      ),
+    );
+  }
+}
+
+class _SelectedChildPanel extends StatelessWidget {
+  const _SelectedChildPanel({required this.child});
+
+  final ParentChild child;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: const Color(0xFFF7F9FE),
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: const Color(0xFFDDE7F7), width: 1.4),
+      ),
+      child: Row(
+        children: [
+          Container(
+            width: 44,
+            height: 44,
+            alignment: Alignment.center,
+            decoration: BoxDecoration(
+              color: const Color(0xFFEAF1FF),
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(color: const Color(0xFFD5E2FF)),
+            ),
+            child: const Icon(Icons.person_rounded, color: SaaptTheme.primary),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'Selected Child',
+                  style: TextStyle(
+                    color: Color(0xFF91A1BB),
+                    fontSize: 12,
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  child.name,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    color: Color(0xFF0F1D3A),
+                    fontSize: 16,
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  child.classLabel,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    color: Color(0xFF61718D),
+                    fontSize: 13,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
       ),
     );
   }

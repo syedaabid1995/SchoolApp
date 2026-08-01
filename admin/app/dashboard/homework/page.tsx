@@ -5,7 +5,8 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import PageHeader from '../../../components/PageHeader';
 import { useNotify } from '../../../components/NotificationProvider';
 import { getSession } from '../../../services/auth.service';
-import { listClasses, listSections, listSubjects } from '../../../services/academic.service';
+import { listClasses, listSections } from '../../../services/academic.service';
+import { listAssignSubjects } from '../../../services/academic-setup.service';
 import { listSchools } from '../../../services/school.service';
 import {
   createHomework,
@@ -24,6 +25,10 @@ import {
 } from '../../../services/homework.service';
 
 type AcademicOption = { id: string; name: string; classId?: string | null; code?: string | null };
+type SubjectAssignmentOption = {
+  subjectId: string;
+  subject?: { id: string; name: string; code?: string | null };
+};
 type TabId = 'homework' | 'report';
 type EvalMode = 'edit' | 'view';
 
@@ -165,25 +170,35 @@ export default function HomeworkPage() {
     queryFn: () => listClasses(scopedParams),
     enabled: canQuery,
   });
-  const subjectsQuery = useQuery({
-    queryKey: ['homework-subjects', effectiveSchoolId],
-    queryFn: () => listSubjects(scopedParams),
-    enabled: canQuery,
-  });
   const formSectionsQuery = useQuery({
     queryKey: ['homework-form-sections', effectiveSchoolId, homeworkForm.classId],
     queryFn: () => listSections({ ...scopedParams, classId: homeworkForm.classId }),
     enabled: canQuery && Boolean(homeworkForm.classId),
+  });
+  const formSubjectAssignmentsQuery = useQuery({
+    queryKey: ['homework-form-subject-assignments', effectiveSchoolId, homeworkForm.classId, homeworkForm.sectionId],
+    queryFn: () => listAssignSubjects({ ...scopedParams, classId: homeworkForm.classId, sectionId: homeworkForm.sectionId }),
+    enabled: canQuery && Boolean(homeworkForm.classId && homeworkForm.sectionId),
   });
   const filterSectionsQuery = useQuery({
     queryKey: ['homework-filter-sections', effectiveSchoolId, filters.classId],
     queryFn: () => listSections({ ...scopedParams, classId: filters.classId }),
     enabled: canQuery && Boolean(filters.classId),
   });
+  const filterSubjectAssignmentsQuery = useQuery({
+    queryKey: ['homework-filter-subject-assignments', effectiveSchoolId, filters.classId, filters.sectionId],
+    queryFn: () => listAssignSubjects({ ...scopedParams, classId: filters.classId, sectionId: filters.sectionId }),
+    enabled: canQuery && Boolean(filters.classId && filters.sectionId),
+  });
   const reportSectionsQuery = useQuery({
     queryKey: ['homework-report-sections', effectiveSchoolId, reportFilters.classId],
     queryFn: () => listSections({ ...scopedParams, classId: reportFilters.classId }),
     enabled: canQuery && Boolean(reportFilters.classId),
+  });
+  const reportSubjectAssignmentsQuery = useQuery({
+    queryKey: ['homework-report-subject-assignments', effectiveSchoolId, reportFilters.classId, reportFilters.sectionId],
+    queryFn: () => listAssignSubjects({ ...scopedParams, classId: reportFilters.classId, sectionId: reportFilters.sectionId }),
+    enabled: canQuery && Boolean(reportFilters.classId && reportFilters.sectionId),
   });
   const homeworksQuery = useQuery({
     queryKey: ['homeworks', effectiveSchoolId, submittedFilters, quickSearch],
@@ -202,13 +217,22 @@ export default function HomeworkPage() {
   });
 
   const classes = (classesQuery.data ?? []) as AcademicOption[];
-  const subjects = (subjectsQuery.data ?? []) as AcademicOption[];
   const formSections = (formSectionsQuery.data ?? []) as AcademicOption[];
   const filterSections = (filterSectionsQuery.data ?? []) as AcademicOption[];
   const reportSections = (reportSectionsQuery.data ?? []) as AcademicOption[];
-  const formSubjects = subjects.filter((subject) => !subject.classId || !homeworkForm.classId || subject.classId === homeworkForm.classId);
-  const filterSubjects = subjects.filter((subject) => !subject.classId || !filters.classId || subject.classId === filters.classId);
-  const reportSubjects = subjects.filter((subject) => !subject.classId || !reportFilters.classId || subject.classId === reportFilters.classId);
+  const toMappedSubjects = (assignments?: SubjectAssignmentOption[]) => {
+    const seen = new Set<string>();
+    return (assignments ?? []).flatMap((assignment) => {
+      const subject = assignment.subject;
+      const id = subject?.id ?? assignment.subjectId;
+      if (!id || seen.has(id)) return [];
+      seen.add(id);
+      return [{ id, name: subject?.name ?? 'Subject', code: subject?.code ?? null }];
+    });
+  };
+  const formSubjects = toMappedSubjects(formSubjectAssignmentsQuery.data as SubjectAssignmentOption[] | undefined);
+  const filterSubjects = toMappedSubjects(filterSubjectAssignmentsQuery.data as SubjectAssignmentOption[] | undefined);
+  const reportSubjects = toMappedSubjects(reportSubjectAssignmentsQuery.data as SubjectAssignmentOption[] | undefined);
 
   useEffect(() => {
     if (!evaluationQuery.data) return;
@@ -242,8 +266,16 @@ export default function HomeworkPage() {
   }, [filters.classId]);
 
   useEffect(() => {
+    setFilters((current) => ({ ...current, subjectId: '' }));
+  }, [filters.sectionId]);
+
+  useEffect(() => {
     setReportFilters((current) => ({ ...current, sectionId: '', subjectId: '' }));
   }, [reportFilters.classId]);
+
+  useEffect(() => {
+    setReportFilters((current) => ({ ...current, subjectId: '' }));
+  }, [reportFilters.sectionId]);
 
   const invalidateHomework = async () => {
     await Promise.all([
@@ -433,13 +465,13 @@ export default function HomeworkPage() {
                   </select>
                 </Field>
                 <Field label="Select section *">
-                  <select className={inputClass} value={homeworkForm.sectionId} disabled={!homeworkForm.classId} onChange={(e) => setHomeworkForm((p) => ({ ...p, sectionId: e.target.value }))}>
+                  <select className={inputClass} value={homeworkForm.sectionId} disabled={!homeworkForm.classId} onChange={(e) => setHomeworkForm((p) => ({ ...p, sectionId: e.target.value, subjectId: '' }))}>
                     <option value="">Select section</option>
                     {formSections.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
                   </select>
                 </Field>
                 <Field label="Select subjects *">
-                  <select className={inputClass} value={homeworkForm.subjectId} onChange={(e) => setHomeworkForm((p) => ({ ...p, subjectId: e.target.value }))}>
+                  <select className={inputClass} value={homeworkForm.subjectId} disabled={!homeworkForm.sectionId} onChange={(e) => setHomeworkForm((p) => ({ ...p, subjectId: e.target.value }))}>
                     <option value="">Select subject</option>
                     {formSubjects.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
                   </select>
@@ -488,13 +520,13 @@ export default function HomeworkPage() {
                 </select>
               </Field>
               <Field label="Select section *">
-                <select className={inputClass} value={filters.sectionId} disabled={!filters.classId} onChange={(e) => setFilters((p) => ({ ...p, sectionId: e.target.value }))}>
+                <select className={inputClass} value={filters.sectionId} disabled={!filters.classId} onChange={(e) => setFilters((p) => ({ ...p, sectionId: e.target.value, subjectId: '' }))}>
                   <option value="">Select section</option>
                   {filterSections.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
                 </select>
               </Field>
               <Field label="Select subjects *">
-                <select className={inputClass} value={filters.subjectId} onChange={(e) => setFilters((p) => ({ ...p, subjectId: e.target.value }))}>
+                <select className={inputClass} value={filters.subjectId} disabled={!filters.sectionId} onChange={(e) => setFilters((p) => ({ ...p, subjectId: e.target.value }))}>
                   <option value="">Select subject</option>
                   {filterSubjects.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
                 </select>
@@ -535,13 +567,13 @@ export default function HomeworkPage() {
                 </select>
               </Field>
               <Field label="Select section *">
-                <select className={inputClass} value={reportFilters.sectionId} disabled={!reportFilters.classId} onChange={(e) => setReportFilters((p) => ({ ...p, sectionId: e.target.value }))}>
+                <select className={inputClass} value={reportFilters.sectionId} disabled={!reportFilters.classId} onChange={(e) => setReportFilters((p) => ({ ...p, sectionId: e.target.value, subjectId: '' }))}>
                   <option value="">Select section</option>
                   {reportSections.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
                 </select>
               </Field>
               <Field label="Select subjects *">
-                <select className={inputClass} value={reportFilters.subjectId} onChange={(e) => setReportFilters((p) => ({ ...p, subjectId: e.target.value }))}>
+                <select className={inputClass} value={reportFilters.subjectId} disabled={!reportFilters.sectionId} onChange={(e) => setReportFilters((p) => ({ ...p, subjectId: e.target.value }))}>
                   <option value="">Select subject</option>
                   {reportSubjects.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
                 </select>

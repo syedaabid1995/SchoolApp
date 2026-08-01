@@ -27,12 +27,12 @@ const requireHomeworkManager = (req: Request, requestedSchoolId?: string | null)
     if (requestedSchoolId && requestedSchoolId !== req.auth.schoolId) {
       throw new HttpError(403, 'Tenant scope violation');
     }
-    return { schoolId: req.auth.schoolId, userId: req.auth.userId };
+    return { schoolId: req.auth.schoolId, userId: req.auth.userId, role: req.auth.role };
   }
 
   if (req.auth.role === 'SUPER_ADMIN') {
     if (!requestedSchoolId) throw new HttpError(400, 'schoolId is required');
-    return { schoolId: requestedSchoolId, userId: req.auth.userId };
+    return { schoolId: requestedSchoolId, userId: req.auth.userId, role: req.auth.role };
   }
 
   throw new HttpError(403, 'School scope is required to manage homework');
@@ -76,18 +76,77 @@ const includeHomework = {
   _count: { select: { evaluations: true } },
 } satisfies Prisma.HomeworkInclude;
 
+const isTeacherRole = (role?: string | null) => role === 'TEACHER';
+
 const assertAcademicScope = async (schoolId: string, classId: string, sectionId: string, subjectId: string) => {
   const [schoolClass, section, subject] = await Promise.all([
     prisma.class.findFirst({ where: { id: classId, schoolId }, select: { id: true } }),
-    prisma.section.findFirst({ where: { id: sectionId, schoolId }, select: { id: true, classId: true } }),
+    prisma.section.findFirst({
+      where: { id: sectionId, schoolId },
+      select: { id: true, classId: true, classSections: { where: { classId }, select: { classId: true } } },
+    }),
     prisma.subject.findFirst({ where: { id: subjectId, schoolId }, select: { id: true, classId: true } }),
   ]);
 
   if (!schoolClass) throw new HttpError(404, 'Class not found');
   if (!section) throw new HttpError(404, 'Section not found');
-  if (section.classId && section.classId !== classId) throw new HttpError(400, 'Section does not belong to selected class');
+  if (section.classId !== classId && section.classSections.length === 0) {
+    throw new HttpError(400, 'Section does not belong to selected class');
+  }
   if (!subject) throw new HttpError(404, 'Subject not found');
   if (subject.classId && subject.classId !== classId) throw new HttpError(400, 'Subject does not belong to selected class');
+
+  const assignedSubject = await prisma.assignSubject.findFirst({
+    where: { schoolId, classId, sectionId, subjectId },
+    select: { id: true },
+  });
+  if (!assignedSubject) throw new HttpError(400, 'Subject is not assigned to selected class and section');
+};
+
+const getTeacherProfileId = async (schoolId: string, userId: string) => {
+  const teacher = await prisma.teacherProfile.findFirst({
+    where: { schoolId, userId, isActive: true },
+    select: { id: true },
+  });
+  if (!teacher) throw new HttpError(403, 'Teacher profile not found');
+  return teacher.id;
+};
+
+const assertTeacherHomeworkScope = async (params: {
+  schoolId: string;
+  userId: string;
+  classId: string;
+  sectionId: string;
+  subjectId: string;
+}) => {
+  const teacherId = await getTeacherProfileId(params.schoolId, params.userId);
+  const assigned = await prisma.assignSubject.findFirst({
+    where: {
+      schoolId: params.schoolId,
+      teacherId,
+      classId: params.classId,
+      sectionId: params.sectionId,
+      subjectId: params.subjectId,
+    },
+    select: { id: true },
+  });
+  if (!assigned) throw new HttpError(403, 'Teacher is not assigned to this homework subject');
+};
+
+const teacherHomeworkWhere = async (schoolId: string, userId: string): Promise<Prisma.HomeworkWhereInput> => {
+  const teacherId = await getTeacherProfileId(schoolId, userId);
+  const assignments = await prisma.assignSubject.findMany({
+    where: { schoolId, teacherId },
+    select: { classId: true, sectionId: true, subjectId: true },
+  });
+  if (assignments.length === 0) return { id: { in: [] } };
+  return {
+    OR: assignments.map((assignment) => ({
+      classId: assignment.classId,
+      sectionId: assignment.sectionId,
+      subjectId: assignment.subjectId,
+    })),
+  };
 };
 
 const getHomeworkOrThrow = async (schoolId: string, id: string) => {
@@ -100,18 +159,25 @@ const getHomeworkOrThrow = async (schoolId: string, id: string) => {
 };
 
 export const listHomeworks = async (req: Request, res: Response) => {
-  const { schoolId } = requireHomeworkManager(req, getRequestedSchoolId(req));
+  const { schoolId, userId, role } = requireHomeworkManager(req, getRequestedSchoolId(req));
   const classId = typeof req.query.classId === 'string' ? req.query.classId : undefined;
   const sectionId = typeof req.query.sectionId === 'string' ? req.query.sectionId : undefined;
   const subjectId = typeof req.query.subjectId === 'string' ? req.query.subjectId : undefined;
+  const homeworkDateQuery = typeof req.query.homeworkDate === 'string' ? req.query.homeworkDate : undefined;
   const search = typeof req.query.search === 'string' ? req.query.search.trim() : '';
+  const scopedWhere = isTeacherRole(role) ? await teacherHomeworkWhere(schoolId, userId) : {};
+  const homeworkDate = homeworkDateQuery ? z.coerce.date().parse(homeworkDateQuery) : undefined;
+  const homeworkDateEnd = homeworkDate ? new Date(homeworkDate) : undefined;
+  if (homeworkDateEnd) homeworkDateEnd.setDate(homeworkDateEnd.getDate() + 1);
 
   const items = await prisma.homework.findMany({
     where: {
       schoolId,
+      ...scopedWhere,
       ...(classId ? { classId } : {}),
       ...(sectionId ? { sectionId } : {}),
       ...(subjectId ? { subjectId } : {}),
+      ...(homeworkDate && homeworkDateEnd ? { homeworkDate: { gte: homeworkDate, lt: homeworkDateEnd } } : {}),
       ...(search
         ? {
             OR: [
@@ -132,9 +198,18 @@ export const listHomeworks = async (req: Request, res: Response) => {
 
 export const createHomework = async (req: Request, res: Response) => {
   const payload = homeworkSchema.parse(req.body);
-  const { schoolId, userId } = requireHomeworkManager(req, payload.schoolId);
+  const { schoolId, userId, role } = requireHomeworkManager(req, payload.schoolId);
 
   await assertAcademicScope(schoolId, payload.classId, payload.sectionId, payload.subjectId);
+  if (isTeacherRole(role)) {
+    await assertTeacherHomeworkScope({
+      schoolId,
+      userId,
+      classId: payload.classId,
+      sectionId: payload.sectionId,
+      subjectId: payload.subjectId,
+    });
+  }
 
   const item = await prisma.homework.create({
     data: {
@@ -166,7 +241,7 @@ export const createHomework = async (req: Request, res: Response) => {
 
 export const updateHomework = async (req: Request, res: Response) => {
   const payload = homeworkSchema.partial().parse(req.body);
-  const { schoolId } = requireHomeworkManager(req, getRequestedSchoolId(req, payload.schoolId));
+  const { schoolId, userId, role } = requireHomeworkManager(req, getRequestedSchoolId(req, payload.schoolId));
   const id = req.params.id;
   const existing = await getHomeworkOrThrow(schoolId, id);
 
@@ -174,6 +249,9 @@ export const updateHomework = async (req: Request, res: Response) => {
   const sectionId = payload.sectionId ?? existing.sectionId;
   const subjectId = payload.subjectId ?? existing.subjectId;
   await assertAcademicScope(schoolId, classId, sectionId, subjectId);
+  if (isTeacherRole(role)) {
+    await assertTeacherHomeworkScope({ schoolId, userId, classId, sectionId, subjectId });
+  }
 
   const item = await prisma.homework.update({
     where: { id },
@@ -204,9 +282,18 @@ export const updateHomework = async (req: Request, res: Response) => {
 };
 
 export const deleteHomework = async (req: Request, res: Response) => {
-  const { schoolId } = requireHomeworkManager(req, getRequestedSchoolId(req));
+  const { schoolId, userId, role } = requireHomeworkManager(req, getRequestedSchoolId(req));
   const id = req.params.id;
   const existing = await getHomeworkOrThrow(schoolId, id);
+  if (isTeacherRole(role)) {
+    await assertTeacherHomeworkScope({
+      schoolId,
+      userId,
+      classId: existing.classId,
+      sectionId: existing.sectionId,
+      subjectId: existing.subjectId,
+    });
+  }
 
   await prisma.homework.delete({ where: { id } });
   await logAudit(req, { schoolId, entityType: 'HOMEWORK', entityId: id, action: 'DELETE', beforeState: existing });
@@ -214,9 +301,18 @@ export const deleteHomework = async (req: Request, res: Response) => {
 };
 
 export const getHomeworkEvaluation = async (req: Request, res: Response) => {
-  const { schoolId } = requireHomeworkManager(req, getRequestedSchoolId(req));
+  const { schoolId, userId, role } = requireHomeworkManager(req, getRequestedSchoolId(req));
   const id = req.params.id;
   const homework = await getHomeworkOrThrow(schoolId, id);
+  if (isTeacherRole(role)) {
+    await assertTeacherHomeworkScope({
+      schoolId,
+      userId,
+      classId: homework.classId,
+      sectionId: homework.sectionId,
+      subjectId: homework.subjectId,
+    });
+  }
 
   const [students, evaluations] = await Promise.all([
     prisma.student.findMany({
@@ -244,9 +340,18 @@ export const getHomeworkEvaluation = async (req: Request, res: Response) => {
 
 export const saveHomeworkEvaluation = async (req: Request, res: Response) => {
   const payload = evaluationSchema.parse(req.body);
-  const { schoolId, userId } = requireHomeworkManager(req, getRequestedSchoolId(req, payload.schoolId));
+  const { schoolId, userId, role } = requireHomeworkManager(req, getRequestedSchoolId(req, payload.schoolId));
   const homeworkId = req.params.id;
   const homework = await getHomeworkOrThrow(schoolId, homeworkId);
+  if (isTeacherRole(role)) {
+    await assertTeacherHomeworkScope({
+      schoolId,
+      userId,
+      classId: homework.classId,
+      sectionId: homework.sectionId,
+      subjectId: homework.subjectId,
+    });
+  }
   const studentIds = Array.from(new Set(payload.evaluations.map((item) => item.studentId)));
 
   const students = await prisma.student.findMany({
@@ -327,14 +432,16 @@ export const saveHomeworkEvaluation = async (req: Request, res: Response) => {
 };
 
 export const getHomeworkEvaluationReport = async (req: Request, res: Response) => {
-  const { schoolId } = requireHomeworkManager(req, getRequestedSchoolId(req));
+  const { schoolId, userId, role } = requireHomeworkManager(req, getRequestedSchoolId(req));
   const classId = typeof req.query.classId === 'string' ? req.query.classId : undefined;
   const sectionId = typeof req.query.sectionId === 'string' ? req.query.sectionId : undefined;
   const subjectId = typeof req.query.subjectId === 'string' ? req.query.subjectId : undefined;
+  const scopedWhere = isTeacherRole(role) ? await teacherHomeworkWhere(schoolId, userId) : {};
 
   const homeworks = await prisma.homework.findMany({
     where: {
       schoolId,
+      ...scopedWhere,
       ...(classId ? { classId } : {}),
       ...(sectionId ? { sectionId } : {}),
       ...(subjectId ? { subjectId } : {}),

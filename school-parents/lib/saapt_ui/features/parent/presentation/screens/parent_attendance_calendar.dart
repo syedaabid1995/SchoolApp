@@ -12,12 +12,14 @@ class ParentAttendanceCalendar extends StatelessWidget {
     required this.attendance,
     required this.childName,
     this.onMonthChanged,
+    this.showMonthlyStatus = true,
   });
 
   final DateTime month;
   final ParentAttendance attendance;
   final String childName;
   final ValueChanged<DateTime>? onMonthChanged;
+  final bool showMonthlyStatus;
 
   @override
   Widget build(BuildContext context) {
@@ -29,13 +31,15 @@ class ParentAttendanceCalendar extends StatelessWidget {
     final byDate = {
       for (final day in attendance.calendar) _dateKey(day.date): day,
     };
-    final statusRows = [
-      for (var day = 1; day <= daysInMonth; day++)
-        _CalendarDayStatus(
-          date: DateTime(month.year, month.month, day),
-          entry: byDate[_dateKey(DateTime(month.year, month.month, day))],
-        ),
-    ];
+    final statusRows = showMonthlyStatus
+        ? [
+            for (var day = 1; day <= daysInMonth; day++)
+              _CalendarDayStatus(
+                date: DateTime(month.year, month.month, day),
+                entry: byDate[_dateKey(DateTime(month.year, month.month, day))],
+              ),
+          ]
+        : const <_CalendarDayStatus>[];
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -144,19 +148,21 @@ class ParentAttendanceCalendar extends StatelessWidget {
             ],
           ),
         ),
-        const SizedBox(height: 18),
-        const Text(
-          'Monthly Status',
-          style: TextStyle(
-            color: SaaptTheme.navy,
-            fontSize: 19,
-            fontWeight: FontWeight.w900,
+        if (showMonthlyStatus) ...[
+          const SizedBox(height: 18),
+          const Text(
+            'Monthly Status',
+            style: TextStyle(
+              color: SaaptTheme.navy,
+              fontSize: 19,
+              fontWeight: FontWeight.w900,
+            ),
           ),
-        ),
-        const SizedBox(height: 12),
-        for (final row in statusRows) ...[
-          _StatusListTile(status: row),
-          const SizedBox(height: 10),
+          const SizedBox(height: 12),
+          for (final row in statusRows) ...[
+            _StatusListTile(status: row),
+            const SizedBox(height: 10),
+          ],
         ],
       ],
     );

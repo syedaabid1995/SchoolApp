@@ -18,6 +18,15 @@ const requireAcademicSetupUser = (req: Request) => {
   return { schoolId: req.auth.schoolId, userId: req.auth.userId };
 };
 
+const requireAcademicSetupReadScope = (req: Request) => {
+  if (!req.auth?.userId) throw new HttpError(401, 'Unauthorized');
+  if (req.auth.schoolId) return { schoolId: req.auth.schoolId, userId: req.auth.userId };
+  if (req.auth.role === 'SUPER_ADMIN' && typeof req.query.schoolId === 'string') {
+    return { schoolId: req.query.schoolId, userId: req.auth.userId };
+  }
+  throw new HttpError(403, 'School scope is required to read academic setup');
+};
+
 const normalizeText = (value: string) => value.trim().replace(/\s+/g, ' ');
 const DEFAULT_TIME_PERIODS: Array<{ type: TimePeriodType; name: string; startTime: string; endTime: string }> = [
   { type: 'CLASS_TIME', name: '1ST PERIOD', startTime: '09:00', endTime: '09:45' },
@@ -870,7 +879,7 @@ const assignSubjectsSchema = z.object({
 });
 
 export const listAssignSubjects = async (req: Request, res: Response) => {
-  const { schoolId } = requireAcademicSetupUser(req);
+  const { schoolId } = requireAcademicSetupReadScope(req);
   const classId = typeof req.query.classId === 'string' ? req.query.classId : undefined;
   const sectionId = typeof req.query.sectionId === 'string' ? req.query.sectionId : undefined;
   const items = await prisma.assignSubject.findMany({

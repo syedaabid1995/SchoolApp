@@ -11,13 +11,20 @@ import '../../domain/entities/homework.dart';
 import '../../domain/repositories/homework_repository.dart';
 
 class HomeworkFilter extends Equatable {
-  const HomeworkFilter({this.classId, this.sectionId});
+  const HomeworkFilter({
+    this.classId,
+    this.sectionId,
+    this.subjectId,
+    this.homeworkDate,
+  });
 
   final String? classId;
   final String? sectionId;
+  final String? subjectId;
+  final DateTime? homeworkDate;
 
   @override
-  List<Object?> get props => [classId, sectionId];
+  List<Object?> get props => [classId, sectionId, subjectId, homeworkDate];
 }
 
 final homeworkRemoteDatasourceProvider = Provider<HomeworkRemoteDatasource>((
@@ -38,7 +45,17 @@ final homeworkListProvider = FutureProvider.autoDispose
     .family<List<Homework>, HomeworkFilter>((ref, filter) {
       return ref
           .watch(homeworkRepositoryProvider)
-          .list(classId: filter.classId, sectionId: filter.sectionId);
+          .list(
+            classId: filter.classId,
+            sectionId: filter.sectionId,
+            subjectId: filter.subjectId,
+            homeworkDate: filter.homeworkDate,
+          );
+    });
+
+final homeworkEvaluationProvider = FutureProvider.autoDispose
+    .family<HomeworkEvaluationDetail, String>((ref, id) {
+      return ref.watch(homeworkRepositoryProvider).getEvaluation(id);
     });
 
 final homeworkMutationProvider =
@@ -73,6 +90,29 @@ class HomeworkMutationController extends AsyncNotifier<Homework?> {
       return null;
     });
     await _refreshSyncBadge();
+  }
+
+  Future<HomeworkAttachment> uploadAttachment({
+    required String path,
+    required String filename,
+  }) {
+    return ref
+        .read(homeworkRepositoryProvider)
+        .uploadAttachment(path: path, filename: filename);
+  }
+
+  Future<HomeworkEvaluationDetail> saveEvaluation({
+    required String id,
+    required DateTime evaluationDate,
+    required List<HomeworkEvaluationDraftRow> evaluations,
+  }) {
+    return ref
+        .read(homeworkRepositoryProvider)
+        .saveEvaluation(
+          id: id,
+          evaluationDate: evaluationDate,
+          evaluations: evaluations,
+        );
   }
 
   Future<void> _refreshSyncBadge() async {

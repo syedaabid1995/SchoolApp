@@ -5,28 +5,13 @@ import 'package:intl/intl.dart';
 import '../../../../app/theme/saapt_theme.dart';
 import '../../data/parent_models.dart';
 import '../providers/parent_providers.dart';
-import 'parent_attendance_calendar.dart';
 import 'parent_screen_widgets.dart';
 
-class ParentAttendanceScreen extends ConsumerStatefulWidget {
+class ParentAttendanceScreen extends ConsumerWidget {
   const ParentAttendanceScreen({super.key});
 
   @override
-  ConsumerState<ParentAttendanceScreen> createState() =>
-      _ParentAttendanceScreenState();
-}
-
-class _ParentAttendanceScreenState
-    extends ConsumerState<ParentAttendanceScreen> {
-  DateTime _month = DateTime(DateTime.now().year, DateTime.now().month);
-  DateTime _selectedDate = DateTime(
-    DateTime.now().year,
-    DateTime.now().month,
-    DateTime.now().day,
-  );
-
-  @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final childState = ref.watch(effectiveSelectedChildProvider);
     return Scaffold(
       body: childState.when(
@@ -36,18 +21,10 @@ class _ParentAttendanceScreenState
           if (child == null) {
             return const _NoChildSelected();
           }
-          final attendanceQuery = (
-            childId: child.id,
-            month: _month,
-            date: _selectedDate,
-          );
-          final attendanceState = ref.watch(
-            parentMonthlyAttendanceProvider(attendanceQuery),
-          );
+          final attendanceState = ref.watch(parentAttendanceProvider(child));
           return RefreshIndicator(
-            onRefresh: () async => ref.invalidate(
-              parentMonthlyAttendanceProvider(attendanceQuery),
-            ),
+            onRefresh: () async =>
+                ref.invalidate(parentAttendanceProvider(child)),
             child: CustomScrollView(
               slivers: [
                 SliverToBoxAdapter(
@@ -55,7 +32,7 @@ class _ParentAttendanceScreenState
                     badge: '📅 Parent Attendance',
                     title: child.name,
                     subtitle:
-                        '${child.classLabel} • ${DateFormat('MMMM y').format(_month)}',
+                        '${child.classLabel} • ${DateFormat('d MMM y').format(DateTime.now())}',
                   ),
                 ),
                 SliverPadding(
@@ -68,13 +45,6 @@ class _ParentAttendanceScreenState
                       data: (attendance) => _AttendanceContent(
                         child: child,
                         attendance: attendance,
-                        month: _month,
-                        onMonthChanged: (value) {
-                          setState(() {
-                            _month = DateTime(value.year, value.month);
-                            _selectedDate = DateTime(value.year, value.month);
-                          });
-                        },
                       ),
                     ),
                   ),
@@ -105,17 +75,10 @@ class _NoChildSelected extends StatelessWidget {
 }
 
 class _AttendanceContent extends StatelessWidget {
-  const _AttendanceContent({
-    required this.child,
-    required this.attendance,
-    required this.month,
-    required this.onMonthChanged,
-  });
+  const _AttendanceContent({required this.child, required this.attendance});
 
   final ParentChild child;
   final ParentAttendance attendance;
-  final DateTime month;
-  final ValueChanged<DateTime> onMonthChanged;
 
   @override
   Widget build(BuildContext context) {
@@ -129,30 +92,23 @@ class _AttendanceContent extends StatelessWidget {
         Row(
           children: [
             StatCard(
-              value: attendance.presentDays.toString(),
+              value: attendance.presentSessions.toString(),
               label: 'Present',
               color: SaaptTheme.success,
             ),
             const SizedBox(width: 12),
             StatCard(
-              value: attendance.absentDays.toString(),
+              value: attendance.absentSessions.toString(),
               label: 'Absent',
               color: const Color(0xFFEF4C55),
             ),
             const SizedBox(width: 12),
             StatCard(
-              value: attendance.leaveDays.toString(),
-              label: 'Leave',
-              color: const Color(0xFF8B5CF6),
+              value: '${attendance.selectedDayPercent}%',
+              label: 'Day',
+              color: SaaptTheme.warning,
             ),
           ],
-        ),
-        const SizedBox(height: 26),
-        ParentAttendanceCalendar(
-          month: month,
-          attendance: attendance,
-          childName: child.name,
-          onMonthChanged: onMonthChanged,
         ),
         const SizedBox(height: 26),
         const Text(

@@ -356,7 +356,7 @@ export const seedDefaultTimePeriods = async () => {
   };
 };
 
-export const listAssignSubjects = async (params?: { classId?: string; sectionId?: string }) => {
+export const listAssignSubjects = async (params?: { schoolId?: string; classId?: string; sectionId?: string }) => {
   const { data } = await api.get<AssignSubject[]>('/academic-setup/assign-subjects', { params: sanitizeParams(params) });
   return data;
 };

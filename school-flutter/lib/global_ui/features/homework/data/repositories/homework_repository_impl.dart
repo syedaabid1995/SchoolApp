@@ -25,9 +25,19 @@ class HomeworkRepositoryImpl implements HomeworkRepository {
   final MutationQueueService? _mutationQueue;
 
   @override
-  Future<List<Homework>> list({String? classId, String? sectionId}) async {
+  Future<List<Homework>> list({
+    String? classId,
+    String? sectionId,
+    String? subjectId,
+    DateTime? homeworkDate,
+  }) async {
     try {
-      final items = await _remote.list(classId: classId, sectionId: sectionId);
+      final items = await _remote.list(
+        classId: classId,
+        sectionId: sectionId,
+        subjectId: subjectId,
+        homeworkDate: homeworkDate,
+      );
       await _cache.writeCached(
         _cacheKey,
         items.map((item) => item.toJson()).toList(),
@@ -83,6 +93,44 @@ class HomeworkRepositoryImpl implements HomeworkRepository {
     }
   }
 
+  @override
+  Future<HomeworkAttachment> uploadAttachment({
+    required String path,
+    required String filename,
+  }) async {
+    try {
+      return await _remote.uploadAttachment(path: path, filename: filename);
+    } catch (error) {
+      throw ErrorHandler.toFailure(error);
+    }
+  }
+
+  @override
+  Future<HomeworkEvaluationDetail> getEvaluation(String id) async {
+    try {
+      return await _remote.getEvaluation(id);
+    } catch (error) {
+      throw ErrorHandler.toFailure(error);
+    }
+  }
+
+  @override
+  Future<HomeworkEvaluationDetail> saveEvaluation({
+    required String id,
+    required DateTime evaluationDate,
+    required List<HomeworkEvaluationDraftRow> evaluations,
+  }) async {
+    try {
+      return await _remote.saveEvaluation(
+        id: id,
+        evaluationDate: evaluationDate,
+        evaluations: evaluations,
+      );
+    } catch (error) {
+      throw ErrorHandler.toFailure(error);
+    }
+  }
+
   List<Homework> _fromCache(List<dynamic> values) => [
     for (final item in values)
       if (item is Map)
@@ -99,6 +147,8 @@ class HomeworkRepositoryImpl implements HomeworkRepository {
     'submissionDate': DateFormat('yyyy-MM-dd').format(draft.submissionDate),
     'marks': draft.marks,
     'description': draft.description,
+    'attachmentUrl': draft.attachmentUrl,
+    'attachmentName': draft.attachmentName,
   };
 
   Homework _queuedHomework(HomeworkDraft draft, {String? id}) {
@@ -111,6 +161,8 @@ class HomeworkRepositoryImpl implements HomeworkRepository {
       submissionDate: draft.submissionDate,
       marks: draft.marks,
       description: '${draft.description}\nQueued for sync',
+      attachmentUrl: draft.attachmentUrl,
+      attachmentName: draft.attachmentName,
     );
   }
 }

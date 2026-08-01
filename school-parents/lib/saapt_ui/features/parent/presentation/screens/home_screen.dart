@@ -48,38 +48,53 @@ class ParentHomeScreen extends ConsumerWidget {
   }
 }
 
-class _DashboardContent extends ConsumerWidget {
+class _DashboardContent extends ConsumerStatefulWidget {
   const _DashboardContent({required this.children});
 
   final List<ParentChild> children;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    if (children.isEmpty) {
+  ConsumerState<_DashboardContent> createState() => _DashboardContentState();
+}
+
+class _DashboardContentState extends ConsumerState<_DashboardContent> {
+  late DateTime _month;
+
+  @override
+  void initState() {
+    super.initState();
+    final now = DateTime.now();
+    _month = DateTime(now.year, now.month);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (widget.children.isEmpty) {
       return const EmptyPanel(
         message: 'No children are mapped to this parent account.',
       );
     }
-    final selected = ref.watch(selectedChildProvider) ?? children.first;
-    final now = DateTime.now();
-    final currentMonth = DateTime(now.year, now.month);
-    final today = DateTime(now.year, now.month, now.day);
+    final selected = ref.watch(selectedChildProvider) ?? widget.children.first;
+    final selectedDate = DateTime(_month.year, _month.month);
     final attendanceState = ref.watch(
       parentMonthlyAttendanceProvider((
         childId: selected.id,
-        month: currentMonth,
-        date: today,
+        month: _month,
+        date: selectedDate,
       )),
     );
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        _SelectedChildCard(child: selected, children: children),
+        _SelectedChildCard(child: selected, children: widget.children),
         const SizedBox(height: 18),
         Row(
           children: [
-            StatCard(value: children.length.toString(), label: 'Children'),
+            StatCard(
+              value: widget.children.length.toString(),
+              label: 'Children',
+            ),
             const SizedBox(width: 14),
             const StatCard(
               value: 'Active',
@@ -118,9 +133,15 @@ class _DashboardContent extends ConsumerWidget {
               ),
               const SizedBox(height: 22),
               ParentAttendanceCalendar(
-                month: currentMonth,
+                month: _month,
                 attendance: attendance,
                 childName: selected.name,
+                showMonthlyStatus: false,
+                onMonthChanged: (value) {
+                  setState(() {
+                    _month = DateTime(value.year, value.month);
+                  });
+                },
               ),
               const SizedBox(height: 12),
               FilledButton.icon(

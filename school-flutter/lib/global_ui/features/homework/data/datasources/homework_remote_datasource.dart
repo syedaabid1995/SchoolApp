@@ -10,12 +10,20 @@ class HomeworkRemoteDatasource {
 
   final Dio _dio;
 
-  Future<List<HomeworkModel>> list({String? classId, String? sectionId}) async {
+  Future<List<HomeworkModel>> list({
+    String? classId,
+    String? sectionId,
+    String? subjectId,
+    DateTime? homeworkDate,
+  }) async {
     final response = await _dio.get<List<dynamic>>(
       ApiEndpoints.homework,
       queryParameters: {
         if (classId != null && classId.isNotEmpty) 'classId': classId,
         if (sectionId != null && sectionId.isNotEmpty) 'sectionId': sectionId,
+        if (subjectId != null && subjectId.isNotEmpty) 'subjectId': subjectId,
+        if (homeworkDate != null)
+          'homeworkDate': DateFormat('yyyy-MM-dd').format(homeworkDate),
       },
     );
     return [
@@ -44,6 +52,51 @@ class HomeworkRemoteDatasource {
     await _dio.delete('${ApiEndpoints.homework}/$id');
   }
 
+  Future<HomeworkAttachmentModel> uploadAttachment({
+    required String path,
+    required String filename,
+  }) async {
+    final response = await _dio.post<Map<String, dynamic>>(
+      '${ApiEndpoints.homework}/attachments',
+      data: FormData.fromMap({
+        'file': await MultipartFile.fromFile(path, filename: filename),
+      }),
+      options: Options(contentType: 'multipart/form-data'),
+    );
+    return HomeworkAttachmentModel.fromJson(response.data ?? const {});
+  }
+
+  Future<HomeworkEvaluationDetailModel> getEvaluation(String id) async {
+    final response = await _dio.get<Map<String, dynamic>>(
+      '${ApiEndpoints.homework}/$id/evaluations',
+    );
+    return HomeworkEvaluationDetailModel.fromJson(response.data ?? const {});
+  }
+
+  Future<HomeworkEvaluationDetailModel> saveEvaluation({
+    required String id,
+    required DateTime evaluationDate,
+    required List<HomeworkEvaluationDraftRow> evaluations,
+  }) async {
+    final response = await _dio.post<Map<String, dynamic>>(
+      '${ApiEndpoints.homework}/$id/evaluations',
+      data: {
+        'evaluationDate': DateFormat('yyyy-MM-dd').format(evaluationDate),
+        'evaluations': [
+          for (final item in evaluations)
+            {
+              'studentId': item.studentId,
+              'marks': item.marks,
+              'comments': item.comments,
+              'qualityStatus': qualityStatusValue(item.qualityStatus),
+              'completionStatus': completionStatusValue(item.completionStatus),
+            },
+        ],
+      },
+    );
+    return HomeworkEvaluationDetailModel.fromJson(response.data ?? const {});
+  }
+
   Map<String, dynamic> _payload(HomeworkDraft draft) => {
     'classId': draft.classId,
     'sectionId': draft.sectionId,
@@ -52,5 +105,7 @@ class HomeworkRemoteDatasource {
     'submissionDate': DateFormat('yyyy-MM-dd').format(draft.submissionDate),
     'marks': draft.marks,
     'description': draft.description,
+    'attachmentUrl': draft.attachmentUrl,
+    'attachmentName': draft.attachmentName,
   };
 }

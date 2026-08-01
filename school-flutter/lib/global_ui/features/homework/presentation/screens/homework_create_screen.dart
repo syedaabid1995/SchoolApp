@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:file_picker/file_picker.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:intl/intl.dart';
 
 import '../../../../app/theme/app_spacing.dart';
@@ -29,6 +31,9 @@ class _HomeworkCreateScreenState extends ConsumerState<HomeworkCreateScreen> {
   String? _classId;
   String? _sectionId;
   String? _subjectId;
+  String? _attachmentUrl;
+  String? _attachmentName;
+  _AttachmentPick? _pickedAttachment;
   DateTime _homeworkDate = DateTime.now();
   DateTime _submissionDate = DateTime.now().add(const Duration(days: 7));
   num _marks = 10;
@@ -47,6 +52,8 @@ class _HomeworkCreateScreenState extends ConsumerState<HomeworkCreateScreen> {
       _submissionDate = item.submissionDate;
       _marks = item.marks;
       _descriptionController.text = item.description;
+      _attachmentUrl = item.attachmentUrl;
+      _attachmentName = item.attachmentName;
     }
   }
 
@@ -59,7 +66,10 @@ class _HomeworkCreateScreenState extends ConsumerState<HomeworkCreateScreen> {
   @override
   Widget build(BuildContext context) {
     final sections = widget.assignments.sectionsForClass(_classId);
-    final subjects = widget.assignments.subjectsForClass(_classId);
+    final subjects = widget.assignments.subjectsForClass(
+      _classId,
+      sectionId: _sectionId,
+    );
     final state = ref.watch(homeworkMutationProvider);
     final colorScheme = Theme.of(context).colorScheme;
     final textTheme = Theme.of(context).textTheme;
@@ -101,24 +111,31 @@ class _HomeworkCreateScreenState extends ConsumerState<HomeworkCreateScreen> {
                     items: [
                       for (final item in sections)
                         DropdownMenuItem(
-                            value: item.id, child: Text(item.name)),
+                          value: item.id,
+                          child: Text(item.name),
+                        ),
                     ],
-                    onChanged: (value) =>
-                        setState(() => _sectionId = value),
+                    onChanged: (value) => setState(() {
+                      _sectionId = value;
+                      _subjectId = null;
+                    }),
                   ),
-                  _CardDivider(),
-                  _StyledDropdown<String>(
-                    hint: 'Select subject',
-                    icon: Icons.book_outlined,
-                    value: _subjectId,
-                    items: [
-                      for (final item in subjects)
-                        DropdownMenuItem(
-                            value: item.id, child: Text(item.name)),
-                    ],
-                    onChanged: (value) =>
-                        setState(() => _subjectId = value),
-                  ),
+                  if (_sectionId != null) ...[
+                    _CardDivider(),
+                    _StyledDropdown<String>(
+                      hint: 'Select subject',
+                      icon: Icons.book_outlined,
+                      value: _subjectId,
+                      items: [
+                        for (final item in subjects)
+                          DropdownMenuItem(
+                            value: item.id,
+                            child: Text(item.name),
+                          ),
+                      ],
+                      onChanged: (value) => setState(() => _subjectId = value),
+                    ),
+                  ],
                 ],
               ],
             ),
@@ -207,8 +224,8 @@ class _HomeworkCreateScreenState extends ConsumerState<HomeworkCreateScreen> {
                     IconButton(
                       icon: const Icon(Icons.remove_circle_outline),
                       color: colorScheme.primary,
-                      onPressed: () => setState(
-                          () => _marks = (_marks - 1).clamp(1, 999)),
+                      onPressed: () =>
+                          setState(() => _marks = (_marks - 1).clamp(1, 999)),
                     ),
                     IconButton(
                       icon: const Icon(Icons.add_circle_outline),
@@ -245,6 +262,49 @@ class _HomeworkCreateScreenState extends ConsumerState<HomeworkCreateScreen> {
             ),
           ),
 
+          const SizedBox(height: AppSpacing.md),
+
+          _SectionLabel(label: 'Attachment'),
+          const SizedBox(height: AppSpacing.xs),
+          _FormCard(
+            child: ListTile(
+              leading: Icon(
+                Icons.attach_file_outlined,
+                color: colorScheme.primary,
+              ),
+              title: Text(
+                _pickedAttachment?.name ??
+                    _attachmentName ??
+                    'No file attached',
+              ),
+              subtitle: Text(
+                _pickedAttachment == null && _attachmentName != null
+                    ? 'Current attachment'
+                    : 'Camera, gallery, PDF, or document',
+              ),
+              trailing: Wrap(
+                spacing: AppSpacing.xs,
+                children: [
+                  IconButton(
+                    tooltip: 'Choose attachment',
+                    icon: const Icon(Icons.upload_file_outlined),
+                    onPressed: () => _chooseAttachment(context),
+                  ),
+                  if (_pickedAttachment != null || _attachmentUrl != null)
+                    IconButton(
+                      tooltip: 'Remove attachment',
+                      icon: const Icon(Icons.close),
+                      onPressed: () => setState(() {
+                        _pickedAttachment = null;
+                        _attachmentUrl = null;
+                        _attachmentName = null;
+                      }),
+                    ),
+                ],
+              ),
+            ),
+          ),
+
           // ── Error ────────────────────────────────────────────────────
           if (state.hasError) ...[
             const SizedBox(height: AppSpacing.sm),
@@ -256,8 +316,11 @@ class _HomeworkCreateScreenState extends ConsumerState<HomeworkCreateScreen> {
               ),
               child: Row(
                 children: [
-                  Icon(Icons.error_outline,
-                      size: 16, color: colorScheme.onErrorContainer),
+                  Icon(
+                    Icons.error_outline,
+                    size: 16,
+                    color: colorScheme.onErrorContainer,
+                  ),
                   const SizedBox(width: AppSpacing.xs),
                   Expanded(
                     child: Text(
@@ -280,29 +343,56 @@ class _HomeworkCreateScreenState extends ConsumerState<HomeworkCreateScreen> {
             isLoading: state.isLoading,
             onPressed:
                 _classId == null || _sectionId == null || _subjectId == null
-                    ? null
-                    : () async {
-                        final draft = HomeworkDraft(
-                          classId: _classId!,
-                          sectionId: _sectionId!,
-                          subjectId: _subjectId!,
-                          homeworkDate: _homeworkDate,
-                          submissionDate: _submissionDate,
-                          marks: _marks,
-                          description: _descriptionController.text,
-                        );
-                        final id = widget.homework?.id;
-                        if (id == null) {
-                          await ref
-                              .read(homeworkMutationProvider.notifier)
-                              .create(draft);
-                        } else {
-                          await ref
-                              .read(homeworkMutationProvider.notifier)
-                              .saveUpdate(id, draft);
+                ? null
+                : () async {
+                    var attachmentUrl = _attachmentUrl;
+                    var attachmentName = _attachmentName;
+                    final pickedAttachment = _pickedAttachment;
+                    if (pickedAttachment != null) {
+                      try {
+                        final uploaded = await ref
+                            .read(homeworkMutationProvider.notifier)
+                            .uploadAttachment(
+                              path: pickedAttachment.path,
+                              filename: pickedAttachment.name,
+                            );
+                        attachmentUrl = uploaded.url;
+                        attachmentName = uploaded.filename;
+                      } catch (error) {
+                        if (context.mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(content: Text(error.toString())),
+                          );
                         }
-                        if (context.mounted) Navigator.of(context).pop();
-                      },
+                        return;
+                      }
+                    }
+                    final draft = HomeworkDraft(
+                      classId: _classId!,
+                      sectionId: _sectionId!,
+                      subjectId: _subjectId!,
+                      homeworkDate: _homeworkDate,
+                      submissionDate: _submissionDate,
+                      marks: _marks,
+                      description: _descriptionController.text,
+                      attachmentUrl: attachmentUrl,
+                      attachmentName: attachmentName,
+                    );
+                    final id = widget.homework?.id;
+                    if (id == null) {
+                      await ref
+                          .read(homeworkMutationProvider.notifier)
+                          .create(draft);
+                    } else {
+                      await ref
+                          .read(homeworkMutationProvider.notifier)
+                          .saveUpdate(id, draft);
+                    }
+                    if (!ref.read(homeworkMutationProvider).hasError &&
+                        context.mounted) {
+                      Navigator.of(context).pop();
+                    }
+                  },
           ),
 
           const SizedBox(height: AppSpacing.lg),
@@ -310,6 +400,68 @@ class _HomeworkCreateScreenState extends ConsumerState<HomeworkCreateScreen> {
       ),
     );
   }
+
+  Future<void> _chooseAttachment(BuildContext context) async {
+    final source = await showModalBottomSheet<_AttachmentSource>(
+      context: context,
+      builder: (ctx) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(
+              leading: const Icon(Icons.camera_alt_outlined),
+              title: const Text('Camera'),
+              onTap: () => Navigator.of(ctx).pop(_AttachmentSource.camera),
+            ),
+            ListTile(
+              leading: const Icon(Icons.photo_library_outlined),
+              title: const Text('Gallery'),
+              onTap: () => Navigator.of(ctx).pop(_AttachmentSource.gallery),
+            ),
+            ListTile(
+              leading: const Icon(Icons.folder_outlined),
+              title: const Text('Internal storage'),
+              onTap: () => Navigator.of(ctx).pop(_AttachmentSource.storage),
+            ),
+          ],
+        ),
+      ),
+    );
+    if (source == null) return;
+
+    if (source == _AttachmentSource.storage) {
+      final result = await FilePicker.pickFiles(
+        type: FileType.custom,
+        allowedExtensions: ['pdf', 'doc', 'docx', 'jpg', 'jpeg', 'png', 'webp'],
+        allowMultiple: false,
+      );
+      final file = result?.files.single;
+      if (file?.path == null) return;
+      setState(
+        () => _pickedAttachment = _AttachmentPick(file!.path!, file.name),
+      );
+      return;
+    }
+
+    final picker = ImagePicker();
+    final image = await picker.pickImage(
+      source: source == _AttachmentSource.camera
+          ? ImageSource.camera
+          : ImageSource.gallery,
+      imageQuality: 85,
+    );
+    if (image == null) return;
+    setState(() => _pickedAttachment = _AttachmentPick(image.path, image.name));
+  }
+}
+
+enum _AttachmentSource { camera, gallery, storage }
+
+class _AttachmentPick {
+  const _AttachmentPick(this.path, this.name);
+
+  final String path;
+  final String name;
 }
 
 // ── Shared form widgets ────────────────────────────────────────────────────
@@ -324,13 +476,10 @@ class _SectionLabel extends StatelessWidget {
     return Text(
       label,
       style: Theme.of(context).textTheme.labelLarge?.copyWith(
-            color: Theme.of(context)
-                .colorScheme
-                .onSurface
-                .withValues(alpha: 0.6),
-            fontWeight: FontWeight.w600,
-            letterSpacing: 0.5,
-          ),
+        color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.6),
+        fontWeight: FontWeight.w600,
+        letterSpacing: 0.5,
+      ),
     );
   }
 }
@@ -366,10 +515,9 @@ class _CardDivider extends StatelessWidget {
     return Divider(
       height: 1,
       indent: AppSpacing.md,
-      color: Theme.of(context)
-          .colorScheme
-          .outlineVariant
-          .withValues(alpha: 0.4),
+      color: Theme.of(
+        context,
+      ).colorScheme.outlineVariant.withValues(alpha: 0.4),
     );
   }
 }
@@ -433,9 +581,7 @@ class _DateCard extends StatelessWidget {
         decoration: BoxDecoration(
           color: colorScheme.surface,
           borderRadius: BorderRadius.circular(16),
-          border: Border.all(
-            color: colorScheme.primary.withValues(alpha: 0.2),
-          ),
+          border: Border.all(color: colorScheme.primary.withValues(alpha: 0.2)),
           boxShadow: [
             BoxShadow(
               color: colorScheme.shadow.withValues(alpha: 0.06),
