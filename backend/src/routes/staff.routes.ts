@@ -36,6 +36,7 @@ export const staffRouter = Router();
 staffRouter.use(authMiddleware);
 staffRouter.use((req: Request, _res: Response, next: NextFunction) => {
   if (req.auth?.schoolId) return next();
+  if (req.auth?.role === 'SUPER_ADMIN' && typeof req.query.schoolId === 'string') return next();
   return next(new HttpError(403, 'School scope is required to manage staff'));
 });
 

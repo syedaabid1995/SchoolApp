@@ -1,4 +1,5 @@
 import '../entities/auth_session.dart';
+import '../entities/staff_user.dart';
 
 abstract class AuthRepository {
   Future<AuthSession> restoreSession();
@@ -23,4 +24,12 @@ abstract class AuthRepository {
     required String newPassword,
     required String confirmPassword,
   });
+  Future<StaffUser> updateProfile({
+    required String firstName,
+    required String lastName,
+    required String email,
+    String? phone,
+  });
+  Future<bool> getPushEnabled();
+  Future<bool> updatePushEnabled(bool enabled);
 }

@@ -1,11 +1,24 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../../../../app/theme/app_spacing.dart';
 import '../../../../core/widgets/app_scaffold.dart';
 import '../../../../core/widgets/async_state_view.dart';
 import '../../../auth/domain/entities/staff_user.dart';
 import '../providers/profile_providers.dart';
+
+Future<void> _launchEmail(String email) async {
+  final trimmed = email.trim();
+  if (trimmed.isEmpty) return;
+  await launchUrl(Uri(scheme: 'mailto', path: trimmed));
+}
+
+Future<void> _launchPhone(String phone) async {
+  final trimmed = phone.trim();
+  if (trimmed.isEmpty) return;
+  await launchUrl(Uri(scheme: 'tel', path: trimmed));
+}
 
 class ProfileScreen extends ConsumerWidget {
   const ProfileScreen({super.key});
@@ -173,10 +186,21 @@ class _ContactInformationCard extends StatelessWidget {
         subtitle: Text(school.name),
         children: [
           _ContactDetail(label: 'School Code', value: school.code),
-          _ContactDetail(label: 'Email', value: school.email ?? '-'),
+          _ContactDetail(
+            label: 'Email',
+            value: school.email ?? '-',
+            icon: Icons.mail_outline,
+            onTap: school.email?.trim().isNotEmpty == true
+                ? () => _launchEmail(school.email!)
+                : null,
+          ),
           _ContactDetail(
             label: 'Mobile Number',
             value: school.mobileNumber ?? '-',
+            icon: Icons.call_outlined,
+            onTap: school.mobileNumber?.trim().isNotEmpty == true
+                ? () => _launchPhone(school.mobileNumber!)
+                : null,
           ),
           _ContactDetail(label: 'Address', value: school.address ?? '-'),
           if (school.contacts.isNotEmpty) ...[
@@ -192,40 +216,62 @@ class _ContactInformationCard extends StatelessWidget {
 }
 
 class _ContactDetail extends StatelessWidget {
-  const _ContactDetail({required this.label, required this.value});
+  const _ContactDetail({
+    required this.label,
+    required this.value,
+    this.icon,
+    this.onTap,
+  });
 
   final String label;
   final String value;
+  final IconData? icon;
+  final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {
     final textTheme = Theme.of(context).textTheme;
+    final colorScheme = Theme.of(context).colorScheme;
+    final content = Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        SizedBox(
+          width: 120,
+          child: Text(
+            label,
+            style: textTheme.labelMedium?.copyWith(
+              color: colorScheme.onSurface.withValues(alpha: 0.55),
+            ),
+          ),
+        ),
+        if (icon != null) ...[
+          Icon(icon, size: 18, color: colorScheme.primary),
+          const SizedBox(width: 8),
+        ],
+        Expanded(
+          child: Text(
+            value.isNotEmpty ? value : '-',
+            style: textTheme.bodyMedium?.copyWith(
+              color: onTap == null ? null : colorScheme.primary,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        ),
+      ],
+    );
+
     return Padding(
       padding: const EdgeInsets.only(bottom: AppSpacing.sm),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          SizedBox(
-            width: 120,
-            child: Text(
-              label,
-              style: textTheme.labelMedium?.copyWith(
-                color: Theme.of(
-                  context,
-                ).colorScheme.onSurface.withValues(alpha: 0.55),
+      child: onTap == null
+          ? content
+          : InkWell(
+              borderRadius: BorderRadius.circular(8),
+              onTap: onTap,
+              child: Padding(
+                padding: const EdgeInsets.symmetric(vertical: 4),
+                child: content,
               ),
             ),
-          ),
-          Expanded(
-            child: Text(
-              value.isNotEmpty ? value : '-',
-              style: textTheme.bodyMedium?.copyWith(
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-          ),
-        ],
-      ),
     );
   }
 }
@@ -261,8 +307,23 @@ class _ContactBlock extends StatelessWidget {
             contact.name,
             style: const TextStyle(fontWeight: FontWeight.w700),
           ),
-          const SizedBox(height: 2),
-          Text(contact.contactNumber),
+          const SizedBox(height: AppSpacing.sm),
+          _ContactDetail(
+            label: 'Email',
+            value: contact.email,
+            icon: Icons.mail_outline,
+            onTap: contact.email.trim().isNotEmpty
+                ? () => _launchEmail(contact.email)
+                : null,
+          ),
+          _ContactDetail(
+            label: 'Mobile Number',
+            value: contact.contactNumber,
+            icon: Icons.call_outlined,
+            onTap: contact.contactNumber.trim().isNotEmpty
+                ? () => _launchPhone(contact.contactNumber)
+                : null,
+          ),
         ],
       ),
     );

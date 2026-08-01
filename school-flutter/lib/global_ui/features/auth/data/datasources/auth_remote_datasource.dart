@@ -52,6 +52,24 @@ class AuthRemoteDataSource {
     return StaffUserModel.fromJson(response.data ?? const <String, dynamic>{});
   }
 
+  Future<StaffUserModel> updateProfile({
+    required String firstName,
+    required String lastName,
+    required String email,
+    String? phone,
+  }) async {
+    final response = await _dio.patch<Map<String, dynamic>>(
+      ApiEndpoints.me,
+      data: {
+        'firstName': firstName,
+        'lastName': lastName,
+        'email': email,
+        'phone': phone,
+      },
+    );
+    return StaffUserModel.fromJson(response.data ?? const <String, dynamic>{});
+  }
+
   Future<void> logout() async {
     await _dio.post<void>(ApiEndpoints.logout);
   }
@@ -83,5 +101,20 @@ class AuthRemoteDataSource {
         'confirmPassword': confirmPassword,
       },
     );
+  }
+
+  Future<bool> getPushEnabled() async {
+    final response = await _dio.get<Map<String, dynamic>>(
+      ApiEndpoints.pushPreferencesMe,
+    );
+    return response.data?['pushEnabled'] == true;
+  }
+
+  Future<bool> updatePushEnabled(bool enabled) async {
+    final response = await _dio.patch<Map<String, dynamic>>(
+      ApiEndpoints.pushPreferencesMe,
+      data: {'pushEnabled': enabled},
+    );
+    return response.data?['pushEnabled'] == true;
   }
 }

@@ -20,6 +20,7 @@ export type SchoolContactDetail = {
   id: string;
   department: string;
   name: string;
+  email: string;
   contactNumber: string;
 };
 

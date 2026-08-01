@@ -22,6 +22,7 @@ import {
   type GeneralSchoolSettings,
   type SchoolContactDetail,
 } from '../../../../services/system-settings.service';
+import { listDepartmentsForSchool } from '../../../../services/staff.service';
 
 const hexPattern = /^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/;
 const logoSizeOptions = [
@@ -145,6 +146,30 @@ function ContactField({
     <label className="space-y-1.5">
       <span className="text-xs font-bold uppercase tracking-wide text-slate-500">{label}</span>
       <input className={fieldClass} value={value} onChange={(event) => onChange(event.target.value)} />
+    </label>
+  );
+}
+
+function DepartmentField({
+  value,
+  departments,
+  onChange,
+}: {
+  value: string;
+  departments: Array<{ id: string; name: string }>;
+  onChange: (value: string) => void;
+}) {
+  return (
+    <label className="space-y-1.5">
+      <span className="text-xs font-bold uppercase tracking-wide text-slate-500">Department</span>
+      <select className={fieldClass} value={value} onChange={(event) => onChange(event.target.value)}>
+        <option value="">Select department</option>
+        {departments.map((department) => (
+          <option key={department.id} value={department.name}>
+            {department.name}
+          </option>
+        ))}
+      </select>
     </label>
   );
 }
@@ -330,6 +355,14 @@ export default function LoginBrandingSettingsPage({ embedded = false }: { embedd
     staleTime: 30_000,
   });
 
+  const departmentsQuery = useQuery({
+    queryKey: ['staff-departments', role === 'SUPER_ADMIN' ? selectedSchoolId : sessionQuery.data?.schoolId],
+    queryFn: () => listDepartmentsForSchool(params),
+    enabled: isAllowed && schoolSettingsReady,
+    refetchOnWindowFocus: false,
+    staleTime: 60_000,
+  });
+
   useEffect(() => {
     if (brandingQuery.data) setForm(normalizeBranding(brandingQuery.data));
   }, [brandingQuery.data]);
@@ -364,7 +397,7 @@ export default function LoginBrandingSettingsPage({ embedded = false }: { embedd
     onError: (err: any) => setError(err?.response?.data?.error?.message || err?.response?.data?.message || err?.message || 'Unable to save school details.'),
   });
 
-  const isBusy = brandingQuery.isLoading || schoolSettingsQuery.isLoading || saveMutation.isPending || saveSchoolDetailsMutation.isPending;
+  const isBusy = brandingQuery.isLoading || schoolSettingsQuery.isLoading || departmentsQuery.isLoading || saveMutation.isPending || saveSchoolDetailsMutation.isPending;
 
   const updateField = <K extends keyof LoginBranding>(key: K, value: LoginBranding[K]) => {
     setForm((current) => ({ ...current, [key]: value }));
@@ -396,6 +429,7 @@ export default function LoginBrandingSettingsPage({ embedded = false }: { embedd
       id: `contact-${Date.now()}`,
       department: '',
       name: '',
+      email: '',
       contactNumber: '',
     };
     setSchoolGeneral((current) =>
@@ -440,10 +474,12 @@ export default function LoginBrandingSettingsPage({ embedded = false }: { embedd
       if (schoolGeneral.email.trim() && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(schoolGeneral.email.trim())) return 'Enter a valid school email.';
       const incompleteContact = (schoolGeneral.contacts ?? []).find(
         (contact) =>
-          Boolean(contact.department.trim() || contact.name.trim() || contact.contactNumber.trim()) &&
-          (!contact.department.trim() || !contact.name.trim() || !contact.contactNumber.trim()),
+          Boolean(contact.department.trim() || contact.name.trim() || contact.email.trim() || contact.contactNumber.trim()) &&
+          (!contact.department.trim() || !contact.name.trim() || !contact.email.trim() || !contact.contactNumber.trim()),
       );
-      if (incompleteContact) return 'Each added contact needs department, name, and contact number.';
+      if (incompleteContact) return 'Each added contact needs department, name, email, and contact number.';
+      const invalidContactEmail = (schoolGeneral.contacts ?? []).find((contact) => contact.email.trim() && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(contact.email.trim()));
+      if (invalidContactEmail) return 'Enter a valid email for every contact row.';
       return '';
     }
     if (!form.appName.trim()) return 'App name is required.';
@@ -552,16 +588,21 @@ export default function LoginBrandingSettingsPage({ embedded = false }: { embedd
               {(schoolGeneral.contacts ?? []).length ? (
                 <div className="space-y-3">
                   {schoolGeneral.contacts.map((contact, index) => (
-                    <div key={contact.id} className="grid gap-3 rounded-lg border border-slate-200 bg-slate-50 p-3 lg:grid-cols-[1fr_1fr_1fr_auto]">
-                      <ContactField
-                        label="Department"
+                    <div key={contact.id} className="grid gap-3 rounded-lg border border-slate-200 bg-slate-50 p-3 xl:grid-cols-[1fr_1fr_1fr_1fr_auto]">
+                      <DepartmentField
                         value={contact.department}
+                        departments={departmentsQuery.data ?? []}
                         onChange={(value) => updateContact(contact.id, 'department', value)}
                       />
                       <ContactField
                         label="Name"
                         value={contact.name}
                         onChange={(value) => updateContact(contact.id, 'name', value)}
+                      />
+                      <ContactField
+                        label="Email"
+                        value={contact.email}
+                        onChange={(value) => updateContact(contact.id, 'email', value)}
                       />
                       <ContactField
                         label="Contact number"

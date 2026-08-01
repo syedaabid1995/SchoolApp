@@ -8,6 +8,7 @@ import {
   listMyAssignedStudentsApi,
   listMyExamPapersApi,
   listEmployeePermissionsApi,
+  updateMeProfile,
   updateEmployeePermissionsApi,
 } from '../controllers/user.controller';
 import { authMiddleware } from '../middlewares/auth.middleware';
@@ -17,6 +18,7 @@ export const userRouter = Router();
 userRouter.use(authMiddleware);
 
 userRouter.get('/me', getMe);
+userRouter.patch('/me', updateMeProfile);
 userRouter.get('/me/timetable', getMyTimetableApi);
 userRouter.get('/me/assigned-classes', listMyAssignedClassesApi);
 userRouter.get('/me/assigned-students', listMyAssignedStudentsApi);

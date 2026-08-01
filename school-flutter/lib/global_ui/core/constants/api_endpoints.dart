@@ -5,6 +5,7 @@ class ApiEndpoints {
   static const refresh = '/auth/refresh';
   static const logout = '/auth/logout';
   static const me = '/users/me';
+  static const pushPreferencesMe = '/notifications/push/preferences/me';
   static const changePassword = '/auth/change-password';
   static const forgotPassword = '/auth/forgot-password';
   static const verifyTwoFactor = '/auth/verify-2fa';
@@ -25,7 +26,6 @@ class ApiEndpoints {
   static const notificationSummary = '/notifications/summary';
   static const pushDevices = '/notifications/push/devices';
   static const pushNotificationsMe = '/notifications/push/me';
-  static const pushPreferencesMe = '/notifications/push/preferences/me';
   static const communicationNotices = '/communication/notices';
   static const leaveBalancesMe = '/leave/balances/me';
   static const leaveTypes = '/leave/types';

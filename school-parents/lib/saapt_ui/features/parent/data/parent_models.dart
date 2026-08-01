@@ -120,12 +120,14 @@ class SchoolContactDetail {
     required this.id,
     required this.department,
     required this.name,
+    required this.email,
     required this.contactNumber,
   });
 
   final String id;
   final String department;
   final String name;
+  final String email;
   final String contactNumber;
 
   factory SchoolContactDetail.fromJson(Map<String, dynamic> json) {
@@ -133,6 +135,7 @@ class SchoolContactDetail {
       id: json['id']?.toString() ?? '',
       department: json['department']?.toString() ?? '',
       name: json['name']?.toString() ?? '',
+      email: json['email']?.toString() ?? '',
       contactNumber: json['contactNumber']?.toString() ?? '',
     );
   }

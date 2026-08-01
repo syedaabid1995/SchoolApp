@@ -5,16 +5,18 @@ class SchoolContactDetail extends Equatable {
     required this.id,
     required this.department,
     required this.name,
+    required this.email,
     required this.contactNumber,
   });
 
   final String id;
   final String department;
   final String name;
+  final String email;
   final String contactNumber;
 
   @override
-  List<Object?> get props => [id, department, name, contactNumber];
+  List<Object?> get props => [id, department, name, email, contactNumber];
 }
 
 class SchoolProfileDetails extends Equatable {
@@ -59,6 +61,9 @@ class StaffUser extends Equatable {
     this.schoolName,
     this.photoUrl,
     this.schoolProfile,
+    this.firstName,
+    this.lastName,
+    this.phone,
   });
 
   final String id;
@@ -70,6 +75,9 @@ class StaffUser extends Equatable {
   final String? schoolName;
   final String? photoUrl;
   final SchoolProfileDetails? schoolProfile;
+  final String? firstName;
+  final String? lastName;
+  final String? phone;
 
   @override
   List<Object?> get props => [
@@ -82,5 +90,8 @@ class StaffUser extends Equatable {
     schoolName,
     photoUrl,
     schoolProfile,
+    firstName,
+    lastName,
+    phone,
   ];
 }

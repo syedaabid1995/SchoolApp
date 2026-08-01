@@ -45,6 +45,13 @@ const createSchoolUserSchema = z.object({
   schoolId: z.string().uuid().optional(),
 });
 
+const updateMeProfileSchema = z.object({
+  firstName: z.string().trim().min(1).max(80),
+  lastName: z.string().trim().min(1).max(80),
+  email: z.string().trim().email().max(160),
+  phone: z.string().trim().max(32).optional().nullable(),
+});
+
 const managedRoleSchema = z.enum(MANAGED_EMPLOYEE_ROLES);
 
 const updateEmployeePermissionsSchema = z.object({
@@ -187,6 +194,60 @@ export const getMe = async (req: Request, res: Response) => {
     employeeProfile: user.teacherProfile,
     schoolProfile,
   });
+};
+
+export const updateMeProfile = async (req: Request, res: Response) => {
+  const auth = requireCurrentSchool(req);
+  const payload = updateMeProfileSchema.parse(req.body);
+
+  const existing = await prisma.user.findFirst({
+    where: { id: auth.userId, schoolId: auth.schoolId },
+    select: {
+      id: true,
+      email: true,
+      teacherProfile: { select: { id: true, isActive: true } },
+    },
+  });
+
+  if (!existing?.teacherProfile?.isActive) {
+    throw new HttpError(404, 'Employee profile not found');
+  }
+
+  const duplicate = await prisma.user.findFirst({
+    where: {
+      id: { not: auth.userId },
+      schoolId: auth.schoolId,
+      email: { equals: payload.email, mode: 'insensitive' },
+    },
+    select: { id: true },
+  });
+  if (duplicate) throw new HttpError(409, 'Email is already used by another account');
+
+  await prisma.$transaction([
+    prisma.user.update({
+      where: { id: auth.userId },
+      data: { email: payload.email },
+    }),
+    prisma.teacherProfile.update({
+      where: { id: existing.teacherProfile.id },
+      data: {
+        firstName: payload.firstName,
+        lastName: payload.lastName,
+        phone: payload.phone?.trim() || null,
+      },
+    }),
+  ]);
+
+  await logAudit(req, {
+    schoolId: auth.schoolId,
+    entityType: 'USER_PROFILE',
+    entityId: auth.userId,
+    action: 'UPDATE',
+    beforeState: { email: existing.email },
+    afterState: { email: payload.email, firstName: payload.firstName, lastName: payload.lastName, phone: payload.phone ?? null },
+  });
+
+  return getMe(req, res);
 };
 
 export const getMyTimetableApi = async (req: Request, res: Response) => {

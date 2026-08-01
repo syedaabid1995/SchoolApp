@@ -4,6 +4,7 @@ class AppConfig {
   const AppConfig._();
 
   static const clientPlatform = 'school-mobile';
+  static const appVersion = '1.0.0+2';
 
   static const apiBaseUrl = String.fromEnvironment(
     'API_BASE_URL',

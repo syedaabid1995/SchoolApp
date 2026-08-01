@@ -1,6 +1,7 @@
 import '../../../../core/network/error_handler.dart';
 import '../../../../core/storage/secure_token_storage.dart';
 import '../../domain/entities/auth_session.dart';
+import '../../domain/entities/staff_user.dart';
 import '../../domain/repositories/auth_repository.dart';
 import '../datasources/auth_remote_datasource.dart';
 
@@ -123,6 +124,43 @@ class AuthRepositoryImpl implements AuthRepository {
       newPassword: newPassword,
       confirmPassword: confirmPassword,
     );
+  }
+
+  @override
+  Future<StaffUser> updateProfile({
+    required String firstName,
+    required String lastName,
+    required String email,
+    String? phone,
+  }) async {
+    try {
+      return await _remoteDataSource.updateProfile(
+        firstName: firstName,
+        lastName: lastName,
+        email: email,
+        phone: phone,
+      );
+    } catch (error) {
+      throw ErrorHandler.fromDio(error);
+    }
+  }
+
+  @override
+  Future<bool> getPushEnabled() async {
+    try {
+      return await _remoteDataSource.getPushEnabled();
+    } catch (error) {
+      throw ErrorHandler.fromDio(error);
+    }
+  }
+
+  @override
+  Future<bool> updatePushEnabled(bool enabled) async {
+    try {
+      return await _remoteDataSource.updatePushEnabled(enabled);
+    } catch (error) {
+      throw ErrorHandler.fromDio(error);
+    }
   }
 }
 

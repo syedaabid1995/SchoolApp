@@ -14,6 +14,7 @@ class SchoolContactDetailModel extends SchoolContactDetail {
     required super.id,
     required super.department,
     required super.name,
+    required super.email,
     required super.contactNumber,
   });
 
@@ -22,6 +23,7 @@ class SchoolContactDetailModel extends SchoolContactDetail {
       id: json['id']?.toString() ?? '',
       department: json['department']?.toString() ?? '',
       name: json['name']?.toString() ?? '',
+      email: json['email']?.toString() ?? '',
       contactNumber: json['contactNumber']?.toString() ?? '',
     );
   }
@@ -66,6 +68,9 @@ class StaffUserModel extends StaffUser {
     super.schoolName,
     super.photoUrl,
     super.schoolProfile,
+    super.firstName,
+    super.lastName,
+    super.phone,
   });
 
   factory StaffUserModel.fromJson(Map<String, dynamic> json) {
@@ -113,6 +118,9 @@ class StaffUserModel extends StaffUser {
       schoolProfile: schoolProfile.isNotEmpty
           ? SchoolProfileDetailsModel.fromJson(schoolProfile)
           : null,
+      firstName: teacherProfile?['firstName']?.toString(),
+      lastName: teacherProfile?['lastName']?.toString(),
+      phone: teacherProfile?['phone']?.toString(),
     );
   }
 }

@@ -12,3 +12,7 @@ final profileRepositoryProvider = Provider<ProfileRepository>((ref) {
 final profileProvider = FutureProvider.autoDispose<StaffUser>((ref) {
   return ref.watch(profileRepositoryProvider).getProfile();
 });
+
+final staffPushPreferenceProvider = FutureProvider.autoDispose<bool>((ref) {
+  return ref.watch(profileRepositoryProvider).getPushEnabled();
+});

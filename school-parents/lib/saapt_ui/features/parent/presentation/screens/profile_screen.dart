@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../../../../app/theme/saapt_theme.dart';
 import '../../../../core/config/parent_app_config.dart';
@@ -674,6 +675,82 @@ class _ChildrenPanel extends StatelessWidget {
   }
 }
 
+Future<void> _launchEmail(String email) async {
+  final trimmed = email.trim();
+  if (trimmed.isEmpty) return;
+  await launchUrl(Uri(scheme: 'mailto', path: trimmed));
+}
+
+Future<void> _launchPhone(String phone) async {
+  final trimmed = phone.trim();
+  if (trimmed.isEmpty) return;
+  await launchUrl(Uri(scheme: 'tel', path: trimmed));
+}
+
+class _ContactActionButton extends StatelessWidget {
+  const _ContactActionButton({
+    required this.icon,
+    required this.label,
+    required this.value,
+    required this.onTap,
+  });
+
+  final IconData icon;
+  final String label;
+  final String value;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final enabled = value.trim().isNotEmpty;
+    return InkWell(
+      borderRadius: BorderRadius.circular(12),
+      onTap: enabled ? onTap : null,
+      child: Container(
+        width: double.infinity,
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: enabled ? const Color(0xFFEAF1FF) : const Color(0xFFF7FAFF),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: const Color(0xFFDDE5F2)),
+        ),
+        child: Row(
+          children: [
+            Icon(
+              icon,
+              color: enabled ? SaaptTheme.primary : const Color(0xFF91A1BB),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    label,
+                    style: const TextStyle(
+                      color: Color(0xFF91A1BB),
+                      fontSize: 12,
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    enabled ? value : '-',
+                    style: const TextStyle(
+                      color: SaaptTheme.navy,
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
 class _SchoolProfilePanel extends StatelessWidget {
   const _SchoolProfilePanel({
     required this.profile,
@@ -787,10 +864,23 @@ class _SchoolProfilePanel extends StatelessWidget {
                 label: 'School Code',
                 value: selected.code.isNotEmpty ? selected.code : '-',
               ),
-              _DetailRow(label: 'Email', value: selected.email ?? '-'),
-              _DetailRow(
-                label: 'Mobile Number',
-                value: selected.mobileNumber ?? '-',
+              Padding(
+                padding: const EdgeInsets.only(bottom: 10),
+                child: _ContactActionButton(
+                  icon: Icons.mail_outline,
+                  label: 'Email',
+                  value: selected.email ?? '',
+                  onTap: () => _launchEmail(selected.email ?? ''),
+                ),
+              ),
+              Padding(
+                padding: const EdgeInsets.only(bottom: 14),
+                child: _ContactActionButton(
+                  icon: Icons.call_outlined,
+                  label: 'Mobile Number',
+                  value: selected.mobileNumber ?? '',
+                  onTap: () => _launchPhone(selected.mobileNumber ?? ''),
+                ),
               ),
               _DetailRow(
                 label: 'Address',
@@ -834,13 +924,19 @@ class _SchoolProfilePanel extends StatelessWidget {
                             fontWeight: FontWeight.w800,
                           ),
                         ),
-                        const SizedBox(height: 2),
-                        Text(
-                          contact.contactNumber,
-                          style: const TextStyle(
-                            color: Color(0xFF60708F),
-                            fontWeight: FontWeight.w700,
-                          ),
+                        const SizedBox(height: 12),
+                        _ContactActionButton(
+                          icon: Icons.mail_outline,
+                          label: 'Email',
+                          value: contact.email,
+                          onTap: () => _launchEmail(contact.email),
+                        ),
+                        const SizedBox(height: 8),
+                        _ContactActionButton(
+                          icon: Icons.call_outlined,
+                          label: 'Mobile Number',
+                          value: contact.contactNumber,
+                          onTap: () => _launchPhone(contact.contactNumber),
                         ),
                       ],
                     ),

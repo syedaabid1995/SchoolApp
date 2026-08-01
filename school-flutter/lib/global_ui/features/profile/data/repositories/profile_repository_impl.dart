@@ -36,5 +36,27 @@ class ProfileRepositoryImpl implements ProfileRepository {
   }
 
   @override
+  Future<StaffUser> updateProfile({
+    required String firstName,
+    required String lastName,
+    required String email,
+    String? phone,
+  }) {
+    return _authRepository.updateProfile(
+      firstName: firstName,
+      lastName: lastName,
+      email: email,
+      phone: phone,
+    );
+  }
+
+  @override
+  Future<bool> getPushEnabled() => _authRepository.getPushEnabled();
+
+  @override
+  Future<bool> updatePushEnabled(bool enabled) =>
+      _authRepository.updatePushEnabled(enabled);
+
+  @override
   Future<void> logout() => _authRepository.logout();
 }

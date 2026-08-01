@@ -14,6 +14,7 @@ import { attendanceReadService } from '../modules/attendance/services/attendance
 import { AuthorizationService } from '../services/authorization.service';
 import { PermissionCodes as P } from '../permissions/permission-manifest';
 import { sendAccountCreatedWhatsapp } from '../services/accountOnboardingWhatsapp.service';
+import { resolveSchoolId } from '../utils/tenant';
 
 const staffRoles = ['SCHOOL_ADMIN', 'TEACHER', 'ACCOUNTANT', 'LIBRARIAN', 'STAFF'] as const;
 const attendanceStatuses = ['PRESENT', 'LATE', 'ABSENT', 'HOLIDAY', 'HALF_DAY', 'LEAVE', 'LOP', 'CASUAL_LEAVE'] as const;
@@ -525,7 +526,7 @@ export const seedStaffDefaults = async (req: Request, res: Response) => {
 };
 
 export const listDepartments = async (req: Request, res: Response) => {
-  const { schoolId } = requireSchoolAdmin(req);
+  const schoolId = resolveSchoolId(req, req.query.schoolId as string | undefined);
   const items = await prisma.department.findMany({ where: { schoolId }, orderBy: { name: 'asc' } });
   res.status(200).json(items);
 };

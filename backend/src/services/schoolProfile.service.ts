@@ -5,6 +5,7 @@ export type SchoolContactDetail = {
   id: string;
   department: string;
   name: string;
+  email: string;
   contactNumber: string;
 };
 
@@ -35,10 +36,11 @@ export const normalizeSchoolContacts = (value: unknown): SchoolContactDetail[] =
         id: cleanString(source.id, 80) || `contact-${index + 1}`,
         department: cleanString(source.department, 80),
         name: cleanString(source.name, 120),
+        email: cleanString(source.email, 160),
         contactNumber: cleanString(source.contactNumber, 40),
       };
     })
-    .filter((item) => item.department || item.name || item.contactNumber)
+    .filter((item) => item.department || item.name || item.email || item.contactNumber)
     .slice(0, 50);
 };
 

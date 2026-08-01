@@ -185,6 +185,11 @@ export const listDepartments = async () => {
   return data;
 };
 
+export const listDepartmentsForSchool = async (params?: { schoolId?: string }) => {
+  const { data } = await api.get<Department[]>('/staff/departments', { params });
+  return data;
+};
+
 export const createDepartment = async (payload: { name: string }) => {
   const { data } = await api.post<Department>('/staff/departments', payload);
   return data;
