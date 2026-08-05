@@ -17,6 +17,8 @@ import {
   listParentNotices,
   listParentTimetable,
   listParentFees,
+  createParentFeeCheckoutOrder,
+  verifyParentFeeCheckoutPayment,
 } from '../controllers/parentPortal.controller';
 
 export const parentPortalRouter = Router();
@@ -39,3 +41,5 @@ parentPortalRouter.get('/homework', listParentHomeworks);
 parentPortalRouter.get('/notices', listParentNotices);
 parentPortalRouter.get('/timetable', listParentTimetable);
 parentPortalRouter.get('/fees', listParentFees);
+parentPortalRouter.post('/fees/checkout', createParentFeeCheckoutOrder);
+parentPortalRouter.post('/fees/checkout/verify', verifyParentFeeCheckoutPayment);

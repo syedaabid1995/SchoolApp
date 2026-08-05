@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
+import 'package:razorpay_flutter/razorpay_flutter.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../../../app/theme/saapt_theme.dart';
@@ -24,7 +25,14 @@ enum _ProfilePanel {
 }
 
 class ParentProfileScreen extends ConsumerStatefulWidget {
-  const ParentProfileScreen({super.key});
+  const ParentProfileScreen({
+    super.key,
+    this.initialChildId,
+    this.initialTabKey,
+  });
+
+  final String? initialChildId;
+  final String? initialTabKey;
 
   @override
   ConsumerState<ParentProfileScreen> createState() =>
@@ -47,6 +55,15 @@ class _ParentProfileScreenState extends ConsumerState<ParentProfileScreen> {
   bool _savingProfile = false;
   bool _changingPassword = false;
   bool _profileSeeded = false;
+
+  @override
+  void initState() {
+    super.initState();
+    if (widget.initialChildId?.trim().isNotEmpty == true) {
+      _panel = _ProfilePanel.children;
+      _selectedChildId = widget.initialChildId!.trim();
+    }
+  }
 
   @override
   void dispose() {
@@ -88,6 +105,7 @@ class _ParentProfileScreenState extends ConsumerState<ParentProfileScreen> {
           child: childDetailId != null
               ? _ChildDetailScroll(
                   childId: childDetailId,
+                  initialTabKey: widget.initialTabKey,
                   hero: ParentHero(
                     badge: '👤 Parent Profile',
                     title: _titleForPanel(),
@@ -982,10 +1000,15 @@ class _ChildDetailPanel extends ConsumerWidget {
 }
 
 class _ChildDetailScroll extends ConsumerStatefulWidget {
-  const _ChildDetailScroll({required this.childId, required this.hero});
+  const _ChildDetailScroll({
+    required this.childId,
+    required this.hero,
+    this.initialTabKey,
+  });
 
   final String childId;
   final Widget hero;
+  final String? initialTabKey;
 
   @override
   ConsumerState<_ChildDetailScroll> createState() => _ChildDetailScrollState();
@@ -993,6 +1016,27 @@ class _ChildDetailScroll extends ConsumerStatefulWidget {
 
 class _ChildDetailScrollState extends ConsumerState<_ChildDetailScroll> {
   int _selectedIndex = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    _selectedIndex = _tabIndexForKey(widget.initialTabKey);
+  }
+
+  @override
+  void didUpdateWidget(covariant _ChildDetailScroll oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.childId != widget.childId ||
+        oldWidget.initialTabKey != widget.initialTabKey) {
+      _selectedIndex = _tabIndexForKey(widget.initialTabKey);
+    }
+  }
+
+  int _tabIndexForKey(String? key) {
+    final normalized = key?.trim().toLowerCase();
+    final index = _childDetailTabs.indexWhere((tab) => tab.key == normalized);
+    return index < 0 ? 0 : index;
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -1045,6 +1089,7 @@ class _ChildDetailScrollState extends ConsumerState<_ChildDetailScroll> {
                   tabKey: selectedTab.key,
                   title: selectedTab.label,
                   data: detail.tabs[selectedTab.key],
+                  childId: widget.childId,
                 ),
               ),
             ),
@@ -1273,11 +1318,13 @@ class _DataPanel extends StatelessWidget {
     required this.tabKey,
     required this.title,
     required this.data,
+    this.childId,
   });
 
   final String tabKey;
   final String title;
   final Object? data;
+  final String? childId;
 
   @override
   Widget build(BuildContext context) {
@@ -1288,7 +1335,7 @@ class _DataPanel extends StatelessWidget {
       return _LibraryTabPanel(data: data);
     }
     if (tabKey == 'fees') {
-      return _FeesTabPanel(data: data);
+      return _FeesTabPanel(data: data, childId: childId);
     }
     final records = _recordsForTab(tabKey, data);
     if (records.isEmpty) {
@@ -1383,9 +1430,10 @@ class _SimpleSection extends StatelessWidget {
 }
 
 class _FeesTabPanel extends StatelessWidget {
-  const _FeesTabPanel({required this.data});
+  const _FeesTabPanel({required this.data, required this.childId});
 
   final Object? data;
+  final String? childId;
 
   @override
   Widget build(BuildContext context) {
@@ -1424,7 +1472,7 @@ class _FeesTabPanel extends StatelessWidget {
         ...invoices.map(
           (invoice) => Padding(
             padding: const EdgeInsets.only(bottom: 14),
-            child: _FeeInvoiceCard(invoice: invoice),
+            child: _FeeInvoiceCard(invoice: invoice, childId: childId),
           ),
         ),
       ],
@@ -1549,9 +1597,10 @@ class _FeeStatTile extends StatelessWidget {
 }
 
 class _FeeInvoiceCard extends StatelessWidget {
-  const _FeeInvoiceCard({required this.invoice});
+  const _FeeInvoiceCard({required this.invoice, required this.childId});
 
   final Map<String, dynamic> invoice;
+  final String? childId;
 
   @override
   Widget build(BuildContext context) {
@@ -1576,6 +1625,13 @@ class _FeeInvoiceCard extends StatelessWidget {
         !_isPastDate(invoice['dueDate']) &&
         !status.toUpperCase().contains('PAID') &&
         status.toUpperCase() != 'CANCELLED';
+    final dueAmount = _numberValue(invoice['dueAmount']);
+    final normalizedStatus = status.toUpperCase();
+    final canPay =
+        childId?.trim().isNotEmpty == true &&
+        dueAmount > 0 &&
+        normalizedStatus != 'PAID' &&
+        normalizedStatus != 'CANCELLED';
 
     return ParentCard(
       padding: EdgeInsets.zero,
@@ -1640,6 +1696,15 @@ class _FeeInvoiceCard extends StatelessWidget {
               ),
             ),
             _FeeAmountGrid(invoice: invoice),
+            if (canPay)
+              Padding(
+                padding: const EdgeInsets.fromLTRB(14, 14, 14, 0),
+                child: _PayFeeButton(
+                  childId: childId!,
+                  invoice: invoice,
+                  balanceAmount: dueAmount,
+                ),
+              ),
             if (payments.isEmpty)
               const Padding(
                 padding: EdgeInsets.all(14),
@@ -1705,6 +1770,290 @@ class _FeeAmountGrid extends StatelessWidget {
       childAspectRatio: 2.65,
       children: cells,
     );
+  }
+}
+
+class _PayFeeButton extends ConsumerStatefulWidget {
+  const _PayFeeButton({
+    required this.childId,
+    required this.invoice,
+    required this.balanceAmount,
+  });
+
+  final String childId;
+  final Map<String, dynamic> invoice;
+  final num balanceAmount;
+
+  @override
+  ConsumerState<_PayFeeButton> createState() => _PayFeeButtonState();
+}
+
+class _PayFeeButtonState extends ConsumerState<_PayFeeButton> {
+  bool _processing = false;
+  Razorpay? _razorpay;
+  ParentFeeCheckoutOrder? _checkout;
+
+  @override
+  void dispose() {
+    _razorpay?.clear();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      width: double.infinity,
+      child: FilledButton.icon(
+        onPressed: _processing ? null : _chooseAmountAndPay,
+        icon: _processing
+            ? const SizedBox(
+                width: 16,
+                height: 16,
+                child: CircularProgressIndicator(strokeWidth: 2),
+              )
+            : const Icon(Icons.payment_rounded),
+        label: Text(_processing ? 'Opening payment...' : 'Pay fees'),
+        style: FilledButton.styleFrom(
+          backgroundColor: SaaptTheme.primary,
+          foregroundColor: Colors.white,
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 13),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(14),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _chooseAmountAndPay() async {
+    final amount = await showModalBottomSheet<num>(
+      context: context,
+      isScrollControlled: true,
+      showDragHandle: true,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
+      ),
+      builder: (_) =>
+          _FeePaymentAmountSheet(balanceAmount: widget.balanceAmount),
+    );
+    if (amount == null || amount <= 0) return;
+    await _startRazorpay(amount);
+  }
+
+  Future<void> _startRazorpay(num amount) async {
+    setState(() => _processing = true);
+    try {
+      final repository = ref.read(parentRepositoryProvider);
+      final invoiceId = widget.invoice['id']?.toString() ?? '';
+      final checkout = await repository.createFeeCheckoutOrder(
+        childId: widget.childId,
+        invoiceId: invoiceId,
+        amount: amount,
+      );
+      _checkout = checkout;
+      final razorpay = Razorpay();
+      _razorpay?.clear();
+      _razorpay = razorpay;
+      razorpay.on(Razorpay.EVENT_PAYMENT_SUCCESS, _handlePaymentSuccess);
+      razorpay.on(Razorpay.EVENT_PAYMENT_ERROR, _handlePaymentError);
+      razorpay.on(Razorpay.EVENT_EXTERNAL_WALLET, _handleExternalWallet);
+      razorpay.open({
+        'key': checkout.keyId,
+        'amount': checkout.amountPaise,
+        'currency': checkout.currency,
+        'name': 'Akademifyy',
+        'description': checkout.description,
+        'order_id': checkout.orderId,
+        'prefill': {
+          'name': checkout.prefillName ?? '',
+          'email': checkout.prefillEmail ?? '',
+          'contact': checkout.prefillContact ?? '',
+        },
+        'theme': {'color': '#6D5DFB'},
+      });
+    } catch (error) {
+      if (!mounted) return;
+      setState(() => _processing = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(parentApiError(error, 'Unable to start payment')),
+        ),
+      );
+    }
+  }
+
+  Future<void> _handlePaymentSuccess(PaymentSuccessResponse response) async {
+    try {
+      await ref
+          .read(parentRepositoryProvider)
+          .verifyFeeCheckoutPayment(
+            razorpayOrderId: response.orderId ?? _checkout?.orderId ?? '',
+            razorpayPaymentId: response.paymentId ?? '',
+            razorpaySignature: response.signature ?? '',
+          );
+      ref.invalidate(parentChildDetailProvider(widget.childId));
+      final childState = ref.read(effectiveSelectedChildProvider);
+      final child = childState.asData?.value;
+      if (child != null && child.id == widget.childId) {
+        ref.invalidate(parentFeeSummaryProvider(child));
+      }
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Payment completed successfully.')),
+      );
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(parentApiError(error, 'Payment verification failed')),
+        ),
+      );
+    } finally {
+      _razorpay?.clear();
+      if (mounted) setState(() => _processing = false);
+    }
+  }
+
+  void _handlePaymentError(PaymentFailureResponse response) {
+    _razorpay?.clear();
+    if (!mounted) return;
+    setState(() => _processing = false);
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(response.message ?? 'Payment was cancelled or failed.'),
+      ),
+    );
+  }
+
+  void _handleExternalWallet(ExternalWalletResponse response) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text('Selected ${response.walletName ?? 'external wallet'}.'),
+      ),
+    );
+  }
+}
+
+class _FeePaymentAmountSheet extends StatefulWidget {
+  const _FeePaymentAmountSheet({required this.balanceAmount});
+
+  final num balanceAmount;
+
+  @override
+  State<_FeePaymentAmountSheet> createState() => _FeePaymentAmountSheetState();
+}
+
+class _FeePaymentAmountSheetState extends State<_FeePaymentAmountSheet> {
+  late final TextEditingController _amountController;
+  bool _custom = false;
+  String? _error;
+
+  @override
+  void initState() {
+    super.initState();
+    _amountController = TextEditingController(
+      text: widget.balanceAmount.toStringAsFixed(0),
+    );
+  }
+
+  @override
+  void dispose() {
+    _amountController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final bottom = MediaQuery.of(context).viewInsets.bottom;
+    return SafeArea(
+      child: Padding(
+        padding: EdgeInsets.fromLTRB(22, 4, 22, 22 + bottom),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            const Text(
+              'Pay fees',
+              style: TextStyle(
+                color: SaaptTheme.navy,
+                fontSize: 20,
+                fontWeight: FontWeight.w900,
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'Balance due: ${_moneyValue(widget.balanceAmount)}',
+              style: const TextStyle(
+                color: Color(0xFF60708F),
+                fontWeight: FontWeight.w800,
+              ),
+            ),
+            const SizedBox(height: 18),
+            SegmentedButton<bool>(
+              segments: const [
+                ButtonSegment(value: false, label: Text('Full balance')),
+                ButtonSegment(value: true, label: Text('Custom amount')),
+              ],
+              selected: {_custom},
+              onSelectionChanged: (value) {
+                setState(() {
+                  _custom = value.first;
+                  _error = null;
+                  if (!_custom) {
+                    _amountController.text = widget.balanceAmount
+                        .toStringAsFixed(0);
+                  }
+                });
+              },
+            ),
+            const SizedBox(height: 16),
+            TextField(
+              controller: _amountController,
+              enabled: _custom,
+              keyboardType: const TextInputType.numberWithOptions(
+                decimal: true,
+              ),
+              decoration: InputDecoration(
+                labelText: 'Amount',
+                prefixText: '₹ ',
+                errorText: _error,
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(14),
+                ),
+              ),
+            ),
+            const SizedBox(height: 18),
+            FilledButton(
+              onPressed: _submit,
+              style: FilledButton.styleFrom(
+                backgroundColor: SaaptTheme.primary,
+                foregroundColor: Colors.white,
+                padding: const EdgeInsets.symmetric(vertical: 14),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(14),
+                ),
+              ),
+              child: const Text('Continue to Razorpay'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _submit() {
+    final amount = num.tryParse(_amountController.text.trim());
+    if (amount == null || amount <= 0) {
+      setState(() => _error = 'Enter a valid amount.');
+      return;
+    }
+    if (amount > widget.balanceAmount) {
+      setState(() => _error = 'Amount cannot exceed the balance.');
+      return;
+    }
+    Navigator.of(context).pop(amount);
   }
 }
 

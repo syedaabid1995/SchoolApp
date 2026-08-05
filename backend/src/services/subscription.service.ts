@@ -136,7 +136,7 @@ const getPlanCharge = (plan: { priceCents: number }, billingCycle: NormalizedBil
   };
 };
 
-const getRazorpayConfig = () => {
+export const getRazorpayConfig = () => {
   if (!env.RAZORPAY_KEY_ID || !env.RAZORPAY_KEY_SECRET) {
     throw new HttpError(503, 'Razorpay is not configured. Add RAZORPAY_KEY_ID and RAZORPAY_KEY_SECRET.');
   }
@@ -146,7 +146,7 @@ const getRazorpayConfig = () => {
   };
 };
 
-const razorpayRequest = async <T>(path: string, options: { method?: string; body?: Record<string, unknown> } = {}) => {
+export const razorpayRequest = async <T>(path: string, options: { method?: string; body?: Record<string, unknown> } = {}) => {
   const { keyId, keySecret } = getRazorpayConfig();
   const response = await fetch(`https://api.razorpay.com/v1${path}`, {
     method: options.method ?? 'GET',
@@ -168,7 +168,7 @@ const razorpayRequest = async <T>(path: string, options: { method?: string; body
   return payload as T;
 };
 
-const verifyRazorpaySignature = (orderId: string, paymentId: string, signature: string) => {
+export const verifyRazorpaySignature = (orderId: string, paymentId: string, signature: string) => {
   const { keySecret } = getRazorpayConfig();
   const expected = crypto
     .createHmac('sha256', keySecret)

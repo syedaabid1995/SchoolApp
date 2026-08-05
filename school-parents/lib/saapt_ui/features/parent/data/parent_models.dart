@@ -549,6 +549,65 @@ class ParentFeeSummary {
   }
 }
 
+class ParentFeeCheckoutOrder {
+  const ParentFeeCheckoutOrder({
+    required this.keyId,
+    required this.orderId,
+    required this.amountPaise,
+    required this.currency,
+    required this.description,
+    required this.childName,
+    this.prefillName,
+    this.prefillEmail,
+    this.prefillContact,
+  });
+
+  final String keyId;
+  final String orderId;
+  final int amountPaise;
+  final String currency;
+  final String description;
+  final String childName;
+  final String? prefillName;
+  final String? prefillEmail;
+  final String? prefillContact;
+
+  factory ParentFeeCheckoutOrder.fromJson(Map<String, dynamic> json) {
+    final order = _jsonMap(json['order']);
+    final checkout = _jsonMap(json['checkout']);
+    final child = _jsonMap(json['child']);
+    final prefill = _jsonMap(checkout['prefill']);
+    return ParentFeeCheckoutOrder(
+      keyId: json['keyId']?.toString() ?? '',
+      orderId: order['id']?.toString() ?? '',
+      amountPaise: int.tryParse(order['amount']?.toString() ?? '') ?? 0,
+      currency: order['currency']?.toString() ?? 'INR',
+      description: checkout['description']?.toString() ?? 'Fee payment',
+      childName: child['name']?.toString() ?? 'Student',
+      prefillName: prefill['name']?.toString(),
+      prefillEmail: prefill['email']?.toString(),
+      prefillContact: prefill['contact']?.toString(),
+    );
+  }
+}
+
+class ParentFeePaymentResult {
+  const ParentFeePaymentResult({
+    required this.message,
+    required this.idempotent,
+  });
+
+  final String message;
+  final bool idempotent;
+
+  factory ParentFeePaymentResult.fromJson(Map<String, dynamic> json) {
+    return ParentFeePaymentResult(
+      message: json['message']?.toString() ?? 'Payment recorded.',
+      idempotent: json['idempotent'] == true,
+    );
+  }
+}
+
 class ParentLeaveRequest {
   const ParentLeaveRequest({
     required this.id,

@@ -69,7 +69,13 @@ final saaptRouterProvider = Provider<GoRouter>((ref) {
         path: '/change-password',
         builder: (_, _) => const SaaptForceChangePasswordScreen(),
       ),
-      GoRoute(path: '/profile', builder: (_, _) => const ParentProfileScreen()),
+      GoRoute(
+        path: '/profile',
+        builder: (_, state) => ParentProfileScreen(
+          initialChildId: state.uri.queryParameters['childId'],
+          initialTabKey: state.uri.queryParameters['tab'],
+        ),
+      ),
       StatefulShellRoute.indexedStack(
         builder: (context, state, shell) => _SaaptShell(shell: shell),
         branches: [

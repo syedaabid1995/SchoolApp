@@ -263,6 +263,38 @@ class ParentRepository {
     );
   }
 
+  Future<ParentFeeCheckoutOrder> createFeeCheckoutOrder({
+    required String childId,
+    required String invoiceId,
+    required num amount,
+  }) async {
+    final response = await _dio.post<Map<String, dynamic>>(
+      '/parents/portal/fees/checkout',
+      data: {'childId': childId, 'invoiceId': invoiceId, 'amount': amount},
+    );
+    return ParentFeeCheckoutOrder.fromJson(
+      response.data ?? const <String, dynamic>{},
+    );
+  }
+
+  Future<ParentFeePaymentResult> verifyFeeCheckoutPayment({
+    required String razorpayOrderId,
+    required String razorpayPaymentId,
+    required String razorpaySignature,
+  }) async {
+    final response = await _dio.post<Map<String, dynamic>>(
+      '/parents/portal/fees/checkout/verify',
+      data: {
+        'razorpay_order_id': razorpayOrderId,
+        'razorpay_payment_id': razorpayPaymentId,
+        'razorpay_signature': razorpaySignature,
+      },
+    );
+    return ParentFeePaymentResult.fromJson(
+      response.data ?? const <String, dynamic>{},
+    );
+  }
+
   Future<List<ParentNotice>> getNotices({String? childId}) async {
     final response = await _dio.get<List<dynamic>>(
       '/parents/portal/notices',

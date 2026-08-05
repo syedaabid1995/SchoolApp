@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 
 import '../../../../app/theme/saapt_theme.dart';
@@ -73,7 +74,15 @@ class _AlertCard extends StatelessWidget {
   Widget build(BuildContext context) {
     return InkWell(
       borderRadius: BorderRadius.circular(16),
-      onTap: () => _showAlertDetails(context, display),
+      onTap: () {
+        if (display.targetChildId != null && display.targetTabKey != null) {
+          context.go(
+            '/profile?childId=${Uri.encodeComponent(display.targetChildId!)}&tab=${Uri.encodeComponent(display.targetTabKey!)}',
+          );
+          return;
+        }
+        _showAlertDetails(context, display);
+      },
       child: ParentCard(
         padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 16),
         child: Row(
@@ -319,6 +328,8 @@ class _AlertDisplay {
     required this.badgeLabel,
     required this.badgeStyle,
     required this.detailRows,
+    this.targetChildId,
+    this.targetTabKey,
   });
 
   final String icon;
@@ -328,6 +339,8 @@ class _AlertDisplay {
   final String badgeLabel;
   final _AlertBadgeStyle badgeStyle;
   final List<_AlertDetailRow> detailRows;
+  final String? targetChildId;
+  final String? targetTabKey;
 
   factory _AlertDisplay.fromNotice(ParentNotice notice) {
     final type = notice.type?.toUpperCase();
@@ -351,6 +364,29 @@ class _AlertDisplay {
         searchable.contains('achievement') ||
         searchable.contains('secured') ||
         searchable.contains('grade');
+    final category = notice.details['category']?.toString().toLowerCase();
+    final module = notice.details['module']?.toString().toLowerCase();
+    final isFees =
+        type == 'FEE_REMINDER' ||
+        category == 'fee_reminder' ||
+        module == 'fees' ||
+        searchable.contains('fee') ||
+        searchable.contains('payment');
+
+    if (isFees) {
+      final childId = notice.details['childId']?.toString();
+      return _AlertDisplay(
+        icon: '💳',
+        title: notice.title,
+        summary: _summaryFor(notice),
+        date: notice.date,
+        badgeLabel: 'Pay fees',
+        badgeStyle: _AlertBadgeStyle.blue,
+        detailRows: _detailRowsFor(notice),
+        targetChildId: childId?.trim().isEmpty == true ? null : childId,
+        targetTabKey: 'fees',
+      );
+    }
 
     if (isAttendance) {
       return _AlertDisplay(
@@ -459,6 +495,15 @@ class _AlertDisplay {
       add('Session', details['attendanceUnit']);
       add('Status', details['attendanceStatus']);
       add('Remarks', details['remarks']);
+    }
+
+    if ((details['module']?.toString().toLowerCase() == 'fees') ||
+        (details['category']?.toString().toLowerCase() == 'fee_reminder') ||
+        (type == 'FEE_REMINDER')) {
+      add('Due', details['dueAmount']);
+      add('Invoice', details['invoiceNumber']);
+      add('Invoices', details['invoiceNumbers']);
+      add('Count', details['invoiceCount']);
     }
 
     return rows;
