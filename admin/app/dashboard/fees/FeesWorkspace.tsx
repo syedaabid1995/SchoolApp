@@ -2263,14 +2263,13 @@ export default function FeesWorkspace({ initialSection }: { initialSection?: Fee
               <div className="overflow-x-auto rounded-2xl border border-slate-200">
                 <table className="min-w-full divide-y divide-slate-100 text-sm">
                   <thead className="bg-slate-50 text-left text-xs uppercase text-slate-500">
-                    <tr><th className="px-4 py-3">Master</th><th className="px-4 py-3">Group</th><th className="px-4 py-3">Type</th><th className="px-4 py-3">Due</th><th className="px-4 py-3">Amount</th><th className="px-4 py-3">Status</th><th className="px-4 py-3">Action</th></tr>
+                    <tr><th className="px-4 py-3">Master</th><th className="px-4 py-3">Description</th><th className="px-4 py-3">Due</th><th className="px-4 py-3">Amount</th><th className="px-4 py-3">Status</th><th className="px-4 py-3">Action</th></tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100">
                     {feeMasters.map((item) => (
                       <tr key={item.id} className="hover:bg-slate-50">
                         <td className="px-4 py-3"><p className="font-bold text-slate-900">{item.name}</p><p className="text-xs text-slate-500">{item.code}</p></td>
-                        <td className="px-4 py-3">{item.feeGroup?.name ?? '-'}</td>
-                        <td className="px-4 py-3">{item.feeType?.name ?? '-'}</td>
+                        <td className="min-w-80 max-w-xl whitespace-normal px-4 py-3 text-slate-600">{item.description || '-'}</td>
                         <td className="px-4 py-3">{dateValue(item.dueDate)}</td>
                         <td className="px-4 py-3 font-black text-slate-950">{money(item.amount)}</td>
                         <td className="px-4 py-3"><Badge tone={statusTone(item.status)}>{item.status}</Badge></td>
@@ -2297,7 +2296,7 @@ export default function FeesWorkspace({ initialSection }: { initialSection?: Fee
                         </td>
                       </tr>
                     ))}
-                    {!feeMasters.length ? <tr><td colSpan={7} className="px-4 py-8 text-center text-slate-500">No fee masters found.</td></tr> : null}
+                    {!feeMasters.length ? <tr><td colSpan={6} className="px-4 py-8 text-center text-slate-500">No fee masters found.</td></tr> : null}
                   </tbody>
                 </table>
               </div>

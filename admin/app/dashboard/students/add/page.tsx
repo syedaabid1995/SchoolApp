@@ -11,7 +11,7 @@ import { useNotify } from '../../../../components/NotificationProvider';
 import { getSession } from '../../../../services/auth.service';
 import { listAcademicYears } from '../../../../services/academic.service';
 import { listSetupClasses, listSetupSections } from '../../../../services/academic-setup.service';
-import { listFeeDiscounts, listFeeGroups, listFeeMasters, type FeeDiscount, type FeeMaster } from '../../../../services/fee-management.service';
+import { listFeeDiscounts, listFeeMasters, type FeeDiscount, type FeeMaster } from '../../../../services/fee-management.service';
 import { createParent, createStudent, linkParent, listStudents, uploadAndAddStudentDocument, uploadStudentPhoto } from '../../../../services/student.service';
 import { getSchoolSystemSettings } from '../../../../services/system-settings.service';
 
@@ -214,11 +214,6 @@ export default function AddStudentPage() {
     queryFn: () => getSchoolSystemSettings(),
     enabled: canCreateStudent,
   });
-  const feeGroupsQuery = useQuery({
-    queryKey: ['admission-fee-groups', form.academicSessionId],
-    queryFn: () => listFeeGroups({ academicSessionId: form.academicSessionId, status: 'ACTIVE', limit: 100 }),
-    enabled: canCreateStudent && Boolean(form.academicSessionId),
-  });
   const feeMastersQuery = useQuery({
     queryKey: ['admission-fee-masters', form.academicSessionId],
     queryFn: () => listFeeMasters({ academicSessionId: form.academicSessionId, status: 'ACTIVE', limit: 100 }),
@@ -239,7 +234,6 @@ export default function AddStudentPage() {
     enabled: canCreateStudent && Boolean(siblingFilters.classId && siblingFilters.sectionId),
   });
   const filteredSiblingOptions = (siblingsQuery.data ?? []).filter((student) => !form.siblingIds.includes(student.id));
-  const feeGroups = useMemo(() => feeGroupsQuery.data?.items ?? [], [feeGroupsQuery.data]);
   const feeMasters = useMemo(() => feeMastersQuery.data?.items ?? [], [feeMastersQuery.data]);
   const feeDiscounts: FeeDiscount[] = useMemo(
     () => (Array.isArray(feeDiscountsQuery.data) ? feeDiscountsQuery.data : feeDiscountsQuery.data?.items ?? []),
@@ -719,8 +713,7 @@ export default function AddStudentPage() {
                       <tr>
                         <th className="w-16 px-4 py-3 text-left">Select</th>
                         <th className="px-4 py-3 text-left">Fee Master</th>
-                        <th className="px-4 py-3 text-left">Group</th>
-                        <th className="px-4 py-3 text-left">Fee Type</th>
+                        <th className="px-4 py-3 text-left">Description</th>
                         <th className="px-4 py-3 text-right">Annual Amount</th>
                         <th className="px-4 py-3 text-left">Due Date</th>
                       </tr>
@@ -736,15 +729,14 @@ export default function AddStudentPage() {
                             />
                           </td>
                           <td className="px-4 py-3 font-bold text-slate-900">{master.name}</td>
-                          <td className="px-4 py-3 text-slate-600">{master.feeGroup?.name ?? '-'}</td>
-                          <td className="px-4 py-3 text-slate-600">{master.feeType?.name ?? '-'}</td>
+                          <td className="min-w-80 max-w-xl whitespace-normal px-4 py-3 text-slate-600">{master.description || '-'}</td>
                           <td className="px-4 py-3 text-right font-bold text-slate-900">{formatCurrency(annualizedFeeMasterAmount(master))}</td>
                           <td className="px-4 py-3 text-slate-600">{master.dueDate ? new Date(master.dueDate).toLocaleDateString() : '-'}</td>
                         </tr>
                       ))}
-                      {!form.academicSessionId ? <tr><td colSpan={6} className="px-4 py-8 text-center text-slate-500">Select a session to load fee masters.</td></tr> : null}
-                      {form.academicSessionId && feeMastersQuery.isFetching ? <tr><td colSpan={6} className="px-4 py-8 text-center text-slate-500">Loading fee masters...</td></tr> : null}
-                      {form.academicSessionId && !feeMastersQuery.isFetching && !feeMasters.length ? <tr><td colSpan={6} className="px-4 py-8 text-center text-slate-500">No active fee masters found.</td></tr> : null}
+                      {!form.academicSessionId ? <tr><td colSpan={5} className="px-4 py-8 text-center text-slate-500">Select a session to load fee masters.</td></tr> : null}
+                      {form.academicSessionId && feeMastersQuery.isFetching ? <tr><td colSpan={5} className="px-4 py-8 text-center text-slate-500">Loading fee masters...</td></tr> : null}
+                      {form.academicSessionId && !feeMastersQuery.isFetching && !feeMasters.length ? <tr><td colSpan={5} className="px-4 py-8 text-center text-slate-500">No active fee masters found.</td></tr> : null}
                     </tbody>
                   </table>
                 </div>
@@ -801,9 +793,8 @@ export default function AddStudentPage() {
                     <table className="min-w-full divide-y divide-slate-200 text-sm">
                       <thead className="bg-slate-50 text-xs font-black uppercase tracking-wide text-slate-500">
                         <tr>
-                          <th className="px-4 py-3 text-left">Fee Group</th>
                           <th className="px-4 py-3 text-left">Fee Master</th>
-                          <th className="px-4 py-3 text-left">Fee Type</th>
+                          <th className="px-4 py-3 text-left">Description</th>
                           <th className="px-4 py-3 text-left">Due Date</th>
                           <th className="px-4 py-3 text-right">Annual Amount</th>
                         </tr>
@@ -811,14 +802,13 @@ export default function AddStudentPage() {
                       <tbody className="divide-y divide-slate-100 bg-white">
                         {selectedFeeMasters.map((master) => (
                           <tr key={master.id}>
-                            <td className="px-4 py-3 text-slate-700">{master.feeGroup?.name ?? feeGroups.find((group) => group.id === master.feeGroupId)?.name ?? '-'}</td>
                             <td className="px-4 py-3 font-bold text-slate-900">{master.name}</td>
-                            <td className="px-4 py-3 text-slate-700">{master.feeType?.name ?? '-'}</td>
+                            <td className="min-w-80 max-w-xl whitespace-normal px-4 py-3 text-slate-700">{master.description || '-'}</td>
                             <td className="px-4 py-3 text-slate-700">{formatDate(master.dueDate)}</td>
                             <td className="px-4 py-3 text-right font-bold text-slate-900">{formatCurrency(annualizedFeeMasterAmount(master))}</td>
                           </tr>
                         ))}
-                        {!selectedFeeMasters.length ? <tr><td colSpan={5} className="px-4 py-8 text-center text-slate-500">Select fee groups to preview fee masters.</td></tr> : null}
+                        {!selectedFeeMasters.length ? <tr><td colSpan={4} className="px-4 py-8 text-center text-slate-500">Select fee groups to preview fee masters.</td></tr> : null}
                       </tbody>
                     </table>
                   </div>
