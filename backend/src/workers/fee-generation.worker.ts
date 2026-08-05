@@ -1,5 +1,5 @@
 import { Worker } from 'bullmq';
-import { Prisma } from '@prisma/client';
+import { Prisma, type FeeCollectionSchedule } from '@prisma/client';
 import { prisma } from '../config/db';
 import { logger } from '../config/logger';
 import { redis } from '../config/redis';
@@ -21,9 +21,29 @@ const toDecimal = (value: number | string | Prisma.Decimal | null | undefined) =
 
 const getStringArray = (value: unknown) => Array.isArray(value) ? value.filter((item): item is string => typeof item === 'string') : [];
 
+const feeScheduleMultiplier = (schedule?: FeeCollectionSchedule | null) => {
+  switch (schedule) {
+    case 'MONTHLY':
+      return 12;
+    case 'QUARTERLY':
+      return 4;
+    case 'HALF_YEARLY':
+      return 2;
+    case 'YEARLY':
+    case 'ONE_TIME':
+    default:
+      return 1;
+  }
+};
+
+type AdmissionFeeMaster = Prisma.FeeMasterGetPayload<{ include: { feeType: { select: { schedule: true } } } }>;
+
+const annualizedFeeMasterAmount = (master: AdmissionFeeMaster) =>
+  toDecimal(master.amount).mul(feeScheduleMultiplier(master.feeType.schedule));
+
 const isDiscountApplicable = (
   discount: Prisma.FeeDiscountGetPayload<{ include: { installments: true } }>,
-  master: Prisma.FeeMasterGetPayload<{}>,
+  master: AdmissionFeeMaster,
   studentId: string,
 ) => {
   if (discount.installments.some((item) => item.feeMasterId === master.id && !item.deletedAt)) return true;
@@ -37,10 +57,10 @@ const isDiscountApplicable = (
 
 const calculateDiscountAmount = (
   discounts: Array<Prisma.FeeDiscountGetPayload<{ include: { installments: true } }>>,
-  master: Prisma.FeeMasterGetPayload<{}>,
+  master: AdmissionFeeMaster,
   studentId: string,
 ) => {
-  const amount = toDecimal(master.amount);
+  const amount = annualizedFeeMasterAmount(master);
   return discounts.reduce((sum, discount) => {
     if (!isDiscountApplicable(discount, master, studentId)) return sum;
     const value = toDecimal(discount.amount ?? discount.value);
@@ -117,6 +137,7 @@ export const startFeeGenerationWorker = () => {
               },
             ],
           },
+          include: { feeType: { select: { schedule: true } } },
           orderBy: [{ dueDate: 'asc' }, { sortOrder: 'asc' }, { name: 'asc' }],
         });
 
@@ -166,7 +187,7 @@ export const startFeeGenerationWorker = () => {
             continue;
           }
 
-          const amount = toDecimal(master.amount);
+          const amount = annualizedFeeMasterAmount(master);
           const discountAmount = Prisma.Decimal.min(calculateDiscountAmount(discounts, master, generationJob.studentId), amount);
           const dueAmount = Prisma.Decimal.max(amount.minus(discountAmount), 0);
           const invoiceNumber = await getNextNumber({

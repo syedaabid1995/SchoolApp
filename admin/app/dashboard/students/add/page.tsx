@@ -149,6 +149,24 @@ const toAmount = (value: number | string | null | undefined) => {
   return Number.isFinite(amount) ? amount : 0;
 };
 
+const feeScheduleMultiplier = (schedule?: string | null) => {
+  switch (schedule) {
+    case 'MONTHLY':
+      return 12;
+    case 'QUARTERLY':
+      return 4;
+    case 'HALF_YEARLY':
+      return 2;
+    case 'YEARLY':
+    case 'ONE_TIME':
+    default:
+      return 1;
+  }
+};
+
+const annualizedFeeMasterAmount = (master: Pick<FeeMaster, 'amount' | 'feeType'>) =>
+  toAmount(master.amount) * feeScheduleMultiplier(master.feeType?.schedule);
+
 const formatCurrency = (value: number) =>
   new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 0 }).format(value);
 
@@ -227,17 +245,6 @@ export default function AddStudentPage() {
     () => (Array.isArray(feeDiscountsQuery.data) ? feeDiscountsQuery.data : feeDiscountsQuery.data?.items ?? []),
     [feeDiscountsQuery.data],
   );
-  const feeGroupSummaries = useMemo(() => {
-    const summaries = new Map<string, { total: number; masters: number }>();
-    feeMasters.forEach((master) => {
-      const current = summaries.get(master.feeGroupId) ?? { total: 0, masters: 0 };
-      summaries.set(master.feeGroupId, {
-        total: current.total + toAmount(master.amount),
-        masters: current.masters + 1,
-      });
-    });
-    return summaries;
-  }, [feeMasters]);
   const selectedFeeMasters = useMemo(() => {
     const selectedGroups = new Set(form.feeGroupIds);
     const masters = new Map<string, FeeMaster>();
@@ -264,7 +271,7 @@ export default function AddStudentPage() {
     [activeStudentEligibleDiscounts, form.discountIds],
   );
   const feeSubTotal = useMemo(
-    () => selectedFeeMasters.reduce((sum, master) => sum + toAmount(master.amount), 0),
+    () => selectedFeeMasters.reduce((sum, master) => sum + annualizedFeeMasterAmount(master), 0),
     [selectedFeeMasters],
   );
   const rawDiscountTotal = useMemo(
@@ -714,7 +721,7 @@ export default function AddStudentPage() {
                         <th className="px-4 py-3 text-left">Fee Master</th>
                         <th className="px-4 py-3 text-left">Group</th>
                         <th className="px-4 py-3 text-left">Fee Type</th>
-                        <th className="px-4 py-3 text-right">Amount</th>
+                        <th className="px-4 py-3 text-right">Annual Amount</th>
                         <th className="px-4 py-3 text-left">Due Date</th>
                       </tr>
                     </thead>
@@ -731,7 +738,7 @@ export default function AddStudentPage() {
                           <td className="px-4 py-3 font-bold text-slate-900">{master.name}</td>
                           <td className="px-4 py-3 text-slate-600">{master.feeGroup?.name ?? '-'}</td>
                           <td className="px-4 py-3 text-slate-600">{master.feeType?.name ?? '-'}</td>
-                          <td className="px-4 py-3 text-right font-bold text-slate-900">{formatCurrency(toAmount(master.amount))}</td>
+                          <td className="px-4 py-3 text-right font-bold text-slate-900">{formatCurrency(annualizedFeeMasterAmount(master))}</td>
                           <td className="px-4 py-3 text-slate-600">{master.dueDate ? new Date(master.dueDate).toLocaleDateString() : '-'}</td>
                         </tr>
                       ))}
@@ -798,7 +805,7 @@ export default function AddStudentPage() {
                           <th className="px-4 py-3 text-left">Fee Master</th>
                           <th className="px-4 py-3 text-left">Fee Type</th>
                           <th className="px-4 py-3 text-left">Due Date</th>
-                          <th className="px-4 py-3 text-right">Amount</th>
+                          <th className="px-4 py-3 text-right">Annual Amount</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-slate-100 bg-white">
@@ -808,7 +815,7 @@ export default function AddStudentPage() {
                             <td className="px-4 py-3 font-bold text-slate-900">{master.name}</td>
                             <td className="px-4 py-3 text-slate-700">{master.feeType?.name ?? '-'}</td>
                             <td className="px-4 py-3 text-slate-700">{formatDate(master.dueDate)}</td>
-                            <td className="px-4 py-3 text-right font-bold text-slate-900">{formatCurrency(toAmount(master.amount))}</td>
+                            <td className="px-4 py-3 text-right font-bold text-slate-900">{formatCurrency(annualizedFeeMasterAmount(master))}</td>
                           </tr>
                         ))}
                         {!selectedFeeMasters.length ? <tr><td colSpan={5} className="px-4 py-8 text-center text-slate-500">Select fee groups to preview fee masters.</td></tr> : null}
