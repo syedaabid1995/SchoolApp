@@ -1,6 +1,7 @@
 import { logger } from '../config/logger';
 import { startScheduledNotificationScheduler, stopScheduledNotificationScheduler } from '../workers/scheduled-notification.worker';
 import { startSubscriptionScheduler, stopSubscriptionScheduler } from '../workers/subscription.worker';
+import { startMonthlyFeeReminderScheduler, stopMonthlyFeeReminderScheduler } from '../workers/fee-reminder.worker';
 
 export type SchedulerLifecycle = {
   name: string;
@@ -11,6 +12,7 @@ export type SchedulerLifecycle = {
 export const defaultSchedulerLifecycles: SchedulerLifecycle[] = [
   { name: 'notifications.scheduled-dispatch', start: startScheduledNotificationScheduler, stop: stopScheduledNotificationScheduler },
   { name: 'subscriptions.expiry-check', start: startSubscriptionScheduler, stop: stopSubscriptionScheduler },
+  { name: 'fees.monthly-parent-reminders', start: startMonthlyFeeReminderScheduler, stop: stopMonthlyFeeReminderScheduler },
 ];
 
 export const createSchedulerRuntime = (schedulers: SchedulerLifecycle[] = defaultSchedulerLifecycles) => {
