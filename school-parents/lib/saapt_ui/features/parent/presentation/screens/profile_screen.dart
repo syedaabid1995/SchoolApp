@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:intl/intl.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../../../app/theme/saapt_theme.dart';
@@ -1286,6 +1287,9 @@ class _DataPanel extends StatelessWidget {
     if (tabKey == 'library') {
       return _LibraryTabPanel(data: data);
     }
+    if (tabKey == 'fees') {
+      return _FeesTabPanel(data: data);
+    }
     final records = _recordsForTab(tabKey, data);
     if (records.isEmpty) {
       return EmptyPanel(message: 'No $title records available.');
@@ -1373,6 +1377,544 @@ class _SimpleSection extends StatelessWidget {
           const SizedBox(height: 12),
           ...children,
         ],
+      ),
+    );
+  }
+}
+
+class _FeesTabPanel extends StatelessWidget {
+  const _FeesTabPanel({required this.data});
+
+  final Object? data;
+
+  @override
+  Widget build(BuildContext context) {
+    final map = _asMap(data);
+    final invoices = _asList(
+      map['invoices'],
+    ).map(_asMap).where((item) => !_isEmptyData(item)).toList();
+
+    if (invoices.isEmpty) {
+      return const EmptyPanel(
+        message: 'No fee invoices found for this student.',
+      );
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        ParentCard(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              const Text(
+                'Fees',
+                style: TextStyle(
+                  color: SaaptTheme.navy,
+                  fontSize: 16,
+                  fontWeight: FontWeight.w900,
+                ),
+              ),
+              const SizedBox(height: 14),
+              _FeeTotalsGrid(invoices: invoices),
+            ],
+          ),
+        ),
+        const SizedBox(height: 14),
+        ...invoices.map(
+          (invoice) => Padding(
+            padding: const EdgeInsets.only(bottom: 14),
+            child: _FeeInvoiceCard(invoice: invoice),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _FeeTotalsGrid extends StatelessWidget {
+  const _FeeTotalsGrid({required this.invoices});
+
+  final List<Map<String, dynamic>> invoices;
+
+  @override
+  Widget build(BuildContext context) {
+    final totalBilled = invoices.fold<num>(
+      0,
+      (sum, invoice) => sum + _numberValue(invoice['totalAmount']),
+    );
+    final discount = invoices.fold<num>(
+      0,
+      (sum, invoice) => sum + _numberValue(invoice['discountAmount']),
+    );
+    final paid = invoices.fold<num>(
+      0,
+      (sum, invoice) => sum + _numberValue(invoice['paidAmount']),
+    );
+    final due = invoices.fold<num>(
+      0,
+      (sum, invoice) => sum + _numberValue(invoice['dueAmount']),
+    );
+
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final columns = constraints.maxWidth >= 620 ? 4 : 2;
+        return GridView.count(
+          crossAxisCount: columns,
+          shrinkWrap: true,
+          physics: const NeverScrollableScrollPhysics(),
+          crossAxisSpacing: 10,
+          mainAxisSpacing: 10,
+          childAspectRatio: columns == 4 ? 1.55 : 1.75,
+          children: [
+            _FeeStatTile(
+              label: 'Total billed',
+              value: _moneyValue(totalBilled),
+            ),
+            _FeeStatTile(
+              label: 'Discount',
+              value: _moneyValue(discount),
+              valueColor: const Color(0xFF059669),
+            ),
+            _FeeStatTile(
+              label: 'Paid',
+              value: _moneyValue(paid),
+              valueColor: SaaptTheme.navy,
+            ),
+            _FeeStatTile(
+              label: 'Balance due',
+              value: _moneyValue(due),
+              valueColor: due > 0
+                  ? const Color(0xFFDC2626)
+                  : const Color(0xFF8EA0BA),
+            ),
+          ],
+        );
+      },
+    );
+  }
+}
+
+class _FeeStatTile extends StatelessWidget {
+  const _FeeStatTile({
+    required this.label,
+    required this.value,
+    this.valueColor = SaaptTheme.primary,
+  });
+
+  final String label;
+  final String value;
+  final Color valueColor;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: const Color(0xFFF7FAFF),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: const Color(0xFFE5ECF7)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Text(
+            label.toUpperCase(),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: const TextStyle(
+              color: Color(0xFF8EA0BA),
+              fontSize: 10,
+              fontWeight: FontWeight.w900,
+            ),
+          ),
+          const SizedBox(height: 6),
+          FittedBox(
+            fit: BoxFit.scaleDown,
+            alignment: Alignment.centerLeft,
+            child: Text(
+              value,
+              style: TextStyle(
+                color: valueColor,
+                fontSize: 18,
+                fontWeight: FontWeight.w900,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _FeeInvoiceCard extends StatelessWidget {
+  const _FeeInvoiceCard({required this.invoice});
+
+  final Map<String, dynamic> invoice;
+
+  @override
+  Widget build(BuildContext context) {
+    final feeType = _asMap(invoice['feeType']);
+    final feeStructure = _asMap(invoice['feeStructure']);
+    final title =
+        _firstString(feeType, ['name']) ??
+        _firstString(feeStructure, ['name']) ??
+        _firstString(invoice, ['invoiceNumber']) ??
+        'Fee Invoice';
+    final invoiceNumber = _firstString(invoice, ['invoiceNumber']) ?? '-';
+    final feeMonth = _firstString(invoice, ['feeMonth']);
+    final status = _firstString(invoice, ['status']) ?? 'ISSUED';
+    final dueDate = _firstString(invoice, ['dueDate']);
+    final payments = _asList(
+      invoice['payments'],
+    ).map(_asMap).where((item) => !_isEmptyData(item)).toList();
+    final receipts = _asList(
+      invoice['receipts'],
+    ).map(_asMap).where((item) => !_isEmptyData(item)).toList();
+    final isUpcoming =
+        !_isPastDate(invoice['dueDate']) &&
+        !status.toUpperCase().contains('PAID') &&
+        status.toUpperCase() != 'CANCELLED';
+
+    return ParentCard(
+      padding: EdgeInsets.zero,
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Container(
+              color: const Color(0xFFF7FAFF),
+              padding: const EdgeInsets.all(14),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          feeMonth == null ? title : '$title ($feeMonth)',
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                            color: SaaptTheme.navy,
+                            fontSize: 15,
+                            fontWeight: FontWeight.w900,
+                          ),
+                        ),
+                        const SizedBox(height: 3),
+                        Text(
+                          invoiceNumber,
+                          style: const TextStyle(
+                            color: Color(0xFF8EA0BA),
+                            fontSize: 12,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Wrap(
+                    spacing: 6,
+                    runSpacing: 6,
+                    alignment: WrapAlignment.end,
+                    children: [
+                      if (isUpcoming)
+                        const _FeeStatusChip(
+                          label: 'Upcoming',
+                          background: Color(0xFFF1ECFF),
+                          foreground: SaaptTheme.primary,
+                        ),
+                      _FeeStatusChip.forStatus(status),
+                      _FeeStatusChip(
+                        label: 'Due ${_dateValue(dueDate)}',
+                        background: Colors.white,
+                        foreground: const Color(0xFF60708F),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+            _FeeAmountGrid(invoice: invoice),
+            if (payments.isEmpty)
+              const Padding(
+                padding: EdgeInsets.all(14),
+                child: Text(
+                  'No payments recorded yet.',
+                  style: TextStyle(
+                    color: Color(0xFF8EA0BA),
+                    fontSize: 12,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              )
+            else
+              Column(
+                children: payments
+                    .map(
+                      (payment) => _FeePaymentRow(
+                        payment: payment,
+                        receipt: _receiptForPayment(payment, receipts),
+                      ),
+                    )
+                    .toList(),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _FeeAmountGrid extends StatelessWidget {
+  const _FeeAmountGrid({required this.invoice});
+
+  final Map<String, dynamic> invoice;
+
+  @override
+  Widget build(BuildContext context) {
+    final cells = [
+      _FeeAmountCell('Billed', invoice['totalAmount']),
+      _FeeAmountCell(
+        'Discount',
+        invoice['discountAmount'],
+        valueColor: const Color(0xFF059669),
+      ),
+      _FeeAmountCell(
+        'Paid',
+        invoice['paidAmount'],
+        valueColor: SaaptTheme.navy,
+      ),
+      _FeeAmountCell(
+        'Balance',
+        invoice['dueAmount'],
+        valueColor: _numberValue(invoice['dueAmount']) > 0
+            ? const Color(0xFFDC2626)
+            : const Color(0xFF8EA0BA),
+      ),
+    ];
+
+    return GridView.count(
+      crossAxisCount: 2,
+      shrinkWrap: true,
+      physics: const NeverScrollableScrollPhysics(),
+      childAspectRatio: 2.65,
+      children: cells,
+    );
+  }
+}
+
+class _FeeAmountCell extends StatelessWidget {
+  const _FeeAmountCell(this.label, this.value, {this.valueColor});
+
+  final String label;
+  final Object? value;
+  final Color? valueColor;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+      decoration: const BoxDecoration(
+        border: Border(
+          right: BorderSide(color: Color(0xFFE5ECF7)),
+          bottom: BorderSide(color: Color(0xFFE5ECF7)),
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Text(
+            label.toUpperCase(),
+            style: const TextStyle(
+              color: Color(0xFF8EA0BA),
+              fontSize: 10,
+              fontWeight: FontWeight.w900,
+            ),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            _moneyValue(_numberValue(value)),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(
+              color: valueColor ?? const Color(0xFF60708F),
+              fontSize: 13,
+              fontWeight: FontWeight.w900,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _FeePaymentRow extends StatelessWidget {
+  const _FeePaymentRow({required this.payment, required this.receipt});
+
+  final Map<String, dynamic> payment;
+  final Map<String, dynamic>? receipt;
+
+  @override
+  Widget build(BuildContext context) {
+    final paymentNumber = _firstString(payment, ['paymentNumber']) ?? 'Payment';
+    final paymentMode = _firstString(payment, ['paymentMode']) ?? 'Payment';
+    final paidAt = _firstString(payment, ['paidAt']);
+    final receiptNumber = receipt == null
+        ? null
+        : _firstString(receipt!, ['receiptNumber']);
+
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: const BoxDecoration(
+        border: Border(top: BorderSide(color: Color(0xFFE5ECF7))),
+      ),
+      child: Row(
+        children: [
+          Container(
+            width: 34,
+            height: 34,
+            decoration: BoxDecoration(
+              color: const Color(0xFFE9F8EF),
+              borderRadius: BorderRadius.circular(999),
+            ),
+            child: const Icon(
+              Icons.check_rounded,
+              color: Color(0xFF059669),
+              size: 20,
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  paymentNumber,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    color: SaaptTheme.navy,
+                    fontSize: 13,
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
+                const SizedBox(height: 3),
+                Text(
+                  '$paymentMode • ${_dateValue(paidAt)}',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    color: Color(0xFF60708F),
+                    fontSize: 12,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 8),
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: [
+              Text(
+                '+${_moneyValue(_numberValue(payment['amount']))}',
+                style: const TextStyle(
+                  color: Color(0xFF059669),
+                  fontSize: 13,
+                  fontWeight: FontWeight.w900,
+                ),
+              ),
+              if (receiptNumber != null) ...[
+                const SizedBox(height: 3),
+                Text(
+                  'Receipt $receiptNumber',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    color: Color(0xFF8EA0BA),
+                    fontSize: 11,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ],
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _FeeStatusChip extends StatelessWidget {
+  const _FeeStatusChip({
+    required this.label,
+    required this.background,
+    required this.foreground,
+  });
+
+  factory _FeeStatusChip.forStatus(String status) {
+    final normalized = status.toUpperCase();
+    if (normalized == 'PAID') {
+      return _FeeStatusChip(
+        label: _labelForKey(status),
+        background: const Color(0xFFE9F8EF),
+        foreground: const Color(0xFF059669),
+      );
+    }
+    if (normalized == 'PARTIALLY_PAID') {
+      return _FeeStatusChip(
+        label: _labelForKey(status),
+        background: const Color(0xFFFFF4DF),
+        foreground: const Color(0xFFF59E0B),
+      );
+    }
+    if (normalized == 'OVERDUE') {
+      return _FeeStatusChip(
+        label: _labelForKey(status),
+        background: const Color(0xFFFFE8E8),
+        foreground: const Color(0xFFDC2626),
+      );
+    }
+    if (normalized == 'ISSUED') {
+      return _FeeStatusChip(
+        label: _labelForKey(status),
+        background: const Color(0xFFEAF1FF),
+        foreground: SaaptTheme.primary,
+      );
+    }
+    return _FeeStatusChip(
+      label: _labelForKey(status),
+      background: const Color(0xFFF1F5F9),
+      foreground: const Color(0xFF60708F),
+    );
+  }
+
+  final String label;
+  final Color background;
+  final Color foreground;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
+      decoration: BoxDecoration(
+        color: background,
+        borderRadius: BorderRadius.circular(999),
+        border: Border.all(color: const Color(0xFFE5ECF7)),
+      ),
+      child: Text(
+        label,
+        style: TextStyle(
+          color: foreground,
+          fontSize: 11,
+          fontWeight: FontWeight.w900,
+        ),
       ),
     );
   }
@@ -2306,6 +2848,48 @@ String _labelForKey(String key) {
             : '${part[0].toUpperCase()}${part.substring(1)}',
       )
       .join(' ');
+}
+
+num _numberValue(Object? value) {
+  if (value is num) return value;
+  return num.tryParse(value?.toString() ?? '') ?? 0;
+}
+
+String _moneyValue(num value) {
+  final formatter = NumberFormat.currency(
+    locale: 'en_IN',
+    symbol: '₹',
+    decimalDigits: value % 1 == 0 ? 0 : 2,
+  );
+  return formatter.format(value);
+}
+
+String _dateValue(Object? value) {
+  if (value == null) return '-';
+  final date = DateTime.tryParse(value.toString());
+  if (date == null) return _displayValue(value);
+  return DateFormat('dd-MM-yyyy').format(date);
+}
+
+bool _isPastDate(Object? value) {
+  final date = DateTime.tryParse(value?.toString() ?? '');
+  if (date == null) return false;
+  final today = DateTime.now();
+  final todayStart = DateTime(today.year, today.month, today.day);
+  return DateTime(date.year, date.month, date.day).isBefore(todayStart);
+}
+
+Map<String, dynamic>? _receiptForPayment(
+  Map<String, dynamic> payment,
+  List<Map<String, dynamic>> receipts,
+) {
+  final paymentId = payment['id']?.toString();
+  for (final receipt in receipts) {
+    if (paymentId != null && receipt['paymentId']?.toString() == paymentId) {
+      return receipt;
+    }
+  }
+  return receipts.isEmpty ? null : receipts.first;
 }
 
 String _displayValue(Object? value) {
