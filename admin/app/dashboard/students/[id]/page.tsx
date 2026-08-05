@@ -29,6 +29,7 @@ import {
 } from '../../../../services/student.service';
 import {
   listFeeInvoices,
+  notifyStudentFeePayment,
   type FeeInvoice,
 } from '../../../../services/fee-management.service';
 import { listStudentTransportAssignments } from '../../../../services/transport.service';
@@ -483,6 +484,20 @@ export default function StudentDetailPage() {
       queryClient.invalidateQueries({ queryKey: ['student', studentId] });
     },
     onError: (error: any) => notify.error('Unlink failed', error?.response?.data?.error?.message ?? 'Unable to unlink parent account.'),
+  });
+
+  const notifyPaymentMutation = useMutation({
+    mutationFn: () => notifyStudentFeePayment(studentId, {
+      schoolId: effectiveSchoolId,
+      academicSessionId: student?.academicSessionId ?? undefined,
+    }),
+    onSuccess: (result) => {
+      notify.success(
+        'Payment notification sent',
+        `Email: ${result.emailSent}, push: ${result.pushSent}${result.failed ? `, failed: ${result.failed}` : ''}.`,
+      );
+    },
+    onError: (error: any) => notify.error('Notification failed', error?.response?.data?.error?.message ?? error?.message ?? 'Unable to send payment notification.'),
   });
 
   const createLibraryMemberMutation = useMutation({
@@ -1090,9 +1105,14 @@ export default function StudentDetailPage() {
                 <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
                   <h2 className="text-lg font-bold text-slate-950">Fees</h2>
                   <div className="flex flex-wrap gap-2">
-                    <Link href={`/dashboard/fees?studentId=${student.id}`} className="rounded-xl border border-slate-200 px-3 py-2 text-sm font-bold text-slate-700">
-                      Manage fee setup
-                    </Link>
+                    <button
+                      type="button"
+                      onClick={() => notifyPaymentMutation.mutate()}
+                      disabled={notifyPaymentMutation.isPending || feeInvoicesQuery.isLoading}
+                      className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-sm font-bold text-amber-700 disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                      {notifyPaymentMutation.isPending ? 'Sending...' : 'Notify payment'}
+                    </button>
                     <Link href={`/dashboard/fees/collection?studentId=${student.id}`} className="rounded-xl border border-violet-200 bg-violet-50 px-3 py-2 text-sm font-bold text-violet-700">
                       Open fee collection
                     </Link>

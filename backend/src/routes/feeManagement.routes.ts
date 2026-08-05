@@ -52,6 +52,7 @@ import {
   listFeeTypes,
   previewFeeInvoices,
   previewFeeCarryForward,
+  notifyStudentFeePayment,
   reverseFeePayment,
   searchFeeCollectionStudents,
   rejectFeeDiscount,
@@ -125,6 +126,7 @@ feeManagementRouter.get('/payments', listFeePayments);
 feeManagementRouter.post('/payments', collectFeePayment);
 feeManagementRouter.post('/payments/:id/reverse', reverseFeePayment);
 feeManagementRouter.get('/collection/students', searchFeeCollectionStudents);
+feeManagementRouter.post('/collection/students/:studentId/notify-payment', notifyStudentFeePayment);
 feeManagementRouter.get('/collection/students/:studentId/invoices', listStudentCollectionInvoices);
 
 feeManagementRouter.get('/ledger', getStudentFeeLedger);

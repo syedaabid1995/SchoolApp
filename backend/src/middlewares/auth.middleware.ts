@@ -514,6 +514,7 @@ export const resolvePermissionForPath = (path: string, method = 'GET') => {
     }
     if (pathOnly.startsWith('/api/v1/fees/payments')) return verb === 'POST' ? P.feesCollectionCreate : P.feesCollectionView;
     if (pathOnly.startsWith('/api/v1/fees/collection')) {
+      if (pathOnly.includes('/notify-payment')) return P.feesCollectionView;
       if (pathOnly.includes('/receipt') || pathOnly.includes('/print')) return P.feesReceiptsPrint;
       return verb === 'POST' ? P.feesCollectionCreate : P.feesCollectionView;
     }

@@ -49,6 +49,7 @@ export {
   listFeeStructures,
   listFeeTypes,
   listStudentCollectionInvoices,
+  notifyStudentFeePayment,
   previewFeeInvoices,
   previewFeeCarryForward,
   rejectFeeDiscount,

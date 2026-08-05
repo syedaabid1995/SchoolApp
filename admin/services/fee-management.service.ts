@@ -858,6 +858,20 @@ export const listStudentCollectionInvoices = async (studentId: string, params?: 
   return data;
 };
 
+export type FeePaymentNotificationResponse = {
+  studentId: string;
+  invoiceCount: number;
+  totalDue: string;
+  emailSent: number;
+  pushSent: number;
+  failed: number;
+};
+
+export const notifyStudentFeePayment = async (studentId: string, payload?: FeeScopeParams) => {
+  const { data } = await api.post<FeePaymentNotificationResponse>(`/fees/collection/students/${studentId}/notify-payment`, payload ?? {});
+  return data;
+};
+
 export const getStudentFeeLedger = async (studentId: string, params?: FeeScopeParams & { page?: number; limit?: number; entryType?: string; sortBy?: string; sortOrder?: 'asc' | 'desc' }) => {
   const { data } = await api.get<FeeLedgerResponse>(`/fees/ledger/${studentId}`, { params: sanitizeParams(params) });
   return data;

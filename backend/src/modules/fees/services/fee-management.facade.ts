@@ -5,6 +5,7 @@ export {
   getStudentFeeLedger,
   listFeePayments,
   listStudentCollectionInvoices,
+  notifyStudentFeePayment,
   reverseFeePayment,
   searchFeeCollectionStudents,
 } from './collection/fee-collection.service';

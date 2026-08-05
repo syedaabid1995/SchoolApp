@@ -12,6 +12,7 @@ import {
 } from '../../../../services/feeCalculation.service';
 import { createLedgerEntry } from '../../../../services/feeLedger.service';
 import { getNextNumber } from '../../../../services/numberSequence.service';
+import { sendNotification } from '../../../../services/notification.service';
 import { FeeRepository, type FeeTenantScope as RepositoryFeeTenantScope } from '../../repositories/fee.repository';
 import { FeeAuditService } from '../fee-audit.service';
 import {
@@ -73,6 +74,26 @@ const slugCode = (value: string) =>
     .slice(0, 80);
 const toDecimal = (value: number | string | Prisma.Decimal) => new Prisma.Decimal(value);
 const decimalNumber = (value: Prisma.Decimal | number | string | null | undefined) => Number(value ?? 0);
+const formatMoney = (value: Prisma.Decimal | number | string | null | undefined) => {
+  const amount = decimalNumber(value);
+  return new Intl.NumberFormat('en-IN', {
+    style: 'currency',
+    currency: 'INR',
+    maximumFractionDigits: 0,
+  }).format(Number.isFinite(amount) ? amount : 0);
+};
+const displayStudentName = (student: { fullName?: string | null; firstName: string; lastName: string }) =>
+  student.fullName?.trim() || `${student.firstName} ${student.lastName}`.trim() || 'Student';
+const displayParentName = (parent: { firstName: string; lastName: string }) =>
+  `${parent.firstName} ${parent.lastName}`.trim() || 'Parent';
+const formatNotificationDate = (value: Date | null | undefined) => {
+  if (!value) return 'Not set';
+  return new Intl.DateTimeFormat('en-IN', {
+    day: '2-digit',
+    month: 'short',
+    year: 'numeric',
+  }).format(value);
+};
 
 const getRequestedSchoolId = (req: Request, bodySchoolId?: string | null) =>
   bodySchoolId ?? (typeof req.query.schoolId === 'string' ? req.query.schoolId : undefined);
@@ -1753,6 +1774,240 @@ export const exportFeeLedgerPdf = async (req: Request, res: Response) => {
   res.status(200).send(buffer);
 };
 
+export const notifyStudentFeePayment = async (req: Request, res: Response) => {
+  const studentId = uuidParam(req, 'studentId');
+  const body = z.object({
+    schoolId: uuidSchema.optional().nullable(),
+    academicSessionId: uuidSchema.optional().nullable(),
+  }).parse(req.body ?? {});
+  const scope = await resolveScope(req, body);
+
+  const student = await FeeCollectionRepository.student.findFirst({
+    where: { id: studentId, schoolId: scope.schoolId },
+    select: {
+      id: true,
+      firstName: true,
+      lastName: true,
+      fullName: true,
+      parentEmail: true,
+      parentLinks: {
+        include: {
+          parent: {
+            select: {
+              userId: true,
+              firstName: true,
+              lastName: true,
+              email: true,
+              user: { select: { email: true } },
+            },
+          },
+        },
+      },
+    },
+  });
+  if (!student) throw new HttpError(404, 'Student not found');
+
+  const invoices = await FeeCollectionRepository.feeInvoice.findMany({
+    where: {
+      ...tenantScopeOnly(scope),
+      studentId,
+      deletedAt: null,
+      status: { notIn: ['PAID', 'CANCELLED'] },
+      dueAmount: { gt: 0 },
+    },
+    orderBy: [{ dueDate: 'asc' }, { createdAt: 'asc' }],
+    select: {
+      id: true,
+      invoiceNumber: true,
+      dueDate: true,
+      dueAmount: true,
+      feeMonth: true,
+    },
+  });
+  if (!invoices.length) throw new HttpError(400, 'No unpaid or pending fee invoice found for this student.');
+
+  const parents = student.parentLinks.map((link) => link.parent);
+  const emailRecipients = Array.from(
+    new Set([
+      ...parents.map((parent) => parent.email || parent.user?.email || ''),
+      student.parentEmail || '',
+    ]),
+  )
+    .map((email) => email.trim())
+    .filter(Boolean);
+  const pushRecipients = Array.from(new Set(parents.map((parent) => parent.userId).filter(Boolean)));
+  if (!emailRecipients.length && !pushRecipients.length) {
+    throw new HttpError(400, 'No parent email or parent app account is linked to this student.');
+  }
+
+  const childName = displayStudentName(student);
+  const totalDue = invoices.reduce((sum, invoice) => sum.plus(invoice.dueAmount), new Prisma.Decimal(0));
+  const invoiceSummary = invoices
+    .map((invoice) => {
+      const month = invoice.feeMonth ? ` (${invoice.feeMonth})` : '';
+      return `${invoice.invoiceNumber}${month}: ${formatMoney(invoice.dueAmount)}, due ${formatNotificationDate(invoice.dueDate)}`;
+    })
+    .join('; ');
+  const subject = `Fee payment reminder for ${childName}`;
+  const bodyText = `Dear Parent, ${childName} has a pending fee balance of ${formatMoney(totalDue)} across ${invoices.length} invoice${invoices.length === 1 ? '' : 's'}. ${invoiceSummary}. Please ignore this reminder if payment has already been made.`;
+  const html = `
+    <p>Dear Parent,</p>
+    <p>${childName} has a pending fee balance of <strong>${formatMoney(totalDue)}</strong> across ${invoices.length} invoice${invoices.length === 1 ? '' : 's'}.</p>
+    <ul>
+      ${invoices.map((invoice) => `<li>${invoice.invoiceNumber}${invoice.feeMonth ? ` (${invoice.feeMonth})` : ''}: ${formatMoney(invoice.dueAmount)}, due ${formatNotificationDate(invoice.dueDate)}</li>`).join('')}
+    </ul>
+    <p>Please ignore this reminder if payment has already been made.</p>
+  `;
+
+  let emailSent = 0;
+  let pushSent = 0;
+  let failed = 0;
+
+  for (const recipient of emailRecipients) {
+    try {
+      await sendNotification({
+        schoolId: scope.schoolId,
+        userId: scope.userId,
+        channel: 'EMAIL',
+        data: {
+          to: recipient,
+          subject,
+          body: bodyText,
+          html,
+          emailIntent: 'GENERAL_COMMUNICATION',
+          module: 'fees',
+          category: 'fee_reminder',
+          childId: studentId,
+          childName,
+          dueAmount: formatMoney(totalDue),
+          invoiceCount: invoices.length,
+          invoiceNumbers: invoices.map((invoice) => invoice.invoiceNumber).join(', '),
+        },
+      });
+      await FeeCollectionRepository.feeNotification.create({
+        data: {
+          schoolId: scope.schoolId,
+          academicSessionId: scope.academicSessionId,
+          studentId,
+          invoiceId: null,
+          type: 'FEE_DUE_REMINDER',
+          channel: 'EMAIL',
+          recipient,
+          subject,
+          message: bodyText,
+          status: 'SENT',
+          sentAt: new Date(),
+        },
+      });
+      emailSent += 1;
+    } catch {
+      failed += 1;
+      await FeeCollectionRepository.feeNotification.create({
+        data: {
+          schoolId: scope.schoolId,
+          academicSessionId: scope.academicSessionId,
+          studentId,
+          invoiceId: null,
+          type: 'FEE_DUE_REMINDER',
+          channel: 'EMAIL',
+          recipient,
+          subject,
+          message: bodyText,
+          status: 'FAILED',
+          sentAt: null,
+        },
+      });
+    }
+  }
+
+  for (const userId of pushRecipients) {
+    const recipient = String(userId);
+    const parent = parents.find((item) => item.userId === recipient);
+    try {
+      await sendNotification({
+        schoolId: scope.schoolId,
+        userId: scope.userId,
+        channel: 'PUSH',
+        data: {
+          to: recipient,
+          subject,
+          body: bodyText,
+          recipientName: parent ? displayParentName(parent) : 'Parent',
+          recipientType: 'PARENT',
+          targetMode: 'STUDENT',
+          recipientGroups: ['GUARDIANS'],
+          route: '/profile',
+          module: 'fees',
+          category: 'fee_reminder',
+          priority: 'high',
+          childId: studentId,
+          childName,
+          dueAmount: formatMoney(totalDue),
+          invoiceCount: invoices.length,
+          invoiceNumbers: invoices.map((invoice) => invoice.invoiceNumber).join(', '),
+        },
+      });
+      await FeeCollectionRepository.feeNotification.create({
+        data: {
+          schoolId: scope.schoolId,
+          academicSessionId: scope.academicSessionId,
+          studentId,
+          invoiceId: null,
+          type: 'FEE_DUE_REMINDER',
+          channel: 'IN_APP',
+          recipient,
+          subject,
+          message: bodyText,
+          status: 'SENT',
+          sentAt: new Date(),
+        },
+      });
+      pushSent += 1;
+    } catch {
+      failed += 1;
+      await FeeCollectionRepository.feeNotification.create({
+        data: {
+          schoolId: scope.schoolId,
+          academicSessionId: scope.academicSessionId,
+          studentId,
+          invoiceId: null,
+          type: 'FEE_DUE_REMINDER',
+          channel: 'IN_APP',
+          recipient,
+          subject,
+          message: bodyText,
+          status: 'FAILED',
+          sentAt: null,
+        },
+      });
+    }
+  }
+
+  await FeeAuditService.record(req, {
+    schoolId: scope.schoolId,
+    entityType: 'FEE_NOTIFICATION',
+    entityId: studentId,
+    action: 'SEND_PAYMENT_REMINDER',
+    afterState: {
+      studentId,
+      invoiceCount: invoices.length,
+      totalDue: totalDue.toString(),
+      emailSent,
+      pushSent,
+      failed,
+    },
+  });
+
+  res.status(200).json({
+    studentId,
+    invoiceCount: invoices.length,
+    totalDue: totalDue.toString(),
+    emailSent,
+    pushSent,
+    failed,
+  });
+};
+
 export const FeeCollectionService = {
   collectFeePayment,
   exportFeeLedgerExcel,
@@ -1760,5 +2015,6 @@ export const FeeCollectionService = {
   getStudentFeeLedger,
   listFeePayments,
   listStudentCollectionInvoices,
+  notifyStudentFeePayment,
   searchFeeCollectionStudents,
 };
