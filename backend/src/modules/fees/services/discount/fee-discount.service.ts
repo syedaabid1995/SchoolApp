@@ -553,7 +553,7 @@ const discountAmountForInvoice = (
   discount: Pick<FeeDiscount, 'valueType' | 'value' | 'amount'>,
   invoice: Pick<Prisma.FeeInvoiceGetPayload<{}>, 'totalAmount' | 'dueAmount'>,
 ) => {
-  const value = toDecimal(discount.amount ?? discount.value);
+  const value = toDecimal(discount.valueType === 'PERCENTAGE' ? discount.value : discount.amount ?? discount.value);
   const rawAmount = discount.valueType === 'PERCENTAGE' ? toDecimal(invoice.totalAmount).mul(value).div(100) : value;
   return Prisma.Decimal.min(rawAmount, toDecimal(invoice.dueAmount));
 };

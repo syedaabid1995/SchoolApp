@@ -88,7 +88,7 @@ export const calculateFeeInvoiceAmountsFromPreloaded = ({
 
   const previousBalanceAmount = toDecimal(previousBalance ?? 0);
   const rawDiscountAmount = (discounts ?? []).reduce((sum, discount) => {
-    const value = toDecimal(discount.amount ?? discount.value);
+    const value = toDecimal(discount.valueType === 'PERCENTAGE' ? discount.value : discount.amount ?? discount.value);
     if (discount.valueType === 'PERCENTAGE') return sum.plus(baseAmount.mul(value).div(100));
     return sum.plus(value);
   }, toDecimal(0));

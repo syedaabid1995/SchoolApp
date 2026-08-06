@@ -269,7 +269,7 @@ export const sendStudentAdmissionAccountEmail = async (params: {
     const applicableMasters = feeMasters.filter((master) => selectedDiscountAppliesToMaster(discount, master));
     if (!applicableMasters.length) continue;
 
-    const value = toAmount(discount.amount ?? discount.value);
+    const value = toAmount(discount.valueType === 'PERCENTAGE' ? discount.value : discount.amount ?? discount.value);
     if (discount.valueType === 'PERCENTAGE') {
       applicableMasters.forEach((master) => {
         const masterAnnualAmount = toAmount(master.amount) * feeScheduleMultiplier(master.feeType.schedule);

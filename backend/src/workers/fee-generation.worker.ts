@@ -69,7 +69,7 @@ const calculateDiscountAmountsByMaster = (
     const applicableMasters = masters.filter((master) => isDiscountApplicable(discount, master));
     if (!applicableMasters.length) continue;
 
-    const value = toDecimal(discount.amount ?? discount.value);
+    const value = toDecimal(discount.valueType === 'PERCENTAGE' ? discount.value : discount.amount ?? discount.value);
     if (discount.valueType === 'PERCENTAGE') {
       for (const master of applicableMasters) {
         const amount = annualizedFeeMasterAmount(master);

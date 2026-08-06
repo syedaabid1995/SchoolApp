@@ -317,7 +317,7 @@ export const buildFeeReport = async (scope: FeeReportScope, query: FeeReportQuer
         discountName: discount.discountName ?? discount.discountType,
         studentOrTarget: discount.student?.fullName ?? discount.class?.name ?? discount.section?.name ?? discount.category?.name ?? discount.feeType?.name ?? discount.targetType,
         discountType: discount.valueType,
-        amount: decimalNumber(discount.amount ?? discount.value),
+        amount: decimalNumber(discount.valueType === 'PERCENTAGE' ? discount.value : discount.amount ?? discount.value),
         status: discount.approvalStatus,
         approvedBy: discount.approvedById ?? '',
       }));
