@@ -332,10 +332,44 @@ class ParentLogoutAction extends ConsumerWidget {
         backgroundColor: Colors.white.withValues(alpha: 0.16),
         foregroundColor: Colors.white,
       ),
-      onPressed: () =>
-          ref.read(parentAuthControllerProvider.notifier).logout(),
+      onPressed: () => confirmParentLogout(context, ref),
       icon: const Icon(Icons.logout_rounded),
     );
+  }
+}
+
+Future<void> confirmParentLogout(BuildContext context, WidgetRef ref) async {
+  final confirmed = await showDialog<bool>(
+    context: context,
+    builder: (context) {
+      return AlertDialog(
+        title: const Text(
+          'Logout',
+          style: TextStyle(fontWeight: FontWeight.w900),
+        ),
+        content: const Text(
+          'Are you sure you want to logout from this app?',
+          style: TextStyle(fontWeight: FontWeight.w600),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            style: FilledButton.styleFrom(
+              backgroundColor: const Color(0xFFEF4C55),
+              foregroundColor: Colors.white,
+            ),
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('Logout'),
+          ),
+        ],
+      );
+    },
+  );
+  if (confirmed == true) {
+    await ref.read(parentAuthControllerProvider.notifier).logout();
   }
 }
 

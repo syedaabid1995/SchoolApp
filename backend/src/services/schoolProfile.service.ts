@@ -49,18 +49,59 @@ const nullableString = (value: unknown, maxLength: number) => {
   return next || null;
 };
 
+const PLACEHOLDER_SCHOOL_NAMES = new Set([
+  'infix',
+  'infix school erp',
+]);
+
+const PLACEHOLDER_SCHOOL_CODES = new Set(['1000']);
+
+const PLACEHOLDER_ADDRESSES = new Set([
+  'dhanmondi 32, dhaka',
+  'dhaka',
+]);
+
+const resolveGeneralValue = (
+  value: unknown,
+  maxLength: number,
+  placeholders: Set<string>,
+) => {
+  const cleaned = cleanString(value, maxLength);
+  if (!cleaned) return '';
+  if (placeholders.has(cleaned.toLowerCase())) return '';
+  return cleaned;
+};
+
 export const buildSchoolProfile = (school: {
   id: string;
   name: string;
   code: string;
   systemSetting?: { general: Prisma.JsonValue } | null;
 }): SchoolProfileDetails => {
-  const general = isRecord(school.systemSetting?.general) ? school.systemSetting.general : {};
+  const general = isRecord(school.systemSetting?.general)
+    ? school.systemSetting.general
+    : {};
+  const configuredName = resolveGeneralValue(
+    general.schoolName,
+    160,
+    PLACEHOLDER_SCHOOL_NAMES,
+  );
+  const configuredCode = resolveGeneralValue(
+    general.schoolCode,
+    80,
+    PLACEHOLDER_SCHOOL_CODES,
+  );
+  const configuredAddress = resolveGeneralValue(
+    general.address,
+    500,
+    PLACEHOLDER_ADDRESSES,
+  );
+
   return {
     id: school.id,
-    name: cleanString(general.schoolName, 160) || school.name,
-    code: cleanString(general.schoolCode, 80) || school.code,
-    address: nullableString(general.address, 500),
+    name: configuredName || school.name,
+    code: configuredCode || school.code,
+    address: configuredAddress || 'India',
     email: nullableString(general.email, 160),
     mobileNumber: nullableString(general.phone, 40),
     contacts: normalizeSchoolContacts(general.contacts),

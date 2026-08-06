@@ -247,13 +247,7 @@ class _PerformanceReportView extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final resultsState = ref.watch(parentResultsProvider(child));
     return resultsState.when(
-      loading: () => Column(
-        children: [
-          _SelectionPanel(child: child),
-          const SizedBox(height: 18),
-          const LoadingPanel(),
-        ],
-      ),
+      loading: () => const LoadingPanel(),
       error: (error, _) => EmptyPanel(message: error.toString()),
       data: (results) {
         final selectedResult = _selectedResult(results, selectedExamId);
@@ -261,7 +255,6 @@ class _PerformanceReportView extends ConsumerWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             _SelectionPanel(
-              child: child,
               results: results,
               selectedResult: selectedResult,
               onExamChanged: onExamChanged,
@@ -350,7 +343,6 @@ class _AttendanceReportView extends ConsumerWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         _SelectionPanel(
-          child: child,
           selectedMonth: selectedMonth,
           onMonthChanged: onMonthChanged,
         ),
@@ -428,7 +420,6 @@ class _AttendanceReportView extends ConsumerWidget {
 
 class _SelectionPanel extends StatelessWidget {
   const _SelectionPanel({
-    required this.child,
     this.results = const [],
     this.selectedResult,
     this.selectedMonth,
@@ -436,7 +427,6 @@ class _SelectionPanel extends StatelessWidget {
     this.onMonthChanged,
   });
 
-  final ParentChild child;
   final List<ParentResult> results;
   final ParentResult? selectedResult;
   final DateTime? selectedMonth;
@@ -449,9 +439,7 @@ class _SelectionPanel extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          _SelectedChildPanel(child: child),
           if (onExamChanged != null) ...[
-            const SizedBox(height: 20),
             _FieldLabel('Select Exam'),
             const SizedBox(height: 10),
             _DropdownField<String>(
@@ -469,7 +457,7 @@ class _SelectionPanel extends StatelessWidget {
             ),
           ],
           if (selectedMonth != null && onMonthChanged != null) ...[
-            const SizedBox(height: 20),
+            if (onExamChanged != null) const SizedBox(height: 20),
             _FieldLabel('Select Month'),
             const SizedBox(height: 10),
             _MonthPickerField(
@@ -496,77 +484,6 @@ class _FieldLabel extends StatelessWidget {
         color: Color(0xFF9BADCA),
         fontSize: 12,
         fontWeight: FontWeight.w900,
-      ),
-    );
-  }
-}
-
-class _SelectedChildPanel extends StatelessWidget {
-  const _SelectedChildPanel({required this.child});
-
-  final ParentChild child;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: const Color(0xFFF7F9FE),
-        borderRadius: BorderRadius.circular(18),
-        border: Border.all(color: const Color(0xFFDCE7FA), width: 2),
-      ),
-      child: Row(
-        children: [
-          Container(
-            width: 44,
-            height: 44,
-            alignment: Alignment.center,
-            decoration: BoxDecoration(
-              color: const Color(0xFFEAF1FF),
-              borderRadius: BorderRadius.circular(14),
-              border: Border.all(color: const Color(0xFFD5E2FF)),
-            ),
-            child: const Icon(Icons.person_rounded, color: SaaptTheme.primary),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Text(
-                  'Selected Child',
-                  style: TextStyle(
-                    color: Color(0xFF9BADCA),
-                    fontSize: 12,
-                    fontWeight: FontWeight.w900,
-                  ),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  child.name,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    color: SaaptTheme.navy,
-                    fontSize: 16,
-                    fontWeight: FontWeight.w900,
-                  ),
-                ),
-                const SizedBox(height: 2),
-                Text(
-                  child.classLabel,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    color: Color(0xFF60708F),
-                    fontSize: 13,
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ],
       ),
     );
   }

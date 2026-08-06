@@ -35,18 +35,18 @@ const updateSchema = z.object({
 });
 
 const defaultGeneral = {
-  schoolName: 'Infix',
-  siteTitle: 'Infix School ERP',
-  address: 'Dhanmondi 32, Dhaka',
-  phone: '+8801916589787',
-  email: 'infix@gmail.com',
-  schoolCode: '1000',
+  schoolName: '',
+  siteTitle: 'School ERP',
+  address: 'India',
+  phone: '',
+  email: '',
+  schoolCode: '',
   currentSession: '2026',
   language: 'English',
   dateFormat: 'DD MMMM, YYYY',
   currency: 'USD',
   currencySymbol: '$',
-  timezone: 'Asia/Dhaka',
+  timezone: 'Asia/Kolkata',
   contacts: [],
 };
 
@@ -195,12 +195,23 @@ const normalizeSetting = (setting: {
 });
 
 const ensureSettings = async (schoolId: string) => {
+  const school = await prisma.school.findUnique({
+    where: { id: schoolId },
+    select: { name: true, code: true },
+  });
+  const createGeneral = {
+    ...defaultGeneral,
+    schoolName: school?.name?.trim() || '',
+    schoolCode: school?.code?.trim() || '',
+    address: 'India',
+  };
+
   const setting = await prisma.schoolSystemSetting.upsert({
     where: { schoolId },
     update: {},
     create: {
       schoolId,
-      general: toJson(defaultGeneral),
+      general: toJson(createGeneral),
       paymentGateways: toJson(defaultPaymentGateways),
       baseSetups: toJson(defaultBaseSetups),
       sessions: toJson(defaultSessions),

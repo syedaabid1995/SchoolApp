@@ -110,8 +110,6 @@ class _ParentLeaveScreenState extends ConsumerState<ParentLeaveScreen> {
         return Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            _SelectedChildPanel(child: selectedChild),
-            const SizedBox(height: 18),
             Row(
               children: [
                 StatCard(
@@ -182,8 +180,6 @@ class _ParentLeaveScreenState extends ConsumerState<ParentLeaveScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              _SelectedChildPanel(child: selectedChild),
-              const SizedBox(height: 18),
               _FieldLabel('LEAVE TYPE'),
               _SelectBox(
                 child: DropdownButtonHideUnderline(
@@ -447,77 +443,6 @@ class _FieldLabel extends StatelessWidget {
           fontWeight: FontWeight.w900,
           letterSpacing: 0,
         ),
-      ),
-    );
-  }
-}
-
-class _SelectedChildPanel extends StatelessWidget {
-  const _SelectedChildPanel({required this.child});
-
-  final ParentChild child;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: const Color(0xFFF7F9FE),
-        borderRadius: BorderRadius.circular(18),
-        border: Border.all(color: const Color(0xFFDDE7F7), width: 1.4),
-      ),
-      child: Row(
-        children: [
-          Container(
-            width: 44,
-            height: 44,
-            alignment: Alignment.center,
-            decoration: BoxDecoration(
-              color: const Color(0xFFEAF1FF),
-              borderRadius: BorderRadius.circular(14),
-              border: Border.all(color: const Color(0xFFD5E2FF)),
-            ),
-            child: const Icon(Icons.person_rounded, color: SaaptTheme.primary),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Text(
-                  'Selected Child',
-                  style: TextStyle(
-                    color: Color(0xFF91A1BB),
-                    fontSize: 12,
-                    fontWeight: FontWeight.w900,
-                  ),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  child.name,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    color: Color(0xFF0F1D3A),
-                    fontSize: 16,
-                    fontWeight: FontWeight.w900,
-                  ),
-                ),
-                const SizedBox(height: 2),
-                Text(
-                  child.classLabel,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    color: Color(0xFF61718D),
-                    fontSize: 13,
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ],
       ),
     );
   }

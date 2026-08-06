@@ -219,9 +219,7 @@ class _ParentProfileScreenState extends ConsumerState<ParentProfileScreen> {
                               ),
                               onTogglePush: _togglePush,
                               onOpenInfo: _openInfo,
-                              onLogout: () => ref
-                                  .read(parentAuthControllerProvider.notifier)
-                                  .logout(),
+                              onLogout: () => confirmParentLogout(context, ref),
                             ),
                           };
                         },
@@ -585,105 +583,102 @@ class _ChildrenPanel extends StatelessWidget {
       );
     }
 
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        ParentCard(
-          child: Row(
-            children: [
-              const Icon(
-                Icons.family_restroom_rounded,
-                color: SaaptTheme.primary,
-                size: 34,
-              ),
-              const SizedBox(width: 14),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text(
-                      'Children',
-                      style: TextStyle(
-                        color: SaaptTheme.navy,
-                        fontSize: 18,
-                        fontWeight: FontWeight.w900,
-                      ),
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      '${profile.children.length} child profiles mapped to this parent account',
-                      style: const TextStyle(
-                        color: Color(0xFF60708F),
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
-        ),
-        const SizedBox(height: 14),
-        ...profile.children.map(
-          (child) => Padding(
-            padding: const EdgeInsets.only(bottom: 14),
-            child: ParentCard(
-              padding: const EdgeInsets.all(16),
-              child: InkWell(
-                borderRadius: BorderRadius.circular(14),
-                onTap: () => onSelectChild(child.id),
-                child: Row(
-                  children: [
-                    _ChildAvatar(child: child, size: 56),
-                    const SizedBox(width: 14),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            child.name,
-                            style: const TextStyle(
-                              color: SaaptTheme.navy,
-                              fontSize: 16,
-                              fontWeight: FontWeight.w900,
-                            ),
-                          ),
-                          const SizedBox(height: 5),
-                          Text(
-                            [
-                              if (child.schoolName?.trim().isNotEmpty == true)
-                                child.schoolName!,
-                              child.classLabel,
-                            ].join(' • '),
-                            style: const TextStyle(
-                              color: Color(0xFF60708F),
-                              fontWeight: FontWeight.w700,
-                            ),
-                          ),
-                          if (child.rollNo?.trim().isNotEmpty == true) ...[
-                            const SizedBox(height: 4),
-                            Text(
-                              'Roll / Admission: ${child.rollNo}',
-                              style: const TextStyle(
-                                color: Color(0xFF91A1BB),
-                                fontWeight: FontWeight.w800,
-                              ),
-                            ),
-                          ],
-                        ],
-                      ),
-                    ),
-                    const Icon(
-                      Icons.chevron_right_rounded,
-                      color: SaaptTheme.primary,
-                    ),
-                  ],
-                ),
+    return ParentCard(
+      padding: EdgeInsets.zero,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 14, 16, 8),
+            child: Text(
+              'Children (${profile.children.length})',
+              style: const TextStyle(
+                color: SaaptTheme.navy,
+                fontSize: 15,
+                fontWeight: FontWeight.w900,
               ),
             ),
           ),
+          for (var i = 0; i < profile.children.length; i++) ...[
+            if (i > 0)
+              const Divider(
+                height: 1,
+                thickness: 0.6,
+                indent: 72,
+                color: Color(0xFFE6EBF3),
+              ),
+            _ChildChatTile(
+              child: profile.children[i],
+              onTap: () => onSelectChild(profile.children[i].id),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+class _ChildChatTile extends StatelessWidget {
+  const _ChildChatTile({required this.child, required this.onTap});
+
+  final ParentChild child;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final subtitle = [
+      if (child.classLabel.trim().isNotEmpty) child.classLabel.trim(),
+      if (child.schoolName?.trim().isNotEmpty == true) child.schoolName!.trim(),
+      if (child.rollNo?.trim().isNotEmpty == true) 'Roll ${child.rollNo!.trim()}',
+    ].join(' · ');
+
+    return InkWell(
+      onTap: onTap,
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(14, 11, 14, 11),
+        child: Row(
+          children: [
+            _ChildAvatar(child: child, size: 48, circular: true),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    child.name.trim().isEmpty ? 'Student' : child.name.trim(),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      color: Color(0xFF111B21),
+                      fontSize: 16,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                  if (subtitle.isNotEmpty) ...[
+                    const SizedBox(height: 3),
+                    Text(
+                      subtitle,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        color: Color(0xFF667781),
+                        fontSize: 13.5,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+            const SizedBox(width: 8),
+            const Icon(
+              Icons.chevron_right_rounded,
+              color: Color(0xFFB0B8C4),
+              size: 22,
+            ),
+          ],
         ),
-      ],
+      ),
     );
   }
 }
@@ -698,70 +693,6 @@ Future<void> _launchPhone(String phone) async {
   final trimmed = phone.trim();
   if (trimmed.isEmpty) return;
   await launchUrl(Uri(scheme: 'tel', path: trimmed));
-}
-
-class _ContactActionButton extends StatelessWidget {
-  const _ContactActionButton({
-    required this.icon,
-    required this.label,
-    required this.value,
-    required this.onTap,
-  });
-
-  final IconData icon;
-  final String label;
-  final String value;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    final enabled = value.trim().isNotEmpty;
-    return InkWell(
-      borderRadius: BorderRadius.circular(12),
-      onTap: enabled ? onTap : null,
-      child: Container(
-        width: double.infinity,
-        padding: const EdgeInsets.all(12),
-        decoration: BoxDecoration(
-          color: enabled ? const Color(0xFFEAF1FF) : const Color(0xFFF7FAFF),
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: const Color(0xFFDDE5F2)),
-        ),
-        child: Row(
-          children: [
-            Icon(
-              icon,
-              color: enabled ? SaaptTheme.primary : const Color(0xFF91A1BB),
-            ),
-            const SizedBox(width: 10),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    label,
-                    style: const TextStyle(
-                      color: Color(0xFF91A1BB),
-                      fontSize: 12,
-                      fontWeight: FontWeight.w800,
-                    ),
-                  ),
-                  const SizedBox(height: 2),
-                  Text(
-                    enabled ? value : '-',
-                    style: const TextStyle(
-                      color: SaaptTheme.navy,
-                      fontWeight: FontWeight.w800,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
 }
 
 class _SchoolProfilePanel extends StatelessWidget {
@@ -868,98 +799,413 @@ class _SchoolProfilePanel extends StatelessWidget {
           ),
           const SizedBox(height: 14),
         ],
-        ParentCard(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              _DetailRow(label: 'School Name', value: selected.name),
-              _DetailRow(
-                label: 'School Code',
-                value: selected.code.isNotEmpty ? selected.code : '-',
+        _SchoolDetailCard(school: selected),
+        if (selected.contacts.isNotEmpty) ...[
+          const SizedBox(height: 14),
+          _SchoolContactChatList(contacts: selected.contacts),
+        ],
+      ],
+    );
+  }
+}
+
+class _SchoolDetailCard extends StatelessWidget {
+  const _SchoolDetailCard({required this.school});
+
+  final SchoolProfileDetails school;
+
+  @override
+  Widget build(BuildContext context) {
+    final name = school.name.trim().isEmpty ? 'School' : school.name.trim();
+    final code = school.code.trim();
+    final email = school.email?.trim() ?? '';
+    final phone = school.mobileNumber?.trim() ?? '';
+    final address = school.address?.trim() ?? '';
+
+    return ParentCard(
+      padding: EdgeInsets.zero,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          const Padding(
+            padding: EdgeInsets.fromLTRB(16, 14, 16, 8),
+            child: Text(
+              'School Details',
+              style: TextStyle(
+                color: SaaptTheme.navy,
+                fontSize: 15,
+                fontWeight: FontWeight.w900,
               ),
-              Padding(
-                padding: const EdgeInsets.only(bottom: 10),
-                child: _ContactActionButton(
-                  icon: Icons.mail_outline,
-                  label: 'Email',
-                  value: selected.email ?? '',
-                  onTap: () => _launchEmail(selected.email ?? ''),
-                ),
-              ),
-              Padding(
-                padding: const EdgeInsets.only(bottom: 14),
-                child: _ContactActionButton(
-                  icon: Icons.call_outlined,
-                  label: 'Mobile Number',
-                  value: selected.mobileNumber ?? '',
-                  onTap: () => _launchPhone(selected.mobileNumber ?? ''),
-                ),
-              ),
-              _DetailRow(
-                label: 'Address',
-                value: selected.address ?? '-',
-                last: selected.contacts.isEmpty,
-              ),
-              if (selected.contacts.isNotEmpty) ...[
-                const Text(
-                  'Contact Information',
-                  style: TextStyle(
-                    color: SaaptTheme.navy,
-                    fontSize: 16,
-                    fontWeight: FontWeight.w900,
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(14, 6, 14, 16),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                CircleAvatar(
+                  radius: 28,
+                  backgroundColor: const Color(0xFF0288D1),
+                  child: Text(
+                    _schoolInitials(name),
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 16,
+                      fontWeight: FontWeight.w800,
+                    ),
                   ),
                 ),
-                const SizedBox(height: 12),
-                ...selected.contacts.map(
-                  (contact) => Container(
-                    margin: const EdgeInsets.only(bottom: 10),
-                    padding: const EdgeInsets.all(14),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFFF7FAFF),
-                      borderRadius: BorderRadius.circular(12),
-                      border: Border.all(color: const Color(0xFFDDE5F2)),
-                    ),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          contact.department,
-                          style: const TextStyle(
-                            color: SaaptTheme.primary,
-                            fontWeight: FontWeight.w900,
-                          ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        name,
+                        style: const TextStyle(
+                          color: Color(0xFF111B21),
+                          fontSize: 17,
+                          fontWeight: FontWeight.w800,
                         ),
-                        const SizedBox(height: 4),
-                        Text(
-                          contact.name,
-                          style: const TextStyle(
-                            color: SaaptTheme.navy,
-                            fontWeight: FontWeight.w800,
-                          ),
-                        ),
-                        const SizedBox(height: 12),
-                        _ContactActionButton(
-                          icon: Icons.mail_outline,
-                          label: 'Email',
-                          value: contact.email,
-                          onTap: () => _launchEmail(contact.email),
-                        ),
-                        const SizedBox(height: 8),
-                        _ContactActionButton(
-                          icon: Icons.call_outlined,
-                          label: 'Mobile Number',
-                          value: contact.contactNumber,
-                          onTap: () => _launchPhone(contact.contactNumber),
-                        ),
-                      ],
-                    ),
+                      ),
+                      const SizedBox(height: 8),
+                      _SchoolDetailLine(
+                        icon: Icons.tag_rounded,
+                        label: 'School Code',
+                        value: code.isEmpty ? '-' : code,
+                      ),
+                      _SchoolDetailLine(
+                        icon: Icons.mail_outline_rounded,
+                        label: 'Email',
+                        value: email.isEmpty ? '-' : email,
+                        onTap: email.isEmpty ? null : () => _launchEmail(email),
+                      ),
+                      _SchoolDetailLine(
+                        icon: Icons.call_outlined,
+                        label: 'Mobile Number',
+                        value: phone.isEmpty ? '-' : phone,
+                        onTap: phone.isEmpty ? null : () => _launchPhone(phone),
+                      ),
+                      _SchoolDetailLine(
+                        icon: Icons.location_on_outlined,
+                        label: 'Address',
+                        value: address.isEmpty ? '-' : address,
+                        last: true,
+                      ),
+                    ],
                   ),
                 ),
               ],
-            ],
+            ),
           ),
+        ],
+      ),
+    );
+  }
+
+  static String _schoolInitials(String name) {
+    final parts = name
+        .trim()
+        .split(RegExp(r'\s+'))
+        .where((part) => part.isNotEmpty)
+        .toList();
+    if (parts.isEmpty) return 'S';
+    if (parts.length == 1) {
+      final value = parts.first;
+      return value.substring(0, value.length >= 2 ? 2 : 1).toUpperCase();
+    }
+    return '${parts.first[0]}${parts.last[0]}'.toUpperCase();
+  }
+}
+
+class _SchoolDetailLine extends StatelessWidget {
+  const _SchoolDetailLine({
+    required this.icon,
+    required this.label,
+    required this.value,
+    this.onTap,
+    this.last = false,
+  });
+
+  final IconData icon;
+  final String label;
+  final String value;
+  final VoidCallback? onTap;
+  final bool last;
+
+  @override
+  Widget build(BuildContext context) {
+    final child = Padding(
+      padding: EdgeInsets.only(bottom: last ? 0 : 10),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(icon, size: 16, color: const Color(0xFF667781)),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  label,
+                  style: const TextStyle(
+                    color: Color(0xFF667781),
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  value,
+                  style: TextStyle(
+                    color: onTap == null
+                        ? const Color(0xFF111B21)
+                        : SaaptTheme.primary,
+                    fontSize: 14,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+
+    if (onTap == null) return child;
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(8),
+      child: child,
+    );
+  }
+}
+
+class _SchoolContactChatList extends StatelessWidget {
+  const _SchoolContactChatList({required this.contacts});
+
+  final List<SchoolContactDetail> contacts;
+
+  @override
+  Widget build(BuildContext context) {
+    return ParentCard(
+      padding: EdgeInsets.zero,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          const Padding(
+            padding: EdgeInsets.fromLTRB(16, 14, 16, 8),
+            child: Text(
+              'Contact Information',
+              style: TextStyle(
+                color: SaaptTheme.navy,
+                fontSize: 15,
+                fontWeight: FontWeight.w900,
+              ),
+            ),
+          ),
+          for (var i = 0; i < contacts.length; i++) ...[
+            if (i > 0)
+              const Divider(
+                height: 1,
+                thickness: 0.6,
+                indent: 72,
+                color: Color(0xFFE6EBF3),
+              ),
+            _SchoolContactChatTile(contact: contacts[i]),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+class _SchoolContactChatTile extends StatelessWidget {
+  const _SchoolContactChatTile({required this.contact});
+
+  final SchoolContactDetail contact;
+
+  @override
+  Widget build(BuildContext context) {
+    final subtitle = [
+      if (contact.department.trim().isNotEmpty) contact.department.trim(),
+      if (contact.contactNumber.trim().isNotEmpty) contact.contactNumber.trim(),
+    ].join(' · ');
+
+    return InkWell(
+      onTap: () => _showContactActions(context, contact),
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(14, 11, 14, 11),
+        child: Row(
+          children: [
+            CircleAvatar(
+              radius: 24,
+              backgroundColor: _avatarColor(contact.name),
+              child: Text(
+                _initials(contact.name),
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 15,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    contact.name.trim().isEmpty
+                        ? 'Contact'
+                        : contact.name.trim(),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      color: Color(0xFF111B21),
+                      fontSize: 16,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                  if (subtitle.isNotEmpty) ...[
+                    const SizedBox(height: 3),
+                    Text(
+                      subtitle,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        color: Color(0xFF667781),
+                        fontSize: 13.5,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+            const SizedBox(width: 8),
+            const Icon(
+              Icons.chevron_right_rounded,
+              color: Color(0xFFB0B8C4),
+              size: 22,
+            ),
+          ],
         ),
-      ],
+      ),
+    );
+  }
+
+  static String _initials(String name) {
+    final parts = name
+        .trim()
+        .split(RegExp(r'\s+'))
+        .where((part) => part.isNotEmpty)
+        .toList();
+    if (parts.isEmpty) return '?';
+    if (parts.length == 1) {
+      final value = parts.first;
+      return value.substring(0, value.length >= 2 ? 2 : 1).toUpperCase();
+    }
+    return '${parts.first[0]}${parts.last[0]}'.toUpperCase();
+  }
+
+  static Color _avatarColor(String name) {
+    const palette = [
+      Color(0xFF00A884),
+      Color(0xFF0288D1),
+      Color(0xFF7B61FF),
+      Color(0xFFE56717),
+      Color(0xFFD84315),
+      Color(0xFF00897B),
+      Color(0xFF5E35B1),
+    ];
+    if (name.trim().isEmpty) return palette.first;
+    return palette[name.trim().codeUnits.fold(0, (a, b) => a + b) %
+        palette.length];
+  }
+
+  Future<void> _showContactActions(
+    BuildContext context,
+    SchoolContactDetail contact,
+  ) {
+    final email = contact.email.trim();
+    final phone = contact.contactNumber.trim();
+    return showModalBottomSheet<void>(
+      context: context,
+      showDragHandle: true,
+      builder: (context) {
+        return SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Text(
+                  contact.name.trim().isEmpty
+                      ? 'Contact'
+                      : contact.name.trim(),
+                  style: const TextStyle(
+                    color: SaaptTheme.navy,
+                    fontSize: 18,
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
+                if (contact.department.trim().isNotEmpty) ...[
+                  const SizedBox(height: 4),
+                  Text(
+                    contact.department.trim(),
+                    style: const TextStyle(
+                      color: Color(0xFF60708F),
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ],
+                const SizedBox(height: 16),
+                if (phone.isNotEmpty)
+                  ListTile(
+                    contentPadding: EdgeInsets.zero,
+                    leading: const CircleAvatar(
+                      backgroundColor: Color(0xFFE8F8F1),
+                      child: Icon(Icons.call_rounded, color: Color(0xFF00A884)),
+                    ),
+                    title: const Text(
+                      'Call',
+                      style: TextStyle(fontWeight: FontWeight.w800),
+                    ),
+                    subtitle: Text(phone),
+                    onTap: () {
+                      Navigator.of(context).pop();
+                      _launchPhone(phone);
+                    },
+                  ),
+                if (email.isNotEmpty)
+                  ListTile(
+                    contentPadding: EdgeInsets.zero,
+                    leading: const CircleAvatar(
+                      backgroundColor: Color(0xFFEAF1FF),
+                      child: Icon(
+                        Icons.mail_outline,
+                        color: SaaptTheme.primary,
+                      ),
+                    ),
+                    title: const Text(
+                      'Email',
+                      style: TextStyle(fontWeight: FontWeight.w800),
+                    ),
+                    subtitle: Text(email),
+                    onTap: () {
+                      Navigator.of(context).pop();
+                      _launchEmail(email);
+                    },
+                  ),
+                if (phone.isEmpty && email.isEmpty)
+                  const EmptyPanel(message: 'No contact actions available.'),
+              ],
+            ),
+          ),
+        );
+      },
     );
   }
 }
@@ -1100,54 +1346,75 @@ class _ChildSummaryCard extends StatelessWidget {
   final ParentChild child;
 
   @override
-  Widget build(BuildContext context) => ParentCard(
-    child: Row(
-      children: [
-        _ChildAvatar(child: child, size: 72),
-        const SizedBox(width: 16),
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                child.name,
-                style: const TextStyle(
-                  color: SaaptTheme.navy,
-                  fontSize: 18,
-                  fontWeight: FontWeight.w900,
-                ),
+  Widget build(BuildContext context) {
+    final subtitle = [
+      if (child.classLabel.trim().isNotEmpty) child.classLabel.trim(),
+      if (child.schoolName?.trim().isNotEmpty == true) child.schoolName!.trim(),
+      if (child.rollNo?.trim().isNotEmpty == true) 'Roll ${child.rollNo!.trim()}',
+    ].join(' · ');
+
+    return ParentCard(
+      padding: EdgeInsets.zero,
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
+        child: Row(
+          children: [
+            _ChildAvatar(child: child, size: 48, circular: true),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    child.name.trim().isEmpty ? 'Student' : child.name.trim(),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      color: Color(0xFF111B21),
+                      fontSize: 16,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                  if (subtitle.isNotEmpty) ...[
+                    const SizedBox(height: 3),
+                    Text(
+                      subtitle,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        color: Color(0xFF667781),
+                        fontSize: 13.5,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                  ],
+                ],
               ),
-              const SizedBox(height: 6),
-              Text(
-                [
-                  if (child.schoolName?.trim().isNotEmpty == true)
-                    child.schoolName!,
-                  child.classLabel,
-                ].join(' • '),
-                style: const TextStyle(
-                  color: Color(0xFF60708F),
-                  fontWeight: FontWeight.w800,
-                ),
-              ),
-            ],
-          ),
+            ),
+          ],
         ),
-      ],
-    ),
-  );
+      ),
+    );
+  }
 }
 
 class _ChildAvatar extends StatelessWidget {
-  const _ChildAvatar({required this.child, required this.size});
+  const _ChildAvatar({
+    required this.child,
+    required this.size,
+    this.circular = false,
+  });
 
   final ParentChild child;
   final double size;
+  final bool circular;
 
   @override
   Widget build(BuildContext context) {
     final photoUrl = child.photoUrl;
+    final radius = circular ? size / 2 : 18.0;
     return ClipRRect(
-      borderRadius: BorderRadius.circular(18),
+      borderRadius: BorderRadius.circular(radius),
       child: Container(
         width: size,
         height: size,

@@ -99,8 +99,6 @@ class _DashboardContentState extends ConsumerState<_DashboardContent> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        _SelectedChildCard(child: selected, children: widget.children),
-        const SizedBox(height: 18),
         Row(
           children: [
             StatCard(
@@ -411,89 +409,5 @@ class _TimetablePeriodTile extends StatelessWidget {
         ],
       ),
     );
-  }
-}
-
-class _SelectedChildCard extends ConsumerWidget {
-  const _SelectedChildCard({required this.child, required this.children});
-
-  final ParentChild child;
-  final List<ParentChild> children;
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    return ParentCard(
-      child: Row(
-        children: [
-          Container(
-            width: 58,
-            height: 58,
-            alignment: Alignment.center,
-            decoration: BoxDecoration(
-              color: const Color(0xFFEAF1FF),
-              borderRadius: BorderRadius.circular(20),
-              border: Border.all(color: const Color(0xFFD2E1FF)),
-            ),
-            child: Text(
-              _avatarFor(child.name),
-              style: const TextStyle(fontSize: 23),
-            ),
-          ),
-          const SizedBox(width: 16),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  child.name,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    color: SaaptTheme.navy,
-                    fontSize: 17,
-                    fontWeight: FontWeight.w900,
-                  ),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  child.classLabel,
-                  style: const TextStyle(
-                    color: Color(0xFF586985),
-                    fontSize: 14,
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-              ],
-            ),
-          ),
-          OutlinedButton.icon(
-            style: OutlinedButton.styleFrom(
-              foregroundColor: SaaptTheme.primary,
-              backgroundColor: const Color(0xFFF1F6FF),
-              side: const BorderSide(color: Color(0xFFD4E2FF)),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(22),
-              ),
-            ),
-            onPressed: () => showParentChildPicker(
-              context,
-              ref,
-              children: children,
-              selected: child,
-            ),
-            icon: const Icon(Icons.keyboard_arrow_down_rounded, size: 18),
-            label: Text(
-              children.length == 1 ? 'Selected' : 'Change',
-              style: const TextStyle(fontWeight: FontWeight.w900),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  String _avatarFor(String name) {
-    final lower = name.toLowerCase();
-    return lower.endsWith('a') || lower.contains('ananya') ? '👧' : '👦';
   }
 }
