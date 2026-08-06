@@ -135,6 +135,32 @@ const payloadRecord = (payload: unknown): Record<string, unknown> =>
 const stringArray = (value: unknown) =>
   Array.isArray(value) ? value.filter((item): item is string => typeof item === 'string') : [];
 
+type AdmissionEmailFeeMaster = {
+  id: string;
+  feeGroupId: string;
+  feeTypeId: string;
+  amount: unknown;
+  description: string | null;
+  name: string;
+  feeType: { schedule: string | null };
+};
+
+const selectedDiscountAppliesToMaster = (
+  discount: {
+    feeMasterId?: string | null;
+    feeGroupId?: string | null;
+    feeTypeId?: string | null;
+    installments: Array<{ feeMasterId: string | null; deletedAt: Date | null }>;
+  },
+  master: AdmissionEmailFeeMaster,
+) => {
+  if (discount.installments.some((item) => item.feeMasterId === master.id && !item.deletedAt)) return true;
+  if (discount.feeMasterId && discount.feeMasterId !== master.id) return false;
+  if (discount.feeGroupId && discount.feeGroupId !== master.feeGroupId) return false;
+  if (discount.feeTypeId && discount.feeTypeId !== master.feeTypeId) return false;
+  return true;
+};
+
 export const sendStudentAdmissionAccountEmail = async (params: {
   schoolId: string;
   studentId: string;
@@ -238,28 +264,39 @@ export const sendStudentAdmissionAccountEmail = async (params: {
     (sum, master) => sum + toAmount(master.amount) * feeScheduleMultiplier(master.feeType.schedule),
     0,
   );
+  const discountAmountsByMaster = new Map(feeMasters.map((master) => [master.id, 0]));
+  for (const discount of discounts) {
+    const applicableMasters = feeMasters.filter((master) => selectedDiscountAppliesToMaster(discount, master));
+    if (!applicableMasters.length) continue;
+
+    const value = toAmount(discount.amount ?? discount.value);
+    if (discount.valueType === 'PERCENTAGE') {
+      applicableMasters.forEach((master) => {
+        const masterAnnualAmount = toAmount(master.amount) * feeScheduleMultiplier(master.feeType.schedule);
+        discountAmountsByMaster.set(
+          master.id,
+          (discountAmountsByMaster.get(master.id) ?? 0) + (masterAnnualAmount * value) / 100,
+        );
+      });
+      continue;
+    }
+
+    const applicableTotal = applicableMasters.reduce(
+      (sum, master) => sum + toAmount(master.amount) * feeScheduleMultiplier(master.feeType.schedule),
+      0,
+    );
+    if (applicableTotal <= 0) continue;
+    let allocated = 0;
+    applicableMasters.forEach((master, index) => {
+      const masterAnnualAmount = toAmount(master.amount) * feeScheduleMultiplier(master.feeType.schedule);
+      const share = index === applicableMasters.length - 1 ? Math.max(value - allocated, 0) : (value * masterAnnualAmount) / applicableTotal;
+      allocated += share;
+      discountAmountsByMaster.set(master.id, (discountAmountsByMaster.get(master.id) ?? 0) + share);
+    });
+  }
   const discountTotal = feeMasters.reduce((sum, master) => {
     const masterAnnualAmount = toAmount(master.amount) * feeScheduleMultiplier(master.feeType.schedule);
-    const masterDiscount = discounts.reduce((discountSum, discount) => {
-      if (discount.installments.some((item) => item.feeMasterId === master.id && !item.deletedAt)) {
-        const value = toAmount(discount.amount ?? discount.value);
-        return discountSum + (discount.valueType === 'PERCENTAGE' ? (masterAnnualAmount * value) / 100 : value);
-      }
-      if (discount.feeTypeId && discount.feeTypeId !== master.feeTypeId) return discountSum;
-      if (discount.targetType === 'ALL' ||
-          (discount.targetType === 'STUDENT' && (!discount.studentId || discount.studentId === student.id)) ||
-          (discount.targetType === 'CLASS' && discount.classId === student.classId) ||
-          (discount.targetType === 'SECTION' && discount.sectionId === student.sectionId) ||
-          (discount.targetType === 'CATEGORY' && discount.categoryId === student.studentCategoryId) ||
-          (discount.targetType === 'FEE_TYPE' && discount.feeTypeId === master.feeTypeId) ||
-          (discount.targetType === 'FEE_GROUP' && discount.feeGroupId === master.feeGroupId) ||
-          (discount.targetType === 'FEE_MASTER' && discount.feeMasterId === master.id)) {
-        const value = toAmount(discount.amount ?? discount.value);
-        return discountSum + (discount.valueType === 'PERCENTAGE' ? (masterAnnualAmount * value) / 100 : value);
-      }
-      return discountSum;
-    }, 0);
-    return sum + Math.min(masterDiscount, masterAnnualAmount);
+    return sum + Math.min(discountAmountsByMaster.get(master.id) ?? 0, masterAnnualAmount);
   }, 0);
   const discountLabel = discounts.length
     ? `Discount (${discounts.map((discount) => discount.discountName || discount.code || 'Selected discount').join(', ')})`

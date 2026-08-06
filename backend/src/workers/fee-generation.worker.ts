@@ -50,33 +50,53 @@ const annualizedFeeMasterAmount = (master: AdmissionFeeMaster) =>
 const isDiscountApplicable = (
   discount: Prisma.FeeDiscountGetPayload<{ include: { installments: true } }>,
   master: AdmissionFeeMaster,
-  student: AdmissionStudent,
 ) => {
   if (discount.installments.some((item) => item.feeMasterId === master.id && !item.deletedAt)) return true;
+  if (discount.feeMasterId && discount.feeMasterId !== master.id) return false;
+  if (discount.feeGroupId && discount.feeGroupId !== master.feeGroupId) return false;
   if (discount.feeTypeId && discount.feeTypeId !== master.feeTypeId) return false;
-  if (discount.targetType === 'ALL') return true;
-  if (discount.targetType === 'STUDENT') return discount.studentId ? discount.studentId === student.id : true;
-  if (discount.targetType === 'CLASS') return discount.classId === student.classId;
-  if (discount.targetType === 'SECTION') return discount.sectionId === student.sectionId;
-  if (discount.targetType === 'CATEGORY') return discount.categoryId === student.studentCategoryId;
-  if (discount.targetType === 'FEE_TYPE') return discount.feeTypeId === master.feeTypeId;
-  if (discount.targetType === 'FEE_GROUP') return discount.feeGroupId === master.feeGroupId;
-  if (discount.targetType === 'FEE_MASTER') return discount.feeMasterId === master.id;
-  return false;
+  return true;
 };
 
-const calculateDiscountAmount = (
+const calculateDiscountAmountsByMaster = (
   discounts: Array<Prisma.FeeDiscountGetPayload<{ include: { installments: true } }>>,
-  master: AdmissionFeeMaster,
-  student: AdmissionStudent,
+  masters: AdmissionFeeMaster[],
 ) => {
-  const amount = annualizedFeeMasterAmount(master);
-  return discounts.reduce((sum, discount) => {
-    if (!isDiscountApplicable(discount, master, student)) return sum;
+  const totals = new Map<string, Prisma.Decimal>();
+  masters.forEach((master) => totals.set(master.id, toDecimal(0)));
+
+  for (const discount of discounts) {
+    const applicableMasters = masters.filter((master) => isDiscountApplicable(discount, master));
+    if (!applicableMasters.length) continue;
+
     const value = toDecimal(discount.amount ?? discount.value);
-    const discountAmount = discount.valueType === 'PERCENTAGE' ? amount.mul(value).div(100) : value;
-    return sum.plus(discountAmount);
-  }, toDecimal(0));
+    if (discount.valueType === 'PERCENTAGE') {
+      for (const master of applicableMasters) {
+        const amount = annualizedFeeMasterAmount(master);
+        totals.set(master.id, (totals.get(master.id) ?? toDecimal(0)).plus(amount.mul(value).div(100)));
+      }
+      continue;
+    }
+
+    const applicableTotal = applicableMasters.reduce(
+      (sum, master) => sum.plus(annualizedFeeMasterAmount(master)),
+      toDecimal(0),
+    );
+    if (applicableTotal.lte(0)) continue;
+
+    let allocated = toDecimal(0);
+    applicableMasters.forEach((master, index) => {
+      const amount = annualizedFeeMasterAmount(master);
+      const share =
+        index === applicableMasters.length - 1
+          ? Prisma.Decimal.max(value.minus(allocated), 0)
+          : value.mul(amount).div(applicableTotal);
+      allocated = allocated.plus(share);
+      totals.set(master.id, (totals.get(master.id) ?? toDecimal(0)).plus(share));
+    });
+  }
+
+  return totals;
 };
 
 export const startFeeGenerationWorker = () => {
@@ -101,7 +121,7 @@ export const startFeeGenerationWorker = () => {
           data: { status: 'PROCESSING', error: null },
         });
 
-        if (generationJob.source !== 'ADMISSION' || !generationJob.studentId) {
+        if (!['ADMISSION', 'MANUAL'].includes(generationJob.source) || !generationJob.studentId) {
           await tx.feeInvoiceGenerationJob.update({
             where: { id: generationJob.id },
             data: { status: 'COMPLETED', result: { generatedInvoiceIds: [], skipped: [{ reason: 'Unsupported fee generation source' }] } },
@@ -184,10 +204,11 @@ export const startFeeGenerationWorker = () => {
 
         const generatedInvoiceIds: string[] = [];
         const skipped: Array<{ feeMasterId?: string; reason: string }> = [];
+        const discountAmountsByMaster = calculateDiscountAmountsByMaster(discounts, masters);
 
         for (const master of masters) {
           const amount = annualizedFeeMasterAmount(master);
-          const discountAmount = Prisma.Decimal.min(calculateDiscountAmount(discounts, master, student), amount);
+          const discountAmount = Prisma.Decimal.min(discountAmountsByMaster.get(master.id) ?? toDecimal(0), amount);
 
           const existing = await tx.feeInvoice.findFirst({
             where: {
