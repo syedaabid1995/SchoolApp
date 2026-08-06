@@ -251,46 +251,61 @@ class _SelectedChildCard extends ConsumerWidget {
   ) {
     showModalBottomSheet<void>(
       context: context,
+      isScrollControlled: true,
       showDragHandle: true,
-      builder: (context) => SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(20, 4, 20, 20),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              const Text(
-                'Select Child',
-                style: TextStyle(
-                  color: SaaptTheme.navy,
-                  fontSize: 22,
-                  fontWeight: FontWeight.w900,
-                ),
+      builder: (context) {
+        final maxHeight = MediaQuery.sizeOf(context).height * 0.7;
+        return SafeArea(
+          child: ConstrainedBox(
+            constraints: BoxConstraints(maxHeight: maxHeight),
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(20, 4, 20, 20),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  const Text(
+                    'Select Child',
+                    style: TextStyle(
+                      color: SaaptTheme.navy,
+                      fontSize: 22,
+                      fontWeight: FontWeight.w900,
+                    ),
+                  ),
+                  const SizedBox(height: 6),
+                  Text(
+                    DateFormat('d MMM yyyy').format(DateTime.now()),
+                    style: const TextStyle(
+                      color: Color(0xFF60708F),
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                  const SizedBox(height: 18),
+                  Flexible(
+                    child: ListView.separated(
+                      shrinkWrap: true,
+                      itemCount: children.length,
+                      separatorBuilder: (_, _) => const SizedBox(height: 12),
+                      itemBuilder: (context, index) {
+                        final child = children[index];
+                        return _ChildOptionTile(
+                          child: child,
+                          selected: child.id == selected.id,
+                          onTap: () {
+                            ref.read(selectedChildIdProvider.notifier).state =
+                                child.id;
+                            Navigator.of(context).pop();
+                          },
+                        );
+                      },
+                    ),
+                  ),
+                ],
               ),
-              const SizedBox(height: 6),
-              Text(
-                DateFormat('d MMM yyyy').format(DateTime.now()),
-                style: const TextStyle(
-                  color: Color(0xFF60708F),
-                  fontWeight: FontWeight.w700,
-                ),
-              ),
-              const SizedBox(height: 18),
-              for (final child in children) ...[
-                _ChildOptionTile(
-                  child: child,
-                  selected: child.id == selected.id,
-                  onTap: () {
-                    ref.read(selectedChildIdProvider.notifier).state = child.id;
-                    Navigator.of(context).pop();
-                  },
-                ),
-                const SizedBox(height: 12),
-              ],
-            ],
+            ),
           ),
-        ),
-      ),
+        );
+      },
     );
   }
 
