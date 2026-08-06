@@ -1885,35 +1885,92 @@ export const listParentTimetable = async (req: Request, res: Response) => {
     return;
   }
 
-  const slots = await timetableReadService.getTimetable({
-    schoolId: child.schoolId,
-    classId: child.classId,
-    academicYearId: child.academicYearId ?? undefined,
-    date,
-    dayOfWeek,
-    mode: 'modern',
-  });
-
-  const periods = slots
-    .filter(
+  const pickSlotsForChild = <
+    T extends { sectionId?: string | null },
+  >(
+    slots: T[],
+  ) => {
+    const matched = slots.filter(
       (slot) =>
         slot.sectionId == null ||
         child.sectionId == null ||
         slot.sectionId === child.sectionId,
-    )
-    .map((slot) => ({
-      id: slot.sourceId,
-      periodId: slot.periodId,
-      periodName: slot.periodName,
-      periodType: slot.periodType,
-      startTime: slot.startTime,
-      endTime: slot.endTime,
-      subjectId: slot.subjectId,
-      subjectName: slot.subjectName,
-      teacherId: slot.teacherId,
-      teacherName: slot.teacherName,
-      room: slot.roomName,
-    }));
+    );
+    // If the student section does not match any row, still show the class
+    // timetable for that day so parents are not left with an empty sheet.
+    return matched.length ? matched : slots;
+  };
+
+  const loadVersionSlots = async (timetableVersionId: string) =>
+    timetableReadService.getTimetable({
+      schoolId: child.schoolId,
+      classId: child.classId!,
+      timetableVersionId,
+      dayOfWeek,
+      mode: 'modern',
+    });
+
+  const findVersion = async (
+    status: 'PUBLISHED' | 'DRAFT',
+    restrictAcademicYear: boolean,
+  ) =>
+    prisma.timetableVersion.findFirst({
+      where: {
+        schoolId: child.schoolId,
+        status,
+        ...(restrictAcademicYear && child.academicYearId
+          ? { academicYearId: child.academicYearId }
+          : {}),
+      },
+      orderBy:
+        status === 'PUBLISHED'
+          ? [{ publishedAt: 'desc' }, { createdAt: 'desc' }]
+          : [{ createdAt: 'desc' }],
+      select: { id: true, status: true },
+    });
+
+  // Academy Setup edits the DRAFT timetable. Parent used to require a PUBLISHED
+  // version + effective date window, so parents often saw an empty day even when
+  // the class timetable was visible in admin. Prefer draft rows when present,
+  // otherwise fall back to the latest published version.
+  let slots: Awaited<ReturnType<typeof loadVersionSlots>> = [];
+  for (const restrictAcademicYear of [true, false]) {
+    const draft = await findVersion('DRAFT', restrictAcademicYear);
+    if (draft) {
+      const draftSlots = pickSlotsForChild(await loadVersionSlots(draft.id));
+      if (draftSlots.length) {
+        slots = draftSlots;
+        break;
+      }
+    }
+
+    const published = await findVersion('PUBLISHED', restrictAcademicYear);
+    if (published) {
+      const publishedSlots = pickSlotsForChild(
+        await loadVersionSlots(published.id),
+      );
+      if (publishedSlots.length) {
+        slots = publishedSlots;
+        break;
+      }
+    }
+
+    if (!restrictAcademicYear || !child.academicYearId) break;
+  }
+
+  const periods = slots.map((slot) => ({
+    id: slot.sourceId,
+    periodId: slot.periodId,
+    periodName: slot.periodName,
+    periodType: slot.periodType,
+    startTime: slot.startTime,
+    endTime: slot.endTime,
+    subjectId: slot.subjectId,
+    subjectName: slot.subjectName,
+    teacherId: slot.teacherId,
+    teacherName: slot.teacherName,
+    room: slot.roomName,
+  }));
 
   res.status(200).json({
     child: {
@@ -1927,6 +1984,12 @@ export const listParentTimetable = async (req: Request, res: Response) => {
     isNonWorkingDay: false,
     nonWorkingReason: null,
     periods,
+    ...(periods.length
+      ? {}
+      : {
+          message:
+            'No timetable periods found for this class on this day. Check Academy Setup → Timetable for this class/section.',
+        }),
   });
 };
 
