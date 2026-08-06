@@ -16,6 +16,7 @@ class ParentHomeScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final childrenState = ref.watch(parentChildrenProvider);
+    final selectedChild = ref.watch(effectiveSelectedChildProvider).asData?.value;
     return Scaffold(
       body: RefreshIndicator(
         onRefresh: () async => ref.invalidate(parentChildrenProvider),
@@ -23,11 +24,14 @@ class ParentHomeScreen extends ConsumerWidget {
           slivers: [
             SliverToBoxAdapter(
               child: ParentHero(
+                showMenu: true,
+                showChildSwitcher: true,
                 badge: '👨‍👩‍👧 Parent App',
-                title: 'Select Child',
+                title: selectedChild?.name ?? 'Select Child',
                 subtitle: childrenState.maybeWhen(
-                  data: (children) =>
-                      '${children.length} ${children.length == 1 ? 'student' : 'students'} mapped to this parent account',
+                  data: (children) => selectedChild == null
+                      ? '${children.length} ${children.length == 1 ? 'student' : 'students'} mapped to this parent account'
+                      : '${selectedChild.classLabel} • ${children.length} ${children.length == 1 ? 'student' : 'students'} mapped',
                   orElse: () => 'Loading mapped children',
                 ),
               ),
@@ -471,7 +475,12 @@ class _SelectedChildCard extends ConsumerWidget {
                 borderRadius: BorderRadius.circular(22),
               ),
             ),
-            onPressed: () => _showChildSheet(context, ref, children, child),
+            onPressed: () => showParentChildPicker(
+              context,
+              ref,
+              children: children,
+              selected: child,
+            ),
             icon: const Icon(Icons.keyboard_arrow_down_rounded, size: 18),
             label: Text(
               children.length == 1 ? 'Selected' : 'Change',
@@ -483,141 +492,8 @@ class _SelectedChildCard extends ConsumerWidget {
     );
   }
 
-  void _showChildSheet(
-    BuildContext context,
-    WidgetRef ref,
-    List<ParentChild> children,
-    ParentChild selected,
-  ) {
-    showModalBottomSheet<void>(
-      context: context,
-      isScrollControlled: true,
-      showDragHandle: true,
-      builder: (context) {
-        final maxHeight = MediaQuery.sizeOf(context).height * 0.7;
-        return SafeArea(
-          child: ConstrainedBox(
-            constraints: BoxConstraints(maxHeight: maxHeight),
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(20, 4, 20, 20),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  const Text(
-                    'Select Child',
-                    style: TextStyle(
-                      color: SaaptTheme.navy,
-                      fontSize: 22,
-                      fontWeight: FontWeight.w900,
-                    ),
-                  ),
-                  const SizedBox(height: 6),
-                  Text(
-                    DateFormat('d MMM yyyy').format(DateTime.now()),
-                    style: const TextStyle(
-                      color: Color(0xFF60708F),
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
-                  const SizedBox(height: 18),
-                  Flexible(
-                    child: ListView.separated(
-                      shrinkWrap: true,
-                      itemCount: children.length,
-                      separatorBuilder: (_, _) => const SizedBox(height: 12),
-                      itemBuilder: (context, index) {
-                        final child = children[index];
-                        return _ChildOptionTile(
-                          child: child,
-                          selected: child.id == selected.id,
-                          onTap: () {
-                            ref.read(selectedChildIdProvider.notifier).state =
-                                child.id;
-                            Navigator.of(context).pop();
-                          },
-                        );
-                      },
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-        );
-      },
-    );
-  }
-
   String _avatarFor(String name) {
     final lower = name.toLowerCase();
     return lower.endsWith('a') || lower.contains('ananya') ? '👧' : '👦';
-  }
-}
-
-class _ChildOptionTile extends StatelessWidget {
-  const _ChildOptionTile({
-    required this.child,
-    required this.selected,
-    required this.onTap,
-  });
-
-  final ParentChild child;
-  final bool selected;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    return Material(
-      color: const Color(0xFFF6F8FC),
-      borderRadius: BorderRadius.circular(8),
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(8),
-        child: Padding(
-          padding: const EdgeInsets.all(14),
-          child: Row(
-            children: [
-              Container(
-                width: 44,
-                height: 44,
-                decoration: BoxDecoration(
-                  color: const Color(0xFFE7EFFD),
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: Icon(
-                  selected ? Icons.check_circle_rounded : Icons.person_outline,
-                  color: SaaptTheme.primary,
-                ),
-              ),
-              const SizedBox(width: 14),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      child.name,
-                      style: const TextStyle(
-                        fontWeight: FontWeight.w800,
-                        color: SaaptTheme.navy,
-                      ),
-                    ),
-                    const SizedBox(height: 3),
-                    Text(
-                      child.classLabel,
-                      style: const TextStyle(
-                        color: Color(0xFF60708F),
-                        fontSize: 13,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              const Icon(Icons.chevron_right, color: Color(0xFF8A9AB8)),
-            ],
-          ),
-        ),
-      ),
-    );
   }
 }

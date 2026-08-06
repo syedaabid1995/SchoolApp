@@ -55,9 +55,12 @@ class _ParentHomeworkScreenState extends ConsumerState<ParentHomeworkScreen> {
             padding: EdgeInsets.zero,
             children: [
               ParentHero(
-                badge: child.name,
-                title: 'Homework',
-                subtitle: 'View assigned homework by date',
+                showMenu: true,
+                showChildSwitcher: true,
+                badge: '📚 Homework',
+                title: child.name,
+                subtitle:
+                    '${child.classLabel} • View assigned homework by date',
               ),
               Padding(
                 padding: const EdgeInsets.all(18),

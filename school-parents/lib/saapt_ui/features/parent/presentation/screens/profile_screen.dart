@@ -98,7 +98,12 @@ class _ParentProfileScreenState extends ConsumerState<ParentProfileScreen> {
         ? _selectedChildId
         : null;
     return PopScope(
-      canPop: _panel == _ProfilePanel.menu && _selectedChildId == null,
+      // When opened from the drawer (school/children), allow route pop unless
+      // a child detail is open. Using maybePop() while canPop is false caused
+      // an infinite onPopInvoked → ANR freeze on the back button.
+      canPop: _openedViaPanel
+          ? !(_panel == _ProfilePanel.children && _selectedChildId != null)
+          : (_panel == _ProfilePanel.menu && _selectedChildId == null),
       onPopInvokedWithResult: (didPop, _) {
         if (didPop) return;
         _handleBack();
@@ -149,14 +154,7 @@ class _ParentProfileScreenState extends ConsumerState<ParentProfileScreen> {
                           backgroundColor: Colors.white.withValues(alpha: 0.16),
                           foregroundColor: Colors.white,
                         ),
-                        onPressed: () {
-                          if (_panel == _ProfilePanel.menu &&
-                              _selectedChildId == null) {
-                            Navigator.of(context).maybePop();
-                          } else {
-                            _handleBack();
-                          }
-                        },
+                        onPressed: _handleBack,
                         icon: const Icon(Icons.arrow_back_rounded),
                       ),
                     ),
@@ -269,16 +267,24 @@ class _ParentProfileScreenState extends ConsumerState<ParentProfileScreen> {
       setState(() => _selectedChildId = null);
       return;
     }
-    if (_panel != _ProfilePanel.menu) {
-      if (_openedViaPanel) {
-        Navigator.of(context).maybePop();
-        return;
+    if (_openedViaPanel) {
+      // Force pop — do not use maybePop() while this route may still report
+      // canPop=false for nested panels (that loops with PopScope).
+      if (Navigator.of(context).canPop()) {
+        Navigator.of(context).pop();
       }
+      return;
+    }
+    if (_panel != _ProfilePanel.menu) {
       setState(() {
         _panel = _ProfilePanel.menu;
         _selectedChildId = null;
         _selectedSchoolProfileId = null;
       });
+      return;
+    }
+    if (Navigator.of(context).canPop()) {
+      Navigator.of(context).pop();
     }
   }
 

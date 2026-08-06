@@ -52,17 +52,19 @@ class _SaaptReportsScreenState extends ConsumerState<SaaptReportsScreen> {
               padding: EdgeInsets.zero,
               children: [
                 ParentHero(
+                  showMenu: true,
+                  showChildSwitcher: true,
                   badge: _kind == _ReportKind.performance
-                      ? '📊 Parent Report'
-                      : '📅 Monthly Till Date',
-                  title: _kind == _ReportKind.performance
-                      ? 'Performance Report'
-                      : 'Calendar Attendance Report',
+                      ? '📊 Performance Report'
+                      : '📅 Attendance Report',
+                  title: selectedChild?.name ?? 'Reports',
                   subtitle: _kind == _ReportKind.performance
                       ? selectedChild == null
                             ? 'Select child and exam'
-                            : '${selectedChild.name} • Admin uploaded marks'
-                      : 'Child-wise graphical attendance overview',
+                            : '${selectedChild.classLabel} • Admin uploaded marks'
+                      : selectedChild == null
+                      ? 'Child-wise graphical attendance overview'
+                      : '${selectedChild.classLabel} • Monthly attendance overview',
                 ),
                 Padding(
                   padding: const EdgeInsets.fromLTRB(20, 24, 20, 32),

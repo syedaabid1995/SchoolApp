@@ -5,40 +5,24 @@ import 'package:go_router/go_router.dart';
 import '../../../../app/theme/saapt_theme.dart';
 import '../providers/parent_providers.dart';
 
-class ParentShellScope extends InheritedWidget {
-  const ParentShellScope({
-    super.key,
-    required this.openDrawer,
-    required super.child,
-  });
-
-  final VoidCallback openDrawer;
-
-  /// Look up without registering a rebuild dependency. Nested scrollables must
-  /// not rebuild the whole shell tree when this scope is stable.
-  static ParentShellScope? maybeOf(BuildContext context) {
-    return context.getInheritedWidgetOfExactType<ParentShellScope>();
-  }
-
-  static void openDrawerOf(BuildContext context) {
-    maybeOf(context)?.openDrawer();
-  }
-
-  @override
-  bool updateShouldNotify(ParentShellScope oldWidget) => false;
-}
-
+/// Slide-in side menu that does **not** use [Scaffold.drawer].
+///
+/// Nested `Scaffold.drawer` under the bottom-nav shell freezes Android scroll
+/// gestures after the menu is opened (ANR). This route sits on the root
+/// navigator and leaves tab scrollables untouched.
 Future<void> showParentAppDrawer(BuildContext context) {
-  final width = MediaQuery.sizeOf(context).width * 0.82;
-  return showGeneralDialog<void>(
-    context: context,
-    barrierDismissible: true,
-    barrierLabel: 'Menu',
-    barrierColor: Colors.black.withValues(alpha: 0.45),
-    transitionDuration: const Duration(milliseconds: 220),
-    pageBuilder: (dialogContext, animation, secondaryAnimation) {
-      return SafeArea(
-        child: Align(
+  final width = (MediaQuery.sizeOf(context).width * 0.82).clamp(260.0, 340.0);
+
+  return Navigator.of(context, rootNavigator: true).push<void>(
+    PageRouteBuilder<void>(
+      opaque: false,
+      barrierDismissible: true,
+      barrierLabel: 'Menu',
+      barrierColor: Colors.black.withValues(alpha: 0.45),
+      transitionDuration: const Duration(milliseconds: 220),
+      reverseTransitionDuration: const Duration(milliseconds: 180),
+      pageBuilder: (context, animation, secondaryAnimation) {
+        return Align(
           alignment: Alignment.centerLeft,
           child: Material(
             color: Colors.white,
@@ -48,33 +32,44 @@ Future<void> showParentAppDrawer(BuildContext context) {
               right: Radius.circular(20),
             ),
             child: SizedBox(
-              width: width.clamp(260.0, 340.0),
+              width: width,
               height: double.infinity,
-              child: const ParentAppDrawerPanel(),
+              child: const SafeArea(
+                right: false,
+                child: ParentAppDrawerPanel(),
+              ),
             ),
           ),
-        ),
-      );
-    },
-    transitionBuilder: (context, animation, secondaryAnimation, child) {
-      final curved = CurvedAnimation(
-        parent: animation,
-        curve: Curves.easeOutCubic,
-        reverseCurve: Curves.easeInCubic,
-      );
-      return SlideTransition(
-        position: Tween<Offset>(
-          begin: const Offset(-1, 0),
-          end: Offset.zero,
-        ).animate(curved),
-        child: child,
-      );
-    },
+        );
+      },
+      transitionsBuilder: (context, animation, secondaryAnimation, child) {
+        final curved = CurvedAnimation(
+          parent: animation,
+          curve: Curves.easeOutCubic,
+          reverseCurve: Curves.easeInCubic,
+        );
+        return SlideTransition(
+          position: Tween<Offset>(
+            begin: const Offset(-1, 0),
+            end: Offset.zero,
+          ).animate(curved),
+          child: child,
+        );
+      },
+    ),
   );
 }
 
 class ParentAppDrawerPanel extends ConsumerWidget {
   const ParentAppDrawerPanel({super.key});
+
+  void _closeAndGo(BuildContext context, String location) {
+    final router = GoRouter.of(context);
+    Navigator.of(context, rootNavigator: true).pop();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      router.push(location);
+    });
+  }
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -145,7 +140,8 @@ class ParentAppDrawerPanel extends ConsumerWidget {
               ),
               IconButton(
                 tooltip: 'Close',
-                onPressed: () => Navigator.of(context).maybePop(),
+                onPressed: () =>
+                    Navigator.of(context, rootNavigator: true).pop(),
                 icon: const Icon(Icons.close_rounded, color: Colors.white),
               ),
             ],
@@ -170,10 +166,7 @@ class ParentAppDrawerPanel extends ConsumerWidget {
                 icon: Icons.apartment_outlined,
                 title: 'School Profile',
                 subtitle: 'School address and contact information',
-                onTap: () {
-                  Navigator.of(context).pop();
-                  context.push('/profile?panel=school');
-                },
+                onTap: () => _closeAndGo(context, '/profile?panel=school'),
               ),
               _DrawerMenuTile(
                 icon: Icons.family_restroom_outlined,
@@ -181,19 +174,13 @@ class ParentAppDrawerPanel extends ConsumerWidget {
                 subtitle: profile == null
                     ? 'Mapped child profiles'
                     : '${profile.children.length} mapped child profiles',
-                onTap: () {
-                  Navigator.of(context).pop();
-                  context.push('/profile?panel=children');
-                },
+                onTap: () => _closeAndGo(context, '/profile?panel=children'),
               ),
               _DrawerMenuTile(
                 icon: Icons.payments_outlined,
                 title: 'Online Fee Payment',
                 subtitle: 'Fee breakdown and pay online',
-                onTap: () {
-                  Navigator.of(context).pop();
-                  context.push('/fees/online');
-                },
+                onTap: () => _closeAndGo(context, '/fees/online'),
               ),
             ],
           ),
@@ -203,10 +190,7 @@ class ParentAppDrawerPanel extends ConsumerWidget {
           icon: Icons.person_outline,
           title: 'Account',
           subtitle: 'Profile, password, and settings',
-          onTap: () {
-            Navigator.of(context).pop();
-            context.push('/profile');
-          },
+          onTap: () => _closeAndGo(context, '/profile'),
         ),
         const SizedBox(height: 8),
       ],

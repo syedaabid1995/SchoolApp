@@ -53,11 +53,15 @@ class _ParentLeaveScreenState extends ConsumerState<ParentLeaveScreen> {
               slivers: [
                 SliverToBoxAdapter(
                   child: ParentHero(
-                    badge: _applying ? '📝 Leave Request' : '✅ Leave Status',
-                    title: _applying ? 'Request Leave' : 'Leave Requests',
+                    showMenu: true,
+                    showChildSwitcher: true,
+                    badge: _applying
+                        ? '📝 Leave Request'
+                        : '✅ Leave Requests',
+                    title: selectedChild.name,
                     subtitle: _applying
                         ? 'Submit leave request to school'
-                        : 'Track submitted leave requests',
+                        : '${selectedChild.classLabel} • Track submitted leave requests',
                     showDefaultTrailing: !_applying,
                     leading: _applying
                         ? IconButton(

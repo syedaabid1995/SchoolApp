@@ -13,17 +13,23 @@ class ParentAlertsScreen extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final noticesState = ref.watch(parentNoticesProvider(null));
+    final selectedChild = ref.watch(effectiveSelectedChildProvider).asData?.value;
+    final noticesState = ref.watch(parentNoticesProvider(selectedChild));
     return Scaffold(
       body: RefreshIndicator(
-        onRefresh: () async => ref.invalidate(parentNoticesProvider(null)),
+        onRefresh: () async =>
+            ref.invalidate(parentNoticesProvider(selectedChild)),
         child: ListView(
           padding: EdgeInsets.zero,
           children: [
             ParentHero(
+              showMenu: true,
+              showChildSwitcher: true,
               badge: '🔔 Notifications',
-              title: 'Alerts Center',
-              subtitle: 'Attendance & performance updates',
+              title: selectedChild?.name ?? 'Alerts Center',
+              subtitle: selectedChild == null
+                  ? 'Attendance & performance updates'
+                  : '${selectedChild.classLabel} • Attendance & performance updates',
             ),
             Padding(
               padding: const EdgeInsets.fromLTRB(20, 22, 20, 32),

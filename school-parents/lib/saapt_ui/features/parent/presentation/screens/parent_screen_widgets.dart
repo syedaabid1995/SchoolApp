@@ -1,10 +1,11 @@
 import 'package:flutter/material.dart';
-import 'package:go_router/go_router.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:intl/intl.dart';
 
 import '../../../../app/theme/saapt_theme.dart';
+import '../../data/parent_models.dart';
+import '../providers/parent_providers.dart';
 import 'parent_app_drawer.dart';
-
-export 'parent_app_drawer.dart' show ParentShellScope;
 
 class ParentHero extends StatelessWidget {
   const ParentHero({
@@ -15,6 +16,9 @@ class ParentHero extends StatelessWidget {
     this.leading,
     this.trailing,
     this.showDefaultTrailing = true,
+    this.showMenu = false,
+    this.showChildSwitcher = false,
+    this.titleWidget,
   });
 
   final String badge;
@@ -24,8 +28,21 @@ class ParentHero extends StatelessWidget {
   final Widget? trailing;
   final bool showDefaultTrailing;
 
+  /// Opens the side menu via a root route (never [Scaffold.drawer]).
+  final bool showMenu;
+
+  /// Shows the selected student name with a dropdown to switch children.
+  final bool showChildSwitcher;
+  final Widget? titleWidget;
+
   @override
   Widget build(BuildContext context) {
+    final resolvedTitle =
+        titleWidget ??
+        (showChildSwitcher
+            ? ParentChildTitleSwitcher(fallbackTitle: title)
+            : null);
+
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.fromLTRB(22, 52, 22, 24),
@@ -61,14 +78,14 @@ class ParentHero extends StatelessWidget {
                   if (leading != null) ...[
                     leading!,
                     const SizedBox(width: 10),
-                  ] else if (ParentShellScope.maybeOf(context) != null) ...[
+                  ] else if (showMenu) ...[
                     IconButton(
                       tooltip: 'Menu',
                       style: IconButton.styleFrom(
                         backgroundColor: Colors.white.withValues(alpha: 0.16),
                         foregroundColor: Colors.white,
                       ),
-                      onPressed: () => ParentShellScope.openDrawerOf(context),
+                      onPressed: () => showParentAppDrawer(context),
                       icon: const Icon(Icons.menu_rounded),
                     ),
                     const SizedBox(width: 10),
@@ -98,19 +115,22 @@ class ParentHero extends StatelessWidget {
                   if (trailing != null)
                     trailing!
                   else if (showDefaultTrailing)
-                    const ParentProfileAction(),
+                    const ParentLogoutAction(),
                 ],
               ),
               const SizedBox(height: 22),
-              Text(
-                title,
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 30,
-                  height: 1.1,
-                  fontWeight: FontWeight.w900,
+              if (resolvedTitle != null)
+                resolvedTitle
+              else
+                Text(
+                  title,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 30,
+                    height: 1.1,
+                    fontWeight: FontWeight.w900,
+                  ),
                 ),
-              ),
               const SizedBox(height: 10),
               Text(
                 subtitle,
@@ -128,19 +148,193 @@ class ParentHero extends StatelessWidget {
   }
 }
 
-class ParentProfileAction extends StatelessWidget {
-  const ParentProfileAction({super.key});
+class ParentChildTitleSwitcher extends ConsumerWidget {
+  const ParentChildTitleSwitcher({super.key, this.fallbackTitle = 'Student'});
+
+  final String fallbackTitle;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final selectedChild = ref.watch(effectiveSelectedChildProvider).asData?.value;
+    final children = ref.watch(parentChildrenProvider).asData?.value ?? const [];
+    final name = selectedChild?.name.trim().isNotEmpty == true
+        ? selectedChild!.name.trim()
+        : fallbackTitle;
+    final canSwitch = children.isNotEmpty;
+
+    return InkWell(
+      onTap: canSwitch
+          ? () => showParentChildPicker(
+              context,
+              ref,
+              children: children,
+              selected: selectedChild,
+            )
+          : null,
+      borderRadius: BorderRadius.circular(10),
+      child: Row(
+        children: [
+          Expanded(
+            child: Text(
+              name,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(
+                color: Colors.white,
+                fontSize: 30,
+                height: 1.1,
+                fontWeight: FontWeight.w900,
+              ),
+            ),
+          ),
+          if (canSwitch) ...[
+            const SizedBox(width: 4),
+            Icon(
+              Icons.keyboard_arrow_down_rounded,
+              color: Colors.white.withValues(alpha: 0.92),
+              size: 30,
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+Future<void> showParentChildPicker(
+  BuildContext context,
+  WidgetRef ref, {
+  required List<ParentChild> children,
+  ParentChild? selected,
+}) {
+  return showModalBottomSheet<void>(
+    context: context,
+    isScrollControlled: true,
+    showDragHandle: true,
+    builder: (context) {
+      final maxHeight = MediaQuery.sizeOf(context).height * 0.7;
+      final selectedId = selected?.id;
+      return SafeArea(
+        child: ConstrainedBox(
+          constraints: BoxConstraints(maxHeight: maxHeight),
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(20, 4, 20, 20),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                const Text(
+                  'Select Student',
+                  style: TextStyle(
+                    color: SaaptTheme.navy,
+                    fontSize: 22,
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  DateFormat('d MMM yyyy').format(DateTime.now()),
+                  style: const TextStyle(
+                    color: Color(0xFF60708F),
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+                const SizedBox(height: 18),
+                Flexible(
+                  child: ListView.separated(
+                    shrinkWrap: true,
+                    itemCount: children.length,
+                    separatorBuilder: (_, _) => const SizedBox(height: 12),
+                    itemBuilder: (context, index) {
+                      final child = children[index];
+                      final isSelected = child.id == selectedId;
+                      return Material(
+                        color: const Color(0xFFF6F8FC),
+                        borderRadius: BorderRadius.circular(8),
+                        child: InkWell(
+                          onTap: () {
+                            ref.read(selectedChildIdProvider.notifier).state =
+                                child.id;
+                            Navigator.of(context).pop();
+                          },
+                          borderRadius: BorderRadius.circular(8),
+                          child: Padding(
+                            padding: const EdgeInsets.all(14),
+                            child: Row(
+                              children: [
+                                Container(
+                                  width: 44,
+                                  height: 44,
+                                  decoration: BoxDecoration(
+                                    color: const Color(0xFFE7EFFD),
+                                    borderRadius: BorderRadius.circular(8),
+                                  ),
+                                  child: Icon(
+                                    isSelected
+                                        ? Icons.check_circle_rounded
+                                        : Icons.person_outline,
+                                    color: SaaptTheme.primary,
+                                  ),
+                                ),
+                                const SizedBox(width: 14),
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      Text(
+                                        child.name,
+                                        style: const TextStyle(
+                                          fontWeight: FontWeight.w800,
+                                          color: SaaptTheme.navy,
+                                        ),
+                                      ),
+                                      const SizedBox(height: 3),
+                                      Text(
+                                        child.classLabel,
+                                        style: const TextStyle(
+                                          color: Color(0xFF60708F),
+                                          fontSize: 13,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                                const Icon(
+                                  Icons.chevron_right,
+                                  color: Color(0xFF8A9AB8),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      );
+                    },
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+    },
+  );
+}
+
+class ParentLogoutAction extends ConsumerWidget {
+  const ParentLogoutAction({super.key});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
     return IconButton(
-      tooltip: 'Profile',
+      tooltip: 'Logout',
       style: IconButton.styleFrom(
         backgroundColor: Colors.white.withValues(alpha: 0.16),
         foregroundColor: Colors.white,
       ),
-      onPressed: () => context.push('/profile'),
-      icon: const Icon(Icons.person_rounded),
+      onPressed: () =>
+          ref.read(parentAuthControllerProvider.notifier).logout(),
+      icon: const Icon(Icons.logout_rounded),
     );
   }
 }

@@ -13,7 +13,6 @@ import '../../features/parent/presentation/screens/home_screen.dart';
 import '../../features/parent/presentation/screens/homework_screen.dart';
 import '../../features/parent/presentation/screens/leave_screen.dart';
 import '../../features/parent/presentation/screens/online_fee_payment_screen.dart';
-import '../../features/parent/presentation/screens/parent_app_drawer.dart';
 import '../../features/parent/presentation/screens/profile_screen.dart';
 import '../../features/parent/presentation/screens/reports_screen.dart';
 
@@ -142,65 +141,51 @@ final saaptRouterProvider = Provider<GoRouter>((ref) {
   );
 });
 
-class _SaaptShell extends StatefulWidget {
+class _SaaptShell extends StatelessWidget {
   const _SaaptShell({required this.shell});
 
   final StatefulNavigationShell shell;
 
   @override
-  State<_SaaptShell> createState() => _SaaptShellState();
-}
-
-class _SaaptShellState extends State<_SaaptShell> {
-  void _openDrawer() {
-    showParentAppDrawer(context);
-  }
-
-  @override
   Widget build(BuildContext context) {
-    return ParentShellScope(
-      openDrawer: _openDrawer,
-      child: Scaffold(
-        body: widget.shell,
-        bottomNavigationBar: NavigationBar(
-          selectedIndex: widget.shell.currentIndex,
-          onDestinationSelected: (index) => widget.shell.goBranch(
-            index,
-            initialLocation: index == widget.shell.currentIndex,
+    return Scaffold(
+      body: shell,
+      bottomNavigationBar: NavigationBar(
+        selectedIndex: shell.currentIndex,
+        onDestinationSelected: (index) =>
+            shell.goBranch(index, initialLocation: index == shell.currentIndex),
+        destinations: const [
+          NavigationDestination(
+            icon: Text('🏠', style: TextStyle(fontSize: 22)),
+            selectedIcon: Text('🏠', style: TextStyle(fontSize: 24)),
+            label: 'Home',
           ),
-          destinations: const [
-            NavigationDestination(
-              icon: Text('🏠', style: TextStyle(fontSize: 22)),
-              selectedIcon: Text('🏠', style: TextStyle(fontSize: 24)),
-              label: 'Home',
-            ),
-            NavigationDestination(
-              icon: Text('📅', style: TextStyle(fontSize: 22)),
-              selectedIcon: Text('📅', style: TextStyle(fontSize: 24)),
-              label: 'Attend',
-            ),
-            NavigationDestination(
-              icon: Text('📝', style: TextStyle(fontSize: 22)),
-              selectedIcon: Text('📝', style: TextStyle(fontSize: 24)),
-              label: 'Leave',
-            ),
-            NavigationDestination(
-              icon: Text('📚', style: TextStyle(fontSize: 22)),
-              selectedIcon: Text('📚', style: TextStyle(fontSize: 24)),
-              label: 'Homework',
-            ),
-            NavigationDestination(
-              icon: Text('📊', style: TextStyle(fontSize: 22)),
-              selectedIcon: Text('📊', style: TextStyle(fontSize: 24)),
-              label: 'Reports',
-            ),
-            NavigationDestination(
-              icon: Text('🔔', style: TextStyle(fontSize: 22)),
-              selectedIcon: Text('🔔', style: TextStyle(fontSize: 24)),
-              label: 'Alerts',
-            ),
-          ],
-        ),
+          NavigationDestination(
+            icon: Text('📅', style: TextStyle(fontSize: 22)),
+            selectedIcon: Text('📅', style: TextStyle(fontSize: 24)),
+            label: 'Attend',
+          ),
+          NavigationDestination(
+            icon: Text('📝', style: TextStyle(fontSize: 22)),
+            selectedIcon: Text('📝', style: TextStyle(fontSize: 24)),
+            label: 'Leave',
+          ),
+          NavigationDestination(
+            icon: Text('📚', style: TextStyle(fontSize: 22)),
+            selectedIcon: Text('📚', style: TextStyle(fontSize: 24)),
+            label: 'Homework',
+          ),
+          NavigationDestination(
+            icon: Text('📊', style: TextStyle(fontSize: 22)),
+            selectedIcon: Text('📊', style: TextStyle(fontSize: 24)),
+            label: 'Reports',
+          ),
+          NavigationDestination(
+            icon: Text('🔔', style: TextStyle(fontSize: 22)),
+            selectedIcon: Text('🔔', style: TextStyle(fontSize: 24)),
+            label: 'Alerts',
+          ),
+        ],
       ),
     );
   }

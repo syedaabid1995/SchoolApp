@@ -29,7 +29,9 @@ class ParentAttendanceScreen extends ConsumerWidget {
               slivers: [
                 SliverToBoxAdapter(
                   child: ParentHero(
-                    badge: '📅 Parent Attendance',
+                    showMenu: true,
+                    showChildSwitcher: true,
+                    badge: '📅 Student Attendance',
                     title: child.name,
                     subtitle:
                         '${child.classLabel} • ${DateFormat('d MMM y').format(DateTime.now())}',
