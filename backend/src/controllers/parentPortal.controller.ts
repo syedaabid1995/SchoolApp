@@ -464,7 +464,7 @@ const serializeFaceProfileForParent = async (
 const serializeDocumentsForParent = async (student: any) => {
   const studentId = String(student.id);
 
-  const uploadedDocuments = (
+  const individualDocuments = (
     await Promise.all(
       (Array.isArray(student.documents) ? student.documents : []).map(
         async (document: any) => {
@@ -475,15 +475,17 @@ const serializeDocumentsForParent = async (student: any) => {
           if (!files.length) return null;
           const storageOk = await signParentAssetUrl(files[0]?.url);
           if (!storageOk && !files[0]?.url) return null;
+          const title =
+            (typeof document?.title === 'string' && document.title.trim()) ||
+            'Document';
+          const documentNumber =
+            typeof document?.documentNumber === 'string'
+              ? document.documentNumber.trim() || null
+              : null;
           return {
             id: documentId,
-            title:
-              (typeof document?.title === 'string' && document.title.trim()) ||
-              'Document',
-            documentNumber:
-              typeof document?.documentNumber === 'string'
-                ? document.documentNumber
-                : null,
+            title,
+            documentNumber,
             mimeType: files[0]?.mimeType || document?.mimeType || null,
             url: parentChildFilePath(studentId, {
               type: 'document',
@@ -504,7 +506,48 @@ const serializeDocumentsForParent = async (student: any) => {
         },
       ),
     )
-  ).filter(Boolean);
+  ).filter(Boolean) as Array<{
+    id: string;
+    title: string;
+    documentNumber: string | null;
+    mimeType: string | null;
+    url: string;
+    files: Array<{
+      url: string;
+      fileName: string | null;
+      mimeType: string | null;
+    }>;
+    kind: string;
+  }>;
+
+  // Merge legacy single-file rows that share the same title + document number
+  // so parents see one Aadhaar card with every attached page.
+  const groupedDocuments = new Map<string, (typeof individualDocuments)[number]>();
+  for (const document of individualDocuments) {
+    const key = `${document.title.trim().toLowerCase()}::${(
+      document.documentNumber || ''
+    )
+      .trim()
+      .toLowerCase()}`;
+    const existing = groupedDocuments.get(key);
+    if (!existing) {
+      groupedDocuments.set(key, {
+        ...document,
+        files: [...document.files],
+      });
+      continue;
+    }
+    existing.files.push(...document.files);
+    if (!existing.mimeType && document.mimeType) {
+      existing.mimeType = document.mimeType;
+    }
+  }
+
+  const uploadedDocuments = [...groupedDocuments.values()].map((document) => ({
+    ...document,
+    url: document.files[0]?.url || document.url,
+    mimeType: document.files[0]?.mimeType || document.mimeType,
+  }));
 
   const studentPhotos = (
     Array.isArray(student.photos) ? student.photos : []

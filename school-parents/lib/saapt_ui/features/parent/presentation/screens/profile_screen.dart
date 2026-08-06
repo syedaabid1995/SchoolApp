@@ -5087,9 +5087,7 @@ List<_DisplayRecord> _parentRecords(Object? data) {
 List<_DisplayRecord> _documentRecords(Object? data) {
   final map = _asMap(data);
   final records = <_DisplayRecord>[];
-  records.addAll(
-    _recordsFromGroup('Uploaded Documents', map['uploadedDocuments']),
-  );
+  records.addAll(_groupedUploadedDocumentRecords(map['uploadedDocuments']));
   records.addAll(_recordsFromGroup('Student Photos', map['studentPhotos']));
 
   final admissionDocs = _asMap(map['admissionDocuments']);
@@ -5132,6 +5130,87 @@ List<_DisplayRecord> _documentRecords(Object? data) {
     );
   }
   return records;
+}
+
+List<_DisplayRecord> _groupedUploadedDocumentRecords(Object? value) {
+  if (_isEmptyData(value) || value is! List) return const [];
+
+  final grouped = <String, Map<String, dynamic>>{};
+  for (final raw in value) {
+    final item = _asMap(raw);
+    if (_isEmptyData(item)) continue;
+
+    final title =
+        (_firstString(item, ['title', 'name', 'label']) ?? 'Document').trim();
+    final number =
+        (_firstString(item, ['documentNumber', 'number']) ?? '').trim();
+    final key = '${title.toLowerCase()}::${number.toLowerCase()}';
+
+    final fileEntries = <Map<String, dynamic>>[];
+    final nestedFiles = item['files'];
+    if (nestedFiles is List && nestedFiles.isNotEmpty) {
+      for (final file in nestedFiles) {
+        final fileMap = _asMap(file);
+        final url = _firstString(fileMap, ['url', 'fileUrl', 'imageUrl']);
+        if (url == null || url.trim().isEmpty) continue;
+        if (url.startsWith('s3://') || url.startsWith('local://')) continue;
+        fileEntries.add({
+          'url': url,
+          'fileName': fileMap['fileName'],
+          'mimeType': fileMap['mimeType'],
+        });
+      }
+    } else {
+      final url = _firstString(item, ['url', 'fileUrl', 'documentUrl']);
+      if (url != null &&
+          url.trim().isNotEmpty &&
+          !url.startsWith('s3://') &&
+          !url.startsWith('local://')) {
+        fileEntries.add({
+          'url': url,
+          'fileName': item['fileName'],
+          'mimeType': item['mimeType'],
+        });
+      }
+    }
+    if (fileEntries.isEmpty) continue;
+
+    final existing = grouped[key];
+    if (existing == null) {
+      grouped[key] = {
+        ...item,
+        'title': title,
+        if (number.isNotEmpty) 'documentNumber': number,
+        'files': fileEntries,
+        'url': fileEntries.first['url'],
+        'mimeType': fileEntries.first['mimeType'] ?? item['mimeType'],
+        'kind': 'document',
+      };
+      continue;
+    }
+
+    final mergedFiles = <Map<String, dynamic>>[
+      ..._asList(existing['files']).map(_asMap),
+      ...fileEntries,
+    ];
+    existing['files'] = mergedFiles;
+    existing['url'] = mergedFiles.first['url'];
+    existing['mimeType'] =
+        mergedFiles.first['mimeType'] ?? existing['mimeType'];
+  }
+
+  return grouped.values
+      .map(
+        (item) => _DisplayRecord(
+          title: _titleForRecord('Uploaded Documents', item),
+          subtitle: _subtitleForRecord('Uploaded Documents', item),
+          category: 'Uploaded Documents',
+          data: item,
+          icon: Icons.description_outlined,
+          imageUrl: _imageUrlFrom(item),
+        ),
+      )
+      .toList();
 }
 
 List<_DisplayRecord> _recordsFromGroup(String group, Object? value) {
