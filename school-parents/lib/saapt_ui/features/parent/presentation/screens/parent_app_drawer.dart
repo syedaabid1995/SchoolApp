@@ -14,8 +14,10 @@ class ParentShellScope extends InheritedWidget {
 
   final VoidCallback openDrawer;
 
+  /// Look up without registering a rebuild dependency. Nested scrollables must
+  /// not rebuild the whole shell tree when this scope is stable.
   static ParentShellScope? maybeOf(BuildContext context) {
-    return context.dependOnInheritedWidgetOfExactType<ParentShellScope>();
+    return context.getInheritedWidgetOfExactType<ParentShellScope>();
   }
 
   static void openDrawerOf(BuildContext context) {
@@ -23,12 +25,56 @@ class ParentShellScope extends InheritedWidget {
   }
 
   @override
-  bool updateShouldNotify(ParentShellScope oldWidget) =>
-      openDrawer != oldWidget.openDrawer;
+  bool updateShouldNotify(ParentShellScope oldWidget) => false;
 }
 
-class ParentAppDrawer extends ConsumerWidget {
-  const ParentAppDrawer({super.key});
+Future<void> showParentAppDrawer(BuildContext context) {
+  final width = MediaQuery.sizeOf(context).width * 0.82;
+  return showGeneralDialog<void>(
+    context: context,
+    barrierDismissible: true,
+    barrierLabel: 'Menu',
+    barrierColor: Colors.black.withValues(alpha: 0.45),
+    transitionDuration: const Duration(milliseconds: 220),
+    pageBuilder: (dialogContext, animation, secondaryAnimation) {
+      return SafeArea(
+        child: Align(
+          alignment: Alignment.centerLeft,
+          child: Material(
+            color: Colors.white,
+            elevation: 12,
+            clipBehavior: Clip.antiAlias,
+            borderRadius: const BorderRadius.horizontal(
+              right: Radius.circular(20),
+            ),
+            child: SizedBox(
+              width: width.clamp(260.0, 340.0),
+              height: double.infinity,
+              child: const ParentAppDrawerPanel(),
+            ),
+          ),
+        ),
+      );
+    },
+    transitionBuilder: (context, animation, secondaryAnimation, child) {
+      final curved = CurvedAnimation(
+        parent: animation,
+        curve: Curves.easeOutCubic,
+        reverseCurve: Curves.easeInCubic,
+      );
+      return SlideTransition(
+        position: Tween<Offset>(
+          begin: const Offset(-1, 0),
+          end: Offset.zero,
+        ).animate(curved),
+        child: child,
+      );
+    },
+  );
+}
+
+class ParentAppDrawerPanel extends ConsumerWidget {
+  const ParentAppDrawerPanel({super.key});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -40,129 +86,130 @@ class ParentAppDrawer extends ConsumerWidget {
     final email = profile?.email.trim() ?? '';
     final initial = name.isEmpty ? 'P' : name[0].toUpperCase();
 
-    return Drawer(
-      backgroundColor: Colors.white,
-      child: SafeArea(
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Container(
-              padding: const EdgeInsets.fromLTRB(20, 24, 20, 22),
-              decoration: const BoxDecoration(
-                gradient: LinearGradient(
-                  colors: [Color(0xFF1E4FE8), Color(0xFF346BFF)],
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Container(
+          padding: const EdgeInsets.fromLTRB(20, 24, 20, 22),
+          decoration: const BoxDecoration(
+            gradient: LinearGradient(
+              colors: [Color(0xFF1E4FE8), Color(0xFF346BFF)],
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+            ),
+          ),
+          child: Row(
+            children: [
+              CircleAvatar(
+                radius: 28,
+                backgroundColor: Colors.white.withValues(alpha: 0.18),
+                child: Text(
+                  initial,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 22,
+                    fontWeight: FontWeight.w900,
+                  ),
                 ),
               ),
-              child: Row(
-                children: [
-                  CircleAvatar(
-                    radius: 28,
-                    backgroundColor: Colors.white.withValues(alpha: 0.18),
-                    child: Text(
-                      initial,
+              const SizedBox(width: 14),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      name,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
                       style: const TextStyle(
                         color: Colors.white,
-                        fontSize: 22,
+                        fontSize: 18,
                         fontWeight: FontWeight.w900,
                       ),
                     ),
-                  ),
-                  const SizedBox(width: 14),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          name,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 18,
-                            fontWeight: FontWeight.w900,
-                          ),
+                    if (email.isNotEmpty) ...[
+                      const SizedBox(height: 4),
+                      Text(
+                        email,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          color: Colors.white.withValues(alpha: 0.82),
+                          fontWeight: FontWeight.w700,
+                          fontSize: 12,
                         ),
-                        if (email.isNotEmpty) ...[
-                          const SizedBox(height: 4),
-                          Text(
-                            email,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: TextStyle(
-                              color: Colors.white.withValues(alpha: 0.82),
-                              fontWeight: FontWeight.w700,
-                              fontSize: 12,
-                            ),
-                          ),
-                        ],
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            const Padding(
-              padding: EdgeInsets.fromLTRB(20, 18, 20, 8),
-              child: Text(
-                'Menu',
-                style: TextStyle(
-                  color: Color(0xFF8EA0BA),
-                  fontSize: 12,
-                  fontWeight: FontWeight.w900,
+                      ),
+                    ],
+                  ],
                 ),
               ),
-            ),
-            Expanded(
-              child: ListView(
-                padding: const EdgeInsets.fromLTRB(10, 0, 10, 16),
-                children: [
-                  _DrawerMenuTile(
-                    icon: Icons.apartment_outlined,
-                    title: 'School Profile',
-                    subtitle: 'School address and contact information',
-                    onTap: () {
-                      Navigator.of(context).pop();
-                      context.push('/profile?panel=school');
-                    },
-                  ),
-                  _DrawerMenuTile(
-                    icon: Icons.family_restroom_outlined,
-                    title: 'Children',
-                    subtitle: profile == null
-                        ? 'Mapped child profiles'
-                        : '${profile.children.length} mapped child profiles',
-                    onTap: () {
-                      Navigator.of(context).pop();
-                      context.push('/profile?panel=children');
-                    },
-                  ),
-                  _DrawerMenuTile(
-                    icon: Icons.payments_outlined,
-                    title: 'Online Fee Payment',
-                    subtitle: 'Fee breakdown and pay online',
-                    onTap: () {
-                      Navigator.of(context).pop();
-                      context.push('/fees/online');
-                    },
-                  ),
-                ],
+              IconButton(
+                tooltip: 'Close',
+                onPressed: () => Navigator.of(context).maybePop(),
+                icon: const Icon(Icons.close_rounded, color: Colors.white),
               ),
-            ),
-            const Divider(height: 1),
-            _DrawerMenuTile(
-              icon: Icons.person_outline,
-              title: 'Account',
-              subtitle: 'Profile, password, and settings',
-              onTap: () {
-                Navigator.of(context).pop();
-                context.push('/profile');
-              },
-            ),
-          ],
+            ],
+          ),
         ),
-      ),
+        const Padding(
+          padding: EdgeInsets.fromLTRB(20, 18, 20, 8),
+          child: Text(
+            'Menu',
+            style: TextStyle(
+              color: Color(0xFF8EA0BA),
+              fontSize: 12,
+              fontWeight: FontWeight.w900,
+            ),
+          ),
+        ),
+        Expanded(
+          child: ListView(
+            padding: const EdgeInsets.fromLTRB(10, 0, 10, 16),
+            children: [
+              _DrawerMenuTile(
+                icon: Icons.apartment_outlined,
+                title: 'School Profile',
+                subtitle: 'School address and contact information',
+                onTap: () {
+                  Navigator.of(context).pop();
+                  context.push('/profile?panel=school');
+                },
+              ),
+              _DrawerMenuTile(
+                icon: Icons.family_restroom_outlined,
+                title: 'Children',
+                subtitle: profile == null
+                    ? 'Mapped child profiles'
+                    : '${profile.children.length} mapped child profiles',
+                onTap: () {
+                  Navigator.of(context).pop();
+                  context.push('/profile?panel=children');
+                },
+              ),
+              _DrawerMenuTile(
+                icon: Icons.payments_outlined,
+                title: 'Online Fee Payment',
+                subtitle: 'Fee breakdown and pay online',
+                onTap: () {
+                  Navigator.of(context).pop();
+                  context.push('/fees/online');
+                },
+              ),
+            ],
+          ),
+        ),
+        const Divider(height: 1),
+        _DrawerMenuTile(
+          icon: Icons.person_outline,
+          title: 'Account',
+          subtitle: 'Profile, password, and settings',
+          onTap: () {
+            Navigator.of(context).pop();
+            context.push('/profile');
+          },
+        ),
+        const SizedBox(height: 8),
+      ],
     );
   }
 }

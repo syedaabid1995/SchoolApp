@@ -152,15 +152,15 @@ class _SaaptShell extends StatefulWidget {
 }
 
 class _SaaptShellState extends State<_SaaptShell> {
-  final _scaffoldKey = GlobalKey<ScaffoldState>();
+  void _openDrawer() {
+    showParentAppDrawer(context);
+  }
 
   @override
   Widget build(BuildContext context) {
     return ParentShellScope(
-      openDrawer: () => _scaffoldKey.currentState?.openDrawer(),
+      openDrawer: _openDrawer,
       child: Scaffold(
-        key: _scaffoldKey,
-        drawer: const ParentAppDrawer(),
         body: widget.shell,
         bottomNavigationBar: NavigationBar(
           selectedIndex: widget.shell.currentIndex,
