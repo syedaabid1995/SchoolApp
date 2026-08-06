@@ -2,6 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../../app/theme/saapt_theme.dart';
+import 'parent_app_drawer.dart';
+
+export 'parent_app_drawer.dart' show ParentShellScope;
 
 class ParentHero extends StatelessWidget {
   const ParentHero({
@@ -57,6 +60,17 @@ class ParentHero extends StatelessWidget {
                 children: [
                   if (leading != null) ...[
                     leading!,
+                    const SizedBox(width: 10),
+                  ] else if (ParentShellScope.maybeOf(context) != null) ...[
+                    IconButton(
+                      tooltip: 'Menu',
+                      style: IconButton.styleFrom(
+                        backgroundColor: Colors.white.withValues(alpha: 0.16),
+                        foregroundColor: Colors.white,
+                      ),
+                      onPressed: () => ParentShellScope.openDrawerOf(context),
+                      icon: const Icon(Icons.menu_rounded),
+                    ),
                     const SizedBox(width: 10),
                   ],
                   Container(

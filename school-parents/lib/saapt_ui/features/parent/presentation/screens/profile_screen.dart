@@ -2,7 +2,6 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 import 'package:url_launcher/url_launcher.dart';
 
@@ -30,10 +29,12 @@ class ParentProfileScreen extends ConsumerStatefulWidget {
     super.key,
     this.initialChildId,
     this.initialTabKey,
+    this.initialPanel,
   });
 
   final String? initialChildId;
   final String? initialTabKey;
+  final String? initialPanel;
 
   @override
   ConsumerState<ParentProfileScreen> createState() =>
@@ -56,6 +57,7 @@ class _ParentProfileScreenState extends ConsumerState<ParentProfileScreen> {
   bool _savingProfile = false;
   bool _changingPassword = false;
   bool _profileSeeded = false;
+  bool _openedViaPanel = false;
 
   @override
   void initState() {
@@ -63,6 +65,16 @@ class _ParentProfileScreenState extends ConsumerState<ParentProfileScreen> {
     if (widget.initialChildId?.trim().isNotEmpty == true) {
       _panel = _ProfilePanel.children;
       _selectedChildId = widget.initialChildId!.trim();
+      _openedViaPanel = true;
+      return;
+    }
+    final panel = widget.initialPanel?.trim().toLowerCase();
+    if (panel == 'school' || panel == 'schoolprofile') {
+      _panel = _ProfilePanel.schoolProfile;
+      _openedViaPanel = true;
+    } else if (panel == 'children') {
+      _panel = _ProfilePanel.children;
+      _openedViaPanel = true;
     }
   }
 
@@ -204,19 +216,6 @@ class _ParentProfileScreenState extends ConsumerState<ParentProfileScreen> {
                               onOpenEdit: () => setState(
                                 () => _panel = _ProfilePanel.editProfile,
                               ),
-                              onOpenSchoolProfile: () => setState(() {
-                                _selectedSchoolProfileId =
-                                    profile.schoolProfiles.isNotEmpty
-                                    ? profile.schoolProfiles.first.id
-                                    : null;
-                                _panel = _ProfilePanel.schoolProfile;
-                              }),
-                              onOpenChildren: () => setState(() {
-                                _selectedChildId = null;
-                                _panel = _ProfilePanel.children;
-                              }),
-                              onOpenOnlineFees: () =>
-                                  context.push('/fees/online'),
                               onOpenPassword: () => setState(
                                 () => _panel = _ProfilePanel.changePassword,
                               ),
@@ -271,6 +270,10 @@ class _ParentProfileScreenState extends ConsumerState<ParentProfileScreen> {
       return;
     }
     if (_panel != _ProfilePanel.menu) {
+      if (_openedViaPanel) {
+        Navigator.of(context).maybePop();
+        return;
+      }
       setState(() {
         _panel = _ProfilePanel.menu;
         _selectedChildId = null;
@@ -393,9 +396,6 @@ class _ProfileMenuPanel extends StatelessWidget {
     required this.pushState,
     required this.onOpenProfile,
     required this.onOpenEdit,
-    required this.onOpenSchoolProfile,
-    required this.onOpenChildren,
-    required this.onOpenOnlineFees,
     required this.onOpenPassword,
     required this.onTogglePush,
     required this.onOpenInfo,
@@ -406,9 +406,6 @@ class _ProfileMenuPanel extends StatelessWidget {
   final AsyncValue<bool> pushState;
   final VoidCallback onOpenProfile;
   final VoidCallback onOpenEdit;
-  final VoidCallback onOpenSchoolProfile;
-  final VoidCallback onOpenChildren;
-  final VoidCallback onOpenOnlineFees;
   final VoidCallback onOpenPassword;
   final ValueChanged<bool> onTogglePush;
   final void Function(String title, String body) onOpenInfo;
@@ -490,26 +487,6 @@ class _ProfileMenuPanel extends StatelessWidget {
                 title: 'Edit Profile',
                 subtitle: 'Name, email, and mobile number',
                 onTap: onOpenEdit,
-              ),
-              _MenuTile(
-                icon: Icons.apartment_outlined,
-                title: 'School Profile',
-                subtitle: profile.schoolProfiles.length > 1
-                    ? '${profile.schoolProfiles.length} school contact profiles'
-                    : 'School address and contact information',
-                onTap: onOpenSchoolProfile,
-              ),
-              _MenuTile(
-                icon: Icons.family_restroom_outlined,
-                title: 'Children',
-                subtitle: '${profile.children.length} mapped child profiles',
-                onTap: onOpenChildren,
-              ),
-              _MenuTile(
-                icon: Icons.payments_outlined,
-                title: 'Online Fee Payment',
-                subtitle: 'Fee breakdown, select items, and pay online',
-                onTap: onOpenOnlineFees,
               ),
               _MenuTile(
                 icon: Icons.lock_outline,
