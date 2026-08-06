@@ -1870,6 +1870,13 @@ class _PayFeeButtonState extends ConsumerState<_PayFeeButton> {
           'email': checkout.prefillEmail ?? '',
           'contact': checkout.prefillContact ?? '',
         },
+        'config': {
+          'display': {
+            'sequence': ['upi', 'card', 'netbanking', 'wallet'],
+            'preferences': {'show_default_blocks': true},
+          },
+        },
+        'retry': {'enabled': true, 'max_count': 3},
         'theme': {'color': '#6D5DFB'},
       });
     } catch (error) {

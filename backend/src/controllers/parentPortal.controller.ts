@@ -1846,19 +1846,21 @@ const orderNote = (notes: RazorpayOrder['notes'], key: string) => {
   return String(value);
 };
 
-export const verifyParentFeeCheckoutPayment = async (req: Request, res: Response) => {
-  const auth = requireAuth(req);
-  const payload = parentFeeCheckoutVerifySchema.parse(req.body ?? {});
-  if (!verifyRazorpaySignature(payload.razorpay_order_id, payload.razorpay_payment_id, payload.razorpay_signature)) {
-    throw new HttpError(400, 'Invalid Razorpay payment signature');
-  }
-
-  const order = await razorpayRequest<RazorpayOrder>(`/orders/${encodeURIComponent(payload.razorpay_order_id)}`);
+export const reconcileParentFeeRazorpayPayment = async (params: {
+  razorpayOrderId: string;
+  razorpayPaymentId: string;
+  expectedParentUserId?: string;
+  ignoreNonParentOrder?: boolean;
+}) => {
+  const order = await razorpayRequest<RazorpayOrder>(`/orders/${encodeURIComponent(params.razorpayOrderId)}`);
   const notes = order.notes ?? {};
-  if (orderNote(notes, 'purpose') !== 'PARENT_FEE_PAYMENT') {
+  const purpose = notes.purpose == null ? '' : String(notes.purpose);
+  if (purpose !== 'PARENT_FEE_PAYMENT') {
+    if (params.ignoreNonParentOrder) return null;
     throw new HttpError(400, 'Razorpay order is not a parent fee payment');
   }
-  if (orderNote(notes, 'parentUserId') !== auth.userId) {
+  const parentUserId = orderNote(notes, 'parentUserId');
+  if (params.expectedParentUserId && parentUserId !== params.expectedParentUserId) {
     throw new HttpError(403, 'Razorpay order does not belong to this parent');
   }
 
@@ -1870,9 +1872,9 @@ export const verifyParentFeeCheckoutPayment = async (req: Request, res: Response
   if (!Number.isFinite(expectedPaise) || expectedPaise <= 0) {
     throw new HttpError(400, 'Razorpay order has an invalid amount');
   }
-  await requireChildAccess(auth.userId, studentId);
+  await requireChildAccess(parentUserId, studentId);
 
-  let payment = await razorpayRequest<RazorpayPayment>(`/payments/${encodeURIComponent(payload.razorpay_payment_id)}`);
+  let payment = await razorpayRequest<RazorpayPayment>(`/payments/${encodeURIComponent(params.razorpayPaymentId)}`);
   if (payment.order_id !== order.id) {
     throw new HttpError(400, 'Razorpay payment does not match this order');
   }
@@ -1900,14 +1902,13 @@ export const verifyParentFeeCheckoutPayment = async (req: Request, res: Response
     },
   });
   if (existingPayment) {
-    res.status(200).json({
+    return {
       idempotent: true,
       payment: existingPayment,
       receipt: existingPayment.receipt,
       invoice: existingPayment.invoice,
       message: 'Razorpay payment was already verified.',
-    });
-    return;
+    };
   }
 
   const paidAt = new Date();
@@ -1922,6 +1923,22 @@ export const verifyParentFeeCheckoutPayment = async (req: Request, res: Response
       academicSessionId,
       studentId,
     );
+    const concurrentPayment = await tx.feePayment.findFirst({
+      where: { schoolId, gateway: 'RAZORPAY', gatewayPaymentId: payment.id },
+      include: {
+        receipt: true,
+        invoice: { include: { feeType: { select: { name: true, schedule: true } }, items: true, payments: true, receipts: true } },
+      },
+    });
+    if (concurrentPayment) {
+      return {
+        idempotent: true,
+        payment: concurrentPayment,
+        receipt: concurrentPayment.receipt,
+        invoice: concurrentPayment.invoice,
+        allocation: null,
+      };
+    }
     const invoice = await tx.feeInvoice.findFirst({
       where: {
         id: invoiceId,
@@ -1962,7 +1979,7 @@ export const verifyParentFeeCheckoutPayment = async (req: Request, res: Response
         status: 'SUCCESS',
         paidAt,
         note: `Razorpay ${payment.method ?? 'online'} parent payment for ${invoice.invoiceNumber}`,
-        collectedById: auth.userId,
+        collectedById: parentUserId,
       },
     });
     const receipt = await tx.feeReceipt.create({
@@ -2013,7 +2030,7 @@ export const verifyParentFeeCheckoutPayment = async (req: Request, res: Response
       type: 'PAYMENT_CREDIT',
       description: `Parent Razorpay payment ${createdPayment.paymentNumber} against invoice ${invoice.invoiceNumber}`,
       creditAmount: amount,
-      createdById: auth.userId,
+      createdById: parentUserId,
     });
     await tx.feeNotification.create({
       data: {
@@ -2028,12 +2045,29 @@ export const verifyParentFeeCheckoutPayment = async (req: Request, res: Response
         status: 'QUEUED',
       },
     });
-    return { payment: createdPayment, receipt, invoice: updatedInvoice, allocation };
+    return { idempotent: false, payment: createdPayment, receipt, invoice: updatedInvoice, allocation };
   });
 
-  res.status(201).json({
-    idempotent: false,
+  return {
     ...result,
-    message: 'Razorpay payment verified and fee invoice updated.',
+    message: result.idempotent
+      ? 'Razorpay payment was already verified.'
+      : 'Razorpay payment verified and fee invoice updated.',
+  };
+};
+
+export const verifyParentFeeCheckoutPayment = async (req: Request, res: Response) => {
+  const auth = requireAuth(req);
+  const payload = parentFeeCheckoutVerifySchema.parse(req.body ?? {});
+  if (!verifyRazorpaySignature(payload.razorpay_order_id, payload.razorpay_payment_id, payload.razorpay_signature)) {
+    throw new HttpError(400, 'Invalid Razorpay payment signature');
+  }
+
+  const result = await reconcileParentFeeRazorpayPayment({
+    razorpayOrderId: payload.razorpay_order_id,
+    razorpayPaymentId: payload.razorpay_payment_id,
+    expectedParentUserId: auth.userId,
   });
+  if (!result) throw new HttpError(400, 'Razorpay order is not a parent fee payment');
+  res.status(result.idempotent ? 200 : 201).json(result);
 };

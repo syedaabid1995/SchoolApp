@@ -179,6 +179,19 @@ export const verifyRazorpaySignature = (orderId: string, paymentId: string, sign
   return expectedBuffer.length === actualBuffer.length && crypto.timingSafeEqual(expectedBuffer, actualBuffer);
 };
 
+export const verifyRazorpayWebhookSignature = (body: Buffer, signature: string) => {
+  if (!env.RAZORPAY_WEBHOOK_SECRET) {
+    throw new HttpError(503, 'Razorpay webhook is not configured. Add RAZORPAY_WEBHOOK_SECRET.');
+  }
+  const expected = crypto
+    .createHmac('sha256', env.RAZORPAY_WEBHOOK_SECRET)
+    .update(body)
+    .digest('hex');
+  const expectedBuffer = Buffer.from(expected);
+  const actualBuffer = Buffer.from(signature);
+  return expectedBuffer.length === actualBuffer.length && crypto.timingSafeEqual(expectedBuffer, actualBuffer);
+};
+
 const paymentModeFromRazorpayMethod = (method?: string | null) => {
   const normalized = (method ?? '').toLowerCase();
   if (normalized === 'upi') return 'UPI';

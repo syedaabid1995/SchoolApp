@@ -74,6 +74,7 @@ import { requestMetricsMiddleware } from './middlewares/request-metrics.middlewa
 import { getHealthStatus } from './services/observability/health.service';
 import { metricsRegistry } from './services/observability/metrics.service';
 import { QueueMetricsService } from './services/observability/queue-metrics.service';
+import { razorpayWebhookRouter } from './routes/razorpayWebhook.routes';
 
 export const createApp = () => {
   const app = express();
@@ -111,6 +112,11 @@ export const createApp = () => {
       },
       credentials: true,
     }),
+  );
+  app.use(
+    '/api/v1/webhooks/razorpay',
+    express.raw({ type: 'application/json', limit: '1mb' }),
+    razorpayWebhookRouter,
   );
   app.use(express.json({ limit: '10mb' }));
   app.use(express.urlencoded({ extended: false, limit: '10mb' }));
