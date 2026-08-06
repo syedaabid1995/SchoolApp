@@ -12,7 +12,9 @@ import { getSession } from '../../../../../services/auth.service';
 import { listAcademicYears } from '../../../../../services/academic.service';
 import { listSetupClasses, listSetupSections } from '../../../../../services/academic-setup.service';
 import { listFeeDiscounts, listFeeMasters, type FeeDiscount, type FeeMaster } from '../../../../../services/fee-management.service';
-import { createParent, getStudent, linkParent, listStudents, resolveUploadUrl, updateStudent, uploadAndAddStudentDocument, uploadStudentPhoto } from '../../../../../services/student.service';
+import { createParent, getStudent, linkParent, listStudents, updateStudent, uploadAndAddStudentDocuments, uploadStudentPhoto } from '../../../../../services/student.service';
+import StudentDocumentViewer from '../../../../../components/StudentDocumentViewer';
+import { groupStudentDocumentsForDisplay } from '../../../../../utils/student-document-files';
 import { getSchoolSystemSettings } from '../../../../../services/system-settings.service';
 
 const categories = ['Regular', 'RTE', 'Management', 'Scholarship', 'Transport'];
@@ -206,6 +208,7 @@ export default function EditStudentPage() {
   const [siblingFilters, setSiblingFilters] = useState({ classId: '', sectionId: '', search: '' });
   const [selectedSiblingSummaries, setSelectedSiblingSummaries] = useState<Record<string, SelectedSiblingSummary>>({});
   const [documentRows, setDocumentRows] = useState<DocumentCollectionRow[]>(initialDocumentRows);
+  const [viewingDocument, setViewingDocument] = useState<ReturnType<typeof groupStudentDocumentsForDisplay>[number] | null>(null);
 
   const { data: session, isLoading: isSessionLoading } = useQuery({ queryKey: ['session'], queryFn: getSession });
   const isSuperAdmin = session?.role === 'SUPER_ADMIN';
@@ -490,17 +493,15 @@ export default function EditStudentPage() {
         effectiveStudentRequestParams,
       );
 
-      const pendingDocuments = documentRows.filter((row) => row.title.trim() || row.documentNumber.trim() || row.files.length);
+      const pendingDocuments = documentRows.filter((row) => row.files.length > 0 && row.title.trim());
       if (pendingDocuments.length) {
         await Promise.all(
-          pendingDocuments.flatMap((row) =>
-            row.files.map((file) =>
-              uploadAndAddStudentDocument(studentId, {
-                title: row.title.trim(),
-                documentNumber: row.documentNumber.trim() || null,
-                file,
-              }, effectiveStudentRequestParams),
-            ),
+          pendingDocuments.map((row) =>
+            uploadAndAddStudentDocuments(studentId, {
+              title: row.title.trim() || 'Document',
+              documentNumber: row.documentNumber.trim() || null,
+              files: row.files,
+            }, effectiveStudentRequestParams),
           ),
         );
       }
@@ -1135,13 +1136,22 @@ export default function EditStudentPage() {
                 <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
                   <h2 className="mb-4 text-lg font-bold text-slate-950">Uploaded Documents</h2>
                   <div className="grid gap-3">
-                    {student.documents?.length ? student.documents.map((document) => (
-                      <div key={document.id} className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-slate-100 bg-slate-50 px-4 py-3">
+                    {groupStudentDocumentsForDisplay(student.documents).length ? groupStudentDocumentsForDisplay(student.documents).map((document) => (
+                      <div key={document.documentIds.join('-')} className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-slate-100 bg-slate-50 px-4 py-3">
                         <div>
                           <p className="font-semibold text-slate-900">{document.title}</p>
-                          <p className="text-xs text-slate-500">{document.documentNumber || document.fileName || formatDate(document.createdAt)}</p>
+                          <p className="text-xs text-slate-500">
+                            {document.documentNumber ? `${document.documentNumber} · ` : ''}
+                            {document.files.length} file{document.files.length === 1 ? '' : 's'}
+                          </p>
                         </div>
-                        <a href={resolveUploadUrl(document.url, { type: 'student-document', id: document.id }) ?? undefined} target="_blank" rel="noreferrer" className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-700">View</a>
+                        <button
+                          type="button"
+                          onClick={() => setViewingDocument(document)}
+                          className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-700"
+                        >
+                          View
+                        </button>
                       </div>
                     )) : <p className="rounded-xl border border-dashed border-slate-200 p-8 text-center text-sm text-slate-500">No documents uploaded.</p>}
                   </div>
@@ -1319,6 +1329,11 @@ export default function EditStudentPage() {
           </aside>
         </div>
       </div>
+      <StudentDocumentViewer
+        open={Boolean(viewingDocument)}
+        document={viewingDocument}
+        onClose={() => setViewingDocument(null)}
+      />
     </div>
   );
 }

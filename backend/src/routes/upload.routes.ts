@@ -21,6 +21,7 @@ import {
   validateBrandingImage,
 } from '../utils/brandingAssets';
 import { isAllowedDocumentMimeType, validateUploadedDocumentFile } from '../utils/documentUploadValidation';
+import { normalizeStudentDocumentFiles } from '../modules/students/utils/student-document-files';
 
 const imageOnlyFilter: multer.Options['fileFilter'] = (_req, file, cb) => {
   if (file.mimetype.startsWith('image/')) {
@@ -134,11 +135,15 @@ const resolveSignedAsset = async (req: Request) => {
   if (payload.type === 'student-document') {
     const document = await prisma.studentDocument.findFirst({
       where: { id: payload.id },
-      select: { schoolId: true, url: true },
+      select: { schoolId: true, url: true, fileName: true, mimeType: true, sizeBytes: true, files: true },
     });
     if (!document) throw new HttpError(404, 'Asset not found');
     await assertSignedAssetPermission(req, document.schoolId, P.studentDocumentView);
-    return document.url;
+    const files = normalizeStudentDocumentFiles(document);
+    if (!files.length) throw new HttpError(404, 'Asset not found');
+    const rawIndex = typeof req.query.fileIndex === 'string' ? Number(req.query.fileIndex) : 0;
+    const index = Number.isFinite(rawIndex) ? Math.max(0, Math.floor(rawIndex)) : 0;
+    return files[Math.min(index, files.length - 1)].url;
   }
 
   if (payload.type === 'student-photo') {

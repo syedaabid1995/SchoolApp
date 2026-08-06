@@ -14,6 +14,7 @@ import '../../../../core/network/parent_api_client.dart';
 import '../../data/parent_models.dart';
 import '../providers/parent_providers.dart';
 import 'parent_app_drawer.dart';
+import 'parent_media_cache.dart';
 
 class ParentHero extends StatelessWidget {
   const ParentHero({
@@ -520,7 +521,16 @@ String _parentMediaRequestPath(String raw) {
   return resolved;
 }
 
-Future<List<int>> _loadParentMediaBytes(Dio dio, String rawUrl) async {
+Future<Uint8List> _loadParentMediaBytes(
+  Dio dio,
+  String rawUrl, {
+  bool useCache = true,
+}) async {
+  if (useCache) {
+    final cached = await ParentMediaCache.read(rawUrl);
+    if (cached != null && cached.isNotEmpty) return cached;
+  }
+
   final response = await dio.get<List<int>>(
     _parentMediaRequestPath(rawUrl),
     options: Options(
@@ -535,7 +545,11 @@ Future<List<int>> _loadParentMediaBytes(Dio dio, String rawUrl) async {
   if (bytes == null || bytes.isEmpty) {
     throw Exception('Empty media response');
   }
-  return bytes;
+  final data = bytes is Uint8List ? bytes : Uint8List.fromList(bytes);
+  if (useCache) {
+    await ParentMediaCache.write(rawUrl, data);
+  }
+  return data;
 }
 
 class ParentAuthedImage extends ConsumerStatefulWidget {
@@ -555,7 +569,7 @@ class ParentAuthedImage extends ConsumerStatefulWidget {
 }
 
 class _ParentAuthedImageState extends ConsumerState<ParentAuthedImage> {
-  late Future<List<int>> _bytesFuture;
+  late Future<Uint8List> _bytesFuture;
 
   @override
   void initState() {
@@ -571,13 +585,13 @@ class _ParentAuthedImageState extends ConsumerState<ParentAuthedImage> {
     }
   }
 
-  Future<List<int>> _load() {
+  Future<Uint8List> _load() {
     return _loadParentMediaBytes(ref.read(parentDioProvider), widget.url);
   }
 
   @override
   Widget build(BuildContext context) {
-    return FutureBuilder<List<int>>(
+    return FutureBuilder<Uint8List>(
       future: _bytesFuture,
       builder: (context, snapshot) {
         if (snapshot.connectionState != ConnectionState.done) {
@@ -596,7 +610,7 @@ class _ParentAuthedImageState extends ConsumerState<ParentAuthedImage> {
               );
         }
         return Image.memory(
-          bytes is Uint8List ? bytes : Uint8List.fromList(bytes),
+          bytes,
           fit: widget.fit,
           gaplessPlayback: true,
           errorBuilder: (context, error, stackTrace) =>

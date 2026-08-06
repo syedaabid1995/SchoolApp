@@ -17,6 +17,7 @@ import { buildQueryFingerprint, cacheKeys } from '../../../../services/cache/cac
 import { rememberCache, setCacheHeader } from '../../../../services/cache/cache.service';
 import { cacheTTL } from '../../../../services/cache/cache.ttl';
 import { invalidateStudentCache, invalidateAttendanceCache } from '../../../../services/cache/cache.invalidation';
+import { normalizeStudentDocumentFiles } from '../../utils/student-document-files';
 
 const requireSchoolAdmin = (req: Request) => {
   if (!req.auth?.userId) throw new HttpError(401, 'Unauthorized');
@@ -184,14 +185,32 @@ const updateSchema = z.object({
   siblingIds: z.array(z.string().uuid()).optional(),
 });
 
-const documentSchema = z.object({
-  title: z.string().min(1).max(160),
-  documentNumber: z.string().trim().max(120).optional().nullable(),
+const documentFileSchema = z.object({
   url: z.string().min(1),
   fileName: z.string().max(255).optional().nullable(),
   mimeType: z.string().max(120).optional().nullable(),
   sizeBytes: z.coerce.number().int().positive().optional().nullable(),
 });
+
+const documentSchema = z
+  .object({
+    title: z.string().min(1).max(160),
+    documentNumber: z.string().trim().max(120).optional().nullable(),
+    url: z.string().min(1).optional(),
+    fileName: z.string().max(255).optional().nullable(),
+    mimeType: z.string().max(120).optional().nullable(),
+    sizeBytes: z.coerce.number().int().positive().optional().nullable(),
+    files: z.array(documentFileSchema).min(1).max(20).optional(),
+  })
+  .superRefine((value, ctx) => {
+    if ((!value.files || value.files.length === 0) && !value.url?.trim()) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'At least one file is required',
+        path: ['files'],
+      });
+    }
+  });
 
 const timelineSchema = z.object({
   title: z.string().min(1).max(160),
@@ -427,16 +446,28 @@ export const addStudentDocument = async (req: Request, res: Response) => {
   const { id } = req.params;
   const student = await StudentDocumentRepository.student.findFirst({ where: { id, schoolId }, select: { id: true } });
   if (!student) throw new HttpError(404, 'Student not found');
+
+  const files = normalizeStudentDocumentFiles({
+    url: payload.url,
+    fileName: payload.fileName,
+    mimeType: payload.mimeType,
+    sizeBytes: payload.sizeBytes,
+    files: payload.files,
+  });
+  if (!files.length) throw new HttpError(400, 'At least one file is required');
+  const primary = files[0];
+
   const document = await StudentDocumentRepository.studentDocument.create({
     data: {
       schoolId,
       studentId: id,
       title: normalizeText(payload.title)!,
       documentNumber: nullableText(payload.documentNumber),
-      url: payload.url,
-      fileName: payload.fileName ?? null,
-      mimeType: payload.mimeType ?? null,
-      sizeBytes: payload.sizeBytes ?? null,
+      url: primary.url,
+      fileName: primary.fileName ?? null,
+      mimeType: primary.mimeType ?? null,
+      sizeBytes: primary.sizeBytes ?? null,
+      files: files as Prisma.InputJsonValue,
       uploadedById: userId,
     },
   });
@@ -445,7 +476,12 @@ export const addStudentDocument = async (req: Request, res: Response) => {
     entityType: 'STUDENT_DOCUMENT',
     entityId: document.id,
     action: 'CREATE',
-    afterState: { studentId: id, title: document.title, documentNumber: document.documentNumber },
+    afterState: {
+      studentId: id,
+      title: document.title,
+      documentNumber: document.documentNumber,
+      fileCount: files.length,
+    },
   });
   await invalidateStudentCache(schoolId, id);
   res.status(201).json(document);

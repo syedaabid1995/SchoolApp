@@ -34,6 +34,7 @@ import {
   storageKeyFromUrl,
 } from '../services/s3.service';
 import { Readable } from 'stream';
+import { normalizeStudentDocumentFiles } from '../modules/students/utils/student-document-files';
 
 type RazorpayOrder = {
   id: string;
@@ -335,22 +336,35 @@ const resolveParentChildStorageRef = async (params: {
   type: string;
   id?: string;
   key?: string;
+  index?: string;
 }) => {
   const type = params.type.trim().toLowerCase();
   const id = params.id?.trim() || '';
   const key = params.key?.trim() || '';
+  const rawIndex = Number(params.index ?? 0);
+  const index = Number.isFinite(rawIndex) ? Math.max(0, Math.floor(rawIndex)) : 0;
 
   if (type === 'document' && id) {
     const document = await prisma.studentDocument.findFirst({
       where: { id, studentId: params.studentId },
-      select: { url: true, mimeType: true, title: true, fileName: true },
+      select: {
+        url: true,
+        mimeType: true,
+        title: true,
+        fileName: true,
+        sizeBytes: true,
+        files: true,
+      },
     });
-    if (!document?.url) return null;
+    if (!document) return null;
+    const files = normalizeStudentDocumentFiles(document);
+    if (!files.length) return null;
+    const file = files[Math.min(index, files.length - 1)];
     return {
-      storageRef: document.url,
-      mimeType: document.mimeType,
+      storageRef: file.url,
+      mimeType: file.mimeType || document.mimeType,
       title: document.title,
-      fileName: document.fileName,
+      fileName: file.fileName || document.fileName,
     };
   }
 
@@ -457,8 +471,10 @@ const serializeDocumentsForParent = async (student: any) => {
           const documentId =
             typeof document?.id === 'string' ? document.id.trim() : '';
           if (!documentId) return null;
-          const storageOk = await signParentAssetUrl(document?.url);
-          if (!storageOk && !document?.url) return null;
+          const files = normalizeStudentDocumentFiles(document);
+          if (!files.length) return null;
+          const storageOk = await signParentAssetUrl(files[0]?.url);
+          if (!storageOk && !files[0]?.url) return null;
           return {
             id: documentId,
             title:
@@ -468,12 +484,21 @@ const serializeDocumentsForParent = async (student: any) => {
               typeof document?.documentNumber === 'string'
                 ? document.documentNumber
                 : null,
-            mimeType:
-              typeof document?.mimeType === 'string' ? document.mimeType : null,
+            mimeType: files[0]?.mimeType || document?.mimeType || null,
             url: parentChildFilePath(studentId, {
               type: 'document',
               id: documentId,
+              index: '0',
             }),
+            files: files.map((file, fileIndex) => ({
+              url: parentChildFilePath(studentId, {
+                type: 'document',
+                id: documentId,
+                index: String(fileIndex),
+              }),
+              fileName: file.fileName ?? null,
+              mimeType: file.mimeType ?? null,
+            })),
             kind: 'document',
           };
         },
@@ -529,12 +554,14 @@ export const getParentChildFile = async (req: Request, res: Response) => {
   const type = typeof req.query.type === 'string' ? req.query.type : '';
   const id = typeof req.query.id === 'string' ? req.query.id : '';
   const key = typeof req.query.key === 'string' ? req.query.key : '';
+  const index = typeof req.query.index === 'string' ? req.query.index : '';
 
   const resolved = await resolveParentChildStorageRef({
     studentId: child.id,
     type,
     id,
     key,
+    index,
   });
   if (!resolved) throw new HttpError(404, 'File not found');
 

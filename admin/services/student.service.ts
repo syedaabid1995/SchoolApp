@@ -127,6 +127,16 @@ export type Student = {
   updatedAt: string;
 };
 
+export type StudentDocumentFile = {
+  url: string;
+  fileName?: string | null;
+  mimeType?: string | null;
+  sizeBytes?: number | null;
+  /** Present when files are grouped from multiple legacy document rows. */
+  documentId?: string | null;
+  fileIndex?: number | null;
+};
+
 export type StudentDocument = {
   id: string;
   title: string;
@@ -135,6 +145,7 @@ export type StudentDocument = {
   fileName?: string | null;
   mimeType?: string | null;
   sizeBytes?: number | null;
+  files?: StudentDocumentFile[] | null;
   createdAt: string;
 };
 
@@ -365,7 +376,15 @@ export const uploadStudentDocument = async (file: File, studentId: string, param
 
 export const addStudentDocument = async (
   studentId: string,
-  payload: { title: string; documentNumber?: string | null; url: string; fileName?: string | null; mimeType?: string | null; sizeBytes?: number | null },
+  payload: {
+    title: string;
+    documentNumber?: string | null;
+    url?: string;
+    fileName?: string | null;
+    mimeType?: string | null;
+    sizeBytes?: number | null;
+    files?: StudentDocumentFile[];
+  },
   params?: { schoolId?: string },
 ) => {
   const { data } = await api.post<StudentDocument>(`/students/students/${studentId}/documents`, payload, { params });
@@ -377,14 +396,40 @@ export const uploadAndAddStudentDocument = async (
   payload: { title: string; documentNumber?: string | null; file: File },
   params?: { schoolId?: string },
 ) => {
-  const uploaded = await uploadStudentDocument(payload.file, studentId, params);
+  return uploadAndAddStudentDocuments(studentId, {
+    title: payload.title,
+    documentNumber: payload.documentNumber,
+    files: [payload.file],
+  }, params);
+};
+
+export const uploadAndAddStudentDocuments = async (
+  studentId: string,
+  payload: { title: string; documentNumber?: string | null; files: File[] },
+  params?: { schoolId?: string },
+) => {
+  if (!payload.files.length) {
+    throw new Error('Select at least one document file.');
+  }
+  const uploadedFiles = await Promise.all(
+    payload.files.map(async (file) => {
+      const uploaded = await uploadStudentDocument(file, studentId, params);
+      return {
+        url: uploaded.url,
+        fileName: uploaded.filename,
+        mimeType: file.type || null,
+        sizeBytes: file.size,
+      } satisfies StudentDocumentFile;
+    }),
+  );
   return addStudentDocument(studentId, {
     title: payload.title,
     documentNumber: payload.documentNumber,
-    url: uploaded.url,
-    fileName: uploaded.filename,
-    mimeType: payload.file.type,
-    sizeBytes: payload.file.size,
+    url: uploadedFiles[0].url,
+    fileName: uploadedFiles[0].fileName,
+    mimeType: uploadedFiles[0].mimeType,
+    sizeBytes: uploadedFiles[0].sizeBytes,
+    files: uploadedFiles,
   }, params);
 };
 

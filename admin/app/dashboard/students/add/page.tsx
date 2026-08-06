@@ -12,7 +12,7 @@ import { getSession } from '../../../../services/auth.service';
 import { listAcademicYears } from '../../../../services/academic.service';
 import { listSetupClasses, listSetupSections } from '../../../../services/academic-setup.service';
 import { listFeeDiscounts, listFeeMasters, type FeeDiscount, type FeeMaster } from '../../../../services/fee-management.service';
-import { createParent, createStudent, linkParent, listStudents, uploadAndAddStudentDocument, uploadStudentPhoto } from '../../../../services/student.service';
+import { createParent, createStudent, linkParent, listStudents, uploadAndAddStudentDocuments, uploadStudentPhoto } from '../../../../services/student.service';
 import { getSchoolSystemSettings } from '../../../../services/system-settings.service';
 
 const categories = ['Regular', 'RTE', 'Management', 'Scholarship', 'Transport'];
@@ -393,17 +393,15 @@ export default function AddStudentPage() {
         generateInvoices: form.generateFeeInvoices,
       });
 
-      const pendingDocuments = documentRows.filter((row) => row.title.trim() || row.documentNumber.trim() || row.files.length);
+      const pendingDocuments = documentRows.filter((row) => row.files.length > 0 && row.title.trim());
       if (pendingDocuments.length) {
         await Promise.all(
-          pendingDocuments.flatMap((row) =>
-            row.files.map((file) =>
-              uploadAndAddStudentDocument(student.id, {
-                title: row.title.trim(),
-                documentNumber: row.documentNumber.trim() || null,
-                file,
-              }),
-            ),
+          pendingDocuments.map((row) =>
+            uploadAndAddStudentDocuments(student.id, {
+              title: row.title.trim() || 'Document',
+              documentNumber: row.documentNumber.trim() || null,
+              files: row.files,
+            }),
           ),
         );
       }

@@ -3210,6 +3210,7 @@ class _DocumentFileCard extends ConsumerWidget {
     final style = _style;
     final url = _documentOpenUrl(record);
     final showPreview = url != null && _documentLooksLikeImage(record, url);
+    final fileCount = _documentFileEntries(record).length;
 
     return ParentCard(
       padding: EdgeInsets.zero,
@@ -3269,7 +3270,9 @@ class _DocumentFileCard extends ConsumerWidget {
                     ),
                     const SizedBox(height: 4),
                     Text(
-                      record.category,
+                      fileCount > 1
+                          ? '${record.category} · $fileCount files'
+                          : record.category,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: const TextStyle(
@@ -3303,6 +3306,8 @@ class _DocumentFileCard extends ConsumerWidget {
 }
 
 String? _documentOpenUrl(_DisplayRecord record) {
+  final files = _documentFileEntries(record);
+  if (files.isNotEmpty) return files.first.url;
   final raw = _firstString(record.data, ['url', 'fileUrl', 'documentUrl']) ??
       record.imageUrl;
   if (raw == null || raw.trim().isEmpty) return null;
@@ -3310,8 +3315,53 @@ String? _documentOpenUrl(_DisplayRecord record) {
   return resolveParentMediaUrl(raw);
 }
 
-bool _documentLooksLikeImage(_DisplayRecord record, String url) {
-  final mime = record.data['mimeType']?.toString().toLowerCase() ?? '';
+class _DocumentFileEntry {
+  const _DocumentFileEntry({
+    required this.url,
+    this.mimeType,
+    this.fileName,
+  });
+
+  final String url;
+  final String? mimeType;
+  final String? fileName;
+}
+
+List<_DocumentFileEntry> _documentFileEntries(_DisplayRecord record) {
+  final entries = <_DocumentFileEntry>[];
+  final files = record.data['files'];
+  if (files is List) {
+    for (final item in files) {
+      final map = _asMap(item);
+      final raw = _firstString(map, ['url', 'fileUrl', 'imageUrl']);
+      if (raw == null || raw.trim().isEmpty) continue;
+      if (raw.startsWith('s3://') || raw.startsWith('local://')) continue;
+      entries.add(
+        _DocumentFileEntry(
+          url: resolveParentMediaUrl(raw),
+          mimeType: map['mimeType']?.toString(),
+          fileName: map['fileName']?.toString(),
+        ),
+      );
+    }
+  }
+  if (entries.isNotEmpty) return entries;
+
+  final raw = _firstString(record.data, ['url', 'fileUrl', 'documentUrl']) ??
+      record.imageUrl;
+  if (raw == null || raw.trim().isEmpty) return const [];
+  if (raw.startsWith('s3://') || raw.startsWith('local://')) return const [];
+  return [
+    _DocumentFileEntry(
+      url: resolveParentMediaUrl(raw),
+      mimeType: record.data['mimeType']?.toString(),
+      fileName: record.data['fileName']?.toString(),
+    ),
+  ];
+}
+
+bool _documentLooksLikeImage(_DisplayRecord record, String url, {String? mimeType}) {
+  final mime = (mimeType ?? record.data['mimeType']?.toString() ?? '').toLowerCase();
   if (mime.startsWith('image/')) return true;
   if (record.data['kind']?.toString().toLowerCase() == 'photo') return true;
   if (record.category.toLowerCase().contains('photo')) return true;
@@ -3344,8 +3394,13 @@ class _DocumentMediaSheet extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final url = _documentOpenUrl(record);
-    final showImage = url != null && _documentLooksLikeImage(record, url);
+    final files = _documentFileEntries(record);
+    final imageFiles = files
+        .where((file) => _documentLooksLikeImage(record, file.url, mimeType: file.mimeType))
+        .toList();
+    final otherFiles = files
+        .where((file) => !_documentLooksLikeImage(record, file.url, mimeType: file.mimeType))
+        .toList();
 
     return SafeArea(
       child: Padding(
@@ -3370,14 +3425,16 @@ class _DocumentMediaSheet extends ConsumerWidget {
               ),
               const SizedBox(height: 4),
               Text(
-                record.category,
+                files.isEmpty
+                    ? record.category
+                    : '${record.category} · ${files.length} file${files.length == 1 ? '' : 's'}',
                 style: const TextStyle(
                   color: Color(0xFF60708F),
                   fontWeight: FontWeight.w700,
                 ),
               ),
               const SizedBox(height: 18),
-              if (url == null)
+              if (files.isEmpty)
                 const ParentCard(
                   padding: EdgeInsets.fromLTRB(18, 24, 18, 24),
                   child: Text(
@@ -3389,56 +3446,66 @@ class _DocumentMediaSheet extends ConsumerWidget {
                     ),
                   ),
                 )
-              else if (showImage)
-                ClipRRect(
-                  borderRadius: BorderRadius.circular(18),
-                  child: AspectRatio(
-                    aspectRatio: 1,
-                    child: ColoredBox(
-                      color: const Color(0xFFEAF1FF),
-                      child: ParentAuthedImage(url: url),
+              else ...[
+                if (imageFiles.isNotEmpty)
+                  GridView.builder(
+                    shrinkWrap: true,
+                    physics: const NeverScrollableScrollPhysics(),
+                    itemCount: imageFiles.length,
+                    gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                      crossAxisCount: imageFiles.length == 1 ? 1 : 2,
+                      crossAxisSpacing: 12,
+                      mainAxisSpacing: 12,
+                      childAspectRatio: imageFiles.length == 1 ? 1 : 0.92,
+                    ),
+                    itemBuilder: (context, index) {
+                      final file = imageFiles[index];
+                      return ClipRRect(
+                        borderRadius: BorderRadius.circular(18),
+                        child: ColoredBox(
+                          color: const Color(0xFFEAF1FF),
+                          child: ParentAuthedImage(url: file.url),
+                        ),
+                      );
+                    },
+                  ),
+                if (otherFiles.isNotEmpty) ...[
+                  if (imageFiles.isNotEmpty) const SizedBox(height: 14),
+                  ...otherFiles.map(
+                    (file) => Padding(
+                      padding: const EdgeInsets.only(bottom: 10),
+                      child: ParentCard(
+                        padding: const EdgeInsets.fromLTRB(16, 14, 16, 14),
+                        child: Row(
+                          children: [
+                            const Icon(
+                              Icons.description_outlined,
+                              color: SaaptTheme.primary,
+                            ),
+                            const SizedBox(width: 10),
+                            Expanded(
+                              child: Text(
+                                file.fileName?.trim().isNotEmpty == true
+                                    ? file.fileName!
+                                    : 'Attached file',
+                                style: const TextStyle(
+                                  color: SaaptTheme.navy,
+                                  fontWeight: FontWeight.w800,
+                                ),
+                              ),
+                            ),
+                            TextButton(
+                              onPressed: () =>
+                                  openParentProtectedFile(ref, file.url),
+                              child: const Text('Open'),
+                            ),
+                          ],
+                        ),
+                      ),
                     ),
                   ),
-                )
-              else
-                ParentCard(
-                  padding: const EdgeInsets.fromLTRB(16, 18, 16, 18),
-                  child: Column(
-                    children: [
-                      const Icon(
-                        Icons.description_outlined,
-                        color: SaaptTheme.primary,
-                        size: 36,
-                      ),
-                      const SizedBox(height: 10),
-                      const Text(
-                        'Open this file to view it.',
-                        textAlign: TextAlign.center,
-                        style: TextStyle(
-                          color: Color(0xFF60708F),
-                          fontWeight: FontWeight.w700,
-                        ),
-                      ),
-                      const SizedBox(height: 14),
-                      SizedBox(
-                        width: double.infinity,
-                        child: FilledButton.icon(
-                          onPressed: () => openParentProtectedFile(ref, url),
-                          icon: const Icon(Icons.open_in_new_rounded),
-                          label: const Text('Open file'),
-                          style: FilledButton.styleFrom(
-                            backgroundColor: SaaptTheme.primary,
-                            foregroundColor: Colors.white,
-                            padding: const EdgeInsets.symmetric(vertical: 14),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(14),
-                            ),
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
+                ],
+              ],
             ],
           ),
         ),

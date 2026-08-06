@@ -9,6 +9,7 @@ export type SignedUploadAssetType =
 export type SignedUploadAssetRef = {
   type: SignedUploadAssetType;
   id?: string | null;
+  fileIndex?: number | null;
 };
 
 export type StudentPhotoCarrier = {
@@ -40,6 +41,9 @@ const isUploadStorageUrl = (value: string) => {
 export const signedUploadUrl = (asset?: SignedUploadAssetRef | null) => {
   if (!asset?.id) return null;
   const params = new URLSearchParams({ type: asset.type, id: asset.id });
+  if (typeof asset.fileIndex === 'number' && Number.isFinite(asset.fileIndex)) {
+    params.set('fileIndex', String(asset.fileIndex));
+  }
   return `/api/proxy/uploads/signed?${params.toString()}`;
 };
 

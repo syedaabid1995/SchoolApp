@@ -1451,6 +1451,8 @@ model StudentDocument {
   fileName       String?  @map("file_name")
   mimeType       String?  @map("mime_type")
   sizeBytes      Int?     @map("size_bytes")
+  /// Additional attached pages/files for this logical document (JSON array).
+  files          Json?
   uploadedById   String?  @map("uploaded_by_id") @db.Uuid
   createdAt      DateTime @default(now()) @map("created_at")
   updatedAt      DateTime @updatedAt @map("updated_at")

@@ -24,9 +24,11 @@ import {
   type Student,
   updateParent,
   updateStudent,
-  uploadAndAddStudentDocument,
+  uploadAndAddStudentDocuments,
   uploadStudentPhoto,
 } from '../../../../services/student.service';
+import StudentDocumentViewer from '../../../../components/StudentDocumentViewer';
+import { groupStudentDocumentsForDisplay } from '../../../../utils/student-document-files';
 import {
   listFeeInvoices,
   notifyStudentFeePayment,
@@ -214,6 +216,7 @@ export default function StudentDetailPage() {
   const [documentForm, setDocumentForm] = useState({ title: '', documentNumber: '', files: [] as File[] });
   const [timelineForm, setTimelineForm] = useState({ title: '', description: '', timelineDate: new Date().toISOString().slice(0, 10) });
   const [photoUploadTarget, setPhotoUploadTarget] = useState<'student' | 'gallery' | 'face' | null>(null);
+  const [viewingDocument, setViewingDocument] = useState<ReturnType<typeof groupStudentDocumentsForDisplay>[number] | null>(null);
 
   const { data: session, isLoading: isSessionLoading } = useQuery({ queryKey: ['session'], queryFn: getSession });
   const isSuperAdmin = session?.role === 'SUPER_ADMIN';
@@ -587,11 +590,11 @@ export default function StudentDetailPage() {
     mutationFn: async () => {
       if (!documentForm.files.length) throw new Error('Select at least one document.');
       if (!documentForm.title.trim()) throw new Error('Document title is required.');
-      return Promise.all(documentForm.files.map((file) => uploadAndAddStudentDocument(studentId, {
+      return uploadAndAddStudentDocuments(studentId, {
         title: documentForm.title.trim(),
         documentNumber: documentForm.documentNumber.trim() || null,
-        file,
-      }, effectiveStudentRequestParams)));
+        files: documentForm.files,
+      }, effectiveStudentRequestParams);
     },
     onSuccess: () => {
       notify.success('Document uploaded', 'Student document was added.');
@@ -619,7 +622,11 @@ export default function StudentDetailPage() {
   });
 
   const deleteDocumentMutation = useMutation({
-    mutationFn: (documentId: string) => deleteStudentDocument(studentId, documentId, effectiveStudentRequestParams),
+    mutationFn: async (documentIds: string[]) => {
+      for (const documentId of documentIds) {
+        await deleteStudentDocument(studentId, documentId, effectiveStudentRequestParams);
+      }
+    },
     onSuccess: () => {
       notify.success('Document deleted', 'Student document was removed.');
       queryClient.invalidateQueries({ queryKey: ['student', studentId] });
@@ -1457,16 +1464,40 @@ export default function StudentDetailPage() {
                   <input type="file" multiple accept=".pdf,.doc,.docx,image/jpeg,image/png,image/webp" onChange={(event) => setDocumentForm({ ...documentForm, files: Array.from(event.target.files ?? []) })} className="rounded-xl border border-slate-200 px-3 py-2 text-sm" />
                   <button onClick={() => documentMutation.mutate()} disabled={documentMutation.isPending} className="rounded-xl bg-violet-600 px-4 py-2 text-sm font-bold text-white disabled:opacity-50">Upload</button>
                 </div> : null}
+                {documentForm.files.length ? (
+                  <p className="mb-4 text-xs font-semibold text-slate-500">
+                    {documentForm.files.length} file{documentForm.files.length === 1 ? '' : 's'} selected for this document
+                  </p>
+                ) : null}
                 <div className="grid gap-3">
-                  {student.documents?.length ? student.documents.map((document) => (
-                    <div key={document.id} className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-slate-100 p-3">
+                  {groupStudentDocumentsForDisplay(student.documents).length ? groupStudentDocumentsForDisplay(student.documents).map((document) => (
+                    <div key={document.documentIds.join('-')} className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-slate-100 p-3">
                       <div>
                         <p className="font-semibold text-slate-900">{document.title}</p>
-                        <p className="text-xs text-slate-500">{document.documentNumber ? `${document.documentNumber} - ` : ''}{document.fileName ?? formatDate(document.createdAt)}</p>
+                        <p className="text-xs text-slate-500">
+                          {document.documentNumber ? `${document.documentNumber} · ` : ''}
+                          {document.files.length} file{document.files.length === 1 ? '' : 's'} · {formatDate(document.createdAt)}
+                        </p>
                       </div>
                       <div className="flex gap-2">
-                        <a href={resolveUploadUrl(document.url, { type: 'student-document', id: document.id }) ?? undefined} target="_blank" rel="noreferrer" className="rounded-lg border border-slate-200 px-3 py-2 text-sm font-semibold text-slate-700">Download</a>
-                        {canDeleteDocument ? <button onClick={() => window.confirm('Delete this document?') && deleteDocumentMutation.mutate(document.id)} className="rounded-lg border border-red-200 px-3 py-2 text-sm font-semibold text-red-600">Delete</button> : null}
+                        <button
+                          type="button"
+                          onClick={() => setViewingDocument(document)}
+                          className="rounded-lg border border-slate-200 px-3 py-2 text-sm font-semibold text-slate-700"
+                        >
+                          View
+                        </button>
+                        {canDeleteDocument ? (
+                          <button
+                            onClick={() =>
+                              window.confirm('Delete this document and all attached files?') &&
+                              deleteDocumentMutation.mutate(document.documentIds)
+                            }
+                            className="rounded-lg border border-red-200 px-3 py-2 text-sm font-semibold text-red-600"
+                          >
+                            Delete
+                          </button>
+                        ) : null}
                       </div>
                     </div>
                   )) : <p className="rounded-xl border border-dashed border-slate-200 p-8 text-center text-sm text-slate-500">No documents uploaded.</p>}
@@ -1504,6 +1535,11 @@ export default function StudentDetailPage() {
           </main>
         </div>
       </div>
+      <StudentDocumentViewer
+        open={Boolean(viewingDocument)}
+        document={viewingDocument}
+        onClose={() => setViewingDocument(null)}
+      />
     </div>
   );
 }
