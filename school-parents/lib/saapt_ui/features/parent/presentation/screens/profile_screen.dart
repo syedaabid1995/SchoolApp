@@ -1833,7 +1833,7 @@ class _ChildDetailScrollState extends ConsumerState<_ChildDetailScroll>
   }
 }
 
-class _ChildAvatar extends StatelessWidget {
+class _ChildAvatar extends ConsumerWidget {
   const _ChildAvatar({
     required this.child,
     required this.size,
@@ -1845,7 +1845,7 @@ class _ChildAvatar extends StatelessWidget {
   final bool circular;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final photoUrl = child.photoUrl;
     final radius = circular ? size / 2 : 18.0;
     return ClipRRect(
@@ -1855,10 +1855,9 @@ class _ChildAvatar extends StatelessWidget {
         height: size,
         color: const Color(0xFFEAF1FF),
         child: photoUrl?.trim().isNotEmpty == true
-            ? Image.network(
-                photoUrl!,
-                fit: BoxFit.cover,
-                errorBuilder: (context, error, stackTrace) => _fallbackAvatar(),
+            ? ParentAuthedImage(
+                url: photoUrl!,
+                errorWidget: _fallbackAvatar(),
               )
             : _fallbackAvatar(),
       ),
@@ -2981,7 +2980,7 @@ class _ParentPersonCard extends StatelessWidget {
   }
 }
 
-class _PersonAvatar extends StatelessWidget {
+class _PersonAvatar extends ConsumerWidget {
   const _PersonAvatar({
     required this.initials,
     required this.color,
@@ -2995,7 +2994,7 @@ class _PersonAvatar extends StatelessWidget {
   final String? imageUrl;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final url = imageUrl?.trim();
     return ClipRRect(
       borderRadius: BorderRadius.circular(18),
@@ -3004,10 +3003,9 @@ class _PersonAvatar extends StatelessWidget {
         height: 56,
         color: soft,
         child: url != null && url.isNotEmpty
-            ? Image.network(
-                url,
-                fit: BoxFit.cover,
-                errorBuilder: (_, _, _) => Center(
+            ? ParentAuthedImage(
+                url: url,
+                errorWidget: Center(
                   child: Text(
                     initials,
                     style: TextStyle(
@@ -3171,7 +3169,7 @@ class _DocumentGroupHeader extends StatelessWidget {
   }
 }
 
-class _DocumentFileCard extends StatelessWidget {
+class _DocumentFileCard extends ConsumerWidget {
   const _DocumentFileCard({required this.record});
 
   final _DisplayRecord record;
@@ -3208,12 +3206,10 @@ class _DocumentFileCard extends StatelessWidget {
   }
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final style = _style;
     final url = _documentOpenUrl(record);
-    final isPhoto = record.category.toLowerCase().contains('photo') ||
-        (record.data['kind']?.toString().toLowerCase() == 'photo');
-    final previewUrl = isPhoto ? url : null;
+    final showPreview = url != null && _documentLooksLikeImage(record, url);
 
     return ParentCard(
       padding: EdgeInsets.zero,
@@ -3244,11 +3240,10 @@ class _DocumentFileCard extends StatelessWidget {
                       color: style.$2.withValues(alpha: 0.18),
                     ),
                   ),
-                  child: previewUrl != null
-                      ? Image.network(
-                          parentMediaUrl(previewUrl),
-                          fit: BoxFit.cover,
-                          errorBuilder: (_, _, _) => Center(
+                  child: showPreview
+                      ? ParentAuthedImage(
+                          url: url,
+                          errorWidget: Center(
                             child: Icon(style.$1, color: style.$2, size: 24),
                           ),
                         )
@@ -3288,7 +3283,7 @@ class _DocumentFileCard extends StatelessWidget {
               ),
               const SizedBox(width: 8),
               Text(
-                url == null ? 'View' : (isPhoto ? 'View' : 'Open'),
+                showPreview ? 'View' : 'Open',
                 style: TextStyle(
                   color: style.$2,
                   fontSize: 12.5,
@@ -3312,20 +3307,21 @@ String? _documentOpenUrl(_DisplayRecord record) {
       record.imageUrl;
   if (raw == null || raw.trim().isEmpty) return null;
   if (raw.startsWith('s3://') || raw.startsWith('local://')) return null;
-  return parentMediaUrl(raw);
+  return resolveParentMediaUrl(raw);
 }
 
-bool _looksLikeImageUrl(String url) {
-  final lower = url.toLowerCase();
-  final path = Uri.tryParse(url)?.path.toLowerCase() ?? lower;
+bool _documentLooksLikeImage(_DisplayRecord record, String url) {
+  final mime = record.data['mimeType']?.toString().toLowerCase() ?? '';
+  if (mime.startsWith('image/')) return true;
+  if (record.data['kind']?.toString().toLowerCase() == 'photo') return true;
+  if (record.category.toLowerCase().contains('photo')) return true;
+  if (record.category.toLowerCase().contains('face')) return true;
+  final path = Uri.tryParse(url)?.path.toLowerCase() ?? url.toLowerCase();
   return path.endsWith('.jpg') ||
       path.endsWith('.jpeg') ||
       path.endsWith('.png') ||
       path.endsWith('.webp') ||
-      path.endsWith('.gif') ||
-      lower.contains('image') ||
-      lower.contains('photo') ||
-      lower.contains('face-samples');
+      path.endsWith('.gif');
 }
 
 void _showDocumentMediaSheet(BuildContext context, _DisplayRecord record) {
@@ -3341,18 +3337,15 @@ void _showDocumentMediaSheet(BuildContext context, _DisplayRecord record) {
   );
 }
 
-class _DocumentMediaSheet extends StatelessWidget {
+class _DocumentMediaSheet extends ConsumerWidget {
   const _DocumentMediaSheet({required this.record});
 
   final _DisplayRecord record;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final url = _documentOpenUrl(record);
-    final showImage = url != null &&
-        (_looksLikeImageUrl(url) ||
-            record.category.toLowerCase().contains('photo') ||
-            record.data['kind']?.toString().toLowerCase() == 'photo');
+    final showImage = url != null && _documentLooksLikeImage(record, url);
 
     return SafeArea(
       child: Padding(
@@ -3401,27 +3394,9 @@ class _DocumentMediaSheet extends StatelessWidget {
                   borderRadius: BorderRadius.circular(18),
                   child: AspectRatio(
                     aspectRatio: 1,
-                    child: Container(
+                    child: ColoredBox(
                       color: const Color(0xFFEAF1FF),
-                      child: Image.network(
-                        url,
-                        fit: BoxFit.cover,
-                        loadingBuilder: (context, child, progress) {
-                          if (progress == null) return child;
-                          return const Center(
-                            child: CircularProgressIndicator(
-                              color: SaaptTheme.primary,
-                            ),
-                          );
-                        },
-                        errorBuilder: (_, _, _) => const Center(
-                          child: Icon(
-                            Icons.image_not_supported_outlined,
-                            color: SaaptTheme.primary,
-                            size: 36,
-                          ),
-                        ),
-                      ),
+                      child: ParentAuthedImage(url: url),
                     ),
                   ),
                 )
@@ -3448,10 +3423,7 @@ class _DocumentMediaSheet extends StatelessWidget {
                       SizedBox(
                         width: double.infinity,
                         child: FilledButton.icon(
-                          onPressed: () => launchUrl(
-                            Uri.parse(url),
-                            mode: LaunchMode.externalApplication,
-                          ),
+                          onPressed: () => openParentProtectedFile(ref, url),
                           icon: const Icon(Icons.open_in_new_rounded),
                           label: const Text('Open file'),
                           style: FilledButton.styleFrom(
@@ -3487,7 +3459,7 @@ class _FaceProfileCard extends StatelessWidget {
     final imageUrl = sampleUrls.isNotEmpty
         ? sampleUrls.first
         : (record.imageUrl ?? _imageUrlFrom(record.data));
-    final resolvedImage = imageUrl == null ? null : parentMediaUrl(imageUrl);
+    final resolvedImage = imageUrl == null ? null : resolveParentMediaUrl(imageUrl);
 
     return ParentCard(
       padding: EdgeInsets.zero,
@@ -3541,10 +3513,9 @@ class _FaceProfileCard extends StatelessWidget {
                       ),
                       child: ClipOval(
                         child: resolvedImage?.trim().isNotEmpty == true
-                            ? Image.network(
-                                resolvedImage!,
-                                fit: BoxFit.cover,
-                                errorBuilder: (_, _, _) => const ColoredBox(
+                            ? ParentAuthedImage(
+                                url: resolvedImage!,
+                                errorWidget: const ColoredBox(
                                   color: Color(0xFFEAF1FF),
                                   child: Icon(
                                     Icons.face_retouching_natural_outlined,
@@ -3648,7 +3619,7 @@ class _FaceProfileDetailSheet extends StatelessWidget {
   Widget build(BuildContext context) {
     final status = _displayValue(record.data['status']);
     final urls = _faceSampleImageUrls(record.data)
-        .map(parentMediaUrl)
+        .map(resolveParentMediaUrl)
         .where((url) => url.trim().isNotEmpty)
         .toList();
 
@@ -3735,27 +3706,9 @@ class _FaceProfileDetailSheet extends StatelessWidget {
                     final url = urls[index];
                     return ClipRRect(
                       borderRadius: BorderRadius.circular(18),
-                      child: Container(
+                      child: ColoredBox(
                         color: const Color(0xFFEAF1FF),
-                        child: Image.network(
-                          url,
-                          fit: BoxFit.cover,
-                          loadingBuilder: (context, child, progress) {
-                            if (progress == null) return child;
-                            return const Center(
-                              child: CircularProgressIndicator(
-                                color: SaaptTheme.primary,
-                              ),
-                            );
-                          },
-                          errorBuilder: (_, _, _) => const Center(
-                            child: Icon(
-                              Icons.image_not_supported_outlined,
-                              color: SaaptTheme.primary,
-                              size: 32,
-                            ),
-                          ),
-                        ),
+                        child: ParentAuthedImage(url: url),
                       ),
                     );
                   },
@@ -3768,7 +3721,7 @@ class _FaceProfileDetailSheet extends StatelessWidget {
   }
 }
 
-class _ContentRecordCard extends StatelessWidget {
+class _ContentRecordCard extends ConsumerWidget {
   const _ContentRecordCard({
     required this.record,
     this.visual = const _TabVisual(
@@ -3782,7 +3735,7 @@ class _ContentRecordCard extends StatelessWidget {
   final _TabVisual visual;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final facts = _previewFacts(
       record.data,
       limit: 4,
@@ -3825,10 +3778,9 @@ class _ContentRecordCard extends StatelessWidget {
                     child: record.imageUrl?.trim().isNotEmpty == true
                         ? ClipRRect(
                             borderRadius: BorderRadius.circular(15),
-                            child: Image.network(
-                              record.imageUrl!,
-                              fit: BoxFit.cover,
-                              errorBuilder: (_, _, _) => Icon(
+                            child: ParentAuthedImage(
+                              url: record.imageUrl!,
+                              errorWidget: Icon(
                                 record.icon,
                                 color: visual.accent,
                               ),
@@ -5260,11 +5212,9 @@ class _RecordThumb extends StatelessWidget {
         height: 48,
         color: const Color(0xFFEAF1FF),
         child: url?.trim().isNotEmpty == true
-            ? Image.network(
-                parentMediaUrl(url!),
-                fit: BoxFit.cover,
-                errorBuilder: (context, error, stackTrace) =>
-                    Icon(icon, color: SaaptTheme.primary),
+            ? ParentAuthedImage(
+                url: url!,
+                errorWidget: Icon(icon, color: SaaptTheme.primary),
               )
             : Icon(icon, color: SaaptTheme.primary),
       ),
@@ -5371,14 +5321,7 @@ class _ImageStrip extends StatelessWidget {
             width: 88,
             height: 88,
             color: const Color(0xFFEAF1FF),
-            child: Image.network(
-              parentMediaUrl(urls[index]),
-              fit: BoxFit.cover,
-              errorBuilder: (context, error, stackTrace) => const Icon(
-                Icons.image_not_supported_outlined,
-                color: SaaptTheme.primary,
-              ),
-            ),
+            child: ParentAuthedImage(url: urls[index]),
           ),
         ),
       ),
@@ -5717,19 +5660,7 @@ List<String> _faceSampleImageUrls(Map<String, dynamic> data) {
   return urls;
 }
 
-String parentMediaUrl(String raw) {
-  final value = raw.trim();
-  if (value.isEmpty) return value;
-  if (value.startsWith('http://') || value.startsWith('https://')) return value;
-
-  final apiBase = ParentAppConfig.apiBaseUrl.replaceAll(RegExp(r'/+$'), '');
-  final origin = apiBase.replaceFirst(RegExp(r'/api/v1$'), '');
-
-  if (value.startsWith('/api/v1/')) return '$origin$value';
-  if (value.startsWith('/uploads/')) return '$origin/api/v1$value';
-  if (value.startsWith('/')) return '$origin$value';
-  return value;
-}
+String parentMediaUrl(String raw) => resolveParentMediaUrl(raw);
 
 List<String> _imageUrlsFrom(Object? data) {
   final urls = <String>{};
@@ -5751,6 +5682,7 @@ List<String> _imageUrlsFrom(Object? data) {
           trimmed.startsWith('http://') ||
           trimmed.startsWith('https://') ||
           trimmed.startsWith('/api/v1/uploads/') ||
+          trimmed.startsWith('/parents/portal/') ||
           trimmed.startsWith('/uploads/')) {
         urls.add(parentMediaUrl(trimmed));
       }

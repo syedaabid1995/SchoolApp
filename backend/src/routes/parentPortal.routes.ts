@@ -20,6 +20,7 @@ import {
   createParentFeeCheckoutOrder,
   confirmParentFeePaymentLink,
   verifyParentFeeCheckoutPayment,
+  getParentChildFile,
 } from '../controllers/parentPortal.controller';
 
 export const parentPortalRouter = Router();
@@ -29,6 +30,7 @@ parentPortalRouter.use(requireParentProfile);
 
 parentPortalRouter.get('/children', listParentChildren);
 parentPortalRouter.get('/children/:childId', getParentChildDetail);
+parentPortalRouter.get('/children/:childId/files', getParentChildFile);
 parentPortalRouter.get('/profile', getParentProfile);
 parentPortalRouter.patch('/profile', updateParentProfile);
 parentPortalRouter.get('/dashboard', getParentDashboard);

@@ -28,7 +28,12 @@ import {
   verifyRazorpaySignature,
 } from '../services/subscription.service';
 import { timetableReadService } from '../modules/timetable/services/timetable-read.service';
-import { getSignedUrlForStoredUrl } from '../services/s3.service';
+import {
+  getObjectForKey,
+  getSignedUrlForStoredUrl,
+  storageKeyFromUrl,
+} from '../services/s3.service';
+import { Readable } from 'stream';
 
 type RazorpayOrder = {
   id: string;
@@ -307,47 +312,155 @@ const signParentAssetUrl = async (storageRef?: string | null) => {
   }
 };
 
-const serializeFaceProfileForParent = async (faceProfile: any) => {
+const parentChildFilePath = (
+  studentId: string,
+  query: Record<string, string>,
+) => {
+  const params = new URLSearchParams(query);
+  return `/parents/portal/children/${studentId}/files?${params.toString()}`;
+};
+
+const absoluteRequestUrl = (req: Request, pathOrUrl: string) => {
+  if (/^https?:\/\//i.test(pathOrUrl)) return pathOrUrl;
+  const host = req.get('x-forwarded-host') || req.get('host');
+  if (!host) return pathOrUrl;
+  const proto = String(req.get('x-forwarded-proto') || req.protocol || 'https')
+    .split(',')[0]
+    .trim();
+  return `${proto}://${host}${pathOrUrl.startsWith('/') ? pathOrUrl : `/${pathOrUrl}`}`;
+};
+
+const resolveParentChildStorageRef = async (params: {
+  studentId: string;
+  type: string;
+  id?: string;
+  key?: string;
+}) => {
+  const type = params.type.trim().toLowerCase();
+  const id = params.id?.trim() || '';
+  const key = params.key?.trim() || '';
+
+  if (type === 'document' && id) {
+    const document = await prisma.studentDocument.findFirst({
+      where: { id, studentId: params.studentId },
+      select: { url: true, mimeType: true, title: true, fileName: true },
+    });
+    if (!document?.url) return null;
+    return {
+      storageRef: document.url,
+      mimeType: document.mimeType,
+      title: document.title,
+      fileName: document.fileName,
+    };
+  }
+
+  if (type === 'photo' && id) {
+    const photo = await prisma.studentPhoto.findFirst({
+      where: { id, studentId: params.studentId },
+      select: { url: true },
+    });
+    if (!photo?.url) return null;
+    return {
+      storageRef: photo.url,
+      mimeType: 'image/jpeg',
+      title: 'Student photo',
+      fileName: null as string | null,
+    };
+  }
+
+  if (type === 'face-sample' && id) {
+    const sample = await prisma.faceSample.findFirst({
+      where: {
+        id,
+        faceProfile: { studentId: params.studentId },
+      },
+      select: { imageUrl: true, imageKey: true },
+    });
+    const storageRef = sample?.imageUrl || sample?.imageKey || null;
+    if (!storageRef) return null;
+    return {
+      storageRef,
+      mimeType: 'image/jpeg',
+      title: 'Face sample',
+      fileName: null as string | null,
+    };
+  }
+
+  if (type === 'admission' && key) {
+    const student = await prisma.student.findFirst({
+      where: { id: params.studentId },
+      select: {
+        docBirthCert: true,
+        docTransferCert: true,
+        docAadhaar: true,
+        docReportCard: true,
+      },
+    });
+    if (!student) return null;
+    const map: Record<string, string | null | undefined> = {
+      birthCertificate: student.docBirthCert,
+      transferCertificate: student.docTransferCert,
+      aadhaar: student.docAadhaar,
+      reportCard: student.docReportCard,
+    };
+    const storageRef = map[key];
+    if (!storageRef?.trim()) return null;
+    return {
+      storageRef,
+      mimeType: null as string | null,
+      title: key,
+      fileName: null as string | null,
+    };
+  }
+
+  return null;
+};
+
+const serializeFaceProfileForParent = async (
+  faceProfile: any,
+  studentId: string,
+) => {
   if (!faceProfile) return null;
 
   const samples = Array.isArray(faceProfile.samples) ? faceProfile.samples : [];
-  const signedSamples = await Promise.all(
-    samples.map(async (sample: any) => {
-      const storageRef =
-        (typeof sample?.imageUrl === 'string' && sample.imageUrl.trim()) ||
-        (typeof sample?.imageKey === 'string' && sample.imageKey.trim()) ||
-        '';
-      const imageUrl = storageRef
-        ? await signParentAssetUrl(storageRef)
-        : null;
+  const signedSamples = samples
+    .map((sample: any) => {
+      const sampleId = typeof sample?.id === 'string' ? sample.id.trim() : '';
+      if (!sampleId) return null;
       return {
-        id: sample?.id ?? null,
-        imageUrl,
+        id: sampleId,
+        imageUrl: parentChildFilePath(studentId, {
+          type: 'face-sample',
+          id: sampleId,
+        }),
         createdAt: sample?.createdAt ?? null,
       };
-    }),
-  );
+    })
+    .filter(Boolean);
 
   return {
     id: faceProfile.id ?? null,
     status: faceProfile.status ?? null,
     approvedAt: faceProfile.approvedAt ?? null,
     createdAt: faceProfile.createdAt ?? null,
-    samples: signedSamples.filter(
-      (sample) => typeof sample.imageUrl === 'string' && sample.imageUrl.trim(),
-    ),
+    samples: signedSamples,
   };
 };
 
 const serializeDocumentsForParent = async (student: any) => {
+  const studentId = String(student.id);
+
   const uploadedDocuments = (
     await Promise.all(
       (Array.isArray(student.documents) ? student.documents : []).map(
         async (document: any) => {
-          const url = await signParentAssetUrl(document?.url);
-          if (!url) return null;
+          const documentId =
+            typeof document?.id === 'string' ? document.id.trim() : '';
+          if (!documentId) return null;
+          const storageOk = await signParentAssetUrl(document?.url);
+          if (!storageOk && !document?.url) return null;
           return {
-            id: document?.id ?? null,
+            id: documentId,
             title:
               (typeof document?.title === 'string' && document.title.trim()) ||
               'Document',
@@ -355,7 +468,12 @@ const serializeDocumentsForParent = async (student: any) => {
               typeof document?.documentNumber === 'string'
                 ? document.documentNumber
                 : null,
-            url,
+            mimeType:
+              typeof document?.mimeType === 'string' ? document.mimeType : null,
+            url: parentChildFilePath(studentId, {
+              type: 'document',
+              id: documentId,
+            }),
             kind: 'document',
           };
         },
@@ -364,21 +482,20 @@ const serializeDocumentsForParent = async (student: any) => {
   ).filter(Boolean);
 
   const studentPhotos = (
-    await Promise.all(
-      (Array.isArray(student.photos) ? student.photos : []).map(
-        async (photo: any, index: number) => {
-          const url = await signParentAssetUrl(photo?.url);
-          if (!url) return null;
-          return {
-            id: photo?.id ?? null,
-            title: `Photo ${index + 1}`,
-            url,
-            kind: 'photo',
-          };
-        },
-      ),
-    )
-  ).filter(Boolean);
+    Array.isArray(student.photos) ? student.photos : []
+  )
+    .map((photo: any, index: number) => {
+      const photoId = typeof photo?.id === 'string' ? photo.id.trim() : '';
+      if (!photoId || !photo?.url) return null;
+      return {
+        id: photoId,
+        title: `Photo ${index + 1}`,
+        mimeType: 'image/jpeg',
+        url: parentChildFilePath(studentId, { type: 'photo', id: photoId }),
+        kind: 'photo',
+      };
+    })
+    .filter(Boolean);
 
   const admissionSource = {
     birthCertificate: student.docBirthCert,
@@ -387,21 +504,87 @@ const serializeDocumentsForParent = async (student: any) => {
     reportCard: student.docReportCard,
   };
   const admissionDocuments: Record<string, string> = {};
-  await Promise.all(
-    Object.entries(admissionSource).map(async ([key, value]) => {
-      const url = await signParentAssetUrl(
-        typeof value === 'string' ? value : null,
-      );
-      if (url) admissionDocuments[key] = url;
-    }),
-  );
+  for (const [key, value] of Object.entries(admissionSource)) {
+    if (typeof value !== 'string' || !value.trim()) continue;
+    admissionDocuments[key] = parentChildFilePath(studentId, {
+      type: 'admission',
+      key,
+    });
+  }
 
   return {
     uploadedDocuments,
     studentPhotos,
     admissionDocuments,
-    faceProfile: await serializeFaceProfileForParent(student.faceProfile),
+    faceProfile: await serializeFaceProfileForParent(
+      student.faceProfile,
+      studentId,
+    ),
   };
+};
+
+export const getParentChildFile = async (req: Request, res: Response) => {
+  const auth = requireAuth(req);
+  const { child } = await requireChildAccess(auth.userId, req.params.childId);
+  const type = typeof req.query.type === 'string' ? req.query.type : '';
+  const id = typeof req.query.id === 'string' ? req.query.id : '';
+  const key = typeof req.query.key === 'string' ? req.query.key : '';
+
+  const resolved = await resolveParentChildStorageRef({
+    studentId: child.id,
+    type,
+    id,
+    key,
+  });
+  if (!resolved) throw new HttpError(404, 'File not found');
+
+  // Prefer streaming so the Flutter app can load images with Authorization
+  // headers. Redirects are unreliable for Image.network / some HTTP clients.
+  const forceRedirect =
+    String(req.query.redirect || '').trim() === '1' ||
+    String(req.query.redirect || '').trim().toLowerCase() === 'true';
+
+  if (!forceRedirect) {
+    const objectKey = storageKeyFromUrl(resolved.storageRef);
+    if (objectKey) {
+      try {
+        const object = await getObjectForKey({ key: objectKey });
+        res.setHeader(
+          'Content-Type',
+          resolved.mimeType || object.contentType || 'application/octet-stream',
+        );
+        res.setHeader('Cache-Control', 'private, max-age=60');
+        if (object.contentLength) {
+          res.setHeader('Content-Length', String(object.contentLength));
+        }
+
+        const body = object.body;
+        if (body instanceof Readable) {
+          body.pipe(res);
+          return;
+        }
+        if (
+          typeof (body as { transformToByteArray?: () => Promise<Uint8Array> })
+            .transformToByteArray === 'function'
+        ) {
+          const bytes = await (
+            body as { transformToByteArray: () => Promise<Uint8Array> }
+          ).transformToByteArray();
+          res.send(Buffer.from(bytes));
+          return;
+        }
+      } catch {
+        // Fall through to signed redirect.
+      }
+    }
+  }
+
+  try {
+    const signed = await getSignedUrlForStoredUrl({ url: resolved.storageRef });
+    res.redirect(302, absoluteRequestUrl(req, signed));
+  } catch {
+    throw new HttpError(404, 'File not found');
+  }
 };
 
 const formatStudentLeaveRequest = (request: any) => {
@@ -663,7 +846,12 @@ export const getParentChildDetail = async (req: Request, res: Response) => {
     status: student.status,
     gender: student.gender,
     dob: student.dob,
-    photoUrl: student.photoUrl ?? student.photos[0]?.url ?? null,
+    photoUrl: student.photos[0]?.id
+      ? parentChildFilePath(student.id, {
+          type: 'photo',
+          id: String(student.photos[0].id),
+        })
+      : null,
   };
 
   res.status(200).json({

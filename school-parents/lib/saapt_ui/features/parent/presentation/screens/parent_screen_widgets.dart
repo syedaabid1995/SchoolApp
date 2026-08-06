@@ -1,8 +1,16 @@
+import 'dart:io';
+import 'dart:typed_data';
+
+import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
+import 'package:path_provider/path_provider.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../../../../app/theme/saapt_theme.dart';
+import '../../../../core/config/parent_app_config.dart';
+import '../../../../core/network/parent_api_client.dart';
 import '../../data/parent_models.dart';
 import '../providers/parent_providers.dart';
 import 'parent_app_drawer.dart';
@@ -486,6 +494,187 @@ class ParentCard extends StatelessWidget {
       child: child,
     );
   }
+}
+
+String resolveParentMediaUrl(String raw) {
+  final value = raw.trim();
+  if (value.isEmpty) return value;
+  if (value.startsWith('http://') || value.startsWith('https://')) return value;
+
+  final apiBase = ParentAppConfig.apiBaseUrl.replaceAll(RegExp(r'/+$'), '');
+  final origin = apiBase.replaceFirst(RegExp(r'/api/v1$'), '');
+
+  if (value.startsWith('/api/v1/')) return '$origin$value';
+  if (value.startsWith('/uploads/')) return '$origin/api/v1$value';
+  if (value.startsWith('/')) return '$apiBase$value';
+  return value;
+}
+
+String _parentMediaRequestPath(String raw) {
+  final resolved = resolveParentMediaUrl(raw);
+  final apiBase = ParentAppConfig.apiBaseUrl.replaceAll(RegExp(r'/+$'), '');
+  if (resolved.startsWith(apiBase)) {
+    final path = resolved.substring(apiBase.length);
+    return path.isEmpty ? '/' : path;
+  }
+  return resolved;
+}
+
+Future<List<int>> _loadParentMediaBytes(Dio dio, String rawUrl) async {
+  final response = await dio.get<List<int>>(
+    _parentMediaRequestPath(rawUrl),
+    options: Options(
+      responseType: ResponseType.bytes,
+      followRedirects: true,
+      maxRedirects: 5,
+      headers: const {'Accept': '*/*'},
+      validateStatus: (status) => status != null && status >= 200 && status < 400,
+    ),
+  );
+  final bytes = response.data;
+  if (bytes == null || bytes.isEmpty) {
+    throw Exception('Empty media response');
+  }
+  return bytes;
+}
+
+class ParentAuthedImage extends ConsumerStatefulWidget {
+  const ParentAuthedImage({
+    super.key,
+    required this.url,
+    this.fit = BoxFit.cover,
+    this.errorWidget,
+  });
+
+  final String url;
+  final BoxFit fit;
+  final Widget? errorWidget;
+
+  @override
+  ConsumerState<ParentAuthedImage> createState() => _ParentAuthedImageState();
+}
+
+class _ParentAuthedImageState extends ConsumerState<ParentAuthedImage> {
+  late Future<List<int>> _bytesFuture;
+
+  @override
+  void initState() {
+    super.initState();
+    _bytesFuture = _load();
+  }
+
+  @override
+  void didUpdateWidget(covariant ParentAuthedImage oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.url != widget.url) {
+      _bytesFuture = _load();
+    }
+  }
+
+  Future<List<int>> _load() {
+    return _loadParentMediaBytes(ref.read(parentDioProvider), widget.url);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return FutureBuilder<List<int>>(
+      future: _bytesFuture,
+      builder: (context, snapshot) {
+        if (snapshot.connectionState != ConnectionState.done) {
+          return const Center(
+            child: CircularProgressIndicator(color: SaaptTheme.primary),
+          );
+        }
+        final bytes = snapshot.data;
+        if (snapshot.hasError || bytes == null || bytes.isEmpty) {
+          return widget.errorWidget ??
+              const Center(
+                child: Icon(
+                  Icons.image_not_supported_outlined,
+                  color: SaaptTheme.primary,
+                ),
+              );
+        }
+        return Image.memory(
+          bytes is Uint8List ? bytes : Uint8List.fromList(bytes),
+          fit: widget.fit,
+          gaplessPlayback: true,
+          errorBuilder: (context, error, stackTrace) =>
+              widget.errorWidget ??
+              const Center(
+                child: Icon(
+                  Icons.image_not_supported_outlined,
+                  color: SaaptTheme.primary,
+                ),
+              ),
+        );
+      },
+    );
+  }
+}
+
+Future<void> openParentProtectedFile(
+  WidgetRef ref,
+  String rawUrl,
+) async {
+  final dio = ref.read(parentDioProvider);
+  final path = _parentMediaRequestPath(rawUrl);
+  final redirectPath = path.contains('?') ? '$path&redirect=1' : '$path?redirect=1';
+
+  try {
+    final response = await dio.get<dynamic>(
+      redirectPath,
+      options: Options(
+        followRedirects: false,
+        maxRedirects: 0,
+        validateStatus: (status) =>
+            status != null && status >= 200 && status < 400,
+        responseType: ResponseType.bytes,
+        headers: const {'Accept': '*/*'},
+      ),
+    );
+    final location = response.headers.value('location');
+    if (location != null && location.trim().isNotEmpty) {
+      final target = resolveParentMediaUrl(location.trim());
+      final launched = await launchUrl(
+        Uri.parse(target),
+        mode: LaunchMode.externalApplication,
+      );
+      if (launched) return;
+    }
+  } catch (_) {
+    // Fall through to downloading bytes locally.
+  }
+
+  try {
+    final bytes = await _loadParentMediaBytes(dio, rawUrl);
+    final dir = await getTemporaryDirectory();
+    final extension = _guessFileExtension(rawUrl);
+    final file = File(
+      '${dir.path}/parent_doc_${DateTime.now().millisecondsSinceEpoch}$extension',
+    );
+    await file.writeAsBytes(bytes, flush: true);
+    final launched = await launchUrl(
+      Uri.file(file.path),
+      mode: LaunchMode.externalApplication,
+    );
+    if (launched) return;
+  } catch (_) {
+    // Fall through to direct launch attempt.
+  }
+
+  await launchUrl(
+    Uri.parse(resolveParentMediaUrl(rawUrl)),
+    mode: LaunchMode.externalApplication,
+  );
+}
+
+String _guessFileExtension(String rawUrl) {
+  final path = Uri.tryParse(rawUrl)?.path.toLowerCase() ?? rawUrl.toLowerCase();
+  for (final ext in const ['.pdf', '.png', '.jpg', '.jpeg', '.webp', '.gif']) {
+    if (path.endsWith(ext)) return ext;
+  }
+  return '.bin';
 }
 
 class LoadingPanel extends StatelessWidget {
