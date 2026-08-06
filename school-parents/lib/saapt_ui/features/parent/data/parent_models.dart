@@ -549,6 +549,90 @@ class ParentFeeSummary {
   }
 }
 
+class ParentFeeInvoiceItem {
+  const ParentFeeInvoiceItem({
+    required this.id,
+    required this.title,
+    required this.invoiceNumber,
+    required this.allotted,
+    required this.paid,
+    required this.due,
+    required this.status,
+    this.feeType,
+    this.feeMonth,
+    this.dueDate,
+  });
+
+  final String id;
+  final String title;
+  final String invoiceNumber;
+  final num allotted;
+  final num paid;
+  final num due;
+  final String status;
+  final String? feeType;
+  final String? feeMonth;
+  final String? dueDate;
+
+  bool get canPay {
+    final normalized = status.toUpperCase();
+    return due > 0 && normalized != 'PAID' && normalized != 'CANCELLED';
+  }
+
+  factory ParentFeeInvoiceItem.fromJson(Map<String, dynamic> json) {
+    final allotted =
+        num.tryParse(json['amount']?.toString() ?? '') ??
+        ((num.tryParse(json['totalAmount']?.toString() ?? '') ?? 0) -
+            (num.tryParse(json['discountAmount']?.toString() ?? '') ?? 0));
+    return ParentFeeInvoiceItem(
+      id: json['id']?.toString() ?? '',
+      title: json['title']?.toString() ?? 'School Fee',
+      invoiceNumber: json['invoiceNumber']?.toString() ?? '',
+      allotted: allotted,
+      paid: num.tryParse(json['paidAmount']?.toString() ?? '') ?? 0,
+      due: num.tryParse(json['dueAmount']?.toString() ?? '') ?? 0,
+      status: json['status']?.toString() ?? 'ISSUED',
+      feeType: json['feeType']?.toString(),
+      feeMonth: json['feeMonth']?.toString(),
+      dueDate: json['dueDate']?.toString(),
+    );
+  }
+}
+
+class ParentFeeBreakdown {
+  const ParentFeeBreakdown({
+    required this.summary,
+    required this.items,
+  });
+
+  final ParentFeeSummary summary;
+  final List<ParentFeeInvoiceItem> items;
+
+  factory ParentFeeBreakdown.fromJson(Map<String, dynamic> json) {
+    final items = (json['items'] as List? ?? const [])
+        .whereType<Map<String, dynamic>>()
+        .map(ParentFeeInvoiceItem.fromJson)
+        .where((item) => item.id.isNotEmpty)
+        .toList();
+    return ParentFeeBreakdown(
+      summary: ParentFeeSummary.fromJson(json),
+      items: items,
+    );
+  }
+}
+
+class ParentFeeCheckoutLine {
+  const ParentFeeCheckoutLine({
+    required this.invoiceId,
+    required this.title,
+    required this.amount,
+  });
+
+  final String invoiceId;
+  final String title;
+  final num amount;
+}
+
 class ParentFeeCheckoutLink {
   const ParentFeeCheckoutLink({
     required this.paymentLinkId,

@@ -196,11 +196,28 @@ const parentProfileUpdateSchema = z.object({
   phone: z.string().trim().max(32).optional().nullable(),
 });
 
-const parentFeeCheckoutSchema = z.object({
-  childId: z.string().uuid(),
+const parentFeeCheckoutItemSchema = z.object({
   invoiceId: z.string().uuid(),
   amount: z.coerce.number().positive().max(100000000),
 });
+
+const parentFeeCheckoutSchema = z
+  .object({
+    childId: z.string().uuid(),
+    invoiceId: z.string().uuid().optional(),
+    amount: z.coerce.number().positive().max(100000000).optional(),
+    items: z.array(parentFeeCheckoutItemSchema).min(1).max(7).optional(),
+  })
+  .superRefine((value, ctx) => {
+    const hasItems = Boolean(value.items?.length);
+    const hasLegacy = Boolean(value.invoiceId && value.amount != null);
+    if (!hasItems && !hasLegacy) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'Provide invoiceId/amount or items[]',
+      });
+    }
+  });
 
 const parentFeeCheckoutVerifySchema = z.object({
   razorpay_order_id: z.string().trim().min(1),
@@ -211,6 +228,15 @@ const parentFeeCheckoutVerifySchema = z.object({
 const parentFeePaymentLinkStatusSchema = z.object({
   paymentLinkId: z.string().trim().startsWith('plink_'),
 });
+
+type ParentFeeCheckoutAllocation = {
+  invoiceId: string;
+  amount: Prisma.Decimal;
+  amountPaise: number;
+};
+
+const encodeParentFeeAllocationNote = (allocation: ParentFeeCheckoutAllocation) =>
+  `${allocation.invoiceId}|${allocation.amountPaise}`;
 
 // Matches StyLife: Razorpay hides UPI inside in-app WebViews unless
 // checkout.webview_intent is enabled on the Payment Link options.
@@ -1753,25 +1779,27 @@ export const listParentFees = async (req: Request, res: Response) => {
     take: limit,
   });
 
-  const items = invoices.map((invoice) => ({
-    id: invoice.id,
-    invoiceNumber: invoice.invoiceNumber,
-    title: invoice.feeMonth
-      ? `${invoice.feeMonth} Fee`
-      : (invoice.feeType?.name ?? 'School Fee'),
-    feeType: invoice.feeType?.name ?? null,
-    amount: moneyDecimal(invoice.totalAmount).minus(moneyDecimal(invoice.discountAmount)),
-    totalAmount: invoice.totalAmount,
-    discountAmount: invoice.discountAmount,
-    paidAmount: invoice.paidAmount,
-    dueAmount: invoice.dueAmount,
-    status: invoice.status,
-    dueDate: invoice.dueDate,
-    issueDate: invoice.issueDate,
-    items: invoice.items,
-    payments: invoice.payments,
-    receipts: invoice.receipts,
-  }));
+  const items = invoices.map((invoice) => {
+    const feeTypeName = invoice.feeType?.name ?? 'School Fee';
+    return {
+      id: invoice.id,
+      invoiceNumber: invoice.invoiceNumber,
+      title: invoice.feeMonth ? `${feeTypeName} (${invoice.feeMonth})` : feeTypeName,
+      feeType: feeTypeName,
+      feeMonth: invoice.feeMonth,
+      amount: moneyDecimal(invoice.totalAmount).minus(moneyDecimal(invoice.discountAmount)),
+      totalAmount: invoice.totalAmount,
+      discountAmount: invoice.discountAmount,
+      paidAmount: invoice.paidAmount,
+      dueAmount: invoice.dueAmount,
+      status: invoice.status,
+      dueDate: invoice.dueDate,
+      issueDate: invoice.issueDate,
+      items: invoice.items,
+      payments: invoice.payments,
+      receipts: invoice.receipts,
+    };
+  });
 
   const summary = items.reduce(
     (result, invoice) => {
@@ -1791,11 +1819,19 @@ export const createParentFeeCheckoutOrder = async (req: Request, res: Response) 
   const auth = requireAuth(req);
   const payload = parentFeeCheckoutSchema.parse(req.body ?? {});
   const { child } = await requireChildAccess(auth.userId, payload.childId);
-  const amount = moneyDecimal(payload.amount);
+  const requestedItems =
+    payload.items?.length
+      ? payload.items
+      : [{ invoiceId: payload.invoiceId!, amount: payload.amount! }];
 
-  const invoice = await prisma.feeInvoice.findFirst({
+  const invoiceIds = requestedItems.map((item) => item.invoiceId);
+  if (new Set(invoiceIds).size !== invoiceIds.length) {
+    throw new HttpError(400, 'Duplicate invoices are not allowed in one checkout');
+  }
+
+  const invoices = await prisma.feeInvoice.findMany({
     where: {
-      id: payload.invoiceId,
+      id: { in: invoiceIds },
       schoolId: child.schoolId,
       studentId: child.id,
       deletedAt: null,
@@ -1808,28 +1844,62 @@ export const createParentFeeCheckoutOrder = async (req: Request, res: Response) 
       feeType: { select: { name: true } },
     },
   });
-  if (!invoice) throw new HttpError(404, 'Pending fee invoice not found');
-
-  const dueAmount = moneyDecimal(invoice.dueAmount);
-  if (amount.gt(dueAmount)) {
-    throw new HttpError(400, 'Payment amount cannot exceed the invoice balance');
+  if (invoices.length !== invoiceIds.length) {
+    throw new HttpError(404, 'One or more pending fee invoices were not found');
   }
 
-  const amountPaise = moneyToPaise(amount);
+  const invoiceById = new Map(invoices.map((invoice) => [invoice.id, invoice]));
+  const academicSessionId = invoices[0]!.academicSessionId;
+  if (invoices.some((invoice) => invoice.academicSessionId !== academicSessionId)) {
+    throw new HttpError(400, 'Selected fee items must belong to the same academic session');
+  }
+
+  const allocations: ParentFeeCheckoutAllocation[] = requestedItems.map((item) => {
+    const invoice = invoiceById.get(item.invoiceId);
+    if (!invoice) throw new HttpError(404, 'Pending fee invoice not found');
+    const amount = moneyDecimal(item.amount);
+    const dueAmount = moneyDecimal(invoice.dueAmount);
+    if (amount.gt(dueAmount)) {
+      throw new HttpError(
+        400,
+        `Payment amount cannot exceed the balance for ${invoice.invoiceNumber}`,
+      );
+    }
+    return {
+      invoiceId: invoice.id,
+      amount,
+      amountPaise: moneyToPaise(amount),
+    };
+  });
+
+  const totalAmount = allocations.reduce(
+    (sum, allocation) => sum.plus(allocation.amount),
+    new Prisma.Decimal(0),
+  );
+  const amountPaise = allocations.reduce((sum, allocation) => sum + allocation.amountPaise, 0);
+  const primaryInvoice = invoiceById.get(allocations[0]!.invoiceId)!;
   const parent = (await resolveParentProfiles(auth.userId))[0] ?? null;
   const receipt = parentFeeReceipt();
   const parentName = parent ? `${parent.firstName} ${parent.lastName}`.trim() : '';
-  const notes = {
+  const description =
+    allocations.length === 1
+      ? `${primaryInvoice.invoiceNumber} fee payment`
+      : `Fee payment for ${allocations.length} invoices`;
+
+  const notes: Record<string, string> = {
     purpose: 'PARENT_FEE_PAYMENT',
     parentUserId: auth.userId,
     schoolId: child.schoolId,
     studentId: child.id,
-    academicSessionId: invoice.academicSessionId,
-    invoiceId: invoice.id,
-    invoiceNumber: invoice.invoiceNumber,
-    amount: amount.toFixed(2),
+    academicSessionId,
+    invoiceId: primaryInvoice.id,
+    invoiceCount: String(allocations.length),
     amountPaise: String(amountPaise),
   };
+  allocations.forEach((allocation, index) => {
+    notes[`alloc${index}`] = encodeParentFeeAllocationNote(allocation);
+  });
+
   const paymentLink = await razorpayRequest<RazorpayPaymentLink>('/payment_links', {
     method: 'POST',
     body: {
@@ -1837,7 +1907,7 @@ export const createParentFeeCheckoutOrder = async (req: Request, res: Response) 
       currency: 'INR',
       accept_partial: false,
       reference_id: receipt,
-      description: `${invoice.invoiceNumber} fee payment`,
+      description,
       customer: {
         ...(parentName ? { name: parentName } : {}),
         ...(parent?.email ? { email: parent.email } : {}),
@@ -1866,15 +1936,29 @@ export const createParentFeeCheckoutOrder = async (req: Request, res: Response) 
       classLabel: child.classLabel,
     },
     invoice: {
-      id: invoice.id,
-      invoiceNumber: invoice.invoiceNumber,
-      title: invoice.feeMonth ? `${invoice.feeMonth} Fee` : (invoice.feeType?.name ?? 'School Fee'),
-      dueAmount: dueAmount.toString(),
+      id: primaryInvoice.id,
+      invoiceNumber: primaryInvoice.invoiceNumber,
+      title:
+        allocations.length === 1
+          ? primaryInvoice.feeMonth
+            ? `${primaryInvoice.feeMonth} Fee`
+            : (primaryInvoice.feeType?.name ?? 'School Fee')
+          : description,
+      dueAmount: moneyDecimal(primaryInvoice.dueAmount).toString(),
     },
+    items: allocations.map((allocation) => {
+      const invoice = invoiceById.get(allocation.invoiceId)!;
+      return {
+        invoiceId: invoice.id,
+        invoiceNumber: invoice.invoiceNumber,
+        amount: allocation.amount.toFixed(2),
+        dueAmount: moneyDecimal(invoice.dueAmount).toString(),
+      };
+    }),
     checkout: {
-      amount: amount.toString(),
+      amount: totalAmount.toFixed(2),
       currency: 'INR',
-      description: `${invoice.invoiceNumber} fee payment`,
+      description,
       prefill: {
         name: parentName,
         email: parent?.email ?? '',
@@ -1890,6 +1974,45 @@ const orderNote = (notes: RazorpayOrder['notes'], key: string) => {
     throw new HttpError(400, `Razorpay order is missing ${key}`);
   }
   return String(value);
+};
+
+const parseParentFeeAllocationsFromNotes = (
+  notes: RazorpayOrder['notes'],
+): ParentFeeCheckoutAllocation[] => {
+  const count = Number(notes?.invoiceCount ?? 0);
+  if (Number.isFinite(count) && count > 0) {
+    const allocations: ParentFeeCheckoutAllocation[] = [];
+    for (let index = 0; index < count; index += 1) {
+      const raw = notes?.[`alloc${index}`];
+      if (raw == null || String(raw).trim() === '') {
+        throw new HttpError(400, `Razorpay order is missing alloc${index}`);
+      }
+      const [invoiceId, paiseRaw] = String(raw).split('|');
+      const amountPaise = Number(paiseRaw);
+      if (!invoiceId || !Number.isFinite(amountPaise) || amountPaise <= 0) {
+        throw new HttpError(400, `Razorpay order has an invalid alloc${index}`);
+      }
+      allocations.push({
+        invoiceId,
+        amountPaise,
+        amount: paiseToMoney(amountPaise),
+      });
+    }
+    return allocations;
+  }
+
+  const invoiceId = orderNote(notes, 'invoiceId');
+  const amountPaise = Number(orderNote(notes, 'amountPaise'));
+  if (!Number.isFinite(amountPaise) || amountPaise <= 0) {
+    throw new HttpError(400, 'Razorpay order has an invalid amount');
+  }
+  return [
+    {
+      invoiceId,
+      amountPaise,
+      amount: paiseToMoney(amountPaise),
+    },
+  ];
 };
 
 export const reconcileParentFeeRazorpayPayment = async (params: {
@@ -1918,10 +2041,15 @@ export const reconcileParentFeeRazorpayPayment = async (params: {
   const schoolId = orderNote(notes, 'schoolId');
   const studentId = orderNote(notes, 'studentId');
   const academicSessionId = orderNote(notes, 'academicSessionId');
-  const invoiceId = orderNote(notes, 'invoiceId');
-  const expectedPaise = Number(orderNote(notes, 'amountPaise'));
+  const allocations = parseParentFeeAllocationsFromNotes(notes);
+  const invoiceId = allocations[0]!.invoiceId;
+  const expectedPaise = allocations.reduce((sum, allocation) => sum + allocation.amountPaise, 0);
+  const notesAmountPaise = Number(notes.amountPaise ?? expectedPaise);
   if (!Number.isFinite(expectedPaise) || expectedPaise <= 0) {
     throw new HttpError(400, 'Razorpay order has an invalid amount');
+  }
+  if (Number.isFinite(notesAmountPaise) && notesAmountPaise !== expectedPaise) {
+    throw new HttpError(400, 'Razorpay allocation amounts do not match checkout total');
   }
   await requireChildAccess(parentUserId, studentId);
 
@@ -1950,6 +2078,7 @@ export const reconcileParentFeeRazorpayPayment = async (params: {
     include: {
       receipt: true,
       invoice: { include: { feeType: { select: { name: true, schedule: true } }, items: true, payments: true, receipts: true } },
+      allocations: true,
     },
   });
   if (existingPayment) {
@@ -1958,6 +2087,7 @@ export const reconcileParentFeeRazorpayPayment = async (params: {
       payment: existingPayment,
       receipt: existingPayment.receipt,
       invoice: existingPayment.invoice,
+      allocations: existingPayment.allocations,
       message: 'Razorpay payment was already verified.',
     };
   }
@@ -1965,11 +2095,18 @@ export const reconcileParentFeeRazorpayPayment = async (params: {
   const paidAt = new Date();
   const amount = paiseToMoney(payment.amount);
   const reference = `razorpay:${payment.id};order:${order.id}`;
+  const invoiceIds = allocations.map((allocation) => allocation.invoiceId);
 
   const result = await prisma.$transaction(async (tx) => {
     await tx.$queryRawUnsafe(
-      'SELECT id FROM fee_invoices WHERE id = $1::uuid AND school_id = $2::uuid AND academic_session_id = $3::uuid AND student_id = $4::uuid AND deleted_at IS NULL FOR UPDATE',
-      invoiceId,
+      `SELECT id FROM fee_invoices
+       WHERE id = ANY($1::uuid[])
+         AND school_id = $2::uuid
+         AND academic_session_id = $3::uuid
+         AND student_id = $4::uuid
+         AND deleted_at IS NULL
+       FOR UPDATE`,
+      invoiceIds,
       schoolId,
       academicSessionId,
       studentId,
@@ -1979,6 +2116,7 @@ export const reconcileParentFeeRazorpayPayment = async (params: {
       include: {
         receipt: true,
         invoice: { include: { feeType: { select: { name: true, schedule: true } }, items: true, payments: true, receipts: true } },
+        allocations: true,
       },
     });
     if (concurrentPayment) {
@@ -1987,12 +2125,14 @@ export const reconcileParentFeeRazorpayPayment = async (params: {
         payment: concurrentPayment,
         receipt: concurrentPayment.receipt,
         invoice: concurrentPayment.invoice,
-        allocation: null,
+        allocation: concurrentPayment.allocations[0] ?? null,
+        allocations: concurrentPayment.allocations,
       };
     }
-    const invoice = await tx.feeInvoice.findFirst({
+
+    const invoices = await tx.feeInvoice.findMany({
       where: {
-        id: invoiceId,
+        id: { in: invoiceIds },
         schoolId,
         academicSessionId,
         studentId,
@@ -2005,15 +2145,35 @@ export const reconcileParentFeeRazorpayPayment = async (params: {
         receipts: { orderBy: { receiptDate: 'desc' } },
       },
     });
-    if (!invoice) throw new HttpError(404, 'Pending fee invoice not found');
-    if (invoice.status === 'PAID') throw new HttpError(409, 'Invoice is already paid');
-    if (invoice.status === 'CANCELLED') throw new HttpError(409, 'Cannot pay a cancelled invoice');
-    const currentDue = moneyDecimal(invoice.dueAmount);
-    if (currentDue.lte(0)) throw new HttpError(409, 'Invoice is already paid');
-    if (amount.gt(currentDue)) throw new HttpError(400, 'Payment amount cannot exceed the invoice balance');
+    if (invoices.length !== invoiceIds.length) {
+      throw new HttpError(404, 'One or more pending fee invoices were not found');
+    }
+    const invoiceById = new Map(invoices.map((invoice) => [invoice.id, invoice]));
 
+    for (const allocation of allocations) {
+      const invoice = invoiceById.get(allocation.invoiceId);
+      if (!invoice) throw new HttpError(404, 'Pending fee invoice not found');
+      if (invoice.status === 'PAID') throw new HttpError(409, `Invoice ${invoice.invoiceNumber} is already paid`);
+      if (invoice.status === 'CANCELLED') {
+        throw new HttpError(409, `Cannot pay cancelled invoice ${invoice.invoiceNumber}`);
+      }
+      const currentDue = moneyDecimal(invoice.dueAmount);
+      if (currentDue.lte(0)) throw new HttpError(409, `Invoice ${invoice.invoiceNumber} is already paid`);
+      if (allocation.amount.gt(currentDue)) {
+        throw new HttpError(
+          400,
+          `Payment amount cannot exceed the balance for ${invoice.invoiceNumber}`,
+        );
+      }
+    }
+
+    const primaryInvoice = invoiceById.get(invoiceId)!;
     const paymentNumber = await getNextNumber({ schoolId, academicSessionId, type: 'PAYMENT', prefix: 'PAY' }, tx);
     const receiptNumber = await getNextNumber({ schoolId, academicSessionId, type: 'RECEIPT', prefix: 'RCP' }, tx);
+    const invoiceNumbers = allocations
+      .map((allocation) => invoiceById.get(allocation.invoiceId)?.invoiceNumber)
+      .filter(Boolean)
+      .join(', ');
     const createdPayment = await tx.feePayment.create({
       data: {
         schoolId,
@@ -2029,7 +2189,7 @@ export const reconcileParentFeeRazorpayPayment = async (params: {
         gatewayPaymentId: payment.id,
         status: 'SUCCESS',
         paidAt,
-        note: `Razorpay ${payment.method ?? 'online'} parent payment for ${invoice.invoiceNumber}`,
+        note: `Razorpay ${payment.method ?? 'online'} parent payment for ${invoiceNumbers}`,
         collectedById: parentUserId,
       },
     });
@@ -2045,65 +2205,85 @@ export const reconcileParentFeeRazorpayPayment = async (params: {
         receiptDate: paidAt,
       },
     });
-    const dueAmount = currentDue.minus(amount);
-    const paidAmount = moneyDecimal(invoice.paidAmount).plus(amount);
-    const updatedInvoice = await tx.feeInvoice.update({
-      where: { id: invoiceId },
-      data: {
-        paidAmount,
-        dueAmount,
-        status: dueAmount.eq(0) ? 'PAID' : 'PARTIALLY_PAID',
-      },
-      include: {
-        feeType: { select: { name: true, schedule: true } },
-        items: { orderBy: { sortOrder: 'asc' } },
-        payments: { orderBy: { paidAt: 'desc' } },
-        receipts: { orderBy: { receiptDate: 'desc' } },
-      },
-    });
-    const allocation = await tx.feePaymentAllocation.create({
-      data: {
+
+    const updatedInvoices = [];
+    const createdAllocations = [];
+    for (const allocation of allocations) {
+      const invoice = invoiceById.get(allocation.invoiceId)!;
+      const currentDue = moneyDecimal(invoice.dueAmount);
+      const dueAmount = currentDue.minus(allocation.amount);
+      const paidAmount = moneyDecimal(invoice.paidAmount).plus(allocation.amount);
+      const updatedInvoice = await tx.feeInvoice.update({
+        where: { id: invoice.id },
+        data: {
+          paidAmount,
+          dueAmount,
+          status: dueAmount.eq(0) ? 'PAID' : 'PARTIALLY_PAID',
+        },
+        include: {
+          feeType: { select: { name: true, schedule: true } },
+          items: { orderBy: { sortOrder: 'asc' } },
+          payments: { orderBy: { paidAt: 'desc' } },
+          receipts: { orderBy: { receiptDate: 'desc' } },
+        },
+      });
+      updatedInvoices.push(updatedInvoice);
+      const createdAllocation = await tx.feePaymentAllocation.create({
+        data: {
+          schoolId,
+          academicSessionId,
+          studentId,
+          paymentId: createdPayment.id,
+          invoiceId: invoice.id,
+          allocatedAmount: allocation.amount,
+        },
+      });
+      createdAllocations.push(createdAllocation);
+      await createLedgerEntry(tx, {
         schoolId,
         academicSessionId,
         studentId,
+        invoiceId: invoice.id,
         paymentId: createdPayment.id,
-        invoiceId,
-        allocatedAmount: amount,
-      },
-    });
-    await createLedgerEntry(tx, {
-      schoolId,
-      academicSessionId,
-      studentId,
-      invoiceId,
-      paymentId: createdPayment.id,
-      receiptId: receipt.id,
-      type: 'PAYMENT_CREDIT',
-      description: `Parent Razorpay payment ${createdPayment.paymentNumber} against invoice ${invoice.invoiceNumber}`,
-      creditAmount: amount,
-      createdById: parentUserId,
-    });
-    await tx.feeNotification.create({
-      data: {
-        schoolId,
-        academicSessionId,
-        studentId,
-        invoiceId,
-        type: 'PAYMENT_SUCCESS',
-        channel: 'IN_APP',
-        recipient: studentId,
-        message: `Payment ${createdPayment.paymentNumber} received for ${invoice.invoiceNumber}.`,
-        status: 'QUEUED',
-      },
-    });
-    return { idempotent: false, payment: createdPayment, receipt, invoice: updatedInvoice, allocation };
+        receiptId: receipt.id,
+        type: 'PAYMENT_CREDIT',
+        description: `Parent Razorpay payment ${createdPayment.paymentNumber} against invoice ${invoice.invoiceNumber}`,
+        creditAmount: allocation.amount,
+        createdById: parentUserId,
+      });
+      await tx.feeNotification.create({
+        data: {
+          schoolId,
+          academicSessionId,
+          studentId,
+          invoiceId: invoice.id,
+          type: 'PAYMENT_SUCCESS',
+          channel: 'IN_APP',
+          recipient: studentId,
+          message: `Payment ${createdPayment.paymentNumber} received for ${invoice.invoiceNumber}.`,
+          status: 'QUEUED',
+        },
+      });
+    }
+
+    return {
+      idempotent: false,
+      payment: createdPayment,
+      receipt,
+      invoice: updatedInvoices.find((invoice) => invoice.id === invoiceId) ?? primaryInvoice,
+      invoices: updatedInvoices,
+      allocation: createdAllocations[0] ?? null,
+      allocations: createdAllocations,
+    };
   });
 
   return {
     ...result,
     message: result.idempotent
       ? 'Razorpay payment was already verified.'
-      : 'Razorpay payment verified and fee invoice updated.',
+      : allocations.length > 1
+        ? 'Razorpay payment verified and fee invoices updated.'
+        : 'Razorpay payment verified and fee invoice updated.',
   };
 };
 

@@ -254,11 +254,16 @@ class ParentRepository {
   }
 
   Future<ParentFeeSummary> getFeeSummary({required String childId}) async {
+    final breakdown = await getFeeBreakdown(childId: childId);
+    return breakdown.summary;
+  }
+
+  Future<ParentFeeBreakdown> getFeeBreakdown({required String childId}) async {
     final response = await _dio.get<Map<String, dynamic>>(
       '/parents/portal/fees',
-      queryParameters: {'childId': childId, 'limit': 20},
+      queryParameters: {'childId': childId, 'limit': 100},
     );
-    return ParentFeeSummary.fromJson(
+    return ParentFeeBreakdown.fromJson(
       response.data ?? const <String, dynamic>{},
     );
   }
@@ -268,9 +273,35 @@ class ParentRepository {
     required String invoiceId,
     required num amount,
   }) async {
+    return createFeeCheckoutOrders(
+      childId: childId,
+      items: [
+        ParentFeeCheckoutLine(
+          invoiceId: invoiceId,
+          title: 'Fee payment',
+          amount: amount,
+        ),
+      ],
+    );
+  }
+
+  Future<ParentFeeCheckoutLink> createFeeCheckoutOrders({
+    required String childId,
+    required List<ParentFeeCheckoutLine> items,
+  }) async {
     final response = await _dio.post<Map<String, dynamic>>(
       '/parents/portal/fees/checkout',
-      data: {'childId': childId, 'invoiceId': invoiceId, 'amount': amount},
+      data: {
+        'childId': childId,
+        'items': items
+            .map(
+              (item) => {
+                'invoiceId': item.invoiceId,
+                'amount': item.amount,
+              },
+            )
+            .toList(),
+      },
     );
     return ParentFeeCheckoutLink.fromJson(
       response.data ?? const <String, dynamic>{},

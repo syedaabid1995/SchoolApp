@@ -143,6 +143,13 @@ final parentFeeSummaryProvider = FutureProvider.autoDispose
           .getFeeSummary(childId: child.id);
     });
 
+final parentFeeBreakdownProvider = FutureProvider.autoDispose
+    .family<ParentFeeBreakdown, String>((ref, childId) {
+      return ref
+          .watch(parentRepositoryProvider)
+          .getFeeBreakdown(childId: childId);
+    });
+
 final parentNoticesProvider = FutureProvider.autoDispose
     .family<List<ParentNotice>, ParentChild?>((ref, child) {
       return ref.watch(parentRepositoryProvider).getNotices(childId: child?.id);

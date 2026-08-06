@@ -12,6 +12,7 @@ import '../../features/parent/presentation/screens/attendance_screen.dart';
 import '../../features/parent/presentation/screens/home_screen.dart';
 import '../../features/parent/presentation/screens/homework_screen.dart';
 import '../../features/parent/presentation/screens/leave_screen.dart';
+import '../../features/parent/presentation/screens/online_fee_payment_screen.dart';
 import '../../features/parent/presentation/screens/profile_screen.dart';
 import '../../features/parent/presentation/screens/reports_screen.dart';
 
@@ -74,6 +75,12 @@ final saaptRouterProvider = Provider<GoRouter>((ref) {
         builder: (_, state) => ParentProfileScreen(
           initialChildId: state.uri.queryParameters['childId'],
           initialTabKey: state.uri.queryParameters['tab'],
+        ),
+      ),
+      GoRoute(
+        path: '/fees/online',
+        builder: (_, state) => OnlineFeePaymentScreen(
+          initialChildId: state.uri.queryParameters['childId'],
         ),
       ),
       StatefulShellRoute.indexedStack(

@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 import 'package:url_launcher/url_launcher.dart';
 
@@ -214,6 +215,8 @@ class _ParentProfileScreenState extends ConsumerState<ParentProfileScreen> {
                                 _selectedChildId = null;
                                 _panel = _ProfilePanel.children;
                               }),
+                              onOpenOnlineFees: () =>
+                                  context.push('/fees/online'),
                               onOpenPassword: () => setState(
                                 () => _panel = _ProfilePanel.changePassword,
                               ),
@@ -392,6 +395,7 @@ class _ProfileMenuPanel extends StatelessWidget {
     required this.onOpenEdit,
     required this.onOpenSchoolProfile,
     required this.onOpenChildren,
+    required this.onOpenOnlineFees,
     required this.onOpenPassword,
     required this.onTogglePush,
     required this.onOpenInfo,
@@ -404,6 +408,7 @@ class _ProfileMenuPanel extends StatelessWidget {
   final VoidCallback onOpenEdit;
   final VoidCallback onOpenSchoolProfile;
   final VoidCallback onOpenChildren;
+  final VoidCallback onOpenOnlineFees;
   final VoidCallback onOpenPassword;
   final ValueChanged<bool> onTogglePush;
   final void Function(String title, String body) onOpenInfo;
@@ -499,6 +504,12 @@ class _ProfileMenuPanel extends StatelessWidget {
                 title: 'Children',
                 subtitle: '${profile.children.length} mapped child profiles',
                 onTap: onOpenChildren,
+              ),
+              _MenuTile(
+                icon: Icons.payments_outlined,
+                title: 'Online Fee Payment',
+                subtitle: 'Fee breakdown, select items, and pay online',
+                onTap: onOpenOnlineFees,
               ),
               _MenuTile(
                 icon: Icons.lock_outline,
