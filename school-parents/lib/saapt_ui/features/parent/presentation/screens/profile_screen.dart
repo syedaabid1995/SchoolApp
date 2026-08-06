@@ -2533,6 +2533,14 @@ List<(String, String)> _previewFacts(
     if (_isEmptyData(entry.value)) continue;
     final value = _displayValue(entry.value);
     if (value.trim().isEmpty) continue;
+    if (value.startsWith('http://') ||
+        value.startsWith('https://') ||
+        value.startsWith('s3://') ||
+        value.startsWith('local://') ||
+        value.startsWith('/api/') ||
+        value.startsWith('/uploads/')) {
+      continue;
+    }
     if (skipValues.any((skip) => skip.toLowerCase() == value.toLowerCase())) {
       continue;
     }
@@ -3169,132 +3177,298 @@ class _DocumentFileCard extends StatelessWidget {
   final _DisplayRecord record;
 
   (IconData, Color, Color) get _style {
-    final title = '${record.title} ${record.subtitle}'.toLowerCase();
+    final title = '${record.title} ${record.subtitle} ${record.category}'
+        .toLowerCase();
     if (title.contains('photo') || title.contains('image')) {
-      return (Icons.image_outlined, const Color(0xFF7C3AED), const Color(0xFFF3E8FF));
+      return (
+        Icons.image_outlined,
+        const Color(0xFF7C3AED),
+        const Color(0xFFF3E8FF),
+      );
     }
     if (title.contains('pdf')) {
-      return (Icons.picture_as_pdf_outlined, const Color(0xFFDC2626), const Color(0xFFFFEDED));
+      return (
+        Icons.picture_as_pdf_outlined,
+        const Color(0xFFDC2626),
+        const Color(0xFFFFEDED),
+      );
     }
     if (title.contains('certificate') || title.contains('birth')) {
-      return (Icons.workspace_premium_outlined, const Color(0xFFB45309), const Color(0xFFFFF4E5));
+      return (
+        Icons.workspace_premium_outlined,
+        const Color(0xFFB45309),
+        const Color(0xFFFFF4E5),
+      );
     }
-    return (Icons.description_outlined, SaaptTheme.primary, const Color(0xFFEAF1FF));
+    return (
+      Icons.description_outlined,
+      SaaptTheme.primary,
+      const Color(0xFFEAF1FF),
+    );
   }
 
   @override
   Widget build(BuildContext context) {
     final style = _style;
-    final url = _firstString(record.data, ['url', 'fileUrl', 'documentUrl']) ??
-        record.imageUrl;
-    final facts = _previewFacts(
-      record.data,
-      limit: 3,
-      skipValues: {record.title, record.subtitle, url ?? ''},
-    );
+    final url = _documentOpenUrl(record);
+    final isPhoto = record.category.toLowerCase().contains('photo') ||
+        (record.data['kind']?.toString().toLowerCase() == 'photo');
+    final previewUrl = isPhoto ? url : null;
 
     return ParentCard(
       padding: EdgeInsets.zero,
       child: InkWell(
         borderRadius: BorderRadius.circular(16),
-        onTap: () => _showRecordDetailSheet(context, record),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Container(
-              padding: const EdgeInsets.all(14),
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  colors: [style.$3, Colors.white],
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
-                ),
-                borderRadius: const BorderRadius.vertical(
-                  top: Radius.circular(16),
-                ),
-              ),
-              child: Row(
-                children: [
-                  Container(
-                    width: 52,
-                    height: 52,
-                    decoration: BoxDecoration(
-                      color: Colors.white,
-                      borderRadius: BorderRadius.circular(16),
-                      border: Border.all(
-                        color: style.$2.withValues(alpha: 0.18),
-                      ),
-                    ),
-                    child: Icon(style.$1, color: style.$2, size: 24),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          record.title,
-                          maxLines: 2,
-                          overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(
-                            color: SaaptTheme.navy,
-                            fontSize: 14.5,
-                            fontWeight: FontWeight.w900,
-                          ),
-                        ),
-                        const SizedBox(height: 4),
-                        Text(
-                          record.subtitle.isEmpty
-                              ? record.category
-                              : record.subtitle,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(
-                            color: Color(0xFF60708F),
-                            fontSize: 12.5,
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  if (url != null && url.trim().isNotEmpty)
-                    TextButton(
-                      onPressed: () => launchUrl(
-                        Uri.parse(url.trim()),
-                        mode: LaunchMode.externalApplication,
-                      ),
-                      style: TextButton.styleFrom(
-                        foregroundColor: style.$2,
-                        padding: const EdgeInsets.symmetric(horizontal: 10),
-                      ),
-                      child: const Text(
-                        'Open',
-                        style: TextStyle(fontWeight: FontWeight.w900),
-                      ),
-                    )
-                  else
-                    Icon(
-                      Icons.chevron_right_rounded,
-                      color: style.$2.withValues(alpha: 0.7),
-                    ),
-                ],
-              ),
+        onTap: () => _showDocumentMediaSheet(context, record),
+        child: Container(
+          padding: const EdgeInsets.all(14),
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              colors: [style.$3, Colors.white],
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
             ),
-            if (facts.isNotEmpty)
-              Padding(
-                padding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
-                child: Wrap(
-                  spacing: 8,
-                  runSpacing: 8,
+            borderRadius: BorderRadius.circular(16),
+          ),
+          child: Row(
+            children: [
+              ClipRRect(
+                borderRadius: BorderRadius.circular(16),
+                child: Container(
+                  width: 52,
+                  height: 52,
+                  color: Colors.white,
+                  foregroundDecoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(16),
+                    border: Border.all(
+                      color: style.$2.withValues(alpha: 0.18),
+                    ),
+                  ),
+                  child: previewUrl != null
+                      ? Image.network(
+                          parentMediaUrl(previewUrl),
+                          fit: BoxFit.cover,
+                          errorBuilder: (_, _, _) => Center(
+                            child: Icon(style.$1, color: style.$2, size: 24),
+                          ),
+                        )
+                      : Center(
+                          child: Icon(style.$1, color: style.$2, size: 24),
+                        ),
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    for (final fact in facts)
-                      _MiniFactChip(label: fact.$1, value: fact.$2),
+                    Text(
+                      record.title,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        color: SaaptTheme.navy,
+                        fontSize: 14.5,
+                        fontWeight: FontWeight.w900,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      record.category,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        color: Color(0xFF60708F),
+                        fontSize: 12.5,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
                   ],
                 ),
               ),
-          ],
+              const SizedBox(width: 8),
+              Text(
+                url == null ? 'View' : (isPhoto ? 'View' : 'Open'),
+                style: TextStyle(
+                  color: style.$2,
+                  fontSize: 12.5,
+                  fontWeight: FontWeight.w900,
+                ),
+              ),
+              Icon(
+                Icons.chevron_right_rounded,
+                color: style.$2.withValues(alpha: 0.7),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+String? _documentOpenUrl(_DisplayRecord record) {
+  final raw = _firstString(record.data, ['url', 'fileUrl', 'documentUrl']) ??
+      record.imageUrl;
+  if (raw == null || raw.trim().isEmpty) return null;
+  if (raw.startsWith('s3://') || raw.startsWith('local://')) return null;
+  return parentMediaUrl(raw);
+}
+
+bool _looksLikeImageUrl(String url) {
+  final lower = url.toLowerCase();
+  final path = Uri.tryParse(url)?.path.toLowerCase() ?? lower;
+  return path.endsWith('.jpg') ||
+      path.endsWith('.jpeg') ||
+      path.endsWith('.png') ||
+      path.endsWith('.webp') ||
+      path.endsWith('.gif') ||
+      lower.contains('image') ||
+      lower.contains('photo') ||
+      lower.contains('face-samples');
+}
+
+void _showDocumentMediaSheet(BuildContext context, _DisplayRecord record) {
+  showModalBottomSheet<void>(
+    context: context,
+    showDragHandle: true,
+    isScrollControlled: true,
+    backgroundColor: Colors.white,
+    shape: const RoundedRectangleBorder(
+      borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+    ),
+    builder: (context) => _DocumentMediaSheet(record: record),
+  );
+}
+
+class _DocumentMediaSheet extends StatelessWidget {
+  const _DocumentMediaSheet({required this.record});
+
+  final _DisplayRecord record;
+
+  @override
+  Widget build(BuildContext context) {
+    final url = _documentOpenUrl(record);
+    final showImage = url != null &&
+        (_looksLikeImageUrl(url) ||
+            record.category.toLowerCase().contains('photo') ||
+            record.data['kind']?.toString().toLowerCase() == 'photo');
+
+    return SafeArea(
+      child: Padding(
+        padding: EdgeInsets.fromLTRB(
+          20,
+          4,
+          20,
+          20 + MediaQuery.of(context).viewInsets.bottom,
+        ),
+        child: SingleChildScrollView(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                record.title,
+                style: const TextStyle(
+                  color: SaaptTheme.navy,
+                  fontSize: 18,
+                  fontWeight: FontWeight.w900,
+                ),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                record.category,
+                style: const TextStyle(
+                  color: Color(0xFF60708F),
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+              const SizedBox(height: 18),
+              if (url == null)
+                const ParentCard(
+                  padding: EdgeInsets.fromLTRB(18, 24, 18, 24),
+                  child: Text(
+                    'This file is not available right now.',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      color: Color(0xFF60708F),
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                )
+              else if (showImage)
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(18),
+                  child: AspectRatio(
+                    aspectRatio: 1,
+                    child: Container(
+                      color: const Color(0xFFEAF1FF),
+                      child: Image.network(
+                        url,
+                        fit: BoxFit.cover,
+                        loadingBuilder: (context, child, progress) {
+                          if (progress == null) return child;
+                          return const Center(
+                            child: CircularProgressIndicator(
+                              color: SaaptTheme.primary,
+                            ),
+                          );
+                        },
+                        errorBuilder: (_, _, _) => const Center(
+                          child: Icon(
+                            Icons.image_not_supported_outlined,
+                            color: SaaptTheme.primary,
+                            size: 36,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                )
+              else
+                ParentCard(
+                  padding: const EdgeInsets.fromLTRB(16, 18, 16, 18),
+                  child: Column(
+                    children: [
+                      const Icon(
+                        Icons.description_outlined,
+                        color: SaaptTheme.primary,
+                        size: 36,
+                      ),
+                      const SizedBox(height: 10),
+                      const Text(
+                        'Open this file to view it.',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                          color: Color(0xFF60708F),
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                      const SizedBox(height: 14),
+                      SizedBox(
+                        width: double.infinity,
+                        child: FilledButton.icon(
+                          onPressed: () => launchUrl(
+                            Uri.parse(url),
+                            mode: LaunchMode.externalApplication,
+                          ),
+                          icon: const Icon(Icons.open_in_new_rounded),
+                          label: const Text('Open file'),
+                          style: FilledButton.styleFrom(
+                            backgroundColor: SaaptTheme.primary,
+                            foregroundColor: Colors.white,
+                            padding: const EdgeInsets.symmetric(vertical: 14),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(14),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+            ],
+          ),
         ),
       ),
     );
@@ -4902,14 +5076,22 @@ List<_DisplayRecord> _documentRecords(Object? data) {
   final admissionDocs = _asMap(map['admissionDocuments']);
   admissionDocs.forEach((key, value) {
     if (_isEmptyData(value)) return;
+    final url = value.toString().trim();
+    if (url.isEmpty || url.startsWith('s3://') || url.startsWith('local://')) {
+      return;
+    }
     records.add(
       _DisplayRecord(
         title: _labelForKey(key),
         subtitle: 'Admission document',
         category: 'Admission Documents',
-        data: {'type': _labelForKey(key), 'url': value},
+        data: {
+          'title': _labelForKey(key),
+          'kind': 'document',
+          'url': url,
+        },
         icon: Icons.description_outlined,
-        imageUrl: value.toString(),
+        imageUrl: url,
       ),
     );
   });
@@ -5079,7 +5261,7 @@ class _RecordThumb extends StatelessWidget {
         color: const Color(0xFFEAF1FF),
         child: url?.trim().isNotEmpty == true
             ? Image.network(
-                url!,
+                parentMediaUrl(url!),
                 fit: BoxFit.cover,
                 errorBuilder: (context, error, stackTrace) =>
                     Icon(icon, color: SaaptTheme.primary),
@@ -5313,8 +5495,25 @@ bool _shouldHideKey(String key) {
     'reviewedById',
     'uploadedById',
     'returnedById',
+    'url',
+    'fileUrl',
+    'documentUrl',
+    'imageUrl',
+    'imageKey',
+    'photoUrl',
+    'mimeType',
+    'sizeBytes',
+    'fileName',
+    'embedding',
+    'collectionId',
+    'rekognitionFaceId',
+    'kind',
   };
-  return hidden.contains(key) || key.endsWith('Id');
+  final normalized = key.trim();
+  return hidden.contains(normalized) ||
+      normalized.endsWith('Id') ||
+      normalized.toLowerCase().contains('url') ||
+      normalized.toLowerCase().contains('key');
 }
 
 String _recordTitle(Object? data, String fallback) {

@@ -296,6 +296,17 @@ const skippedDaysArray = (value: Prisma.JsonValue) =>
         }))
     : [];
 
+const signParentAssetUrl = async (storageRef?: string | null) => {
+  const value = typeof storageRef === 'string' ? storageRef.trim() : '';
+  if (!value) return null;
+  try {
+    return await getSignedUrlForStoredUrl({ url: value });
+  } catch {
+    if (/^https?:\/\//i.test(value)) return value;
+    return null;
+  }
+};
+
 const serializeFaceProfileForParent = async (faceProfile: any) => {
   if (!faceProfile) return null;
 
@@ -306,14 +317,9 @@ const serializeFaceProfileForParent = async (faceProfile: any) => {
         (typeof sample?.imageUrl === 'string' && sample.imageUrl.trim()) ||
         (typeof sample?.imageKey === 'string' && sample.imageKey.trim()) ||
         '';
-      let imageUrl = typeof sample?.imageUrl === 'string' ? sample.imageUrl : '';
-      if (storageRef) {
-        try {
-          imageUrl = await getSignedUrlForStoredUrl({ url: storageRef });
-        } catch {
-          // Keep original reference if signing fails; client will hide broken images.
-        }
-      }
+      const imageUrl = storageRef
+        ? await signParentAssetUrl(storageRef)
+        : null;
       return {
         id: sample?.id ?? null,
         imageUrl,
@@ -330,6 +336,71 @@ const serializeFaceProfileForParent = async (faceProfile: any) => {
     samples: signedSamples.filter(
       (sample) => typeof sample.imageUrl === 'string' && sample.imageUrl.trim(),
     ),
+  };
+};
+
+const serializeDocumentsForParent = async (student: any) => {
+  const uploadedDocuments = (
+    await Promise.all(
+      (Array.isArray(student.documents) ? student.documents : []).map(
+        async (document: any) => {
+          const url = await signParentAssetUrl(document?.url);
+          if (!url) return null;
+          return {
+            id: document?.id ?? null,
+            title:
+              (typeof document?.title === 'string' && document.title.trim()) ||
+              'Document',
+            documentNumber:
+              typeof document?.documentNumber === 'string'
+                ? document.documentNumber
+                : null,
+            url,
+            kind: 'document',
+          };
+        },
+      ),
+    )
+  ).filter(Boolean);
+
+  const studentPhotos = (
+    await Promise.all(
+      (Array.isArray(student.photos) ? student.photos : []).map(
+        async (photo: any, index: number) => {
+          const url = await signParentAssetUrl(photo?.url);
+          if (!url) return null;
+          return {
+            id: photo?.id ?? null,
+            title: `Photo ${index + 1}`,
+            url,
+            kind: 'photo',
+          };
+        },
+      ),
+    )
+  ).filter(Boolean);
+
+  const admissionSource = {
+    birthCertificate: student.docBirthCert,
+    transferCertificate: student.docTransferCert,
+    aadhaar: student.docAadhaar,
+    reportCard: student.docReportCard,
+  };
+  const admissionDocuments: Record<string, string> = {};
+  await Promise.all(
+    Object.entries(admissionSource).map(async ([key, value]) => {
+      const url = await signParentAssetUrl(
+        typeof value === 'string' ? value : null,
+      );
+      if (url) admissionDocuments[key] = url;
+    }),
+  );
+
+  return {
+    uploadedDocuments,
+    studentPhotos,
+    admissionDocuments,
+    faceProfile: await serializeFaceProfileForParent(student.faceProfile),
   };
 };
 
@@ -572,7 +643,7 @@ export const getParentChildDetail = async (req: Request, res: Response) => {
 
   if (!student) throw new HttpError(404, 'Student not found');
 
-  const faceProfile = await serializeFaceProfileForParent(student.faceProfile);
+  const documents = await serializeDocumentsForParent(student);
 
   const name =
     student.fullName || `${student.firstName} ${student.lastName}`.trim();
@@ -688,17 +759,7 @@ export const getParentChildDetail = async (req: Request, res: Response) => {
       library: { memberships: student.libraryMemberships },
       dormitory: { assignments: student.dormitoryAssignments },
       exam: { marks: student.marks, seating: student.examSeatingAllocations },
-      documents: {
-        uploadedDocuments: student.documents,
-        studentPhotos: student.photos,
-        admissionDocuments: {
-          birthCertificate: student.docBirthCert,
-          transferCertificate: student.docTransferCert,
-          aadhaar: student.docAadhaar,
-          reportCard: student.docReportCard,
-        },
-        faceProfile,
-      },
+      documents,
       timeline: {
         timelines: student.timelines,
         statusEvents: student.statusEvents,
