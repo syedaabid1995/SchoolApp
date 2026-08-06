@@ -44,11 +44,6 @@ export const normalizeSchoolContacts = (value: unknown): SchoolContactDetail[] =
     .slice(0, 50);
 };
 
-const nullableString = (value: unknown, maxLength: number) => {
-  const next = cleanString(value, maxLength);
-  return next || null;
-};
-
 const PLACEHOLDER_SCHOOL_NAMES = new Set([
   'infix',
   'infix school erp',
@@ -60,6 +55,10 @@ const PLACEHOLDER_ADDRESSES = new Set([
   'dhanmondi 32, dhaka',
   'dhaka',
 ]);
+
+const PLACEHOLDER_EMAILS = new Set(['infix@gmail.com']);
+
+const PLACEHOLDER_PHONES = new Set(['+8801916589787', '8801916589787']);
 
 const resolveGeneralValue = (
   value: unknown,
@@ -76,6 +75,7 @@ export const buildSchoolProfile = (school: {
   id: string;
   name: string;
   code: string;
+  adminEmail?: string | null;
   systemSetting?: { general: Prisma.JsonValue } | null;
 }): SchoolProfileDetails => {
   const general = isRecord(school.systemSetting?.general)
@@ -96,14 +96,25 @@ export const buildSchoolProfile = (school: {
     500,
     PLACEHOLDER_ADDRESSES,
   );
+  const configuredEmail = resolveGeneralValue(
+    general.email,
+    160,
+    PLACEHOLDER_EMAILS,
+  );
+  const configuredPhone = resolveGeneralValue(
+    general.phone,
+    40,
+    PLACEHOLDER_PHONES,
+  );
+  const adminEmail = cleanString(school.adminEmail, 160);
 
   return {
     id: school.id,
     name: configuredName || school.name,
     code: configuredCode || school.code,
     address: configuredAddress || 'India',
-    email: nullableString(general.email, 160),
-    mobileNumber: nullableString(general.phone, 40),
+    email: configuredEmail || adminEmail || null,
+    mobileNumber: configuredPhone || null,
     contacts: normalizeSchoolContacts(general.contacts),
   };
 };
@@ -118,8 +129,25 @@ export const getSchoolProfilesByIds = async (schoolIds: string[]) => {
       name: true,
       code: true,
       systemSetting: { select: { general: true } },
+      users: {
+        where: {
+          status: 'ACTIVE',
+          roles: { some: { role: { name: 'SCHOOL_ADMIN' } } },
+        },
+        select: { email: true },
+        orderBy: { createdAt: 'asc' },
+        take: 1,
+      },
     },
     orderBy: { name: 'asc' },
   });
-  return schools.map(buildSchoolProfile);
+  return schools.map((school) =>
+    buildSchoolProfile({
+      id: school.id,
+      name: school.name,
+      code: school.code,
+      systemSetting: school.systemSetting,
+      adminEmail: school.users[0]?.email ?? null,
+    }),
+  );
 };

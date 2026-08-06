@@ -224,6 +224,7 @@ class _OnlineFeePaymentScreenState
   Widget _buildHero(BuildContext context, ParentChild? selectedChild) {
     return ParentHero(
       showChildSwitcher: true,
+      showDefaultTrailing: false,
       badge: '💳 Online Fee Payment',
       title: selectedChild?.name ?? 'Online Fee Payment',
       subtitle: selectedChild == null
