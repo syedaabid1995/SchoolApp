@@ -579,37 +579,171 @@ class _FeeBreakdownCard extends StatelessWidget {
           if (expanded)
             Padding(
               padding: const EdgeInsets.fromLTRB(14, 0, 14, 14),
-              child: Row(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  Expanded(
-                    child: _MiniAmount(
-                      label: 'Allotted',
-                      value: money.format(item.allotted),
-                      color: SaaptTheme.primary,
+                  Row(
+                    children: [
+                      Expanded(
+                        child: _MiniAmount(
+                          label: 'Allotted',
+                          value: money.format(item.allotted),
+                          color: SaaptTheme.primary,
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: _MiniAmount(
+                          label: 'Paid',
+                          value: money.format(item.paid),
+                          color: const Color(0xFF059669),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: _MiniAmount(
+                          label: 'Due',
+                          value: money.format(item.due),
+                          color: const Color(0xFFDC2626),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 14),
+                  const Text(
+                    'Payment history',
+                    style: TextStyle(
+                      color: SaaptTheme.navy,
+                      fontSize: 13,
+                      fontWeight: FontWeight.w900,
                     ),
                   ),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: _MiniAmount(
-                      label: 'Paid',
-                      value: money.format(item.paid),
-                      color: const Color(0xFF059669),
+                  const SizedBox(height: 8),
+                  if (item.paymentHistory.isEmpty)
+                    const Text(
+                      'No payments recorded yet.',
+                      style: TextStyle(
+                        color: Color(0xFF8EA0BA),
+                        fontSize: 12,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    )
+                  else
+                    ...item.paymentHistory.map(
+                      (payment) => _FeePaymentHistoryRow(
+                        payment: payment,
+                        money: money,
+                      ),
                     ),
-                  ),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: _MiniAmount(
-                      label: 'Due',
-                      value: money.format(item.due),
-                      color: const Color(0xFFDC2626),
-                    ),
-                  ),
                 ],
               ),
             ),
         ],
       ),
     );
+  }
+}
+
+class _FeePaymentHistoryRow extends StatelessWidget {
+  const _FeePaymentHistoryRow({
+    required this.payment,
+    required this.money,
+  });
+
+  final ParentFeePaymentHistoryEntry payment;
+  final NumberFormat money;
+
+  @override
+  Widget build(BuildContext context) {
+    final modeLabel = payment.paymentMode.replaceAll('_', ' ');
+    return Container(
+      margin: const EdgeInsets.only(bottom: 8),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: const Color(0xFFF7FAFF),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: const Color(0xFFE5ECF7)),
+      ),
+      child: Row(
+        children: [
+          Container(
+            width: 34,
+            height: 34,
+            decoration: BoxDecoration(
+              color: const Color(0xFFE9F8EF),
+              borderRadius: BorderRadius.circular(999),
+            ),
+            child: const Icon(
+              Icons.check_rounded,
+              color: Color(0xFF059669),
+              size: 20,
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  payment.paymentNumber,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    color: SaaptTheme.navy,
+                    fontSize: 13,
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
+                const SizedBox(height: 3),
+                Text(
+                  '$modeLabel • ${_formatPaidAt(payment.paidAt)}',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    color: Color(0xFF60708F),
+                    fontSize: 12,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 8),
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: [
+              Text(
+                '+${money.format(payment.amount)}',
+                style: const TextStyle(
+                  color: Color(0xFF059669),
+                  fontSize: 13,
+                  fontWeight: FontWeight.w900,
+                ),
+              ),
+              if (payment.receiptNumber?.trim().isNotEmpty == true) ...[
+                const SizedBox(height: 3),
+                Text(
+                  'Receipt ${payment.receiptNumber}',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    color: Color(0xFF8EA0BA),
+                    fontSize: 11,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ],
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  String _formatPaidAt(String? value) {
+    final date = DateTime.tryParse(value ?? '');
+    if (date == null) return '-';
+    return DateFormat('dd-MM-yyyy').format(date.toLocal());
   }
 }
 

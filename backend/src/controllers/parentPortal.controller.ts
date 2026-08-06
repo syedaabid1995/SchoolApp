@@ -1774,6 +1774,16 @@ export const listParentFees = async (req: Request, res: Response) => {
       items: { orderBy: { sortOrder: 'asc' } },
       payments: { orderBy: { paidAt: 'desc' } },
       receipts: { orderBy: { receiptDate: 'desc' } },
+      paymentAllocations: {
+        include: {
+          payment: {
+            include: {
+              receipt: true,
+            },
+          },
+        },
+        orderBy: { createdAt: 'desc' },
+      },
     },
     orderBy: { issueDate: 'desc' },
     take: limit,
@@ -1781,6 +1791,50 @@ export const listParentFees = async (req: Request, res: Response) => {
 
   const items = invoices.map((invoice) => {
     const feeTypeName = invoice.feeType?.name ?? 'School Fee';
+    const historyByPaymentId = new Map<
+      string,
+      {
+        id: string;
+        paymentNumber: string;
+        paymentMode: string;
+        paidAt: Date;
+        amount: Prisma.Decimal | number | string;
+        receiptNumber: string | null;
+        status: string;
+      }
+    >();
+
+    for (const payment of invoice.payments) {
+      const receipt =
+        invoice.receipts.find((item) => item.paymentId === payment.id) ?? null;
+      historyByPaymentId.set(payment.id, {
+        id: payment.id,
+        paymentNumber: payment.paymentNumber,
+        paymentMode: payment.paymentMode,
+        paidAt: payment.paidAt,
+        amount: payment.amount,
+        receiptNumber: receipt?.receiptNumber ?? null,
+        status: payment.status,
+      });
+    }
+
+    for (const allocation of invoice.paymentAllocations) {
+      const payment = allocation.payment;
+      historyByPaymentId.set(payment.id, {
+        id: payment.id,
+        paymentNumber: payment.paymentNumber,
+        paymentMode: payment.paymentMode,
+        paidAt: payment.paidAt,
+        amount: allocation.allocatedAmount,
+        receiptNumber: payment.receipt?.receiptNumber ?? null,
+        status: payment.status,
+      });
+    }
+
+    const paymentHistory = Array.from(historyByPaymentId.values()).sort(
+      (left, right) => right.paidAt.getTime() - left.paidAt.getTime(),
+    );
+
     return {
       id: invoice.id,
       invoiceNumber: invoice.invoiceNumber,
@@ -1798,6 +1852,7 @@ export const listParentFees = async (req: Request, res: Response) => {
       items: invoice.items,
       payments: invoice.payments,
       receipts: invoice.receipts,
+      paymentHistory,
     };
   });
 

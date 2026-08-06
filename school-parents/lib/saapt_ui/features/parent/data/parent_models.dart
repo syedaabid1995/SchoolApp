@@ -549,6 +549,38 @@ class ParentFeeSummary {
   }
 }
 
+class ParentFeePaymentHistoryEntry {
+  const ParentFeePaymentHistoryEntry({
+    required this.id,
+    required this.paymentNumber,
+    required this.paymentMode,
+    required this.amount,
+    required this.paidAt,
+    this.receiptNumber,
+    this.status,
+  });
+
+  final String id;
+  final String paymentNumber;
+  final String paymentMode;
+  final num amount;
+  final String? paidAt;
+  final String? receiptNumber;
+  final String? status;
+
+  factory ParentFeePaymentHistoryEntry.fromJson(Map<String, dynamic> json) {
+    return ParentFeePaymentHistoryEntry(
+      id: json['id']?.toString() ?? '',
+      paymentNumber: json['paymentNumber']?.toString() ?? 'Payment',
+      paymentMode: json['paymentMode']?.toString() ?? 'Payment',
+      amount: num.tryParse(json['amount']?.toString() ?? '') ?? 0,
+      paidAt: json['paidAt']?.toString(),
+      receiptNumber: json['receiptNumber']?.toString(),
+      status: json['status']?.toString(),
+    );
+  }
+}
+
 class ParentFeeInvoiceItem {
   const ParentFeeInvoiceItem({
     required this.id,
@@ -561,6 +593,7 @@ class ParentFeeInvoiceItem {
     this.feeType,
     this.feeMonth,
     this.dueDate,
+    this.paymentHistory = const [],
   });
 
   final String id;
@@ -573,6 +606,7 @@ class ParentFeeInvoiceItem {
   final String? feeType;
   final String? feeMonth;
   final String? dueDate;
+  final List<ParentFeePaymentHistoryEntry> paymentHistory;
 
   bool get canPay {
     final normalized = status.toUpperCase();
@@ -584,6 +618,46 @@ class ParentFeeInvoiceItem {
         num.tryParse(json['amount']?.toString() ?? '') ??
         ((num.tryParse(json['totalAmount']?.toString() ?? '') ?? 0) -
             (num.tryParse(json['discountAmount']?.toString() ?? '') ?? 0));
+
+    final history = <ParentFeePaymentHistoryEntry>[
+      ...(json['paymentHistory'] as List? ?? const [])
+          .whereType<Map<String, dynamic>>()
+          .map(ParentFeePaymentHistoryEntry.fromJson)
+          .where(
+            (entry) => entry.id.isNotEmpty || entry.paymentNumber.isNotEmpty,
+          ),
+    ];
+
+    // Fallback for older API payloads that only return payments/receipts.
+    if (history.isEmpty) {
+      final receipts = (json['receipts'] as List? ?? const [])
+          .whereType<Map<String, dynamic>>()
+          .toList();
+      for (final payment in (json['payments'] as List? ?? const [])
+          .whereType<Map<String, dynamic>>()) {
+        final paymentId = payment['id']?.toString();
+        Map<String, dynamic>? receipt;
+        for (final candidate in receipts) {
+          if (paymentId != null &&
+              candidate['paymentId']?.toString() == paymentId) {
+            receipt = candidate;
+            break;
+          }
+        }
+        history.add(
+          ParentFeePaymentHistoryEntry(
+            id: paymentId ?? '',
+            paymentNumber: payment['paymentNumber']?.toString() ?? 'Payment',
+            paymentMode: payment['paymentMode']?.toString() ?? 'Payment',
+            amount: num.tryParse(payment['amount']?.toString() ?? '') ?? 0,
+            paidAt: payment['paidAt']?.toString(),
+            receiptNumber: receipt?['receiptNumber']?.toString(),
+            status: payment['status']?.toString(),
+          ),
+        );
+      }
+    }
+
     return ParentFeeInvoiceItem(
       id: json['id']?.toString() ?? '',
       title: json['title']?.toString() ?? 'School Fee',
@@ -595,6 +669,7 @@ class ParentFeeInvoiceItem {
       feeType: json['feeType']?.toString(),
       feeMonth: json['feeMonth']?.toString(),
       dueDate: json['dueDate']?.toString(),
+      paymentHistory: history,
     );
   }
 }
