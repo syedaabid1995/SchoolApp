@@ -4,6 +4,7 @@ import test, { afterEach } from 'node:test';
 import type { Request, Response } from 'express';
 import { env } from '../config/env';
 import { handleRazorpayWebhook } from '../controllers/razorpayWebhook.controller';
+import { parentFeePaymentLinkOptions } from '../controllers/parentPortal.controller';
 import { verifyRazorpayWebhookSignature } from '../services/subscription.service';
 
 const originalWebhookSecret = env.RAZORPAY_WEBHOOK_SECRET;
@@ -14,6 +15,20 @@ afterEach(() => {
 
 const signatureFor = (body: Buffer, secret: string) =>
   crypto.createHmac('sha256', secret).update(body).digest('hex');
+
+test('parent fee Payment Links enable UPI intent and standard methods', () => {
+  assert.deepEqual(parentFeePaymentLinkOptions, {
+    checkout: {
+      method: {
+        card: true,
+        netbanking: true,
+        upi: true,
+        wallet: true,
+      },
+      webview_intent: true,
+    },
+  });
+});
 
 test('Razorpay webhook signature verification uses the exact raw body', () => {
   const secret = 'webhook-test-secret';

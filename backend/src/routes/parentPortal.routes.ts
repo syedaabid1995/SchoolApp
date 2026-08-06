@@ -18,6 +18,7 @@ import {
   listParentTimetable,
   listParentFees,
   createParentFeeCheckoutOrder,
+  confirmParentFeePaymentLink,
   verifyParentFeeCheckoutPayment,
 } from '../controllers/parentPortal.controller';
 
@@ -42,4 +43,5 @@ parentPortalRouter.get('/notices', listParentNotices);
 parentPortalRouter.get('/timetable', listParentTimetable);
 parentPortalRouter.get('/fees', listParentFees);
 parentPortalRouter.post('/fees/checkout', createParentFeeCheckoutOrder);
+parentPortalRouter.post('/fees/checkout/status', confirmParentFeePaymentLink);
 parentPortalRouter.post('/fees/checkout/verify', verifyParentFeeCheckoutPayment);

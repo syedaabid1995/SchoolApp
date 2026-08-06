@@ -263,7 +263,7 @@ class ParentRepository {
     );
   }
 
-  Future<ParentFeeCheckoutOrder> createFeeCheckoutOrder({
+  Future<ParentFeeCheckoutLink> createFeeCheckoutOrder({
     required String childId,
     required String invoiceId,
     required num amount,
@@ -272,7 +272,19 @@ class ParentRepository {
       '/parents/portal/fees/checkout',
       data: {'childId': childId, 'invoiceId': invoiceId, 'amount': amount},
     );
-    return ParentFeeCheckoutOrder.fromJson(
+    return ParentFeeCheckoutLink.fromJson(
+      response.data ?? const <String, dynamic>{},
+    );
+  }
+
+  Future<ParentFeePaymentLinkStatus> confirmFeePaymentLink({
+    required String paymentLinkId,
+  }) async {
+    final response = await _dio.post<Map<String, dynamic>>(
+      '/parents/portal/fees/checkout/status',
+      data: {'paymentLinkId': paymentLinkId},
+    );
+    return ParentFeePaymentLinkStatus.fromJson(
       response.data ?? const <String, dynamic>{},
     );
   }

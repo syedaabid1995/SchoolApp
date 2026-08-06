@@ -2,6 +2,7 @@ import type { Request, Response } from 'express';
 import { Prisma } from '@prisma/client';
 import { z } from 'zod';
 import { prisma } from '../config/db';
+import { env } from '../config/env';
 import { HttpError } from '../middlewares/error.middleware';
 import { requireAuth } from '../middlewares/rbac.middleware';
 import { attendanceReadService } from '../modules/attendance/services/attendance-read.service';
@@ -23,7 +24,6 @@ import { getSchoolProfilesByIds } from '../services/schoolProfile.service';
 import { createLedgerEntry } from '../services/feeLedger.service';
 import { getNextNumber } from '../services/numberSequence.service';
 import {
-  getRazorpayConfig,
   razorpayRequest,
   verifyRazorpaySignature,
 } from '../services/subscription.service';
@@ -44,6 +44,21 @@ type RazorpayPayment = {
   status: string;
   captured?: boolean;
   method?: string | null;
+};
+
+type RazorpayPaymentLink = {
+  id: string;
+  short_url: string;
+  reference_id: string;
+  status: string;
+  order_id?: string | null;
+  notes?: Record<string, string | number | boolean | null | undefined>;
+  payments?: Array<{
+    payment_id: string;
+    status: string;
+    amount: number;
+    method?: string | null;
+  }> | null;
 };
 
 const resolveParentProfiles = async (userId: string) => {
@@ -192,6 +207,22 @@ const parentFeeCheckoutVerifySchema = z.object({
   razorpay_payment_id: z.string().trim().min(1),
   razorpay_signature: z.string().trim().min(1),
 });
+
+const parentFeePaymentLinkStatusSchema = z.object({
+  paymentLinkId: z.string().trim().startsWith('plink_'),
+});
+
+export const parentFeePaymentLinkOptions = {
+  checkout: {
+    method: {
+      card: true,
+      netbanking: true,
+      upi: true,
+      wallet: true,
+    },
+    webview_intent: true,
+  },
+} as const;
 
 const moneyDecimal = (value: Prisma.Decimal | number | string) =>
   new Prisma.Decimal(value).toDecimalPlaces(2);
@@ -1785,34 +1816,47 @@ export const createParentFeeCheckoutOrder = async (req: Request, res: Response) 
   const amountPaise = moneyToPaise(amount);
   const parent = (await resolveParentProfiles(auth.userId))[0] ?? null;
   const receipt = parentFeeReceipt();
-  const order = await razorpayRequest<RazorpayOrder>('/orders', {
+  const parentName = parent ? `${parent.firstName} ${parent.lastName}`.trim() : '';
+  const notes = {
+    purpose: 'PARENT_FEE_PAYMENT',
+    parentUserId: auth.userId,
+    schoolId: child.schoolId,
+    studentId: child.id,
+    academicSessionId: invoice.academicSessionId,
+    invoiceId: invoice.id,
+    invoiceNumber: invoice.invoiceNumber,
+    amount: amount.toFixed(2),
+    amountPaise: String(amountPaise),
+  };
+  const paymentLink = await razorpayRequest<RazorpayPaymentLink>('/payment_links', {
     method: 'POST',
     body: {
       amount: amountPaise,
       currency: 'INR',
-      receipt,
-      notes: {
-        purpose: 'PARENT_FEE_PAYMENT',
-        parentUserId: auth.userId,
-        schoolId: child.schoolId,
-        studentId: child.id,
-        academicSessionId: invoice.academicSessionId,
-        invoiceId: invoice.id,
-        invoiceNumber: invoice.invoiceNumber,
-        amount: amount.toFixed(2),
-        amountPaise: String(amountPaise),
+      accept_partial: false,
+      reference_id: receipt,
+      description: `${invoice.invoiceNumber} fee payment`,
+      customer: {
+        ...(parentName ? { name: parentName } : {}),
+        ...(parent?.email ? { email: parent.email } : {}),
+        ...(parent?.phone ? { contact: parent.phone } : {}),
       },
+      notify: { sms: false, email: false },
+      reminder_enable: false,
+      notes,
+      callback_url: `${env.FRONTEND_URL.replace(/\/$/, '')}/payment/parent-fee/complete`,
+      callback_method: 'get',
+      options: parentFeePaymentLinkOptions,
     },
   });
 
   res.status(201).json({
-    gateway: 'RAZORPAY',
-    keyId: getRazorpayConfig().keyId,
-    order: {
-      id: order.id,
-      amount: order.amount,
-      currency: order.currency,
-      receipt: order.receipt ?? receipt,
+    gateway: 'RAZORPAY_PAYMENT_LINK',
+    paymentLink: {
+      id: paymentLink.id,
+      url: paymentLink.short_url,
+      referenceId: paymentLink.reference_id ?? receipt,
+      status: paymentLink.status,
     },
     child: {
       id: child.id,
@@ -1830,7 +1874,7 @@ export const createParentFeeCheckoutOrder = async (req: Request, res: Response) 
       currency: 'INR',
       description: `${invoice.invoiceNumber} fee payment`,
       prefill: {
-        name: parent ? `${parent.firstName} ${parent.lastName}`.trim() : '',
+        name: parentName,
         email: parent?.email ?? '',
         contact: parent?.phone ?? '',
       },
@@ -1851,9 +1895,14 @@ export const reconcileParentFeeRazorpayPayment = async (params: {
   razorpayPaymentId: string;
   expectedParentUserId?: string;
   ignoreNonParentOrder?: boolean;
+  fallbackNotes?: RazorpayOrder['notes'];
 }) => {
   const order = await razorpayRequest<RazorpayOrder>(`/orders/${encodeURIComponent(params.razorpayOrderId)}`);
-  const notes = order.notes ?? {};
+  const orderNotes = order.notes ?? {};
+  const notes =
+    String(orderNotes.purpose ?? '') === 'PARENT_FEE_PAYMENT'
+      ? orderNotes
+      : (params.fallbackNotes ?? orderNotes);
   const purpose = notes.purpose == null ? '' : String(notes.purpose);
   if (purpose !== 'PARENT_FEE_PAYMENT') {
     if (params.ignoreNonParentOrder) return null;
@@ -2054,6 +2103,47 @@ export const reconcileParentFeeRazorpayPayment = async (params: {
       ? 'Razorpay payment was already verified.'
       : 'Razorpay payment verified and fee invoice updated.',
   };
+};
+
+export const confirmParentFeePaymentLink = async (req: Request, res: Response) => {
+  const auth = requireAuth(req);
+  const { paymentLinkId } = parentFeePaymentLinkStatusSchema.parse(req.body ?? {});
+  const paymentLink = await razorpayRequest<RazorpayPaymentLink>(
+    `/payment_links/${encodeURIComponent(paymentLinkId)}`,
+  );
+  const notes = paymentLink.notes ?? {};
+  if (String(notes.purpose ?? '') !== 'PARENT_FEE_PAYMENT') {
+    throw new HttpError(400, 'Razorpay Payment Link is not a parent fee payment');
+  }
+  if (orderNote(notes, 'parentUserId') !== auth.userId) {
+    throw new HttpError(403, 'Razorpay Payment Link does not belong to this parent');
+  }
+  await requireChildAccess(auth.userId, orderNote(notes, 'studentId'));
+
+  const capturedPayment = paymentLink.payments?.find(
+    (payment) => payment.status === 'captured',
+  );
+  if (
+    paymentLink.status !== 'paid' ||
+    !paymentLink.order_id ||
+    !capturedPayment?.payment_id
+  ) {
+    res.status(202).json({
+      paid: false,
+      status: paymentLink.status,
+      message: 'Payment is still being processed.',
+    });
+    return;
+  }
+
+  const result = await reconcileParentFeeRazorpayPayment({
+    razorpayOrderId: paymentLink.order_id,
+    razorpayPaymentId: capturedPayment.payment_id,
+    expectedParentUserId: auth.userId,
+    fallbackNotes: notes,
+  });
+  if (!result) throw new HttpError(400, 'Razorpay order is not a parent fee payment');
+  res.status(200).json({ paid: true, status: paymentLink.status, ...result });
 };
 
 export const verifyParentFeeCheckoutPayment = async (req: Request, res: Response) => {

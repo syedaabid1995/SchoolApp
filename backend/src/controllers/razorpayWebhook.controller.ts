@@ -7,6 +7,8 @@ import { verifyRazorpayWebhookSignature } from '../services/subscription.service
 type RazorpayWebhookEntity = {
   id?: string;
   order_id?: string | null;
+  notes?: Record<string, string | number | boolean | null | undefined>;
+  payments?: Array<{ payment_id?: string; status?: string }> | null;
 };
 
 type RazorpayWebhookPayload = {
@@ -14,10 +16,15 @@ type RazorpayWebhookPayload = {
   payload?: {
     payment?: { entity?: RazorpayWebhookEntity };
     order?: { entity?: RazorpayWebhookEntity };
+    payment_link?: { entity?: RazorpayWebhookEntity };
   };
 };
 
-const supportedEvents = new Set(['payment.captured', 'order.paid']);
+const supportedEvents = new Set([
+  'payment.captured',
+  'order.paid',
+  'payment_link.paid',
+]);
 
 export const handleRazorpayWebhook = async (req: Request, res: Response) => {
   if (!Buffer.isBuffer(req.body)) {
@@ -44,8 +51,15 @@ export const handleRazorpayWebhook = async (req: Request, res: Response) => {
 
   const payment = webhook.payload?.payment?.entity;
   const order = webhook.payload?.order?.entity;
-  const razorpayPaymentId = payment?.id?.trim();
-  const razorpayOrderId = payment?.order_id?.trim() || order?.id?.trim();
+  const paymentLink = webhook.payload?.payment_link?.entity;
+  const linkPayment = paymentLink?.payments?.find(
+    (candidate) => candidate.status === 'captured',
+  );
+  const razorpayPaymentId = payment?.id?.trim() || linkPayment?.payment_id?.trim();
+  const razorpayOrderId =
+    payment?.order_id?.trim() ||
+    order?.id?.trim() ||
+    paymentLink?.order_id?.trim();
   if (!razorpayOrderId || !razorpayPaymentId) {
     throw new HttpError(400, 'Razorpay webhook is missing payment or order id');
   }
@@ -54,6 +68,7 @@ export const handleRazorpayWebhook = async (req: Request, res: Response) => {
     razorpayOrderId,
     razorpayPaymentId,
     ignoreNonParentOrder: true,
+    fallbackNotes: paymentLink?.notes ?? payment?.notes,
   });
   if (!result) {
     res.status(200).json({ received: true, ignored: true });

@@ -3,7 +3,6 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
-import 'package:razorpay_flutter/razorpay_flutter.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../../../app/theme/saapt_theme.dart';
@@ -12,6 +11,7 @@ import '../../../../core/network/parent_api_client.dart';
 import '../../../../core/notifications/parent_notification_service.dart';
 import '../../data/parent_models.dart';
 import '../providers/parent_providers.dart';
+import 'parent_fee_payment_screen.dart';
 import 'parent_screen_widgets.dart';
 
 enum _ProfilePanel {
@@ -1790,14 +1790,6 @@ class _PayFeeButton extends ConsumerStatefulWidget {
 
 class _PayFeeButtonState extends ConsumerState<_PayFeeButton> {
   bool _processing = false;
-  Razorpay? _razorpay;
-  ParentFeeCheckoutOrder? _checkout;
-
-  @override
-  void dispose() {
-    _razorpay?.clear();
-    super.dispose();
-  }
 
   @override
   Widget build(BuildContext context) {
@@ -1838,10 +1830,10 @@ class _PayFeeButtonState extends ConsumerState<_PayFeeButton> {
           _FeePaymentAmountSheet(balanceAmount: widget.balanceAmount),
     );
     if (amount == null || amount <= 0) return;
-    await _startRazorpay(amount);
+    await _startPayment(amount);
   }
 
-  Future<void> _startRazorpay(num amount) async {
+  Future<void> _startPayment(num amount) async {
     setState(() => _processing = true);
     try {
       final repository = ref.read(parentRepositoryProvider);
@@ -1851,54 +1843,19 @@ class _PayFeeButtonState extends ConsumerState<_PayFeeButton> {
         invoiceId: invoiceId,
         amount: amount,
       );
-      _checkout = checkout;
-      final razorpay = Razorpay();
-      _razorpay?.clear();
-      _razorpay = razorpay;
-      razorpay.on(Razorpay.EVENT_PAYMENT_SUCCESS, _handlePaymentSuccess);
-      razorpay.on(Razorpay.EVENT_PAYMENT_ERROR, _handlePaymentError);
-      razorpay.on(Razorpay.EVENT_EXTERNAL_WALLET, _handleExternalWallet);
-      razorpay.open({
-        'key': checkout.keyId,
-        'amount': checkout.amountPaise,
-        'currency': checkout.currency,
-        'name': 'Akademifyy',
-        'description': checkout.description,
-        'order_id': checkout.orderId,
-        'prefill': {
-          'name': checkout.prefillName ?? '',
-          'email': checkout.prefillEmail ?? '',
-          'contact': checkout.prefillContact ?? '',
-        },
-        'config': {
-          'display': {
-            'sequence': ['upi', 'card', 'netbanking', 'wallet'],
-            'preferences': {'show_default_blocks': true},
-          },
-        },
-        'retry': {'enabled': true, 'max_count': 3},
-        'theme': {'color': '#6D5DFB'},
-      });
-    } catch (error) {
+      if (checkout.paymentLinkId.isEmpty || checkout.paymentUrl.isEmpty) {
+        throw StateError('Payment Link details are missing');
+      }
       if (!mounted) return;
-      setState(() => _processing = false);
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(parentApiError(error, 'Unable to start payment')),
+      final paid = await Navigator.of(context).push<bool>(
+        MaterialPageRoute(
+          builder: (_) => ParentFeePaymentScreen(
+            paymentUrl: checkout.paymentUrl,
+            paymentLinkId: checkout.paymentLinkId,
+          ),
         ),
       );
-    }
-  }
-
-  Future<void> _handlePaymentSuccess(PaymentSuccessResponse response) async {
-    try {
-      await ref
-          .read(parentRepositoryProvider)
-          .verifyFeeCheckoutPayment(
-            razorpayOrderId: response.orderId ?? _checkout?.orderId ?? '',
-            razorpayPaymentId: response.paymentId ?? '',
-            razorpaySignature: response.signature ?? '',
-          );
+      if (paid != true) return;
       ref.invalidate(parentChildDetailProvider(widget.childId));
       final childState = ref.read(effectiveSelectedChildProvider);
       final child = childState.asData?.value;
@@ -1913,33 +1870,12 @@ class _PayFeeButtonState extends ConsumerState<_PayFeeButton> {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text(parentApiError(error, 'Payment verification failed')),
+          content: Text(parentApiError(error, 'Unable to start payment')),
         ),
       );
     } finally {
-      _razorpay?.clear();
       if (mounted) setState(() => _processing = false);
     }
-  }
-
-  void _handlePaymentError(PaymentFailureResponse response) {
-    _razorpay?.clear();
-    if (!mounted) return;
-    setState(() => _processing = false);
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(response.message ?? 'Payment was cancelled or failed.'),
-      ),
-    );
-  }
-
-  void _handleExternalWallet(ExternalWalletResponse response) {
-    if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text('Selected ${response.walletName ?? 'external wallet'}.'),
-      ),
-    );
   }
 }
 

@@ -549,10 +549,10 @@ class ParentFeeSummary {
   }
 }
 
-class ParentFeeCheckoutOrder {
-  const ParentFeeCheckoutOrder({
-    required this.keyId,
-    required this.orderId,
+class ParentFeeCheckoutLink {
+  const ParentFeeCheckoutLink({
+    required this.paymentLinkId,
+    required this.paymentUrl,
     required this.amountPaise,
     required this.currency,
     required this.description,
@@ -562,8 +562,8 @@ class ParentFeeCheckoutOrder {
     this.prefillContact,
   });
 
-  final String keyId;
-  final String orderId;
+  final String paymentLinkId;
+  final String paymentUrl;
   final int amountPaise;
   final String currency;
   final String description;
@@ -572,21 +572,43 @@ class ParentFeeCheckoutOrder {
   final String? prefillEmail;
   final String? prefillContact;
 
-  factory ParentFeeCheckoutOrder.fromJson(Map<String, dynamic> json) {
-    final order = _jsonMap(json['order']);
+  factory ParentFeeCheckoutLink.fromJson(Map<String, dynamic> json) {
+    final paymentLink = _jsonMap(json['paymentLink']);
     final checkout = _jsonMap(json['checkout']);
     final child = _jsonMap(json['child']);
     final prefill = _jsonMap(checkout['prefill']);
-    return ParentFeeCheckoutOrder(
-      keyId: json['keyId']?.toString() ?? '',
-      orderId: order['id']?.toString() ?? '',
-      amountPaise: int.tryParse(order['amount']?.toString() ?? '') ?? 0,
-      currency: order['currency']?.toString() ?? 'INR',
+    return ParentFeeCheckoutLink(
+      paymentLinkId: paymentLink['id']?.toString() ?? '',
+      paymentUrl: paymentLink['url']?.toString() ?? '',
+      amountPaise:
+          ((num.tryParse(checkout['amount']?.toString() ?? '') ?? 0) * 100)
+              .round(),
+      currency: checkout['currency']?.toString() ?? 'INR',
       description: checkout['description']?.toString() ?? 'Fee payment',
       childName: child['name']?.toString() ?? 'Student',
       prefillName: prefill['name']?.toString(),
       prefillEmail: prefill['email']?.toString(),
       prefillContact: prefill['contact']?.toString(),
+    );
+  }
+}
+
+class ParentFeePaymentLinkStatus {
+  const ParentFeePaymentLinkStatus({
+    required this.paid,
+    required this.status,
+    required this.message,
+  });
+
+  final bool paid;
+  final String status;
+  final String message;
+
+  factory ParentFeePaymentLinkStatus.fromJson(Map<String, dynamic> json) {
+    return ParentFeePaymentLinkStatus(
+      paid: json['paid'] == true,
+      status: json['status']?.toString() ?? 'processing',
+      message: json['message']?.toString() ?? 'Payment is being processed.',
     );
   }
 }
