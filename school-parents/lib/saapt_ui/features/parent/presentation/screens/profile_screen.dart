@@ -3309,13 +3309,17 @@ class _FaceProfileCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final status = _displayValue(record.data['status']);
-    final imageUrl = record.imageUrl ?? _imageUrlFrom(record.data);
+    final sampleUrls = _faceSampleImageUrls(record.data);
+    final imageUrl = sampleUrls.isNotEmpty
+        ? sampleUrls.first
+        : (record.imageUrl ?? _imageUrlFrom(record.data));
+    final resolvedImage = imageUrl == null ? null : parentMediaUrl(imageUrl);
 
     return ParentCard(
       padding: EdgeInsets.zero,
       child: InkWell(
         borderRadius: BorderRadius.circular(16),
-        onTap: () => _showRecordDetailSheet(context, record),
+        onTap: () => _showFaceProfileSheet(context, record),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
@@ -3362,9 +3366,9 @@ class _FaceProfileCard extends StatelessWidget {
                         ],
                       ),
                       child: ClipOval(
-                        child: imageUrl?.trim().isNotEmpty == true
+                        child: resolvedImage?.trim().isNotEmpty == true
                             ? Image.network(
-                                imageUrl!,
+                                resolvedImage!,
                                 fit: BoxFit.cover,
                                 errorBuilder: (_, _, _) => const ColoredBox(
                                   color: Color(0xFFEAF1FF),
@@ -3393,11 +3397,11 @@ class _FaceProfileCard extends StatelessWidget {
               padding: const EdgeInsets.fromLTRB(16, 14, 16, 16),
               child: Row(
                 children: [
-                  const Expanded(
+                  Expanded(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(
+                        const Text(
                           'Face Profile',
                           style: TextStyle(
                             color: SaaptTheme.navy,
@@ -3405,10 +3409,12 @@ class _FaceProfileCard extends StatelessWidget {
                             fontWeight: FontWeight.w900,
                           ),
                         ),
-                        SizedBox(height: 3),
+                        const SizedBox(height: 3),
                         Text(
-                          'Attendance recognition profile',
-                          style: TextStyle(
+                          sampleUrls.isEmpty
+                              ? 'Attendance recognition profile'
+                              : '${sampleUrls.length} face sample${sampleUrls.length == 1 ? '' : 's'}',
+                          style: const TextStyle(
                             color: Color(0xFF60708F),
                             fontSize: 12.5,
                             fontWeight: FontWeight.w600,
@@ -3440,6 +3446,148 @@ class _FaceProfileCard extends StatelessWidget {
               ),
             ),
           ],
+        ),
+      ),
+    );
+  }
+}
+
+void _showFaceProfileSheet(BuildContext context, _DisplayRecord record) {
+  showModalBottomSheet<void>(
+    context: context,
+    showDragHandle: true,
+    isScrollControlled: true,
+    backgroundColor: Colors.white,
+    shape: const RoundedRectangleBorder(
+      borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+    ),
+    builder: (context) => _FaceProfileDetailSheet(record: record),
+  );
+}
+
+class _FaceProfileDetailSheet extends StatelessWidget {
+  const _FaceProfileDetailSheet({required this.record});
+
+  final _DisplayRecord record;
+
+  @override
+  Widget build(BuildContext context) {
+    final status = _displayValue(record.data['status']);
+    final urls = _faceSampleImageUrls(record.data)
+        .map(parentMediaUrl)
+        .where((url) => url.trim().isNotEmpty)
+        .toList();
+
+    return SafeArea(
+      child: Padding(
+        padding: EdgeInsets.fromLTRB(
+          20,
+          4,
+          20,
+          20 + MediaQuery.of(context).viewInsets.bottom,
+        ),
+        child: SingleChildScrollView(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Row(
+                children: [
+                  Container(
+                    width: 48,
+                    height: 48,
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFEAF1FF),
+                      borderRadius: BorderRadius.circular(14),
+                    ),
+                    child: const Icon(
+                      Icons.face_retouching_natural_outlined,
+                      color: SaaptTheme.primary,
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text(
+                          'Face Profile',
+                          style: TextStyle(
+                            color: SaaptTheme.navy,
+                            fontSize: 18,
+                            fontWeight: FontWeight.w900,
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          status.trim().isEmpty
+                              ? 'Attendance recognition photos'
+                              : status,
+                          style: const TextStyle(
+                            color: Color(0xFF60708F),
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 18),
+              if (urls.isEmpty)
+                const ParentCard(
+                  padding: EdgeInsets.fromLTRB(18, 24, 18, 24),
+                  child: Text(
+                    'No face photos are available for this student.',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      color: Color(0xFF60708F),
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                )
+              else
+                GridView.builder(
+                  shrinkWrap: true,
+                  physics: const NeverScrollableScrollPhysics(),
+                  itemCount: urls.length,
+                  gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                    crossAxisCount: 2,
+                    crossAxisSpacing: 12,
+                    mainAxisSpacing: 12,
+                    childAspectRatio: 0.92,
+                  ),
+                  itemBuilder: (context, index) {
+                    final url = urls[index];
+                    return ClipRRect(
+                      borderRadius: BorderRadius.circular(18),
+                      child: Container(
+                        color: const Color(0xFFEAF1FF),
+                        child: Image.network(
+                          url,
+                          fit: BoxFit.cover,
+                          loadingBuilder: (context, child, progress) {
+                            if (progress == null) return child;
+                            return const Center(
+                              child: CircularProgressIndicator(
+                                color: SaaptTheme.primary,
+                              ),
+                            );
+                          },
+                          errorBuilder: (_, _, _) => const Center(
+                            child: Icon(
+                              Icons.image_not_supported_outlined,
+                              color: SaaptTheme.primary,
+                              size: 32,
+                            ),
+                          ),
+                        ),
+                      ),
+                    );
+                  },
+                ),
+            ],
+          ),
         ),
       ),
     );
@@ -4768,6 +4916,7 @@ List<_DisplayRecord> _documentRecords(Object? data) {
 
   final faceProfile = _asMap(map['faceProfile']);
   if (!_isEmptyData(faceProfile)) {
+    final sampleUrls = _faceSampleImageUrls(faceProfile);
     records.add(
       _DisplayRecord(
         title: 'Face Profile',
@@ -4775,7 +4924,9 @@ List<_DisplayRecord> _documentRecords(Object? data) {
         category: 'Face Profile',
         data: faceProfile,
         icon: Icons.face_retouching_natural_outlined,
-        imageUrl: _imageUrlFrom(faceProfile),
+        imageUrl: sampleUrls.isNotEmpty
+            ? sampleUrls.first
+            : _imageUrlFrom(faceProfile),
       ),
     );
   }
@@ -5039,7 +5190,7 @@ class _ImageStrip extends StatelessWidget {
             height: 88,
             color: const Color(0xFFEAF1FF),
             child: Image.network(
-              urls[index],
+              parentMediaUrl(urls[index]),
               fit: BoxFit.cover,
               errorBuilder: (context, error, stackTrace) => const Icon(
                 Icons.image_not_supported_outlined,
@@ -5344,6 +5495,8 @@ String? _imageUrlFrom(Map<String, dynamic> data) {
     final value = data[key];
     if (value is String && value.trim().isNotEmpty) return value;
   }
+  final samples = _faceSampleImageUrls(data);
+  if (samples.isNotEmpty) return samples.first;
   final parent = _asMap(data['parent']);
   if (parent.isNotEmpty) return _imageUrlFrom(parent);
   final student = _asMap(data['student']);
@@ -5351,20 +5504,56 @@ String? _imageUrlFrom(Map<String, dynamic> data) {
   return null;
 }
 
+List<String> _faceSampleImageUrls(Map<String, dynamic> data) {
+  final urls = <String>[];
+  for (final sample in _asList(data['samples'])) {
+    final map = _asMap(sample);
+    final url = _firstString(map, ['imageUrl', 'url', 'photoUrl', 'fileUrl']);
+    if (url == null) continue;
+    final trimmed = url.trim();
+    if (trimmed.isEmpty) continue;
+    if (trimmed.startsWith('s3://') || trimmed.startsWith('local://')) continue;
+    urls.add(trimmed);
+  }
+  return urls;
+}
+
+String parentMediaUrl(String raw) {
+  final value = raw.trim();
+  if (value.isEmpty) return value;
+  if (value.startsWith('http://') || value.startsWith('https://')) return value;
+
+  final apiBase = ParentAppConfig.apiBaseUrl.replaceAll(RegExp(r'/+$'), '');
+  final origin = apiBase.replaceFirst(RegExp(r'/api/v1$'), '');
+
+  if (value.startsWith('/api/v1/')) return '$origin$value';
+  if (value.startsWith('/uploads/')) return '$origin/api/v1$value';
+  if (value.startsWith('/')) return '$origin$value';
+  return value;
+}
+
 List<String> _imageUrlsFrom(Object? data) {
   final urls = <String>{};
 
   void collect(Object? value, [String key = '']) {
     if (value is String && value.trim().isNotEmpty) {
+      final trimmed = value.trim();
+      if (trimmed.startsWith('s3://') || trimmed.startsWith('local://')) {
+        return;
+      }
       final normalizedKey = key.toLowerCase();
-      final lower = value.toLowerCase();
+      final lower = trimmed.toLowerCase();
       if (normalizedKey.contains('photo') ||
           normalizedKey.contains('image') ||
           lower.endsWith('.jpg') ||
           lower.endsWith('.jpeg') ||
           lower.endsWith('.png') ||
-          lower.endsWith('.webp')) {
-        urls.add(value);
+          lower.endsWith('.webp') ||
+          trimmed.startsWith('http://') ||
+          trimmed.startsWith('https://') ||
+          trimmed.startsWith('/api/v1/uploads/') ||
+          trimmed.startsWith('/uploads/')) {
+        urls.add(parentMediaUrl(trimmed));
       }
       return;
     }

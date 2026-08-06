@@ -28,6 +28,7 @@ import {
   verifyRazorpaySignature,
 } from '../services/subscription.service';
 import { timetableReadService } from '../modules/timetable/services/timetable-read.service';
+import { getSignedUrlForStoredUrl } from '../services/s3.service';
 
 type RazorpayOrder = {
   id: string;
@@ -295,6 +296,43 @@ const skippedDaysArray = (value: Prisma.JsonValue) =>
         }))
     : [];
 
+const serializeFaceProfileForParent = async (faceProfile: any) => {
+  if (!faceProfile) return null;
+
+  const samples = Array.isArray(faceProfile.samples) ? faceProfile.samples : [];
+  const signedSamples = await Promise.all(
+    samples.map(async (sample: any) => {
+      const storageRef =
+        (typeof sample?.imageUrl === 'string' && sample.imageUrl.trim()) ||
+        (typeof sample?.imageKey === 'string' && sample.imageKey.trim()) ||
+        '';
+      let imageUrl = typeof sample?.imageUrl === 'string' ? sample.imageUrl : '';
+      if (storageRef) {
+        try {
+          imageUrl = await getSignedUrlForStoredUrl({ url: storageRef });
+        } catch {
+          // Keep original reference if signing fails; client will hide broken images.
+        }
+      }
+      return {
+        id: sample?.id ?? null,
+        imageUrl,
+        createdAt: sample?.createdAt ?? null,
+      };
+    }),
+  );
+
+  return {
+    id: faceProfile.id ?? null,
+    status: faceProfile.status ?? null,
+    approvedAt: faceProfile.approvedAt ?? null,
+    createdAt: faceProfile.createdAt ?? null,
+    samples: signedSamples.filter(
+      (sample) => typeof sample.imageUrl === 'string' && sample.imageUrl.trim(),
+    ),
+  };
+};
+
 const formatStudentLeaveRequest = (request: any) => {
   const childName =
     request.student?.fullName ||
@@ -534,6 +572,8 @@ export const getParentChildDetail = async (req: Request, res: Response) => {
 
   if (!student) throw new HttpError(404, 'Student not found');
 
+  const faceProfile = await serializeFaceProfileForParent(student.faceProfile);
+
   const name =
     student.fullName || `${student.firstName} ${student.lastName}`.trim();
   const classLabel = [student.class?.name, student.section?.name]
@@ -657,7 +697,7 @@ export const getParentChildDetail = async (req: Request, res: Response) => {
           aadhaar: student.docAadhaar,
           reportCard: student.docReportCard,
         },
-        faceProfile: student.faceProfile,
+        faceProfile,
       },
       timeline: {
         timelines: student.timelines,
