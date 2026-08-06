@@ -764,8 +764,36 @@ export default function EditStudentPage() {
           </div>
         </section>
 
-        <div className="grid gap-5 xl:grid-cols-[1.35fr_0.65fr]">
-          <div className="space-y-5">
+        <section className="mb-5 flex flex-col gap-3 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm md:flex-row md:items-center md:justify-between">
+          <div>
+            <p className="text-sm font-black uppercase tracking-wide text-slate-500">
+              Step {currentStepIndex + 1} of {admissionSteps.length}
+            </p>
+            <h2 className="mt-1 text-lg font-bold text-slate-950">
+              {admissionSteps[currentStepIndex]?.label ?? 'Update'}
+            </h2>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <button onClick={goToPreviousStep} disabled={isFirstStep || updateMutation.isPending} className="inline-flex items-center justify-center rounded-xl border border-slate-200 px-5 py-3 text-sm font-bold text-slate-700 disabled:cursor-not-allowed disabled:opacity-50">
+              Back
+            </button>
+            {isLastStep ? (
+              <button onClick={submit} disabled={updateMutation.isPending} className="inline-flex items-center justify-center gap-2 rounded-xl bg-[var(--theme-button-bg)] px-5 py-3 text-sm font-bold text-[var(--theme-button-text)] shadow-sm disabled:opacity-50">
+                <Icon path="M5 13l4 4L19 7" />
+                {updateMutation.isPending ? 'Saving...' : 'Update'}
+              </button>
+            ) : (
+              <button onClick={goToNextStep} disabled={updateMutation.isPending} className="inline-flex items-center justify-center rounded-xl bg-[var(--theme-button-bg)] px-5 py-3 text-sm font-bold text-[var(--theme-button-text)] shadow-sm disabled:opacity-50">
+                Next
+              </button>
+            )}
+            <Link href="/dashboard/students" className="inline-flex items-center justify-center rounded-xl border border-slate-200 px-5 py-3 text-sm font-bold text-slate-700">
+              Cancel
+            </Link>
+          </div>
+        </section>
+
+        <div className="space-y-5">
             {currentStep === 'academic' ? <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
               <h2 className="mb-4 text-lg font-bold text-slate-950">Academic Details</h2>
               <div className="grid gap-4 md:grid-cols-3">
@@ -1291,42 +1319,6 @@ export default function EditStudentPage() {
                 </div>
               </div>
             </section> : null}
-          </div>
-
-          <aside className="space-y-5">
-            <section className="sticky top-24 rounded-2xl border border-violet-100 bg-white p-5 shadow-sm">
-              <h2 className="text-lg font-bold text-slate-950">Update Summary</h2>
-              <div className="mt-4 space-y-3 text-sm">
-                <p><span className="font-semibold text-slate-500">Step:</span> {currentStepIndex + 1} of {admissionSteps.length}</p>
-                <p><span className="font-semibold text-slate-500">Name:</span> {`${form.firstName} ${form.lastName}`.trim() || '-'}</p>
-                <p><span className="font-semibold text-slate-500">Admission:</span> {form.admissionNo || '-'}</p>
-                <p><span className="font-semibold text-slate-500">Roll:</span> {form.rollNo || '-'}</p>
-                <p><span className="font-semibold text-slate-500">Guardian:</span> {form.guardianName || form.fatherName || form.motherName || '-'}</p>
-                <p><span className="font-semibold text-slate-500">Fee groups:</span> {form.feeGroupIds.length}</p>
-                <p><span className="font-semibold text-slate-500">Net payable:</span> {formatCurrency(feeNetPayable)}</p>
-              </div>
-              <div className="mt-6 grid grid-cols-2 gap-2">
-                <button onClick={goToPreviousStep} disabled={isFirstStep || updateMutation.isPending} className="inline-flex items-center justify-center rounded-xl border border-slate-200 px-5 py-3 text-sm font-bold text-slate-700 disabled:cursor-not-allowed disabled:opacity-50">
-                  Back
-                </button>
-                {isLastStep ? (
-                  <button onClick={submit} disabled={updateMutation.isPending} className="inline-flex items-center justify-center gap-2 rounded-xl bg-[var(--theme-button-bg)] px-5 py-3 text-sm font-bold text-[var(--theme-button-text)] shadow-sm disabled:opacity-50">
-                    <Icon path="M5 13l4 4L19 7" />
-                    {updateMutation.isPending ? 'Saving...' : 'Update'}
-                  </button>
-                ) : (
-                  <button onClick={goToNextStep} disabled={updateMutation.isPending} className="inline-flex items-center justify-center rounded-xl bg-[var(--theme-button-bg)] px-5 py-3 text-sm font-bold text-[var(--theme-button-text)] shadow-sm disabled:opacity-50">
-                    Next
-                  </button>
-                )}
-              </div>
-              <div className="mt-2">
-                <Link href="/dashboard/students" className="inline-flex items-center justify-center gap-2 rounded-xl border border-slate-200 px-5 py-3 text-sm font-bold text-slate-700">
-                  Cancel
-                </Link>
-              </div>
-            </section>
-          </aside>
         </div>
       </div>
       <StudentDocumentViewer

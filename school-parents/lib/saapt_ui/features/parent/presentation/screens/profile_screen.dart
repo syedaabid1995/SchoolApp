@@ -5759,7 +5759,13 @@ IconData _iconForGroup(String group) {
 String? _imageUrlFrom(Map<String, dynamic> data) {
   for (final key in const ['photoUrl', 'url', 'imageUrl', 'fileUrl']) {
     final value = data[key];
-    if (value is String && value.trim().isNotEmpty) return value;
+    if (value is String && value.trim().isNotEmpty) {
+      final trimmed = value.trim();
+      if (trimmed.startsWith('s3://') || trimmed.startsWith('local://')) {
+        continue;
+      }
+      return trimmed;
+    }
   }
   final samples = _faceSampleImageUrls(data);
   if (samples.isNotEmpty) return samples.first;

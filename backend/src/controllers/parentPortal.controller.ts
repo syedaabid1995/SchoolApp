@@ -337,6 +337,16 @@ const parentChildFilePath = (
   return `/parents/portal/children/${studentId}/files?${params.toString()}`;
 };
 
+const parentPersonPhotoPath = (
+  studentId: string,
+  type: 'father-photo' | 'mother-photo' | 'guardian-photo',
+  raw?: string | null,
+) => {
+  if (typeof raw !== 'string' || !raw.trim()) return null;
+  return parentChildFilePath(studentId, { type });
+};
+
+
 const absoluteRequestUrl = (req: Request, pathOrUrl: string) => {
   if (/^https?:\/\//i.test(pathOrUrl)) return pathOrUrl;
   const host = req.get('x-forwarded-host') || req.get('host');
@@ -409,6 +419,44 @@ const resolveParentChildStorageRef = async (params: {
       storageRef,
       mimeType: 'image/jpeg',
       title: student?.fullName || 'Student photo',
+      fileName: null as string | null,
+    };
+  }
+
+  if (
+    type === 'father-photo' ||
+    type === 'mother-photo' ||
+    type === 'guardian-photo'
+  ) {
+    const student = await prisma.student.findFirst({
+      where: { id: params.studentId },
+      select: {
+        fatherPhotoUrl: true,
+        motherPhotoUrl: true,
+        guardianPhotoUrl: true,
+        fatherName: true,
+        motherName: true,
+        guardianName: true,
+      },
+    });
+    if (!student) return null;
+    const storageRef =
+      (type === 'father-photo'
+        ? student.fatherPhotoUrl
+        : type === 'mother-photo'
+          ? student.motherPhotoUrl
+          : student.guardianPhotoUrl
+      )?.trim() || null;
+    if (!storageRef) return null;
+    return {
+      storageRef,
+      mimeType: 'image/jpeg',
+      title:
+        type === 'father-photo'
+          ? student.fatherName || 'Father photo'
+          : type === 'mother-photo'
+            ? student.motherName || 'Mother photo'
+            : student.guardianName || 'Guardian photo',
       fileName: null as string | null,
     };
   }
@@ -1017,20 +1065,32 @@ export const getParentChildDetail = async (req: Request, res: Response) => {
           name: student.fatherName,
           occupation: student.fatherOccupation,
           phone: student.fatherPhone,
-          photoUrl: student.fatherPhotoUrl,
+          photoUrl: parentPersonPhotoPath(
+            student.id,
+            'father-photo',
+            student.fatherPhotoUrl,
+          ),
         },
         mother: {
           name: student.motherName,
           occupation: student.motherOccupation,
           phone: student.motherPhone,
-          photoUrl: student.motherPhotoUrl,
+          photoUrl: parentPersonPhotoPath(
+            student.id,
+            'mother-photo',
+            student.motherPhotoUrl,
+          ),
         },
         guardian: {
           name: student.guardianName,
           relationship: student.guardianRelationship,
           phone: student.parentPhone,
           email: student.parentEmail,
-          photoUrl: student.guardianPhotoUrl,
+          photoUrl: parentPersonPhotoPath(
+            student.id,
+            'guardian-photo',
+            student.guardianPhotoUrl,
+          ),
         },
         linkedParents: student.parentLinks.map((link) => ({
           createdAt: link.createdAt,
