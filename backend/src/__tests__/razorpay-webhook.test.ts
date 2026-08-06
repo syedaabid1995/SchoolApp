@@ -16,7 +16,7 @@ afterEach(() => {
 const signatureFor = (body: Buffer, secret: string) =>
   crypto.createHmac('sha256', secret).update(body).digest('hex');
 
-test('parent fee Payment Links enable documented checkout methods', () => {
+test('parent fee Payment Links enable WebView UPI intent like StyLife', () => {
   assert.deepEqual(parentFeePaymentLinkOptions, {
     checkout: {
       method: {
@@ -25,6 +25,7 @@ test('parent fee Payment Links enable documented checkout methods', () => {
         upi: true,
         wallet: true,
       },
+      webview_intent: true,
     },
   });
 });

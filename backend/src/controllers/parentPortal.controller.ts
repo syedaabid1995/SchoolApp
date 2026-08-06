@@ -212,6 +212,8 @@ const parentFeePaymentLinkStatusSchema = z.object({
   paymentLinkId: z.string().trim().startsWith('plink_'),
 });
 
+// Matches StyLife: Razorpay hides UPI inside in-app WebViews unless
+// checkout.webview_intent is enabled on the Payment Link options.
 export const parentFeePaymentLinkOptions = {
   checkout: {
     method: {
@@ -220,6 +222,7 @@ export const parentFeePaymentLinkOptions = {
       upi: true,
       wallet: true,
     },
+    webview_intent: true,
   },
 } as const;
 
