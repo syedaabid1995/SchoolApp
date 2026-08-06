@@ -58,7 +58,7 @@ class ParentAuthController extends AsyncNotifier<ParentSession> {
     ref.invalidate(parentProfileProvider);
     ref.invalidate(parentPushPreferenceProvider);
     ref.invalidate(parentChildrenProvider);
-    ref.invalidate(selectedChildProvider);
+    ref.invalidate(selectedChildIdProvider);
     state = const AsyncData(ParentSession.unauthenticated());
   }
 
@@ -90,15 +90,23 @@ final parentChildDetailProvider = FutureProvider.autoDispose
           .getChildDetail(childId: childId);
     });
 
-final selectedChildProvider = StateProvider<ParentChild?>((ref) => null);
+final selectedChildIdProvider = StateProvider<String?>((ref) => null);
 
 final effectiveSelectedChildProvider = Provider<AsyncValue<ParentChild?>>((
   ref,
 ) {
-  final selected = ref.watch(selectedChildProvider);
-  if (selected != null) return AsyncData(selected);
+  final selectedChildId = ref.watch(selectedChildIdProvider);
   final children = ref.watch(parentChildrenProvider);
-  return children.whenData((items) => items.isEmpty ? null : items.first);
+  return children.whenData((items) {
+    if (items.isEmpty) return null;
+    if (selectedChildId == null || selectedChildId.isEmpty) {
+      return items.first;
+    }
+    for (final child in items) {
+      if (child.id == selectedChildId) return child;
+    }
+    return items.first;
+  });
 });
 
 final parentAttendanceProvider = FutureProvider.autoDispose

@@ -13,53 +13,46 @@ class ParentAlertsScreen extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final childState = ref.watch(effectiveSelectedChildProvider);
+    final noticesState = ref.watch(parentNoticesProvider(null));
     return Scaffold(
-      body: childState.when(
-        loading: () => const LoadingPanel(),
-        error: (error, _) => EmptyPanel(message: error.toString()),
-        data: (child) {
-          final noticesState = ref.watch(parentNoticesProvider(child));
-          return RefreshIndicator(
-            onRefresh: () async => ref.invalidate(parentNoticesProvider(child)),
-            child: ListView(
-              padding: EdgeInsets.zero,
-              children: [
-                ParentHero(
-                  badge: '🔔 Notifications',
-                  title: 'Alerts Center',
-                  subtitle: 'Attendance & performance updates',
-                ),
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(20, 22, 20, 32),
-                  child: noticesState.when(
-                    loading: () => const LoadingPanel(),
-                    error: (error, _) => EmptyPanel(message: error.toString()),
-                    data: (notices) {
-                      if (notices.isEmpty) {
-                        return const EmptyPanel(
-                          message: 'No alerts are available right now.',
-                        );
-                      }
-                      return Column(
-                        children: notices
-                            .map(
-                              (notice) => Padding(
-                                padding: const EdgeInsets.only(bottom: 16),
-                                child: _AlertCard(
-                                  display: _AlertDisplay.fromNotice(notice),
-                                ),
-                              ),
-                            )
-                            .toList(),
-                      );
-                    },
-                  ),
-                ),
-              ],
+      body: RefreshIndicator(
+        onRefresh: () async => ref.invalidate(parentNoticesProvider(null)),
+        child: ListView(
+          padding: EdgeInsets.zero,
+          children: [
+            ParentHero(
+              badge: '🔔 Notifications',
+              title: 'Alerts Center',
+              subtitle: 'Attendance & performance updates',
             ),
-          );
-        },
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 22, 20, 32),
+              child: noticesState.when(
+                loading: () => const LoadingPanel(),
+                error: (error, _) => EmptyPanel(message: error.toString()),
+                data: (notices) {
+                  if (notices.isEmpty) {
+                    return const EmptyPanel(
+                      message: 'No alerts are available right now.',
+                    );
+                  }
+                  return Column(
+                    children: notices
+                        .map(
+                          (notice) => Padding(
+                            padding: const EdgeInsets.only(bottom: 16),
+                            child: _AlertCard(
+                              display: _AlertDisplay.fromNotice(notice),
+                            ),
+                          ),
+                        )
+                        .toList(),
+                  );
+                },
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }

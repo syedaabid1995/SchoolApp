@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 
 import 'package:dio/dio.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
@@ -11,11 +12,13 @@ import '../network/parent_api_client.dart';
 final parentNotificationServiceProvider = Provider<ParentNotificationService>((
   ref,
 ) {
-  return ParentNotificationService(
+  final service = ParentNotificationService(
     messaging: FirebaseMessaging.instance,
     localNotifications: FlutterLocalNotificationsPlugin(),
     dio: ref.watch(parentDioProvider),
   );
+  ref.onDispose(service.dispose);
+  return service;
 });
 
 class ParentNotificationService {
@@ -30,7 +33,10 @@ class ParentNotificationService {
   final FirebaseMessaging _messaging;
   final FlutterLocalNotificationsPlugin _localNotifications;
   final Dio _dio;
+  final _routeController = StreamController<String>.broadcast();
   bool _initialized = false;
+
+  Stream<String> get routeStream => _routeController.stream;
 
   static const AndroidNotificationChannel _androidChannel =
       AndroidNotificationChannel(
@@ -52,6 +58,7 @@ class ParentNotificationService {
         iOS: darwin,
         macOS: darwin,
       ),
+      onDidReceiveNotificationResponse: _handleLocalNotificationTap,
     );
     await _localNotifications
         .resolvePlatformSpecificImplementation<
@@ -60,9 +67,14 @@ class ParentNotificationService {
         ?.createNotificationChannel(_androidChannel);
 
     FirebaseMessaging.onMessage.listen(_showForegroundNotification);
+    FirebaseMessaging.onMessageOpenedApp.listen(_handleMessageOpened);
     _messaging.onTokenRefresh.listen((token) {
       unawaited(registerDeviceToken(token));
     });
+    final initialMessage = await _messaging.getInitialMessage();
+    if (initialMessage != null) {
+      _handleMessageOpened(initialMessage);
+    }
   }
 
   Future<void> syncDeviceToken() async {
@@ -131,6 +143,53 @@ class ParentNotificationService {
       title: title,
       body: body,
       notificationDetails: details,
+      payload: jsonEncode(message.data),
     );
+  }
+
+  void _handleMessageOpened(RemoteMessage message) {
+    _emitRouteFromData(message.data);
+  }
+
+  void _handleLocalNotificationTap(NotificationResponse response) {
+    final payload = response.payload;
+    if (payload == null || payload.isEmpty) return;
+    try {
+      final decoded = jsonDecode(payload);
+      if (decoded is Map) {
+        _emitRouteFromData(
+          decoded.map((key, value) => MapEntry(key.toString(), value)),
+        );
+      }
+    } catch (_) {
+      return;
+    }
+  }
+
+  void _emitRouteFromData(Map<String, Object?> data) {
+    final route = data['route']?.toString().trim();
+    if (route != null && route.isNotEmpty) {
+      _routeController.add(route);
+      return;
+    }
+
+    final childId = data['childId']?.toString().trim();
+    final tab = data['tab']?.toString().trim().toLowerCase();
+    final module = data['module']?.toString().trim().toLowerCase();
+    final category = data['category']?.toString().trim().toLowerCase();
+    if (childId != null &&
+        childId.isNotEmpty &&
+        (tab == 'fees' ||
+            module == 'fees' ||
+            category == 'fee_reminder' ||
+            category == 'payment')) {
+      _routeController.add(
+        '/profile?childId=${Uri.encodeComponent(childId)}&tab=fees',
+      );
+    }
+  }
+
+  void dispose() {
+    _routeController.close();
   }
 }

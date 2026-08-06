@@ -132,13 +132,13 @@ const alertFingerprint = (item: { title: string; summary: string }) =>
 const parentPushAlertVisibleForChild = (params: {
   payload: Record<string, unknown>;
   parentUserId: string;
-  childId: string;
+  childIds: Set<string>;
 }) => {
   const to = payloadString(params.payload, 'to');
   if (to !== params.parentUserId) return false;
 
   const payloadChildId = payloadString(params.payload, 'childId');
-  if (payloadChildId && payloadChildId !== params.childId) return false;
+  if (payloadChildId && !params.childIds.has(payloadChildId)) return false;
 
   return true;
 };
@@ -1570,15 +1570,21 @@ export const listParentHomeworks = async (req: Request, res: Response) => {
 export const listParentNotices = async (req: Request, res: Response) => {
   const auth = requireAuth(req);
   const { childId } = req.query;
-  const { child } = await requireChildAccess(
+  const requestedChildId = typeof childId === 'string' ? childId : undefined;
+  const { child, children } = await requireChildAccess(
     auth.userId,
-    typeof childId === 'string' ? childId : undefined,
+    requestedChildId,
+  );
+  const visibleChildren = requestedChildId ? [child] : children;
+  const childIds = new Set(visibleChildren.map((entry) => entry.id));
+  const schoolIds = Array.from(
+    new Set(visibleChildren.map((entry) => entry.schoolId)),
   );
   const now = new Date();
   const [notices, pushLogs] = await Promise.all([
     prisma.communicationNotice.findMany({
       where: {
-        schoolId: child.schoolId,
+        schoolId: { in: schoolIds },
         status: 'PUBLISHED',
         publishedAt: { lte: now },
         OR: [{ expiresAt: null }, { expiresAt: { gte: now } }],
@@ -1588,7 +1594,7 @@ export const listParentNotices = async (req: Request, res: Response) => {
     }),
     prisma.notificationLog.findMany({
       where: {
-        schoolId: child.schoolId,
+        schoolId: { in: schoolIds },
         channel: 'PUSH',
       },
       orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
@@ -1615,7 +1621,7 @@ export const listParentNotices = async (req: Request, res: Response) => {
       parentPushAlertVisibleForChild({
         payload,
         parentUserId: auth.userId,
-        childId: child.id,
+        childIds,
       }),
     )
     .map(({ log, payload }) => {

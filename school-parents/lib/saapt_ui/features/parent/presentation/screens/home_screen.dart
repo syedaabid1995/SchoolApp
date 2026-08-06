@@ -74,7 +74,14 @@ class _DashboardContentState extends ConsumerState<_DashboardContent> {
         message: 'No children are mapped to this parent account.',
       );
     }
-    final selected = ref.watch(selectedChildProvider) ?? widget.children.first;
+    final selectedChildId = ref.watch(selectedChildIdProvider);
+    var selected = widget.children.first;
+    for (final child in widget.children) {
+      if (child.id == selectedChildId) {
+        selected = child;
+        break;
+      }
+    }
     final selectedDate = DateTime(_month.year, _month.month);
     final attendanceState = ref.watch(
       parentMonthlyAttendanceProvider((
@@ -274,7 +281,7 @@ class _SelectedChildCard extends ConsumerWidget {
                   child: child,
                   selected: child.id == selected.id,
                   onTap: () {
-                    ref.read(selectedChildProvider.notifier).state = child;
+                    ref.read(selectedChildIdProvider.notifier).state = child.id;
                     Navigator.of(context).pop();
                   },
                 ),

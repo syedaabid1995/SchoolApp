@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -14,12 +16,28 @@ class SaaptApp extends ConsumerStatefulWidget {
 }
 
 class _SaaptAppState extends ConsumerState<SaaptApp> {
+  StreamSubscription<String>? _notificationRouteSubscription;
+
   @override
   void initState() {
     super.initState();
-    Future.microtask(
-      () => ref.read(parentNotificationServiceProvider).initialize(),
-    );
+    Future.microtask(() {
+      final notificationService = ref.read(parentNotificationServiceProvider);
+      _notificationRouteSubscription = notificationService.routeStream.listen((
+        route,
+      ) {
+        final destination = route.trim();
+        if (!mounted || destination.isEmpty) return;
+        ref.read(saaptRouterProvider).go(destination);
+      });
+      unawaited(notificationService.initialize());
+    });
+  }
+
+  @override
+  void dispose() {
+    _notificationRouteSubscription?.cancel();
+    super.dispose();
   }
 
   @override
