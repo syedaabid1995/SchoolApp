@@ -37,6 +37,12 @@ const feeScheduleMultiplier = (schedule?: FeeCollectionSchedule | null) => {
 };
 
 type AdmissionFeeMaster = Prisma.FeeMasterGetPayload<{ include: { feeType: { select: { schedule: true } } } }>;
+type AdmissionStudent = {
+  id: string;
+  classId: string | null;
+  sectionId: string | null;
+  studentCategoryId: string | null;
+};
 
 const annualizedFeeMasterAmount = (master: AdmissionFeeMaster) =>
   toDecimal(master.amount).mul(feeScheduleMultiplier(master.feeType.schedule));
@@ -44,11 +50,15 @@ const annualizedFeeMasterAmount = (master: AdmissionFeeMaster) =>
 const isDiscountApplicable = (
   discount: Prisma.FeeDiscountGetPayload<{ include: { installments: true } }>,
   master: AdmissionFeeMaster,
-  studentId: string,
+  student: AdmissionStudent,
 ) => {
   if (discount.installments.some((item) => item.feeMasterId === master.id && !item.deletedAt)) return true;
+  if (discount.feeTypeId && discount.feeTypeId !== master.feeTypeId) return false;
   if (discount.targetType === 'ALL') return true;
-  if (discount.targetType === 'STUDENT') return discount.studentId === studentId;
+  if (discount.targetType === 'STUDENT') return discount.studentId ? discount.studentId === student.id : true;
+  if (discount.targetType === 'CLASS') return discount.classId === student.classId;
+  if (discount.targetType === 'SECTION') return discount.sectionId === student.sectionId;
+  if (discount.targetType === 'CATEGORY') return discount.categoryId === student.studentCategoryId;
   if (discount.targetType === 'FEE_TYPE') return discount.feeTypeId === master.feeTypeId;
   if (discount.targetType === 'FEE_GROUP') return discount.feeGroupId === master.feeGroupId;
   if (discount.targetType === 'FEE_MASTER') return discount.feeMasterId === master.id;
@@ -58,11 +68,11 @@ const isDiscountApplicable = (
 const calculateDiscountAmount = (
   discounts: Array<Prisma.FeeDiscountGetPayload<{ include: { installments: true } }>>,
   master: AdmissionFeeMaster,
-  studentId: string,
+  student: AdmissionStudent,
 ) => {
   const amount = annualizedFeeMasterAmount(master);
   return discounts.reduce((sum, discount) => {
-    if (!isDiscountApplicable(discount, master, studentId)) return sum;
+    if (!isDiscountApplicable(discount, master, student)) return sum;
     const value = toDecimal(discount.amount ?? discount.value);
     const discountAmount = discount.valueType === 'PERCENTAGE' ? amount.mul(value).div(100) : value;
     return sum.plus(discountAmount);
@@ -112,7 +122,7 @@ export const startFeeGenerationWorker = () => {
 
         const student = await tx.student.findFirst({
           where: { id: generationJob.studentId, schoolId: generationJob.schoolId },
-          select: { id: true, classId: true, sectionId: true },
+          select: { id: true, classId: true, sectionId: true, studentCategoryId: true },
         });
         if (!student) throw new Error('Student not found for fee generation');
 
@@ -160,6 +170,12 @@ export const startFeeGenerationWorker = () => {
                       { validTo: { gte: now } },
                     ],
                   },
+                  {
+                    OR: [
+                      { expiryDate: null },
+                      { expiryDate: { gte: now } },
+                    ],
+                  },
                 ],
               },
               include: { installments: true },
@@ -170,6 +186,9 @@ export const startFeeGenerationWorker = () => {
         const skipped: Array<{ feeMasterId?: string; reason: string }> = [];
 
         for (const master of masters) {
+          const amount = annualizedFeeMasterAmount(master);
+          const discountAmount = Prisma.Decimal.min(calculateDiscountAmount(discounts, master, student), amount);
+
           const existing = await tx.feeInvoice.findFirst({
             where: {
               schoolId: generationJob.schoolId,
@@ -180,15 +199,63 @@ export const startFeeGenerationWorker = () => {
               status: { not: 'CANCELLED' },
               items: { some: { feeMasterId: master.id } },
             },
-            select: { id: true },
+            select: {
+              id: true,
+              invoiceNumber: true,
+              totalAmount: true,
+              discountAmount: true,
+              fineAmount: true,
+              paidAmount: true,
+            },
           });
           if (existing) {
+            const currentDiscount = toDecimal(existing.discountAmount);
+            const additionalDiscount = Prisma.Decimal.max(discountAmount.minus(currentDiscount), 0);
+            if (additionalDiscount.gt(0)) {
+              const nextDiscountAmount = currentDiscount.plus(additionalDiscount);
+              const nextDueAmount = Prisma.Decimal.max(
+                toDecimal(existing.totalAmount)
+                  .minus(nextDiscountAmount)
+                  .plus(toDecimal(existing.fineAmount))
+                  .minus(toDecimal(existing.paidAmount)),
+                0,
+              );
+              await tx.feeInvoice.update({
+                where: { id: existing.id },
+                data: {
+                  discountAmount: nextDiscountAmount,
+                  dueAmount: nextDueAmount,
+                  status: nextDueAmount.eq(0)
+                    ? 'PAID'
+                    : toDecimal(existing.paidAmount).gt(0)
+                      ? 'PARTIALLY_PAID'
+                      : 'ISSUED',
+                  items: {
+                    updateMany: {
+                      where: { feeMasterId: master.id },
+                      data: {
+                        discountAmount: nextDiscountAmount,
+                        netAmount: nextDueAmount,
+                      },
+                    },
+                  },
+                },
+              });
+              await createLedgerEntry(tx, {
+                schoolId: generationJob.schoolId,
+                academicSessionId: generationJob.academicSessionId,
+                studentId: generationJob.studentId,
+                invoiceId: existing.id,
+                type: 'DISCOUNT_CREDIT',
+                description: `Admission discount on invoice ${existing.invoiceNumber}`,
+                creditAmount: additionalDiscount,
+                createdById: generationJob.createdById,
+              });
+            }
             skipped.push({ feeMasterId: master.id, reason: 'Invoice already exists for this fee master' });
             continue;
           }
 
-          const amount = annualizedFeeMasterAmount(master);
-          const discountAmount = Prisma.Decimal.min(calculateDiscountAmount(discounts, master, generationJob.studentId), amount);
           const dueAmount = Prisma.Decimal.max(amount.minus(discountAmount), 0);
           const invoiceNumber = await getNextNumber({
             schoolId: generationJob.schoolId,

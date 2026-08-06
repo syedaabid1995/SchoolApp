@@ -107,6 +107,12 @@ const safeFilenamePart = (value?: string | null) =>
 const sumInvoiceField = (items: FeeInvoice[], field: 'totalAmount' | 'discountAmount' | 'fineAmount' | 'paidAmount' | 'dueAmount') =>
   items.reduce((sum, item) => sum + Number(item[field] ?? 0), 0);
 
+const netInvoiceAmount = (invoice: FeeInvoice) =>
+  Math.max(Number(invoice.totalAmount ?? 0) - Number(invoice.discountAmount ?? 0), 0);
+
+const sumNetInvoiceAmount = (items: FeeInvoice[]) =>
+  items.reduce((sum, item) => sum + netInvoiceAmount(item), 0);
+
 type StudentMark = NonNullable<Student['marks']>[number];
 
 const attendanceFacePhotoUrls = (student?: Student | null) =>
@@ -1125,7 +1131,7 @@ export default function StudentDetailPage() {
                 ) : (
                   <>
                     <div className="grid gap-3 sm:grid-cols-4">
-                      <InfoRow label="Total billed" value={toMoney(sumInvoiceField(feeInvoices, 'totalAmount'))} />
+                      <InfoRow label="Total billed" value={toMoney(sumNetInvoiceAmount(feeInvoices))} />
                       <InfoRow label="Discount" value={toMoney(sumInvoiceField(feeInvoices, 'discountAmount'))} />
                       <InfoRow label="Paid" value={toMoney(sumInvoiceField(feeInvoices, 'paidAmount'))} />
                       <InfoRow label="Balance due" value={toMoney(sumInvoiceField(feeInvoices, 'dueAmount'))} />
@@ -1170,7 +1176,7 @@ export default function StudentDetailPage() {
                             {/* Invoice amounts */}
                             <div className="grid grid-cols-2 divide-x divide-slate-100 border-b border-slate-100 sm:grid-cols-4">
                               {[
-                                { label: 'Billed', value: toMoney(invoice.totalAmount) },
+                                { label: 'Billed', value: toMoney(netInvoiceAmount(invoice)) },
                                 { label: 'Discount', value: toMoney(invoice.discountAmount), className: 'text-emerald-700' },
                                 { label: 'Paid', value: toMoney(invoice.paidAmount), className: 'text-slate-900 font-bold' },
                                 { label: 'Balance', value: toMoney(invoice.dueAmount), className: Number(invoice.dueAmount) > 0 ? 'text-red-600 font-bold' : 'text-slate-400' },

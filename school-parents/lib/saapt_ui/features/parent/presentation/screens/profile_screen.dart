@@ -1489,7 +1489,7 @@ class _FeeTotalsGrid extends StatelessWidget {
   Widget build(BuildContext context) {
     final totalBilled = invoices.fold<num>(
       0,
-      (sum, invoice) => sum + _numberValue(invoice['totalAmount']),
+      (sum, invoice) => sum + _netFeeAmount(invoice),
     );
     final discount = invoices.fold<num>(
       0,
@@ -1743,7 +1743,7 @@ class _FeeAmountGrid extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final cells = [
-      _FeeAmountCell('Billed', invoice['totalAmount']),
+      _FeeAmountCell('Billed', _netFeeAmount(invoice)),
       _FeeAmountCell(
         'Discount',
         invoice['discountAmount'],
@@ -3202,6 +3202,13 @@ String _labelForKey(String key) {
 num _numberValue(Object? value) {
   if (value is num) return value;
   return num.tryParse(value?.toString() ?? '') ?? 0;
+}
+
+num _netFeeAmount(Map<String, dynamic> invoice) {
+  final amount =
+      _numberValue(invoice['totalAmount']) -
+      _numberValue(invoice['discountAmount']);
+  return amount < 0 ? 0 : amount;
 }
 
 String _moneyValue(num value) {

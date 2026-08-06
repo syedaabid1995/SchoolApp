@@ -23,6 +23,43 @@ const formatMoney = (value: unknown) => {
   }).format(amount);
 };
 
+const toAmount = (value: unknown) => {
+  const amount = Number(value ?? 0);
+  return Number.isFinite(amount) ? amount : 0;
+};
+
+const feeScheduleMultiplier = (schedule?: string | null) => {
+  switch (schedule) {
+    case 'MONTHLY':
+      return 12;
+    case 'QUARTERLY':
+      return 4;
+    case 'HALF_YEARLY':
+      return 2;
+    case 'YEARLY':
+    case 'ONE_TIME':
+    default:
+      return 1;
+  }
+};
+
+const feeScheduleLabel = (schedule?: string | null) => {
+  switch (schedule) {
+    case 'MONTHLY':
+      return 'Monthly';
+    case 'QUARTERLY':
+      return 'Quarterly';
+    case 'HALF_YEARLY':
+      return 'Half-yearly';
+    case 'YEARLY':
+      return 'Yearly';
+    case 'ONE_TIME':
+      return 'One-time';
+    default:
+      return 'Amount';
+  }
+};
+
 const text = (value: unknown) => {
   const normalized = String(value ?? '').trim();
   return normalized || 'Not provided';
@@ -90,13 +127,21 @@ const detailTable = (headers: string[], rows: unknown[][]) => {
   `;
 };
 
+const payloadRecord = (payload: unknown): Record<string, unknown> =>
+  payload && typeof payload === 'object' && !Array.isArray(payload)
+    ? (payload as Record<string, unknown>)
+    : {};
+
+const stringArray = (value: unknown) =>
+  Array.isArray(value) ? value.filter((item): item is string => typeof item === 'string') : [];
+
 export const sendStudentAdmissionAccountEmail = async (params: {
   schoolId: string;
   studentId: string;
   parentId: string;
   tempPassword?: string | null;
 }) => {
-  const [student, parent] = await Promise.all([
+  const [student, parent, generationJob] = await Promise.all([
     prisma.student.findFirst({
       where: { id: params.studentId, schoolId: params.schoolId },
       include: {
@@ -145,9 +190,32 @@ export const sendStudentAdmissionAccountEmail = async (params: {
       where: { id: params.parentId },
       include: { user: { select: { email: true } } },
     }),
+    prisma.feeInvoiceGenerationJob.findFirst({
+      where: {
+        schoolId: params.schoolId,
+        studentId: params.studentId,
+        source: 'ADMISSION',
+      },
+      orderBy: { createdAt: 'desc' },
+      select: { payload: true },
+    }),
   ]);
 
   if (!student || !parent) return null;
+
+  const discountIds = stringArray(payloadRecord(generationJob?.payload).discountIds);
+  const discounts = discountIds.length
+    ? await prisma.feeDiscount.findMany({
+        where: {
+          schoolId: params.schoolId,
+          academicSessionId: student.academicSessionId ?? undefined,
+          id: { in: discountIds },
+          deletedAt: null,
+          approvalStatus: { in: ['APPROVED', 'ACTIVE'] },
+        },
+        include: { installments: true },
+      })
+    : [];
 
   const recipient = optionalText(parent.email);
   if (!recipient || recipient.endsWith('@parent.local')) return null;
@@ -157,29 +225,65 @@ export const sendStudentAdmissionAccountEmail = async (params: {
   const schoolName = student.school.name || 'School';
   const subject = `Parent account created for ${student.fullName}`;
 
-  const feeRows = student.feeGroupAssignments.flatMap((assignment) =>
-    assignment.feeGroup.masters.map((master) => [
-      master.code,
+  const feeMasters = student.feeGroupAssignments.flatMap((assignment) => assignment.feeGroup.masters);
+  const feeRows = feeMasters.map((master) => {
+    const multiplier = feeScheduleMultiplier(master.feeType.schedule);
+    return [
       master.description || master.name,
-      formatMoney(master.amount),
-    ]),
+      `${formatMoney(master.amount)} / ${feeScheduleLabel(master.feeType.schedule)}`,
+      formatMoney(toAmount(master.amount) * multiplier),
+    ];
+  });
+  const feeSubTotal = feeMasters.reduce(
+    (sum, master) => sum + toAmount(master.amount) * feeScheduleMultiplier(master.feeType.schedule),
+    0,
   );
+  const discountTotal = feeMasters.reduce((sum, master) => {
+    const masterAnnualAmount = toAmount(master.amount) * feeScheduleMultiplier(master.feeType.schedule);
+    const masterDiscount = discounts.reduce((discountSum, discount) => {
+      if (discount.installments.some((item) => item.feeMasterId === master.id && !item.deletedAt)) {
+        const value = toAmount(discount.amount ?? discount.value);
+        return discountSum + (discount.valueType === 'PERCENTAGE' ? (masterAnnualAmount * value) / 100 : value);
+      }
+      if (discount.feeTypeId && discount.feeTypeId !== master.feeTypeId) return discountSum;
+      if (discount.targetType === 'ALL' ||
+          (discount.targetType === 'STUDENT' && (!discount.studentId || discount.studentId === student.id)) ||
+          (discount.targetType === 'CLASS' && discount.classId === student.classId) ||
+          (discount.targetType === 'SECTION' && discount.sectionId === student.sectionId) ||
+          (discount.targetType === 'CATEGORY' && discount.categoryId === student.studentCategoryId) ||
+          (discount.targetType === 'FEE_TYPE' && discount.feeTypeId === master.feeTypeId) ||
+          (discount.targetType === 'FEE_GROUP' && discount.feeGroupId === master.feeGroupId) ||
+          (discount.targetType === 'FEE_MASTER' && discount.feeMasterId === master.id)) {
+        const value = toAmount(discount.amount ?? discount.value);
+        return discountSum + (discount.valueType === 'PERCENTAGE' ? (masterAnnualAmount * value) / 100 : value);
+      }
+      return discountSum;
+    }, 0);
+    return sum + Math.min(masterDiscount, masterAnnualAmount);
+  }, 0);
+  const discountLabel = discounts.length
+    ? `Discount (${discounts.map((discount) => discount.discountName || discount.code || 'Selected discount').join(', ')})`
+    : 'Discount';
+  const feeTableRows = [
+    ...feeRows,
+    ...(discountTotal > 0 ? [[discountLabel, `-${formatMoney(discountTotal)}`, `-${formatMoney(discountTotal)}`]] : []),
+    ['Total payable', '', formatMoney(Math.max(feeSubTotal - discountTotal, 0))],
+  ];
   const transportRows = student.transportAssignments.map((assignment) => [
-    assignment.route.title,
     assignment.vehicle
-      ? `Vehicle ${assignment.vehicle.vehicleNumber}, Driver ${assignment.vehicle.driverName} (${assignment.vehicle.driverContact})`
-      : assignment.note || 'Transport assigned',
+      ? `${assignment.route.title} - Vehicle ${assignment.vehicle.vehicleNumber}, Driver ${assignment.vehicle.driverName} (${assignment.vehicle.driverContact})`
+      : `${assignment.route.title} - ${assignment.note || 'Transport assigned'}`,
     formatMoney(assignment.route.fare),
   ]);
   const libraryRows = student.libraryMemberships.map((member) => [
-    member.memberCode,
-    `${member.fullName} (${member.memberType})`,
+    `${member.memberCode} - ${member.fullName} (${member.memberType})`,
     'Not provided',
   ]);
   const dormitoryRows = student.dormitoryAssignments.map(
     (assignment) => [
-      assignment.dormitory.name,
-      `${assignment.dormitory.type}${assignment.room ? `, Room ${assignment.room.roomNumber}` : ''}`,
+      `${assignment.dormitory.name} (${assignment.dormitory.type})${
+        assignment.room ? `, Room ${assignment.room.roomNumber}` : ''
+      }`,
       assignment.room ? formatMoney(assignment.room.costPerBed) : 'Not provided',
     ],
   );
@@ -244,13 +348,13 @@ export const sendStudentAdmissionAccountEmail = async (params: {
           row('Emergency contact', student.emergencyContact),
       )}
       <h2 style="margin:24px 0 10px;font-size:18px;color:#0f172a;">Fees</h2>
-      ${detailTable(['Slug', 'Description', 'Amount'], feeRows)}
+      ${detailTable(['Description', 'Amount', 'Annual Amount'], feeTableRows)}
       <h2 style="margin:24px 0 10px;font-size:18px;color:#0f172a;">Transport</h2>
-      ${detailTable(['Slug', 'Description', 'Amount'], transportRows)}
+      ${detailTable(['Description', 'Amount'], transportRows)}
       <h2 style="margin:24px 0 10px;font-size:18px;color:#0f172a;">Library</h2>
-      ${detailTable(['Slug', 'Description', 'Amount'], libraryRows)}
+      ${detailTable(['Description', 'Amount'], libraryRows)}
       <h2 style="margin:24px 0 10px;font-size:18px;color:#0f172a;">Dormitory</h2>
-      ${detailTable(['Slug', 'Description', 'Amount'], dormitoryRows)}
+      ${detailTable(['Description', 'Amount'], dormitoryRows)}
     </div>
   `;
 

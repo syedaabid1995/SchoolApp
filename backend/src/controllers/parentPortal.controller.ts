@@ -1727,7 +1727,9 @@ export const listParentFees = async (req: Request, res: Response) => {
       ? `${invoice.feeMonth} Fee`
       : (invoice.feeType?.name ?? 'School Fee'),
     feeType: invoice.feeType?.name ?? null,
-    amount: invoice.totalAmount,
+    amount: moneyDecimal(invoice.totalAmount).minus(moneyDecimal(invoice.discountAmount)),
+    totalAmount: invoice.totalAmount,
+    discountAmount: invoice.discountAmount,
     paidAmount: invoice.paidAmount,
     dueAmount: invoice.dueAmount,
     status: invoice.status,
@@ -1741,11 +1743,12 @@ export const listParentFees = async (req: Request, res: Response) => {
   const summary = items.reduce(
     (result, invoice) => {
       result.total += Number(invoice.amount ?? 0);
+      result.discount += Number(invoice.discountAmount ?? 0);
       result.paid += Number(invoice.paidAmount ?? 0);
       result.due += Number(invoice.dueAmount ?? 0);
       return result;
     },
-    { total: 0, paid: 0, due: 0 },
+    { total: 0, discount: 0, paid: 0, due: 0 },
   );
 
   res.status(200).json({ child, summary, items });
