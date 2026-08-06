@@ -47,18 +47,7 @@ class _ParentFeePaymentScreenState extends ConsumerState<ParentFeePaymentScreen>
     'payzapp',
     'icici',
     'in.fampay.app',
-    'kiwi',
-    'jupiter',
-    'omnicard',
-    'popclubapp',
-    'sbiyono',
-    'myjio',
-    'slice-upi',
-    'bobupi',
-    'shriramone',
-    'indusmobile',
     'whatsapp',
-    'kotakbank',
     'market',
   };
   static const _upiIntentBridgeScript = r'''
@@ -73,10 +62,7 @@ class _ParentFeePaymentScreenState extends ConsumerState<ParentFeePaymentScreen>
     'phonepe': true, 'paytm': true, 'paytmmp': true, 'credpay': true,
     'mobikwik': true, 'bhim': true, 'amazonpay': true, 'navi': true,
     'payzapp': true, 'icici': true, 'in.fampay.app': true,
-    'kiwi': true, 'jupiter': true, 'omnicard': true, 'popclubapp': true,
-    'sbiyono': true, 'myjio': true, 'slice-upi': true, 'bobupi': true,
-    'shriramone': true, 'indusmobile': true, 'whatsapp': true,
-    'kotakbank': true, 'market': true
+    'whatsapp': true, 'market': true
   };
 
   function schemeFor(url) {
