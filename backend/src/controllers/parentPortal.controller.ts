@@ -220,7 +220,6 @@ export const parentFeePaymentLinkOptions = {
       upi: true,
       wallet: true,
     },
-    webview_intent: true,
   },
 } as const;
 
