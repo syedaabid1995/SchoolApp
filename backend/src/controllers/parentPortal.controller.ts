@@ -27,6 +27,7 @@ import {
   razorpayRequest,
   verifyRazorpaySignature,
 } from '../services/subscription.service';
+import { timetableReadService } from '../modules/timetable/services/timetable-read.service';
 
 type RazorpayOrder = {
   id: string;
@@ -1747,8 +1748,186 @@ export const listParentNotices = async (req: Request, res: Response) => {
     );
 };
 
-export const listParentTimetable = async (_req: Request, res: Response) => {
-  res.status(200).json([]);
+export const listParentTimetable = async (req: Request, res: Response) => {
+  const auth = requireAuth(req);
+  const childId = typeof req.query.childId === 'string' ? req.query.childId : undefined;
+  const dateParam =
+    typeof req.query.date === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(req.query.date)
+      ? req.query.date
+      : new Date().toISOString().slice(0, 10);
+  const { child } = await requireChildAccess(auth.userId, childId);
+
+  const date = new Date(`${dateParam}T00:00:00.000Z`);
+  if (Number.isNaN(date.getTime())) {
+    throw new HttpError(400, 'Invalid date. Use YYYY-MM-DD.');
+  }
+
+  // Timetable day codes: Saturday=1 … Friday=7 (matches published TimetableEntry.dayOfWeek).
+  const jsDay = date.getUTCDay();
+  const dayOfWeek = jsDay === 6 ? 1 : jsDay + 2;
+  const dayLabels = [
+    '',
+    'Saturday',
+    'Sunday',
+    'Monday',
+    'Tuesday',
+    'Wednesday',
+    'Thursday',
+    'Friday',
+  ] as const;
+  const dayLabel = dayLabels[dayOfWeek] ?? 'Unknown';
+
+  const [settings, attendanceHoliday] = await Promise.all([
+    prisma.schoolSystemSetting.findUnique({
+      where: { schoolId: child.schoolId },
+      select: { weekends: true, holidays: true },
+    }),
+    child.classId && child.sectionId
+      ? prisma.attendanceHoliday.findFirst({
+          where: {
+            schoolId: child.schoolId,
+            classId: child.classId,
+            sectionId: child.sectionId,
+            holidayDate: date,
+            ...(child.academicYearId
+              ? { academicSessionId: child.academicYearId }
+              : {}),
+          },
+          select: { reason: true },
+        })
+      : Promise.resolve(null),
+  ]);
+
+  const weekendNames = new Set<string>();
+  const weekendRows = Array.isArray(settings?.weekends) ? settings.weekends : [];
+  for (const row of weekendRows) {
+    if (!row || typeof row !== 'object') continue;
+    const item = row as Record<string, unknown>;
+    if (item.isWeekend === false) continue;
+    const raw = String(item.value ?? item.dayOfWeek ?? item.id ?? item.name ?? '')
+      .trim()
+      .toLowerCase();
+    if (raw.includes('saturday') || raw === '6' || raw === 'sat') weekendNames.add('saturday');
+    if (raw.includes('sunday') || raw === '7' || raw === '0' || raw === 'sun') {
+      weekendNames.add('sunday');
+    }
+    if (raw.includes('monday')) weekendNames.add('monday');
+    if (raw.includes('tuesday')) weekendNames.add('tuesday');
+    if (raw.includes('wednesday')) weekendNames.add('wednesday');
+    if (raw.includes('thursday')) weekendNames.add('thursday');
+    if (raw.includes('friday')) weekendNames.add('friday');
+  }
+  if (!weekendNames.size) {
+    weekendNames.add('saturday');
+    weekendNames.add('sunday');
+  }
+
+  const weekdayName = date
+    .toLocaleDateString('en-US', { weekday: 'long', timeZone: 'UTC' })
+    .toLowerCase();
+  let nonWorkingReason: string | null = null;
+  if (weekendNames.has(weekdayName)) {
+    nonWorkingReason = 'Weekend';
+  }
+
+  const systemHolidays = Array.isArray(settings?.holidays) ? settings.holidays : [];
+  for (const row of systemHolidays) {
+    if (!row || typeof row !== 'object') continue;
+    const item = row as Record<string, unknown>;
+    const fromRaw = typeof item.fromDate === 'string' ? item.fromDate.slice(0, 10) : null;
+    const toRaw =
+      typeof item.toDate === 'string'
+        ? item.toDate.slice(0, 10)
+        : fromRaw;
+    if (!fromRaw || !toRaw) continue;
+    if (dateParam >= fromRaw && dateParam <= toRaw) {
+      nonWorkingReason = String(item.title ?? 'Holiday');
+      break;
+    }
+  }
+
+  if (attendanceHoliday) {
+    nonWorkingReason = attendanceHoliday.reason?.trim() || 'Holiday';
+  }
+
+  if (nonWorkingReason) {
+    res.status(200).json({
+      child: {
+        id: child.id,
+        name: child.name,
+        classLabel: child.classLabel,
+      },
+      date: dateParam,
+      dayOfWeek,
+      dayLabel,
+      isNonWorkingDay: true,
+      nonWorkingReason,
+      periods: [],
+    });
+    return;
+  }
+
+  if (!child.classId) {
+    res.status(200).json({
+      child: {
+        id: child.id,
+        name: child.name,
+        classLabel: child.classLabel,
+      },
+      date: dateParam,
+      dayOfWeek,
+      dayLabel,
+      isNonWorkingDay: false,
+      nonWorkingReason: null,
+      periods: [],
+      message: 'No class is assigned to this student.',
+    });
+    return;
+  }
+
+  const slots = await timetableReadService.getTimetable({
+    schoolId: child.schoolId,
+    classId: child.classId,
+    academicYearId: child.academicYearId ?? undefined,
+    date,
+    dayOfWeek,
+    mode: 'modern',
+  });
+
+  const periods = slots
+    .filter(
+      (slot) =>
+        slot.sectionId == null ||
+        child.sectionId == null ||
+        slot.sectionId === child.sectionId,
+    )
+    .map((slot) => ({
+      id: slot.sourceId,
+      periodId: slot.periodId,
+      periodName: slot.periodName,
+      periodType: slot.periodType,
+      startTime: slot.startTime,
+      endTime: slot.endTime,
+      subjectId: slot.subjectId,
+      subjectName: slot.subjectName,
+      teacherId: slot.teacherId,
+      teacherName: slot.teacherName,
+      room: slot.roomName,
+    }));
+
+  res.status(200).json({
+    child: {
+      id: child.id,
+      name: child.name,
+      classLabel: child.classLabel,
+    },
+    date: dateParam,
+    dayOfWeek,
+    dayLabel,
+    isNonWorkingDay: false,
+    nonWorkingReason: null,
+    periods,
+  });
 };
 
 export const listParentFees = async (req: Request, res: Response) => {

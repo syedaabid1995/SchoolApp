@@ -242,6 +242,23 @@ class ParentRepository {
     );
   }
 
+  Future<ParentTimetableDay> getTimetable({
+    required String childId,
+    required DateTime date,
+  }) async {
+    final response = await _dio.get<Map<String, dynamic>>(
+      '/parents/portal/timetable',
+      queryParameters: {
+        'childId': childId,
+        'date':
+            '${date.year.toString().padLeft(4, '0')}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}',
+      },
+    );
+    return ParentTimetableDay.fromJson(
+      response.data ?? const <String, dynamic>{},
+    );
+  }
+
   Future<List<ParentResult>> getResults({required String childId}) async {
     final response = await _dio.get<Map<String, dynamic>>(
       '/parents/portal/results',

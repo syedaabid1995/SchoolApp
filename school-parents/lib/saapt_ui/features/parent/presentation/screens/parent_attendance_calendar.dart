@@ -12,6 +12,7 @@ class ParentAttendanceCalendar extends StatelessWidget {
     required this.attendance,
     required this.childName,
     this.onMonthChanged,
+    this.onDaySelected,
     this.showMonthlyStatus = true,
   });
 
@@ -19,6 +20,7 @@ class ParentAttendanceCalendar extends StatelessWidget {
   final ParentAttendance attendance;
   final String childName;
   final ValueChanged<DateTime>? onMonthChanged;
+  final ValueChanged<DateTime>? onDaySelected;
   final bool showMonthlyStatus;
 
   @override
@@ -129,7 +131,16 @@ class ParentAttendanceCalendar extends StatelessWidget {
                   );
                   return Tooltip(
                     message: status.tooltip,
-                    child: _CalendarDayCell(status: status),
+                    child: Material(
+                      color: Colors.transparent,
+                      child: InkWell(
+                        borderRadius: BorderRadius.circular(8),
+                        onTap: onDaySelected == null
+                            ? null
+                            : () => onDaySelected!(date),
+                        child: _CalendarDayCell(status: status),
+                      ),
+                    ),
                   );
                 },
               ),

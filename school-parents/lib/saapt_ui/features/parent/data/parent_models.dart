@@ -346,6 +346,100 @@ class ParentAttendanceSession {
   }
 }
 
+class ParentTimetablePeriod {
+  const ParentTimetablePeriod({
+    required this.id,
+    required this.periodName,
+    required this.subjectName,
+    required this.teacherName,
+    this.periodType,
+    this.startTime,
+    this.endTime,
+    this.room,
+  });
+
+  final String id;
+  final String periodName;
+  final String subjectName;
+  final String teacherName;
+  final String? periodType;
+  final String? startTime;
+  final String? endTime;
+  final String? room;
+
+  bool get isBreak {
+    final type = (periodType ?? '').toUpperCase();
+    final name = periodName.toLowerCase();
+    return type.contains('BREAK') || name.contains('break');
+  }
+
+  String get timeLabel {
+    if ((startTime?.trim().isNotEmpty ?? false) &&
+        (endTime?.trim().isNotEmpty ?? false)) {
+      return '${startTime!.trim()} - ${endTime!.trim()}';
+    }
+    return startTime?.trim().isNotEmpty == true
+        ? startTime!.trim()
+        : 'Timing TBD';
+  }
+
+  factory ParentTimetablePeriod.fromJson(Map<String, dynamic> json) {
+    return ParentTimetablePeriod(
+      id: json['id']?.toString() ?? '',
+      periodName: json['periodName']?.toString() ?? 'Period',
+      subjectName: json['subjectName']?.toString() ?? 'Subject',
+      teacherName: json['teacherName']?.toString() ?? 'Teacher',
+      periodType: json['periodType']?.toString(),
+      startTime: json['startTime']?.toString(),
+      endTime: json['endTime']?.toString(),
+      room: json['room']?.toString(),
+    );
+  }
+}
+
+class ParentTimetableDay {
+  const ParentTimetableDay({
+    required this.date,
+    required this.dayLabel,
+    required this.isNonWorkingDay,
+    required this.periods,
+    this.nonWorkingReason,
+    this.childName,
+    this.classLabel,
+    this.message,
+  });
+
+  final DateTime date;
+  final String dayLabel;
+  final bool isNonWorkingDay;
+  final String? nonWorkingReason;
+  final List<ParentTimetablePeriod> periods;
+  final String? childName;
+  final String? classLabel;
+  final String? message;
+
+  factory ParentTimetableDay.fromJson(Map<String, dynamic> json) {
+    final child = json['child'] is Map<String, dynamic>
+        ? json['child'] as Map<String, dynamic>
+        : const <String, dynamic>{};
+    return ParentTimetableDay(
+      date:
+          DateTime.tryParse(json['date']?.toString() ?? '') ??
+          DateTime.now(),
+      dayLabel: json['dayLabel']?.toString() ?? '',
+      isNonWorkingDay: json['isNonWorkingDay'] == true,
+      nonWorkingReason: json['nonWorkingReason']?.toString(),
+      periods: (json['periods'] as List? ?? const [])
+          .whereType<Map<String, dynamic>>()
+          .map(ParentTimetablePeriod.fromJson)
+          .toList(),
+      childName: child['name']?.toString(),
+      classLabel: child['classLabel']?.toString(),
+      message: json['message']?.toString(),
+    );
+  }
+}
+
 class ParentResult {
   const ParentResult({
     required this.examId,

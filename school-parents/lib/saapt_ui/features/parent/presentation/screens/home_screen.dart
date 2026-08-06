@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 
 import '../../../../app/theme/saapt_theme.dart';
+import '../../../../core/network/parent_api_client.dart';
 import '../../data/parent_models.dart';
 import '../providers/parent_providers.dart';
 import 'parent_attendance_calendar.dart';
@@ -149,6 +150,13 @@ class _DashboardContentState extends ConsumerState<_DashboardContent> {
                     _month = DateTime(value.year, value.month);
                   });
                 },
+                onDaySelected: (date) => _showTimetableSheet(
+                  context,
+                  ref,
+                  childId: selected.id,
+                  childName: selected.name,
+                  date: date,
+                ),
               ),
               const SizedBox(height: 12),
               FilledButton.icon(
@@ -166,6 +174,238 @@ class _DashboardContentState extends ConsumerState<_DashboardContent> {
           ),
         ),
       ],
+    );
+  }
+
+  Future<void> _showTimetableSheet(
+    BuildContext context,
+    WidgetRef ref, {
+    required String childId,
+    required String childName,
+    required DateTime date,
+  }) async {
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      showDragHandle: true,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
+      ),
+      builder: (sheetContext) {
+        final maxHeight = MediaQuery.sizeOf(sheetContext).height * 0.78;
+        return SafeArea(
+          child: ConstrainedBox(
+            constraints: BoxConstraints(maxHeight: maxHeight),
+            child: _DayTimetableSheet(
+              childId: childId,
+              childName: childName,
+              date: date,
+            ),
+          ),
+        );
+      },
+    );
+  }
+}
+
+class _DayTimetableSheet extends ConsumerStatefulWidget {
+  const _DayTimetableSheet({
+    required this.childId,
+    required this.childName,
+    required this.date,
+  });
+
+  final String childId;
+  final String childName;
+  final DateTime date;
+
+  @override
+  ConsumerState<_DayTimetableSheet> createState() => _DayTimetableSheetState();
+}
+
+class _DayTimetableSheetState extends ConsumerState<_DayTimetableSheet> {
+  late Future<ParentTimetableDay> _future;
+
+  @override
+  void initState() {
+    super.initState();
+    _future = ref
+        .read(parentRepositoryProvider)
+        .getTimetable(childId: widget.childId, date: widget.date);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(20, 4, 20, 20),
+      child: FutureBuilder<ParentTimetableDay>(
+        future: _future,
+        builder: (context, snapshot) {
+          if (snapshot.connectionState != ConnectionState.done) {
+            return const Padding(
+              padding: EdgeInsets.symmetric(vertical: 48),
+              child: Center(child: CircularProgressIndicator()),
+            );
+          }
+          if (snapshot.hasError) {
+            return EmptyPanel(
+              message: parentApiError(
+                snapshot.error!,
+                'Unable to load timetable',
+              ),
+            );
+          }
+          final timetable = snapshot.data!;
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Text(
+                'Timetable',
+                style: const TextStyle(
+                  color: SaaptTheme.navy,
+                  fontSize: 22,
+                  fontWeight: FontWeight.w900,
+                ),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                '${widget.childName} · ${DateFormat('EEE, d MMM yyyy').format(widget.date)}',
+                style: const TextStyle(
+                  color: Color(0xFF60708F),
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+              if (timetable.classLabel?.trim().isNotEmpty == true) ...[
+                const SizedBox(height: 2),
+                Text(
+                  timetable.classLabel!,
+                  style: const TextStyle(
+                    color: Color(0xFF8EA0BA),
+                    fontWeight: FontWeight.w700,
+                    fontSize: 12,
+                  ),
+                ),
+              ],
+              const SizedBox(height: 16),
+              if (timetable.isNonWorkingDay)
+                ParentCard(
+                  child: Text(
+                    timetable.nonWorkingReason?.trim().isNotEmpty == true
+                        ? 'No classes — ${timetable.nonWorkingReason}'
+                        : 'No classes on this day.',
+                    style: const TextStyle(
+                      color: SaaptTheme.navy,
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                )
+              else if (timetable.periods.isEmpty)
+                ParentCard(
+                  child: Text(
+                    timetable.message?.trim().isNotEmpty == true
+                        ? timetable.message!
+                        : 'No timetable is published for this day.',
+                    style: const TextStyle(
+                      color: SaaptTheme.navy,
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                )
+              else
+                Flexible(
+                  child: ListView.separated(
+                    shrinkWrap: true,
+                    itemCount: timetable.periods.length,
+                    separatorBuilder: (_, _) => const SizedBox(height: 10),
+                    itemBuilder: (context, index) {
+                      final period = timetable.periods[index];
+                      return _TimetablePeriodTile(period: period);
+                    },
+                  ),
+                ),
+            ],
+          );
+        },
+      ),
+    );
+  }
+}
+
+class _TimetablePeriodTile extends StatelessWidget {
+  const _TimetablePeriodTile({required this.period});
+
+  final ParentTimetablePeriod period;
+
+  @override
+  Widget build(BuildContext context) {
+    final accent = period.isBreak
+        ? const Color(0xFFF59E0B)
+        : SaaptTheme.primary;
+    return ParentCard(
+      padding: const EdgeInsets.all(14),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            width: 4,
+            height: 54,
+            decoration: BoxDecoration(
+              color: accent,
+              borderRadius: BorderRadius.circular(999),
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  period.periodName,
+                  style: const TextStyle(
+                    color: Color(0xFF8EA0BA),
+                    fontSize: 12,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  period.isBreak ? 'Break' : period.subjectName,
+                  style: const TextStyle(
+                    color: SaaptTheme.navy,
+                    fontSize: 16,
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  period.isBreak
+                      ? period.timeLabel
+                      : [
+                          period.teacherName,
+                          if (period.room?.trim().isNotEmpty == true)
+                            period.room!.trim(),
+                        ].join(' · '),
+                  style: const TextStyle(
+                    color: Color(0xFF60708F),
+                    fontSize: 12,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 8),
+          Text(
+            period.timeLabel,
+            style: TextStyle(
+              color: accent,
+              fontSize: 12,
+              fontWeight: FontWeight.w900,
+            ),
+          ),
+        ],
+      ),
     );
   }
 }
