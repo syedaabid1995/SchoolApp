@@ -87,6 +87,11 @@ const resolveChildren = async (userId: string) => {
           class: { select: { id: true, name: true, academicYearId: true } },
           section: { select: { id: true, name: true } },
           school: { select: { id: true, name: true } },
+          photos: {
+            orderBy: { createdAt: 'desc' },
+            take: 1,
+            select: { id: true },
+          },
         },
       },
     },
@@ -101,6 +106,15 @@ const resolveChildren = async (userId: string) => {
     const className = link.student.class?.name ?? 'Class';
     const sectionName = link.student.section?.name;
     const classLabel = sectionName ? `${className} ${sectionName}` : className;
+    const photoId = link.student.photos[0]?.id;
+    const photoUrl = photoId
+      ? parentChildFilePath(link.student.id, {
+          type: 'photo',
+          id: String(photoId),
+        })
+      : typeof link.student.photoUrl === 'string' && link.student.photoUrl.trim()
+        ? parentChildFilePath(link.student.id, { type: 'profile-photo' })
+        : null;
     return {
       id: link.student.id,
       name: `${link.student.firstName} ${link.student.lastName}`.trim(),
@@ -111,6 +125,8 @@ const resolveChildren = async (userId: string) => {
       schoolId: link.student.schoolId,
       schoolName: link.student.school?.name ?? '',
       academicYearId: link.student.class?.academicYearId ?? null,
+      photoUrl,
+      status: link.student.status ?? null,
     };
   });
 };
@@ -378,6 +394,21 @@ const resolveParentChildStorageRef = async (params: {
       storageRef: photo.url,
       mimeType: 'image/jpeg',
       title: 'Student photo',
+      fileName: null as string | null,
+    };
+  }
+
+  if (type === 'profile-photo') {
+    const student = await prisma.student.findFirst({
+      where: { id: params.studentId },
+      select: { photoUrl: true, fullName: true },
+    });
+    const storageRef = student?.photoUrl?.trim() || null;
+    if (!storageRef) return null;
+    return {
+      storageRef,
+      mimeType: 'image/jpeg',
+      title: student?.fullName || 'Student photo',
       fileName: null as string | null,
     };
   }
@@ -921,7 +952,9 @@ export const getParentChildDetail = async (req: Request, res: Response) => {
           type: 'photo',
           id: String(student.photos[0].id),
         })
-      : null,
+      : typeof student.photoUrl === 'string' && student.photoUrl.trim()
+        ? parentChildFilePath(student.id, { type: 'profile-photo' })
+        : null,
   };
 
   res.status(200).json({

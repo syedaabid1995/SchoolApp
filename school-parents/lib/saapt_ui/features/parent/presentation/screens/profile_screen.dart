@@ -1846,34 +1846,12 @@ class _ChildAvatar extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final photoUrl = child.photoUrl;
-    final radius = circular ? size / 2 : 18.0;
-    return ClipRRect(
-      borderRadius: BorderRadius.circular(radius),
-      child: Container(
-        width: size,
-        height: size,
-        color: const Color(0xFFEAF1FF),
-        child: photoUrl?.trim().isNotEmpty == true
-            ? ParentAuthedImage(
-                url: photoUrl!,
-                errorWidget: _fallbackAvatar(),
-              )
-            : _fallbackAvatar(),
-      ),
+    return ParentChildAvatar(
+      child: child,
+      size: size,
+      circular: circular,
     );
   }
-
-  Widget _fallbackAvatar() => Center(
-    child: Text(
-      child.name.trim().isEmpty ? 'S' : child.name.trim()[0].toUpperCase(),
-      style: TextStyle(
-        color: SaaptTheme.primary,
-        fontSize: size * 0.36,
-        fontWeight: FontWeight.w900,
-      ),
-    ),
-  );
 }
 
 const _childDetailTabs = [

@@ -245,6 +245,60 @@ class ParentStickyScaffold extends StatelessWidget {
   }
 }
 
+class ParentChildAvatar extends ConsumerWidget {
+  const ParentChildAvatar({
+    super.key,
+    required this.child,
+    this.size = 44,
+    this.circular = false,
+    this.backgroundColor = const Color(0xFFEAF1FF),
+    this.foregroundColor = SaaptTheme.primary,
+  });
+
+  final ParentChild child;
+  final double size;
+  final bool circular;
+  final Color backgroundColor;
+  final Color foregroundColor;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final photoUrl = child.photoUrl?.trim();
+    final radius = circular ? size / 2 : 12.0;
+    final initial = child.name.trim().isEmpty
+        ? 'S'
+        : child.name.trim()[0].toUpperCase();
+
+    Widget fallback() => Center(
+          child: Text(
+            initial,
+            style: TextStyle(
+              color: foregroundColor,
+              fontSize: size * 0.36,
+              fontWeight: FontWeight.w900,
+            ),
+          ),
+        );
+
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(radius),
+      child: ColoredBox(
+        color: backgroundColor,
+        child: SizedBox(
+          width: size,
+          height: size,
+          child: photoUrl != null && photoUrl.isNotEmpty
+              ? ParentAuthedImage(
+                  url: photoUrl,
+                  errorWidget: fallback(),
+                )
+              : fallback(),
+        ),
+      ),
+    );
+  }
+}
+
 class ParentChildTitleSwitcher extends ConsumerWidget {
   const ParentChildTitleSwitcher({super.key, this.fallbackTitle = 'Student'});
 
@@ -271,6 +325,16 @@ class ParentChildTitleSwitcher extends ConsumerWidget {
       borderRadius: BorderRadius.circular(10),
       child: Row(
         children: [
+          if (selectedChild != null) ...[
+            ParentChildAvatar(
+              child: selectedChild,
+              size: 36,
+              circular: true,
+              backgroundColor: Colors.white.withValues(alpha: 0.2),
+              foregroundColor: Colors.white,
+            ),
+            const SizedBox(width: 10),
+          ],
           Expanded(
             child: Text(
               name,
@@ -359,19 +423,10 @@ Future<void> showParentChildPicker(
                             padding: const EdgeInsets.all(14),
                             child: Row(
                               children: [
-                                Container(
-                                  width: 44,
-                                  height: 44,
-                                  decoration: BoxDecoration(
-                                    color: const Color(0xFFE7EFFD),
-                                    borderRadius: BorderRadius.circular(8),
-                                  ),
-                                  child: Icon(
-                                    isSelected
-                                        ? Icons.check_circle_rounded
-                                        : Icons.person_outline,
-                                    color: SaaptTheme.primary,
-                                  ),
+                                ParentChildAvatar(
+                                  child: child,
+                                  size: 44,
+                                  circular: false,
                                 ),
                                 const SizedBox(width: 14),
                                 Expanded(
@@ -397,9 +452,13 @@ Future<void> showParentChildPicker(
                                     ],
                                   ),
                                 ),
-                                const Icon(
-                                  Icons.chevron_right,
-                                  color: Color(0xFF8A9AB8),
+                                Icon(
+                                  isSelected
+                                      ? Icons.check_circle_rounded
+                                      : Icons.chevron_right,
+                                  color: isSelected
+                                      ? SaaptTheme.primary
+                                      : const Color(0xFF8A9AB8),
                                 ),
                               ],
                             ),
