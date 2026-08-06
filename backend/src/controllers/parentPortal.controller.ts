@@ -659,10 +659,50 @@ const serializeDocumentsForParent = async (student: any) => {
     });
   }
 
+  const parentPhotos = [
+    {
+      title: 'Father Photo',
+      role: 'father',
+      name: student.fatherName ?? null,
+      url: parentPersonPhotoPath(
+        studentId,
+        'father-photo',
+        student.fatherPhotoUrl,
+      ),
+      mimeType: 'image/jpeg',
+      kind: 'parent-photo',
+    },
+    {
+      title: 'Mother Photo',
+      role: 'mother',
+      name: student.motherName ?? null,
+      url: parentPersonPhotoPath(
+        studentId,
+        'mother-photo',
+        student.motherPhotoUrl,
+      ),
+      mimeType: 'image/jpeg',
+      kind: 'parent-photo',
+    },
+    {
+      title: 'Guardian Photo',
+      role: 'guardian',
+      name: student.guardianName ?? null,
+      url: parentPersonPhotoPath(
+        studentId,
+        'guardian-photo',
+        student.guardianPhotoUrl,
+      ),
+      mimeType: 'image/jpeg',
+      kind: 'parent-photo',
+    },
+  ].filter((photo) => typeof photo.url === 'string' && photo.url.trim());
+
   return {
     uploadedDocuments,
     studentPhotos,
     admissionDocuments,
+    parentPhotos,
     faceProfile: await serializeFaceProfileForParent(
       student.faceProfile,
       studentId,

@@ -3098,7 +3098,9 @@ class _DocumentsTabPanel extends StatelessWidget {
               padding: const EdgeInsets.only(bottom: 10),
               child: record.category.toLowerCase().contains('face')
                   ? _FaceProfileCard(record: record)
-                  : _DocumentFileCard(record: record),
+                  : record.category.toLowerCase().contains('parent photo')
+                      ? _ParentPhotoCard(record: record)
+                      : _DocumentFileCard(record: record),
             ),
           const SizedBox(height: 8),
         ],
@@ -3486,6 +3488,134 @@ class _DocumentMediaSheet extends ConsumerWidget {
               ],
             ],
           ),
+        ),
+      ),
+    );
+  }
+}
+
+class _ParentPhotoCard extends StatelessWidget {
+  const _ParentPhotoCard({required this.record});
+
+  final _DisplayRecord record;
+
+  @override
+  Widget build(BuildContext context) {
+    final imageUrl = record.imageUrl ?? _imageUrlFrom(record.data);
+    final resolvedImage =
+        imageUrl == null ? null : resolveParentMediaUrl(imageUrl);
+    final role = record.title.toLowerCase();
+    final accent = role.contains('mother')
+        ? (const Color(0xFFDB2777), const Color(0xFFFCE7F3))
+        : role.contains('guardian')
+            ? (const Color(0xFF0F766E), const Color(0xFFE7F7F4))
+            : (const Color(0xFF1E4FE8), const Color(0xFFEAF1FF));
+
+    return ParentCard(
+      padding: EdgeInsets.zero,
+      child: InkWell(
+        borderRadius: BorderRadius.circular(16),
+        onTap: () => _showDocumentMediaSheet(context, record),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Container(
+              height: 148,
+              decoration: BoxDecoration(
+                borderRadius: const BorderRadius.vertical(
+                  top: Radius.circular(16),
+                ),
+                gradient: LinearGradient(
+                  colors: [accent.$1, accent.$1.withValues(alpha: 0.72)],
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                ),
+              ),
+              child: Center(
+                child: Container(
+                  width: 88,
+                  height: 88,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    border: Border.all(color: Colors.white, width: 3),
+                    boxShadow: const [
+                      BoxShadow(
+                        color: Color(0x33000000),
+                        blurRadius: 18,
+                        offset: Offset(0, 8),
+                      ),
+                    ],
+                  ),
+                  child: ClipOval(
+                    child: resolvedImage?.trim().isNotEmpty == true
+                        ? ParentAuthedImage(
+                            url: resolvedImage!,
+                            errorWidget: ColoredBox(
+                              color: accent.$2,
+                              child: Icon(
+                                Icons.person_outline_rounded,
+                                color: accent.$1,
+                                size: 36,
+                              ),
+                            ),
+                          )
+                        : ColoredBox(
+                            color: accent.$2,
+                            child: Icon(
+                              Icons.person_outline_rounded,
+                              color: accent.$1,
+                              size: 36,
+                            ),
+                          ),
+                  ),
+                ),
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(14, 12, 14, 14),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          record.title,
+                          style: const TextStyle(
+                            color: SaaptTheme.navy,
+                            fontSize: 15,
+                            fontWeight: FontWeight.w900,
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          record.subtitle.trim().isEmpty
+                              ? 'Parent photo'
+                              : record.subtitle,
+                          style: const TextStyle(
+                            color: Color(0xFF60708F),
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  Text(
+                    'View',
+                    style: TextStyle(
+                      color: accent.$1,
+                      fontSize: 12.5,
+                      fontWeight: FontWeight.w900,
+                    ),
+                  ),
+                  Icon(
+                    Icons.chevron_right_rounded,
+                    color: accent.$1.withValues(alpha: 0.7),
+                  ),
+                ],
+              ),
+            ),
+          ],
         ),
       ),
     );
@@ -5107,6 +5237,44 @@ List<_DisplayRecord> _documentRecords(Object? data) {
       ),
     );
   }
+
+  for (final item in _asList(map['parentPhotos'])) {
+    final photo = _asMap(item);
+    final url = _firstString(photo, ['url', 'photoUrl', 'imageUrl']);
+    if (url == null ||
+        url.trim().isEmpty ||
+        url.startsWith('s3://') ||
+        url.startsWith('local://')) {
+      continue;
+    }
+    final title =
+        (_firstString(photo, ['title', 'label', 'role']) ?? 'Parent Photo')
+            .trim();
+    final name = _firstString(photo, ['name', 'fullName']);
+    records.add(
+      _DisplayRecord(
+        title: title,
+        subtitle: name ?? 'Parent photo',
+        category: 'Parent Photos',
+        data: {
+          ...photo,
+          'kind': 'photo',
+          'mimeType': photo['mimeType'] ?? 'image/jpeg',
+          'url': url,
+          'files': [
+            {
+              'url': url,
+              'mimeType': photo['mimeType'] ?? 'image/jpeg',
+              'fileName': title,
+            },
+          ],
+        },
+        icon: Icons.family_restroom_outlined,
+        imageUrl: url,
+      ),
+    );
+  }
+
   return records;
 }
 
