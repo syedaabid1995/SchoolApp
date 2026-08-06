@@ -17,6 +17,7 @@ import { buildQueryFingerprint, cacheKeys } from '../../../../services/cache/cac
 import { rememberCache, setCacheHeader } from '../../../../services/cache/cache.service';
 import { cacheTTL } from '../../../../services/cache/cache.ttl';
 import { invalidateStudentCache, invalidateAttendanceCache } from '../../../../services/cache/cache.invalidation';
+import { sendStudentAdmissionAccountEmail } from '../../../../services/studentAdmissionEmail.service';
 
 const requireSchoolAdmin = (req: Request) => {
   if (!req.auth?.userId) throw new HttpError(401, 'Unauthorized');
@@ -200,6 +201,7 @@ const timelineSchema = z.object({
 
 const linkParentSchema = z.object({
   parentId: z.string().uuid(),
+  tempPassword: z.string().min(1).optional().nullable(),
   schoolId: z.string().uuid().optional(),
 });
 
@@ -371,6 +373,11 @@ export const linkParent = async (req: Request, res: Response) => {
     throw new HttpError(404, 'Parent not found');
   }
 
+  const existingLink = await StudentParentRepository.studentParent.findUnique({
+    where: { studentId_parentId: { studentId: id, parentId: payload.parentId } },
+    select: { studentId: true },
+  });
+
   const link = await StudentParentRepository.studentParent.upsert({
     where: { studentId_parentId: { studentId: id, parentId: payload.parentId } },
     update: {},
@@ -387,7 +394,16 @@ export const linkParent = async (req: Request, res: Response) => {
 
   await invalidateStudentCache(schoolId, id);
 
-  res.status(201).json(link);
+  const admissionEmail = existingLink
+    ? null
+    : await sendStudentAdmissionAccountEmail({
+        schoolId,
+        studentId: id,
+        parentId: payload.parentId,
+        tempPassword: payload.tempPassword,
+      });
+
+  res.status(201).json({ ...link, admissionEmail });
 };
 
 export const unlinkParent = async (req: Request, res: Response) => {

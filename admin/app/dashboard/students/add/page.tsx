@@ -421,7 +421,9 @@ export default function AddStudentPage() {
             createLogin: true,
             sendVia: form.parentLoginSendVia,
           });
-          await linkParent(student.id, parentLogin.id);
+          await linkParent(student.id, parentLogin.id, {
+            tempPassword: parentLogin.tempPassword,
+          });
         } catch (error) {
           parentLoginError = error;
         }

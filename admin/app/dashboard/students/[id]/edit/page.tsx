@@ -519,7 +519,10 @@ export default function EditStudentPage() {
             sendVia: form.parentLoginSendVia,
             schoolId: effectiveSchoolId,
           });
-          await linkParent(studentId, parentLogin.id, effectiveStudentRequestParams);
+          await linkParent(studentId, parentLogin.id, {
+            ...effectiveStudentRequestParams,
+            tempPassword: parentLogin.tempPassword,
+          });
         } catch (error) {
           parentLoginError = error;
         }

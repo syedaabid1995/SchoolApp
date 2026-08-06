@@ -420,8 +420,16 @@ export const deleteStudentPhoto = async (studentId: string, photoId: string, par
   await api.delete(`/students/students/${studentId}/photos/${photoId}`, { params });
 };
 
-export const linkParent = async (studentId: string, parentId: string, params?: { schoolId?: string }) => {
-  const { data } = await api.post(`/students/students/${studentId}/parents`, { parentId, schoolId: params?.schoolId }, { params });
+export const linkParent = async (
+  studentId: string,
+  parentId: string,
+  params?: { schoolId?: string; tempPassword?: string | null },
+) => {
+  const { data } = await api.post(
+    `/students/students/${studentId}/parents`,
+    { parentId, schoolId: params?.schoolId, tempPassword: params?.tempPassword },
+    { params: params?.schoolId ? { schoolId: params.schoolId } : undefined },
+  );
   return data;
 };
 
