@@ -30,84 +30,71 @@ class _SaaptReportsScreenState extends ConsumerState<SaaptReportsScreen> {
   Widget build(BuildContext context) {
     final selectedChildState = ref.watch(effectiveSelectedChildProvider);
 
-    return Scaffold(
-      body: selectedChildState.when(
-        loading: () => const LoadingPanel(),
-        error: (error, _) => EmptyPanel(message: error.toString()),
-        data: (selectedChild) {
-          return RefreshIndicator(
-            onRefresh: () async {
-              if (selectedChild != null) {
-                ref.invalidate(parentResultsProvider(selectedChild));
-                ref.invalidate(
-                  parentMonthlyAttendanceProvider((
-                    childId: selectedChild.id,
-                    month: _selectedMonth,
-                    date: _selectedMonth,
-                  )),
-                );
-              }
-            },
-            child: ListView(
-              padding: EdgeInsets.zero,
-              children: [
-                ParentHero(
-                  showMenu: true,
-                  showChildSwitcher: true,
-                  badge: _kind == _ReportKind.performance
-                      ? '📊 Performance Report'
-                      : '📅 Attendance Report',
-                  title: selectedChild?.name ?? 'Reports',
-                  subtitle: _kind == _ReportKind.performance
-                      ? selectedChild == null
-                            ? 'Select child and exam'
-                            : '${selectedChild.classLabel} • Admin uploaded marks'
-                      : selectedChild == null
-                      ? 'Child-wise graphical attendance overview'
-                      : '${selectedChild.classLabel} • Monthly attendance overview',
-                ),
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(20, 24, 20, 32),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      _ReportSwitch(
-                        value: _kind,
-                        onChanged: (value) => setState(() => _kind = value),
-                      ),
-                      const SizedBox(height: 18),
-                      if (selectedChild == null)
-                        const EmptyPanel(
-                          message: 'Select a child from Home to view reports.',
-                        )
-                      else if (_kind == _ReportKind.performance)
-                        _PerformanceReportView(
-                          child: selectedChild,
-                          selectedExamId: _selectedExamId,
-                          onExamChanged: (examId) =>
-                              setState(() => _selectedExamId = examId),
-                        )
-                      else
-                        _AttendanceReportView(
-                          child: selectedChild,
-                          selectedMonth: _selectedMonth,
-                          savingReport: _savingReport,
-                          onMonthChanged: (month) => setState(
-                            () => _selectedMonth = DateTime(
-                              month.year,
-                              month.month,
-                            ),
-                          ),
-                          onDownload: _downloadAttendanceReport,
-                        ),
-                    ],
+    return selectedChildState.when(
+      loading: () => const Scaffold(body: LoadingPanel()),
+      error: (error, _) =>
+          Scaffold(body: EmptyPanel(message: error.toString())),
+      data: (selectedChild) {
+        return ParentStickyScaffold(
+          showMenu: true,
+          showChildSwitcher: true,
+          badge: _kind == _ReportKind.performance
+              ? '📊 Performance Report'
+              : '📅 Attendance Report',
+          title: selectedChild?.name ?? 'Reports',
+          subtitle: _kind == _ReportKind.performance
+              ? selectedChild == null
+                    ? 'Select child and exam'
+                    : '${selectedChild.classLabel} • Admin uploaded marks'
+              : selectedChild == null
+              ? 'Child-wise graphical attendance overview'
+              : '${selectedChild.classLabel} • Monthly attendance overview',
+          onRefresh: () async {
+            if (selectedChild != null) {
+              ref.invalidate(parentResultsProvider(selectedChild));
+              ref.invalidate(
+                parentMonthlyAttendanceProvider((
+                  childId: selectedChild.id,
+                  month: _selectedMonth,
+                  date: _selectedMonth,
+                )),
+              );
+            }
+          },
+          padding: const EdgeInsets.fromLTRB(20, 24, 20, 32),
+          body: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              _ReportSwitch(
+                value: _kind,
+                onChanged: (value) => setState(() => _kind = value),
+              ),
+              const SizedBox(height: 18),
+              if (selectedChild == null)
+                const EmptyPanel(
+                  message: 'Select a child from Home to view reports.',
+                )
+              else if (_kind == _ReportKind.performance)
+                _PerformanceReportView(
+                  child: selectedChild,
+                  selectedExamId: _selectedExamId,
+                  onExamChanged: (examId) =>
+                      setState(() => _selectedExamId = examId),
+                )
+              else
+                _AttendanceReportView(
+                  child: selectedChild,
+                  selectedMonth: _selectedMonth,
+                  savingReport: _savingReport,
+                  onMonthChanged: (month) => setState(
+                    () => _selectedMonth = DateTime(month.year, month.month),
                   ),
+                  onDownload: _downloadAttendanceReport,
                 ),
-              ],
-            ),
-          );
-        },
-      ),
+            ],
+          ),
+        );
+      },
     );
   }
 

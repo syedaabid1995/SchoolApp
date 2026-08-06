@@ -13,49 +13,35 @@ class ParentAttendanceScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final childState = ref.watch(effectiveSelectedChildProvider);
-    return Scaffold(
-      body: childState.when(
-        loading: () => const LoadingPanel(),
-        error: (error, _) => EmptyPanel(message: error.toString()),
-        data: (child) {
-          if (child == null) {
-            return const _NoChildSelected();
-          }
-          final attendanceState = ref.watch(parentAttendanceProvider(child));
-          return RefreshIndicator(
-            onRefresh: () async =>
-                ref.invalidate(parentAttendanceProvider(child)),
-            child: CustomScrollView(
-              slivers: [
-                SliverToBoxAdapter(
-                  child: ParentHero(
-                    showMenu: true,
-                    showChildSwitcher: true,
-                    badge: '📅 Student Attendance',
-                    title: child.name,
-                    subtitle:
-                        '${child.classLabel} • ${DateFormat('d MMM y').format(DateTime.now())}',
-                  ),
-                ),
-                SliverPadding(
-                  padding: const EdgeInsets.fromLTRB(20, 24, 20, 32),
-                  sliver: SliverToBoxAdapter(
-                    child: attendanceState.when(
-                      loading: () => const LoadingPanel(),
-                      error: (error, _) =>
-                          EmptyPanel(message: error.toString()),
-                      data: (attendance) => _AttendanceContent(
-                        child: child,
-                        attendance: attendance,
-                      ),
-                    ),
-                  ),
-                ),
-              ],
+    return childState.when(
+      loading: () => const Scaffold(body: LoadingPanel()),
+      error: (error, _) =>
+          Scaffold(body: EmptyPanel(message: error.toString())),
+      data: (child) {
+        if (child == null) {
+          return const Scaffold(body: _NoChildSelected());
+        }
+        final attendanceState = ref.watch(parentAttendanceProvider(child));
+        return ParentStickyScaffold(
+          showMenu: true,
+          showChildSwitcher: true,
+          badge: '📅 Student Attendance',
+          title: child.name,
+          subtitle:
+              '${child.classLabel} • ${DateFormat('d MMM y').format(DateTime.now())}',
+          onRefresh: () async =>
+              ref.invalidate(parentAttendanceProvider(child)),
+          padding: const EdgeInsets.fromLTRB(20, 24, 20, 32),
+          body: attendanceState.when(
+            loading: () => const LoadingPanel(),
+            error: (error, _) => EmptyPanel(message: error.toString()),
+            data: (attendance) => _AttendanceContent(
+              child: child,
+              attendance: attendance,
             ),
-          );
-        },
-      ),
+          ),
+        );
+      },
     );
   }
 }

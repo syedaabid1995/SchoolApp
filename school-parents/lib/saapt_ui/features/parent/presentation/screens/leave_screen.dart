@@ -31,68 +31,53 @@ class _ParentLeaveScreenState extends ConsumerState<ParentLeaveScreen> {
   @override
   Widget build(BuildContext context) {
     final selectedChildState = ref.watch(effectiveSelectedChildProvider);
-    return Scaffold(
-      body: selectedChildState.when(
-        loading: () => const LoadingPanel(),
-        error: (error, _) => EmptyPanel(message: parentApiError(error)),
-        data: (selectedChild) {
-          if (selectedChild == null) {
-            return const EmptyPanel(
+    return selectedChildState.when(
+      loading: () => const Scaffold(body: LoadingPanel()),
+      error: (error, _) =>
+          Scaffold(body: EmptyPanel(message: parentApiError(error))),
+      data: (selectedChild) {
+        if (selectedChild == null) {
+          return const Scaffold(
+            body: EmptyPanel(
               message: 'Select a child from Home to view leave requests.',
-            );
-          }
-          final leaveCenter = ref.watch(
-            parentLeaveCenterProvider(selectedChild),
-          );
-          return RefreshIndicator(
-            onRefresh: () async {
-              ref.invalidate(parentLeaveCenterProvider(selectedChild));
-              await ref.read(parentLeaveCenterProvider(selectedChild).future);
-            },
-            child: CustomScrollView(
-              slivers: [
-                SliverToBoxAdapter(
-                  child: ParentHero(
-                    showMenu: true,
-                    showChildSwitcher: true,
-                    badge: _applying
-                        ? '📝 Leave Request'
-                        : '✅ Leave Requests',
-                    title: selectedChild.name,
-                    subtitle: _applying
-                        ? 'Submit leave request to school'
-                        : '${selectedChild.classLabel} • Track submitted leave requests',
-                    showDefaultTrailing: !_applying,
-                    leading: _applying
-                        ? IconButton(
-                            tooltip: 'Back',
-                            style: IconButton.styleFrom(
-                              backgroundColor: Colors.white.withValues(
-                                alpha: 0.16,
-                              ),
-                              foregroundColor: Colors.white,
-                            ),
-                            onPressed: _submitting
-                                ? null
-                                : () => setState(() => _applying = false),
-                            icon: const Icon(Icons.arrow_back_rounded),
-                          )
-                        : null,
-                  ),
-                ),
-                SliverPadding(
-                  padding: const EdgeInsets.fromLTRB(20, 20, 20, 28),
-                  sliver: SliverToBoxAdapter(
-                    child: _applying
-                        ? _buildApplyForm(selectedChild, leaveCenter.value)
-                        : _buildHistory(leaveCenter, selectedChild),
-                  ),
-                ),
-              ],
             ),
           );
-        },
-      ),
+        }
+        final leaveCenter = ref.watch(
+          parentLeaveCenterProvider(selectedChild),
+        );
+        return ParentStickyScaffold(
+          showMenu: true,
+          showChildSwitcher: true,
+          badge: _applying ? '📝 Leave Request' : '✅ Leave Requests',
+          title: selectedChild.name,
+          subtitle: _applying
+              ? 'Submit leave request to school'
+              : '${selectedChild.classLabel} • Track submitted leave requests',
+          showDefaultTrailing: !_applying,
+          leading: _applying
+              ? IconButton(
+                  tooltip: 'Back',
+                  style: IconButton.styleFrom(
+                    backgroundColor: Colors.white.withValues(alpha: 0.16),
+                    foregroundColor: Colors.white,
+                  ),
+                  onPressed: _submitting
+                      ? null
+                      : () => setState(() => _applying = false),
+                  icon: const Icon(Icons.arrow_back_rounded),
+                )
+              : null,
+          onRefresh: () async {
+            ref.invalidate(parentLeaveCenterProvider(selectedChild));
+            await ref.read(parentLeaveCenterProvider(selectedChild).future);
+          },
+          padding: const EdgeInsets.fromLTRB(20, 20, 20, 28),
+          body: _applying
+              ? _buildApplyForm(selectedChild, leaveCenter.value)
+              : _buildHistory(leaveCenter, selectedChild),
+        );
+      },
     );
   }
 

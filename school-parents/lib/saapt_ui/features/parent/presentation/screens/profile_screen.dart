@@ -94,9 +94,12 @@ class _ParentProfileScreenState extends ConsumerState<ParentProfileScreen> {
   Widget build(BuildContext context) {
     final profileState = ref.watch(parentProfileProvider);
     final pushState = ref.watch(parentPushPreferenceProvider);
+    final profile = profileState.asData?.value;
+    final selectedChild = _selectedChildFrom(profile);
     final childDetailId = _panel == _ProfilePanel.children
         ? _selectedChildId
         : null;
+
     return PopScope(
       // When opened from the drawer (school/children), allow route pop unless
       // a child detail is open. Using maybePop() while canPop is false caused
@@ -108,128 +111,114 @@ class _ParentProfileScreenState extends ConsumerState<ParentProfileScreen> {
         if (didPop) return;
         _handleBack();
       },
-      child: Scaffold(
-        body: RefreshIndicator(
-          onRefresh: () async {
-            ref.invalidate(parentProfileProvider);
-            ref.invalidate(parentPushPreferenceProvider);
-            if (_selectedChildId != null) {
-              ref.invalidate(parentChildDetailProvider(_selectedChildId!));
-            }
-            if (childDetailId == null) {
-              await ref.read(parentProfileProvider.future);
-            }
-          },
-          child: childDetailId != null
-              ? _ChildDetailScroll(
-                  childId: childDetailId,
-                  initialTabKey: widget.initialTabKey,
-                  hero: ParentHero(
-                    badge: '👤 Parent Profile',
-                    title: _titleForPanel(),
-                    subtitle: _subtitleForPanel(),
-                    showDefaultTrailing: false,
-                    leading: IconButton(
-                      tooltip: 'Back',
-                      style: IconButton.styleFrom(
-                        backgroundColor: Colors.white.withValues(alpha: 0.16),
-                        foregroundColor: Colors.white,
-                      ),
-                      onPressed: _handleBack,
-                      icon: const Icon(Icons.arrow_back_rounded),
-                    ),
-                  ),
-                )
-              : ListView(
-                  padding: EdgeInsets.zero,
-                  children: [
-                    ParentHero(
-                      badge: '👤 Parent Profile',
-                      title: _titleForPanel(),
-                      subtitle: _subtitleForPanel(),
-                      showDefaultTrailing: false,
-                      leading: IconButton(
-                        tooltip: 'Back',
-                        style: IconButton.styleFrom(
-                          backgroundColor: Colors.white.withValues(alpha: 0.16),
-                          foregroundColor: Colors.white,
-                        ),
-                        onPressed: _handleBack,
-                        icon: const Icon(Icons.arrow_back_rounded),
-                      ),
-                    ),
-                    Padding(
-                      padding: const EdgeInsets.fromLTRB(20, 22, 20, 32),
-                      child: profileState.when(
-                        loading: () => const LoadingPanel(),
-                        error: (error, _) =>
-                            EmptyPanel(message: parentApiError(error)),
-                        data: (profile) {
-                          _seedProfile(profile);
-                          return switch (_panel) {
-                            _ProfilePanel.viewProfile => _ViewProfilePanel(
-                              profile: profile,
-                            ),
-                            _ProfilePanel.editProfile => _EditProfilePanel(
-                              firstNameController: _firstNameController,
-                              lastNameController: _lastNameController,
-                              emailController: _emailController,
-                              phoneController: _phoneController,
-                              saving: _savingProfile,
-                              onSave: _saveProfile,
-                            ),
-                            _ProfilePanel.schoolProfile => _SchoolProfilePanel(
-                              profile: profile,
-                              selectedSchoolId: _selectedSchoolProfileId,
-                              onSelectSchool: (schoolId) => setState(
-                                () => _selectedSchoolProfileId = schoolId,
-                              ),
-                            ),
-                            _ProfilePanel.changePassword =>
-                              _ChangePasswordPanel(
-                                currentPasswordController:
-                                    _currentPasswordController,
-                                newPasswordController: _newPasswordController,
-                                confirmPasswordController:
-                                    _confirmPasswordController,
-                                saving: _changingPassword,
-                                onSave: _changePassword,
-                              ),
-                            _ProfilePanel.info => _InfoPanel(
-                              title: _infoTitle,
-                              body: _infoBody,
-                            ),
-                            _ProfilePanel.children => _ChildrenPanel(
-                              profile: profile,
-                              selectedChildId: _selectedChildId,
-                              onSelectChild: (childId) =>
-                                  setState(() => _selectedChildId = childId),
-                            ),
-                            _ProfilePanel.menu => _ProfileMenuPanel(
-                              profile: profile,
-                              pushState: pushState,
-                              onOpenProfile: () => setState(
-                                () => _panel = _ProfilePanel.viewProfile,
-                              ),
-                              onOpenEdit: () => setState(
-                                () => _panel = _ProfilePanel.editProfile,
-                              ),
-                              onOpenPassword: () => setState(
-                                () => _panel = _ProfilePanel.changePassword,
-                              ),
-                              onTogglePush: _togglePush,
-                              onOpenInfo: _openInfo,
-                              onLogout: () => confirmParentLogout(context, ref),
-                            ),
-                          };
-                        },
-                      ),
-                    ),
-                  ],
-                ),
+      child: ParentStickyScaffold(
+        badge: selectedChild != null
+            ? 'Student Profile'
+            : (_panel == _ProfilePanel.menu ? 'Account' : 'Parent Profile'),
+        title: selectedChild?.name.trim().isNotEmpty == true
+            ? selectedChild!.name.trim()
+            : _titleForPanel(),
+        subtitle: selectedChild != null
+            ? [
+                if (selectedChild.classLabel.trim().isNotEmpty)
+                  selectedChild.classLabel.trim(),
+                if (selectedChild.schoolName?.trim().isNotEmpty == true)
+                  selectedChild.schoolName!.trim(),
+              ].join(' · ')
+            : _subtitleForPanel(),
+        showDefaultTrailing: false,
+        leading: IconButton(
+          tooltip: 'Back',
+          style: IconButton.styleFrom(
+            backgroundColor: Colors.white.withValues(alpha: 0.16),
+            foregroundColor: Colors.white,
+          ),
+          onPressed: _handleBack,
+          icon: const Icon(Icons.arrow_back_rounded),
         ),
+        onRefresh: childDetailId != null
+            ? null
+            : () async {
+                ref.invalidate(parentProfileProvider);
+                ref.invalidate(parentPushPreferenceProvider);
+                await ref.read(parentProfileProvider.future);
+              },
+        wrapBody: childDetailId == null,
+        body: childDetailId != null
+            ? _ChildDetailScroll(
+                childId: childDetailId,
+                initialTabKey: widget.initialTabKey,
+              )
+            : profileState.when(
+                loading: () => const LoadingPanel(),
+                error: (error, _) =>
+                    EmptyPanel(message: parentApiError(error)),
+                data: (profile) {
+                  _seedProfile(profile);
+                  return switch (_panel) {
+                    _ProfilePanel.viewProfile => _ViewProfilePanel(
+                      profile: profile,
+                    ),
+                    _ProfilePanel.editProfile => _EditProfilePanel(
+                      firstNameController: _firstNameController,
+                      lastNameController: _lastNameController,
+                      emailController: _emailController,
+                      phoneController: _phoneController,
+                      saving: _savingProfile,
+                      onSave: _saveProfile,
+                    ),
+                    _ProfilePanel.schoolProfile => _SchoolProfilePanel(
+                      profile: profile,
+                      selectedSchoolId: _selectedSchoolProfileId,
+                      onSelectSchool: (schoolId) => setState(
+                        () => _selectedSchoolProfileId = schoolId,
+                      ),
+                    ),
+                    _ProfilePanel.changePassword => _ChangePasswordPanel(
+                      currentPasswordController: _currentPasswordController,
+                      newPasswordController: _newPasswordController,
+                      confirmPasswordController: _confirmPasswordController,
+                      saving: _changingPassword,
+                      onSave: _changePassword,
+                    ),
+                    _ProfilePanel.info => _InfoPanel(
+                      title: _infoTitle,
+                      body: _infoBody,
+                    ),
+                    _ProfilePanel.children => _ChildrenPanel(
+                      profile: profile,
+                      onSelectChild: (childId) =>
+                          setState(() => _selectedChildId = childId),
+                    ),
+                    _ProfilePanel.menu => _ProfileMenuPanel(
+                      profile: profile,
+                      pushState: pushState,
+                      onOpenProfile: () => setState(
+                        () => _panel = _ProfilePanel.viewProfile,
+                      ),
+                      onOpenEdit: () =>
+                          setState(() => _panel = _ProfilePanel.editProfile),
+                      onOpenPassword: () => setState(
+                        () => _panel = _ProfilePanel.changePassword,
+                      ),
+                      onTogglePush: _togglePush,
+                      onOpenInfo: _openInfo,
+                      onLogout: () => confirmParentLogout(context, ref),
+                    ),
+                  };
+                },
+              ),
       ),
     );
+  }
+
+  ParentChild? _selectedChildFrom(ParentProfile? profile) {
+    final childId = _selectedChildId;
+    if (childId == null || profile == null) return null;
+    for (final child in profile.children) {
+      if (child.id == childId) return child;
+    }
+    return null;
   }
 
   String _titleForPanel() {
@@ -237,8 +226,7 @@ class _ParentProfileScreenState extends ConsumerState<ParentProfileScreen> {
       _ProfilePanel.editProfile => 'Edit Profile',
       _ProfilePanel.viewProfile => 'Profile',
       _ProfilePanel.schoolProfile => 'School Profile',
-      _ProfilePanel.children =>
-        _selectedChildId == null ? 'Children' : 'Child Profile',
+      _ProfilePanel.children => 'Children',
       _ProfilePanel.changePassword => 'Change Password',
       _ProfilePanel.info => _infoTitle,
       _ProfilePanel.menu => 'Account',
@@ -250,10 +238,7 @@ class _ParentProfileScreenState extends ConsumerState<ParentProfileScreen> {
       _ProfilePanel.editProfile => 'Update parent contact details',
       _ProfilePanel.viewProfile => 'Parent account details',
       _ProfilePanel.schoolProfile => 'School contact information',
-      _ProfilePanel.children =>
-        _selectedChildId == null
-            ? 'Mapped child profiles'
-            : 'Student details and school records',
+      _ProfilePanel.children => 'Mapped child profiles',
       _ProfilePanel.changePassword => 'Secure your parent login',
       _ProfilePanel.info => 'Reference information',
       _ProfilePanel.menu => 'Profile, settings, and app information',
@@ -417,96 +402,208 @@ class _ProfileMenuPanel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final initial = profile.name.trim().isEmpty
-        ? 'P'
-        : profile.name.trim()[0].toUpperCase();
+    final name = profile.name.trim().isEmpty ? 'Parent' : profile.name.trim();
+    final initial = name[0].toUpperCase();
+    final phone = profile.phone?.trim() ?? '';
+    final school = profile.schoolName?.trim() ?? '';
+    final childrenCount = profile.children.length;
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         ParentCard(
-          child: Row(
+          padding: EdgeInsets.zero,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              CircleAvatar(
-                radius: 32,
-                backgroundColor: const Color(0xFFEAF1FF),
-                child: Text(
-                  initial,
-                  style: const TextStyle(
-                    color: SaaptTheme.primary,
-                    fontSize: 22,
-                    fontWeight: FontWeight.w900,
+              Container(
+                padding: const EdgeInsets.fromLTRB(16, 18, 16, 16),
+                decoration: const BoxDecoration(
+                  gradient: LinearGradient(
+                    colors: [Color(0xFF1E4FE8), Color(0xFF3A72FF)],
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
                   ),
+                  borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
                 ),
-              ),
-              const SizedBox(width: 16),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
+                child: Stack(
                   children: [
-                    Text(
-                      profile.name,
-                      style: const TextStyle(
-                        color: SaaptTheme.navy,
-                        fontSize: 17,
-                        fontWeight: FontWeight.w900,
-                      ),
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      profile.email,
-                      style: const TextStyle(
-                        color: Color(0xFF60708F),
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
-                    if (profile.phone?.isNotEmpty == true) ...[
-                      const SizedBox(height: 2),
-                      Text(
-                        profile.phone!,
-                        style: const TextStyle(
-                          color: Color(0xFF60708F),
-                          fontWeight: FontWeight.w700,
+                    Positioned(
+                      right: -24,
+                      top: -36,
+                      child: Container(
+                        width: 110,
+                        height: 110,
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          border: Border.all(
+                            color: Colors.white.withValues(alpha: 0.18),
+                            width: 2,
+                          ),
                         ),
                       ),
-                    ],
+                    ),
+                    Row(
+                      children: [
+                        Container(
+                          width: 64,
+                          height: 64,
+                          decoration: BoxDecoration(
+                            color: Colors.white,
+                            borderRadius: BorderRadius.circular(20),
+                            boxShadow: const [
+                              BoxShadow(
+                                color: Color(0x33000000),
+                                blurRadius: 16,
+                                offset: Offset(0, 8),
+                              ),
+                            ],
+                          ),
+                          alignment: Alignment.center,
+                          child: Text(
+                            initial,
+                            style: const TextStyle(
+                              color: SaaptTheme.primary,
+                              fontSize: 26,
+                              fontWeight: FontWeight.w900,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 14),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                name,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: const TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 20,
+                                  fontWeight: FontWeight.w900,
+                                  letterSpacing: -0.3,
+                                ),
+                              ),
+                              const SizedBox(height: 5),
+                              Text(
+                                profile.email,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: TextStyle(
+                                  color: Colors.white.withValues(alpha: 0.88),
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                              if (phone.isNotEmpty) ...[
+                                const SizedBox(height: 3),
+                                Text(
+                                  phone,
+                                  style: TextStyle(
+                                    color: Colors.white.withValues(alpha: 0.8),
+                                    fontSize: 12.5,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                              ],
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(12, 12, 12, 14),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: _AccountStatChip(
+                        label: 'Children',
+                        value: '$childrenCount',
+                        icon: Icons.groups_rounded,
+                        accent: SaaptTheme.primary,
+                        soft: const Color(0xFFEAF1FF),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: _AccountStatChip(
+                        label: 'School',
+                        value: school.isEmpty ? '—' : school,
+                        icon: Icons.school_outlined,
+                        accent: const Color(0xFF0F766E),
+                        soft: const Color(0xFFE7F7F4),
+                      ),
+                    ),
                   ],
                 ),
               ),
             ],
           ),
         ),
-        const SizedBox(height: 16),
+        const SizedBox(height: 18),
+        const _AccountSectionLabel(title: 'Account'),
+        const SizedBox(height: 10),
         ParentCard(
           padding: EdgeInsets.zero,
           child: Column(
             children: [
               _MenuTile(
-                icon: Icons.person_outline,
+                icon: Icons.person_outline_rounded,
+                accent: SaaptTheme.primary,
+                soft: const Color(0xFFEAF1FF),
                 title: 'Profile',
                 subtitle: 'View parent account details',
                 onTap: onOpenProfile,
               ),
+              const _MenuDivider(),
               _MenuTile(
                 icon: Icons.edit_outlined,
+                accent: const Color(0xFF0F766E),
+                soft: const Color(0xFFE7F7F4),
                 title: 'Edit Profile',
                 subtitle: 'Name, email, and mobile number',
                 onTap: onOpenEdit,
               ),
+              const _MenuDivider(),
               _MenuTile(
-                icon: Icons.lock_outline,
+                icon: Icons.lock_outline_rounded,
+                accent: const Color(0xFFB45309),
+                soft: const Color(0xFFFFF4E5),
                 title: 'Change Password',
                 subtitle: 'Update parent login password',
                 onTap: onOpenPassword,
               ),
-              _SwitchTile(
-                title: 'Push Notifications',
-                subtitle: 'Receive absence, exam, and school alerts',
-                value: pushState.value ?? false,
-                loading: pushState.isLoading,
-                onChanged: onTogglePush,
-              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 18),
+        const _AccountSectionLabel(title: 'Preferences'),
+        const SizedBox(height: 10),
+        ParentCard(
+          padding: EdgeInsets.zero,
+          child: _SwitchTile(
+            title: 'Push Notifications',
+            subtitle: 'Absence, exam, and school alerts',
+            value: pushState.value ?? false,
+            loading: pushState.isLoading,
+            onChanged: onTogglePush,
+          ),
+        ),
+        const SizedBox(height: 18),
+        const _AccountSectionLabel(title: 'Support & legal'),
+        const SizedBox(height: 10),
+        ParentCard(
+          padding: EdgeInsets.zero,
+          child: Column(
+            children: [
               _MenuTile(
                 icon: Icons.settings_outlined,
+                accent: const Color(0xFF0369A1),
+                soft: const Color(0xFFE0F2FE),
                 title: 'Settings',
                 subtitle: 'Notification and account preferences',
                 onTap: () => onOpenInfo(
@@ -514,8 +611,11 @@ class _ProfileMenuPanel extends StatelessWidget {
                   'Push notifications can be enabled or disabled from this screen. More parent app settings will be added as modules are enabled.',
                 ),
               ),
+              const _MenuDivider(),
               _MenuTile(
-                icon: Icons.help_outline,
+                icon: Icons.help_outline_rounded,
+                accent: const Color(0xFF7C3AED),
+                soft: const Color(0xFFF3E8FF),
                 title: 'Frequently Asked Questions',
                 subtitle: 'Common parent app questions',
                 onTap: () => onOpenInfo(
@@ -523,8 +623,11 @@ class _ProfileMenuPanel extends StatelessWidget {
                   'Use Home to select a child, Attend to view attendance, Leave to submit leave requests, Reports for marks and attendance reports, and Alerts for school notifications.',
                 ),
               ),
+              const _MenuDivider(),
               _MenuTile(
                 icon: Icons.privacy_tip_outlined,
+                accent: const Color(0xFFDB2777),
+                soft: const Color(0xFFFCE7F3),
                 title: 'Privacy Policy',
                 subtitle: 'How parent and student data is handled',
                 onTap: () => onOpenInfo(
@@ -532,8 +635,11 @@ class _ProfileMenuPanel extends StatelessWidget {
                   'Akademifyy uses parent and student data only for school communication, attendance, reports, fees, and related school operations.',
                 ),
               ),
+              const _MenuDivider(),
               _MenuTile(
                 icon: Icons.description_outlined,
+                accent: const Color(0xFF0F766E),
+                soft: const Color(0xFFE7F7F4),
                 title: 'Terms of Service',
                 subtitle: 'Parent app usage terms',
                 onTap: () => onOpenInfo(
@@ -541,19 +647,28 @@ class _ProfileMenuPanel extends StatelessWidget {
                   'Use of this app is subject to your school account access and Akademifyy platform terms.',
                 ),
               ),
+              const _MenuDivider(),
               const _StaticTile(
-                icon: Icons.info_outline,
+                icon: Icons.info_outline_rounded,
+                accent: SaaptTheme.primary,
+                soft: Color(0xFFEAF1FF),
                 title: 'App Version',
                 subtitle: ParentAppConfig.appVersion,
               ),
-              _MenuTile(
-                icon: Icons.logout_rounded,
-                title: 'Logout',
-                subtitle: 'Sign out from this device',
-                danger: true,
-                onTap: onLogout,
-              ),
             ],
+          ),
+        ),
+        const SizedBox(height: 18),
+        ParentCard(
+          padding: EdgeInsets.zero,
+          child: _MenuTile(
+            icon: Icons.logout_rounded,
+            accent: const Color(0xFFDC2626),
+            soft: const Color(0xFFFFEDED),
+            title: 'Logout',
+            subtitle: 'Sign out from this device',
+            danger: true,
+            onTap: onLogout,
           ),
         ),
       ],
@@ -561,120 +676,486 @@ class _ProfileMenuPanel extends StatelessWidget {
   }
 }
 
-class _ChildrenPanel extends StatelessWidget {
-  const _ChildrenPanel({
-    required this.profile,
-    required this.selectedChildId,
-    required this.onSelectChild,
-  });
+class _AccountSectionLabel extends StatelessWidget {
+  const _AccountSectionLabel({required this.title});
 
-  final ParentProfile profile;
-  final String? selectedChildId;
-  final ValueChanged<String> onSelectChild;
+  final String title;
 
   @override
   Widget build(BuildContext context) {
-    if (selectedChildId != null) {
-      return _ChildDetailPanel(childId: selectedChildId!);
-    }
-    if (profile.children.isEmpty) {
-      return const EmptyPanel(
-        message: 'No children are mapped to this account.',
-      );
-    }
+    return Text(
+      title,
+      style: const TextStyle(
+        color: SaaptTheme.navy,
+        fontSize: 14,
+        fontWeight: FontWeight.w900,
+      ),
+    );
+  }
+}
 
-    return ParentCard(
-      padding: EdgeInsets.zero,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
+class _AccountStatChip extends StatelessWidget {
+  const _AccountStatChip({
+    required this.label,
+    required this.value,
+    required this.icon,
+    required this.accent,
+    required this.soft,
+  });
+
+  final String label;
+  final String value;
+  final IconData icon;
+  final Color accent;
+  final Color soft;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
+      decoration: BoxDecoration(
+        color: soft,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: accent.withValues(alpha: 0.12)),
+      ),
+      child: Row(
         children: [
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16, 14, 16, 8),
-            child: Text(
-              'Children (${profile.children.length})',
-              style: const TextStyle(
-                color: SaaptTheme.navy,
-                fontSize: 15,
-                fontWeight: FontWeight.w900,
-              ),
+          Icon(icon, color: accent, size: 18),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  label.toUpperCase(),
+                  style: TextStyle(
+                    color: accent.withValues(alpha: 0.75),
+                    fontSize: 9.5,
+                    letterSpacing: 0.4,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  value,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    color: SaaptTheme.navy,
+                    fontSize: 13,
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
+              ],
             ),
           ),
-          for (var i = 0; i < profile.children.length; i++) ...[
-            if (i > 0)
-              const Divider(
-                height: 1,
-                thickness: 0.6,
-                indent: 72,
-                color: Color(0xFFE6EBF3),
-              ),
-            _ChildChatTile(
-              child: profile.children[i],
-              onTap: () => onSelectChild(profile.children[i].id),
-            ),
-          ],
         ],
       ),
     );
   }
 }
 
-class _ChildChatTile extends StatelessWidget {
-  const _ChildChatTile({required this.child, required this.onTap});
-
-  final ParentChild child;
-  final VoidCallback onTap;
+class _MenuDivider extends StatelessWidget {
+  const _MenuDivider();
 
   @override
   Widget build(BuildContext context) {
-    final subtitle = [
-      if (child.classLabel.trim().isNotEmpty) child.classLabel.trim(),
-      if (child.schoolName?.trim().isNotEmpty == true) child.schoolName!.trim(),
-      if (child.rollNo?.trim().isNotEmpty == true) 'Roll ${child.rollNo!.trim()}',
-    ].join(' · ');
+    return const Divider(
+      height: 1,
+      thickness: 0.7,
+      indent: 68,
+      color: Color(0xFFE6EBF3),
+    );
+  }
+}
 
-    return InkWell(
-      onTap: onTap,
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(14, 11, 14, 11),
-        child: Row(
-          children: [
-            _ChildAvatar(child: child, size: 48, circular: true),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    child.name.trim().isEmpty ? 'Student' : child.name.trim(),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
-                      color: Color(0xFF111B21),
-                      fontSize: 16,
-                      fontWeight: FontWeight.w700,
+class _ChildrenPanel extends StatelessWidget {
+  const _ChildrenPanel({
+    required this.profile,
+    required this.onSelectChild,
+  });
+
+  final ParentProfile profile;
+  final ValueChanged<String> onSelectChild;
+
+  @override
+  Widget build(BuildContext context) {
+    if (profile.children.isEmpty) {
+      return const _ChildEmptyState(
+        icon: Icons.family_restroom_rounded,
+        title: 'No children mapped',
+        message: 'No children are mapped to this account yet.',
+      );
+    }
+
+    final children = profile.children;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        ParentCard(
+          padding: EdgeInsets.zero,
+          child: Container(
+            padding: const EdgeInsets.fromLTRB(16, 14, 16, 14),
+            decoration: const BoxDecoration(
+              gradient: LinearGradient(
+                colors: [Color(0xFFEAF1FF), Colors.white],
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+              ),
+              borderRadius: BorderRadius.all(Radius.circular(16)),
+            ),
+            child: Row(
+              children: [
+                Container(
+                  width: 44,
+                  height: 44,
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(14),
+                    border: Border.all(
+                      color: SaaptTheme.primary.withValues(alpha: 0.18),
                     ),
                   ),
-                  if (subtitle.isNotEmpty) ...[
-                    const SizedBox(height: 3),
-                    Text(
-                      subtitle,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                        color: Color(0xFF667781),
-                        fontSize: 13.5,
-                        fontWeight: FontWeight.w500,
+                  child: const Icon(
+                    Icons.groups_rounded,
+                    color: SaaptTheme.primary,
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        '${children.length} child${children.length == 1 ? '' : 'ren'} linked',
+                        style: const TextStyle(
+                          color: SaaptTheme.navy,
+                          fontSize: 16,
+                          fontWeight: FontWeight.w900,
+                          letterSpacing: -0.2,
+                        ),
+                      ),
+                      const SizedBox(height: 3),
+                      const Text(
+                        'Open a profile for fees, documents, exams and more',
+                        style: TextStyle(
+                          color: Color(0xFF60708F),
+                          fontSize: 12.5,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+        const SizedBox(height: 18),
+        Row(
+          children: [
+            const Expanded(
+              child: Text(
+                'Your children',
+                style: TextStyle(
+                  color: SaaptTheme.navy,
+                  fontSize: 14,
+                  fontWeight: FontWeight.w900,
+                ),
+              ),
+            ),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
+              decoration: BoxDecoration(
+                color: const Color(0xFFEAF1FF),
+                borderRadius: BorderRadius.circular(999),
+              ),
+              child: Text(
+                '${children.length}',
+                style: const TextStyle(
+                  color: SaaptTheme.primary,
+                  fontSize: 12,
+                  fontWeight: FontWeight.w900,
+                ),
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 10),
+        for (var i = 0; i < children.length; i++)
+          Padding(
+            padding: const EdgeInsets.only(bottom: 12),
+            child: _ChildProfileCard(
+              child: children[i],
+              accentIndex: i,
+              onTap: () => onSelectChild(children[i].id),
+            ),
+          ),
+      ],
+    );
+  }
+}
+
+class _ChildProfileCard extends StatelessWidget {
+  const _ChildProfileCard({
+    required this.child,
+    required this.accentIndex,
+    required this.onTap,
+  });
+
+  final ParentChild child;
+  final int accentIndex;
+  final VoidCallback onTap;
+
+  static const _accents = <(Color, Color)>[
+    (Color(0xFF2054E8), Color(0xFFEAF1FF)),
+    (Color(0xFF0F766E), Color(0xFFE7F7F4)),
+    (Color(0xFFB45309), Color(0xFFFFF4E5)),
+    (Color(0xFF7C3AED), Color(0xFFF3E8FF)),
+    (Color(0xFFDB2777), Color(0xFFFCE7F3)),
+    (Color(0xFF0369A1), Color(0xFFE0F2FE)),
+  ];
+
+  @override
+  Widget build(BuildContext context) {
+    final accent = _accents[accentIndex % _accents.length];
+    final name = child.name.trim().isEmpty ? 'Student' : child.name.trim();
+    final classLabel = child.classLabel.trim();
+    final school = child.schoolName?.trim() ?? '';
+    final roll = child.rollNo?.trim() ?? '';
+    final admission = child.admissionNo?.trim() ?? '';
+    final status = child.status?.trim().isNotEmpty == true
+        ? child.status!.trim()
+        : 'Active';
+    final statusActive = !status.toLowerCase().contains('inactive') &&
+        !status.toLowerCase().contains('left');
+
+    final facts = <(String, String)>[
+      if (classLabel.isNotEmpty) ('Class', classLabel),
+      if (roll.isNotEmpty) ('Roll', roll),
+      if (admission.isNotEmpty && admission != roll) ('Admission', admission),
+      if (school.isNotEmpty) ('School', school),
+    ];
+
+    return ParentCard(
+      padding: EdgeInsets.zero,
+      child: InkWell(
+        borderRadius: BorderRadius.circular(16),
+        onTap: onTap,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Container(
+              padding: const EdgeInsets.fromLTRB(14, 14, 14, 12),
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  colors: [accent.$2, Colors.white],
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                ),
+                borderRadius: const BorderRadius.vertical(
+                  top: Radius.circular(16),
+                ),
+              ),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Container(
+                    width: 58,
+                    height: 58,
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(18),
+                      border: Border.all(
+                        color: accent.$1.withValues(alpha: 0.2),
+                        width: 2,
+                      ),
+                      boxShadow: [
+                        BoxShadow(
+                          color: accent.$1.withValues(alpha: 0.16),
+                          blurRadius: 12,
+                          offset: const Offset(0, 5),
+                        ),
+                      ],
+                    ),
+                    child: ClipRRect(
+                      borderRadius: BorderRadius.circular(16),
+                      child: _ChildAvatar(
+                        child: child,
+                        size: 58,
+                        circular: true,
                       ),
                     ),
-                  ],
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            Expanded(
+                              child: Text(
+                                name,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: const TextStyle(
+                                  color: SaaptTheme.navy,
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.w900,
+                                  letterSpacing: -0.2,
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 9,
+                                vertical: 5,
+                              ),
+                              decoration: BoxDecoration(
+                                color: statusActive
+                                    ? const Color(0xFFE9F8EF)
+                                    : const Color(0xFFFFF4DF),
+                                borderRadius: BorderRadius.circular(999),
+                              ),
+                              child: Text(
+                                status,
+                                style: TextStyle(
+                                  color: statusActive
+                                      ? const Color(0xFF059669)
+                                      : const Color(0xFFB45309),
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w900,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                        if (classLabel.isNotEmpty || school.isNotEmpty) ...[
+                          const SizedBox(height: 6),
+                          Text(
+                            [
+                              if (classLabel.isNotEmpty) classLabel,
+                              if (school.isNotEmpty) school,
+                            ].join(' · '),
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                              color: Color(0xFF60708F),
+                              fontSize: 13,
+                              height: 1.3,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ],
+                      ],
+                    ),
+                  ),
                 ],
               ),
             ),
-            const SizedBox(width: 8),
-            const Icon(
-              Icons.chevron_right_rounded,
-              color: Color(0xFFB0B8C4),
-              size: 22,
+            if (facts.isNotEmpty)
+              Padding(
+                padding: const EdgeInsets.fromLTRB(12, 0, 12, 8),
+                child: LayoutBuilder(
+                  builder: (context, constraints) {
+                    final gap = 8.0;
+                    final half = (constraints.maxWidth - gap) / 2;
+                    return Wrap(
+                      spacing: gap,
+                      runSpacing: gap,
+                      children: [
+                        for (final fact in facts)
+                          SizedBox(
+                            width: facts.length == 1 || fact.$2.length > 26
+                                ? constraints.maxWidth
+                                : half,
+                            child: Container(
+                              width: double.infinity,
+                              padding: const EdgeInsets.fromLTRB(
+                                12,
+                                10,
+                                12,
+                                10,
+                              ),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFFF7FAFF),
+                                borderRadius: BorderRadius.circular(14),
+                                border: Border.all(
+                                  color: const Color(0xFFE5ECF7),
+                                ),
+                              ),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    fact.$1.toUpperCase(),
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: const TextStyle(
+                                      color: Color(0xFF8EA0BA),
+                                      fontSize: 10,
+                                      letterSpacing: 0.4,
+                                      fontWeight: FontWeight.w800,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 4),
+                                  Text(
+                                    fact.$2,
+                                    maxLines: 2,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: const TextStyle(
+                                      color: SaaptTheme.navy,
+                                      fontSize: 13.5,
+                                      height: 1.25,
+                                      fontWeight: FontWeight.w800,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                      ],
+                    );
+                  },
+                ),
+              ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(14, 0, 14, 14),
+              child: Row(
+                children: [
+                  Icon(
+                    Icons.person_outline_rounded,
+                    size: 16,
+                    color: accent.$1.withValues(alpha: 0.8),
+                  ),
+                  const SizedBox(width: 6),
+                  const Expanded(
+                    child: Text(
+                      'View full student profile',
+                      style: TextStyle(
+                        color: Color(0xFF8EA0BA),
+                        fontSize: 12.5,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ),
+                  Text(
+                    'Open',
+                    style: TextStyle(
+                      color: accent.$1,
+                      fontSize: 12.5,
+                      fontWeight: FontWeight.w900,
+                    ),
+                  ),
+                  Icon(
+                    Icons.chevron_right_rounded,
+                    size: 18,
+                    color: accent.$1,
+                  ),
+                ],
+              ),
             ),
           ],
         ),
@@ -1210,57 +1691,40 @@ class _SchoolContactChatTile extends StatelessWidget {
   }
 }
 
-class _ChildDetailPanel extends ConsumerWidget {
-  const _ChildDetailPanel({required this.childId});
-
-  final String childId;
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final detailState = ref.watch(parentChildDetailProvider(childId));
-    return detailState.when(
-      loading: () => const LoadingPanel(),
-      error: (error, _) => EmptyPanel(
-        message: parentApiError(error, 'Unable to load child profile'),
-      ),
-      data: (detail) => Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          _ChildSummaryCard(child: detail.child),
-          const SizedBox(height: 16),
-          _DataPanel(
-            tabKey: 'profile',
-            title: 'Profile',
-            data: detail.tabs['profile'],
-          ),
-        ],
-      ),
-    );
-  }
-}
-
 class _ChildDetailScroll extends ConsumerStatefulWidget {
   const _ChildDetailScroll({
     required this.childId,
-    required this.hero,
     this.initialTabKey,
   });
 
   final String childId;
-  final Widget hero;
   final String? initialTabKey;
 
   @override
   ConsumerState<_ChildDetailScroll> createState() => _ChildDetailScrollState();
 }
 
-class _ChildDetailScrollState extends ConsumerState<_ChildDetailScroll> {
-  int _selectedIndex = 0;
+class _ChildDetailScrollState extends ConsumerState<_ChildDetailScroll>
+    with SingleTickerProviderStateMixin {
+  late TabController _tabController;
+  final _tabScrollController = ScrollController();
+  final _tabKeys = List<GlobalKey>.generate(
+    _childDetailTabs.length,
+    (_) => GlobalKey(),
+  );
 
   @override
   void initState() {
     super.initState();
-    _selectedIndex = _tabIndexForKey(widget.initialTabKey);
+    _tabController = TabController(
+      length: _childDetailTabs.length,
+      vsync: this,
+      initialIndex: _tabIndexForKey(widget.initialTabKey),
+    );
+    _tabController.addListener(_onTabChanged);
+    WidgetsBinding.instance.addPostFrameCallback(
+      (_) => _scrollTabIntoView(_tabController.index),
+    );
   }
 
   @override
@@ -1268,8 +1732,25 @@ class _ChildDetailScrollState extends ConsumerState<_ChildDetailScroll> {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.childId != widget.childId ||
         oldWidget.initialTabKey != widget.initialTabKey) {
-      _selectedIndex = _tabIndexForKey(widget.initialTabKey);
+      final index = _tabIndexForKey(widget.initialTabKey);
+      if (_tabController.index != index) {
+        _tabController.animateTo(index);
+      }
     }
+  }
+
+  @override
+  void dispose() {
+    _tabController.removeListener(_onTabChanged);
+    _tabController.dispose();
+    _tabScrollController.dispose();
+    super.dispose();
+  }
+
+  void _onTabChanged() {
+    if (_tabController.indexIsChanging) return;
+    setState(() {});
+    _scrollTabIntoView(_tabController.index);
   }
 
   int _tabIndexForKey(String? key) {
@@ -1278,122 +1759,76 @@ class _ChildDetailScrollState extends ConsumerState<_ChildDetailScroll> {
     return index < 0 ? 0 : index;
   }
 
+  void _scrollTabIntoView(int index) {
+    final keyContext = _tabKeys[index].currentContext;
+    if (keyContext == null) return;
+    Scrollable.ensureVisible(
+      keyContext,
+      duration: const Duration(milliseconds: 280),
+      curve: Curves.easeOutCubic,
+      alignment: 0.35,
+    );
+  }
+
+  Future<void> _refresh() async {
+    ref.invalidate(parentChildDetailProvider(widget.childId));
+    await ref.read(parentChildDetailProvider(widget.childId).future);
+  }
+
   @override
   Widget build(BuildContext context) {
     final detailState = ref.watch(parentChildDetailProvider(widget.childId));
     return detailState.when(
-      loading: () => CustomScrollView(
-        slivers: [
-          SliverToBoxAdapter(child: widget.hero),
-          const SliverPadding(
-            padding: EdgeInsets.fromLTRB(20, 22, 20, 32),
-            sliver: SliverToBoxAdapter(child: LoadingPanel()),
-          ),
-        ],
-      ),
-      error: (error, _) => CustomScrollView(
-        slivers: [
-          SliverToBoxAdapter(child: widget.hero),
-          SliverPadding(
-            padding: const EdgeInsets.fromLTRB(20, 22, 20, 32),
-            sliver: SliverToBoxAdapter(
-              child: EmptyPanel(
-                message: parentApiError(error, 'Unable to load child profile'),
-              ),
-            ),
+      loading: () => const Center(child: LoadingPanel()),
+      error: (error, _) => ListView(
+        physics: const AlwaysScrollableScrollPhysics(),
+        padding: const EdgeInsets.fromLTRB(20, 28, 20, 32),
+        children: [
+          _ChildEmptyState(
+            icon: Icons.error_outline_rounded,
+            title: 'Unable to load',
+            message: parentApiError(error, 'Unable to load child profile'),
           ),
         ],
       ),
       data: (detail) {
-        final selectedTab = _childDetailTabs[_selectedIndex];
-        return CustomScrollView(
-          slivers: [
-            SliverToBoxAdapter(child: widget.hero),
-            SliverPadding(
-              padding: const EdgeInsets.fromLTRB(20, 22, 20, 14),
-              sliver: SliverToBoxAdapter(
-                child: _ChildSummaryCard(child: detail.child),
-              ),
+        return Column(
+          children: [
+            _ChildTabStrip(
+              selectedIndex: _tabController.index,
+              scrollController: _tabScrollController,
+              tabKeys: _tabKeys,
+              onTap: (index) => _tabController.animateTo(index),
             ),
-            SliverPersistentHeader(
-              pinned: true,
-              delegate: _ChildTabsHeaderDelegate(
-                selectedIndex: _selectedIndex,
-                onTap: (index) => setState(() => _selectedIndex = index),
-              ),
-            ),
-            SliverPadding(
-              padding: const EdgeInsets.fromLTRB(20, 14, 20, 32),
-              sliver: SliverToBoxAdapter(
-                child: _DataPanel(
-                  tabKey: selectedTab.key,
-                  title: selectedTab.label,
-                  data: detail.tabs[selectedTab.key],
-                  childId: widget.childId,
-                ),
+            Expanded(
+              child: TabBarView(
+                controller: _tabController,
+                children: [
+                  for (final tab in _childDetailTabs)
+                    RefreshIndicator(
+                      color: SaaptTheme.primary,
+                      onRefresh: _refresh,
+                      child: ListView(
+                        physics: const AlwaysScrollableScrollPhysics(),
+                        padding: const EdgeInsets.fromLTRB(20, 18, 20, 36),
+                        children: [
+                          _ChildTabIntro(tab: tab),
+                          const SizedBox(height: 16),
+                          _DataPanel(
+                            tabKey: tab.key,
+                            title: tab.label,
+                            data: detail.tabs[tab.key],
+                            childId: widget.childId,
+                          ),
+                        ],
+                      ),
+                    ),
+                ],
               ),
             ),
           ],
         );
       },
-    );
-  }
-}
-
-class _ChildSummaryCard extends StatelessWidget {
-  const _ChildSummaryCard({required this.child});
-
-  final ParentChild child;
-
-  @override
-  Widget build(BuildContext context) {
-    final subtitle = [
-      if (child.classLabel.trim().isNotEmpty) child.classLabel.trim(),
-      if (child.schoolName?.trim().isNotEmpty == true) child.schoolName!.trim(),
-      if (child.rollNo?.trim().isNotEmpty == true) 'Roll ${child.rollNo!.trim()}',
-    ].join(' · ');
-
-    return ParentCard(
-      padding: EdgeInsets.zero,
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
-        child: Row(
-          children: [
-            _ChildAvatar(child: child, size: 48, circular: true),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    child.name.trim().isEmpty ? 'Student' : child.name.trim(),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
-                      color: Color(0xFF111B21),
-                      fontSize: 16,
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
-                  if (subtitle.isNotEmpty) ...[
-                    const SizedBox(height: 3),
-                    Text(
-                      subtitle,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                        color: Color(0xFF667781),
-                        fontSize: 13.5,
-                        fontWeight: FontWeight.w500,
-                      ),
-                    ),
-                  ],
-                ],
-              ),
-            ),
-          ],
-        ),
-      ),
     );
   }
 }
@@ -1443,90 +1878,131 @@ class _ChildAvatar extends StatelessWidget {
 }
 
 const _childDetailTabs = [
-  _ChildTabConfig('profile', 'Profile', Icons.person_outline),
-  _ChildTabConfig('parents', 'Parents', Icons.supervisor_account_outlined),
-  _ChildTabConfig('fees', 'Fees', Icons.receipt_long_outlined),
-  _ChildTabConfig('transport', 'Transport', Icons.directions_bus_outlined),
-  _ChildTabConfig('library', 'Library', Icons.local_library_outlined),
-  _ChildTabConfig('dormitory', 'Dormitory', Icons.bed_outlined),
-  _ChildTabConfig('exam', 'Exam', Icons.assignment_outlined),
-  _ChildTabConfig('documents', 'Documents', Icons.folder_outlined),
-  _ChildTabConfig('timeline', 'Timeline', Icons.timeline_outlined),
+  _ChildTabConfig(
+    'profile',
+    'Profile',
+    Icons.person_outline_rounded,
+    'Admission, personal and medical details',
+  ),
+  _ChildTabConfig(
+    'parents',
+    'Parents',
+    Icons.family_restroom_rounded,
+    'Guardian and family contacts',
+  ),
+  _ChildTabConfig(
+    'fees',
+    'Fees',
+    Icons.receipt_long_outlined,
+    'Invoices, payments and balance',
+  ),
+  _ChildTabConfig(
+    'transport',
+    'Transport',
+    Icons.directions_bus_outlined,
+    'Routes, pickup and drop details',
+  ),
+  _ChildTabConfig(
+    'library',
+    'Library',
+    Icons.local_library_outlined,
+    'Membership and issued books',
+  ),
+  _ChildTabConfig(
+    'dormitory',
+    'Dormitory',
+    Icons.bed_outlined,
+    'Hostel room and stay details',
+  ),
+  _ChildTabConfig(
+    'exam',
+    'Exam',
+    Icons.assignment_outlined,
+    'Schedules and exam records',
+  ),
+  _ChildTabConfig(
+    'documents',
+    'Documents',
+    Icons.folder_outlined,
+    'Certificates and uploaded files',
+  ),
+  _ChildTabConfig(
+    'timeline',
+    'Timeline',
+    Icons.timeline_outlined,
+    'Recent school activity',
+  ),
 ];
 
 class _ChildTabConfig {
-  const _ChildTabConfig(this.key, this.label, this.icon);
+  const _ChildTabConfig(this.key, this.label, this.icon, this.caption);
 
   final String key;
   final String label;
   final IconData icon;
+  final String caption;
 }
 
-class _ChildTabsHeaderDelegate extends SliverPersistentHeaderDelegate {
-  const _ChildTabsHeaderDelegate({
+class _ChildTabStrip extends StatelessWidget {
+  const _ChildTabStrip({
     required this.selectedIndex,
+    required this.scrollController,
+    required this.tabKeys,
     required this.onTap,
   });
 
   final int selectedIndex;
-  final ValueChanged<int> onTap;
-
-  @override
-  double get minExtent => 64;
-
-  @override
-  double get maxExtent => 64;
-
-  @override
-  Widget build(
-    BuildContext context,
-    double shrinkOffset,
-    bool overlapsContent,
-  ) {
-    return SizedBox.expand(
-      child: Container(
-        color: SaaptTheme.canvas,
-        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 6),
-        child: _ChildTabBar(selectedIndex: selectedIndex, onTap: onTap),
-      ),
-    );
-  }
-
-  @override
-  bool shouldRebuild(covariant _ChildTabsHeaderDelegate oldDelegate) {
-    return oldDelegate.selectedIndex != selectedIndex;
-  }
-}
-
-class _ChildTabBar extends StatelessWidget {
-  const _ChildTabBar({required this.selectedIndex, required this.onTap});
-
-  final int selectedIndex;
+  final ScrollController scrollController;
+  final List<GlobalKey> tabKeys;
   final ValueChanged<int> onTap;
 
   @override
   Widget build(BuildContext context) {
-    return ParentCard(
-      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 6),
-      child: SingleChildScrollView(
-        scrollDirection: Axis.horizontal,
-        child: Row(
-          children: [
-            for (var index = 0; index < _childDetailTabs.length; index++)
-              _ChildTabButton(
-                tab: _childDetailTabs[index],
-                selected: selectedIndex == index,
-                onTap: () => onTap(index),
-              ),
+    return Material(
+      color: Colors.white,
+      elevation: 0,
+      child: Container(
+        decoration: const BoxDecoration(
+          color: Colors.white,
+          border: Border(
+            bottom: BorderSide(color: Color(0xFFE4ECF8)),
+          ),
+          boxShadow: [
+            BoxShadow(
+              color: Color(0x0A113B7A),
+              blurRadius: 16,
+              offset: Offset(0, 6),
+            ),
           ],
+        ),
+        child: SingleChildScrollView(
+          controller: scrollController,
+          scrollDirection: Axis.horizontal,
+          padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
+          child: Row(
+            children: [
+              for (var index = 0; index < _childDetailTabs.length; index++)
+                Padding(
+                  key: tabKeys[index],
+                  padding: EdgeInsets.only(
+                    right: index == _childDetailTabs.length - 1 ? 0 : 8,
+                  ),
+                  child: _ChildTabChip(
+                    tab: _childDetailTabs[index],
+                    selected: selectedIndex == index,
+                    onTap: () => onTap(index),
+                  ),
+                ),
+            ],
+          ),
         ),
       ),
     );
   }
 }
 
-class _ChildTabButton extends StatelessWidget {
-  const _ChildTabButton({
+class _ChildTabChip extends StatelessWidget {
+  const _ChildTabChip({
     required this.tab,
     required this.selected,
     required this.onTap,
@@ -1538,37 +2014,171 @@ class _ChildTabButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.only(right: 6),
+    return Material(
+      color: Colors.transparent,
       child: InkWell(
-        borderRadius: BorderRadius.circular(12),
         onTap: onTap,
+        borderRadius: BorderRadius.circular(14),
         child: AnimatedContainer(
-          duration: const Duration(milliseconds: 160),
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
+          duration: const Duration(milliseconds: 220),
+          curve: Curves.easeOutCubic,
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
           decoration: BoxDecoration(
-            color: selected ? SaaptTheme.primary : Colors.transparent,
-            borderRadius: BorderRadius.circular(12),
+            gradient: selected
+                ? const LinearGradient(
+                    colors: [Color(0xFF1E4FE8), Color(0xFF3A72FF)],
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                  )
+                : null,
+            color: selected ? null : const Color(0xFFF4F7FD),
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(
+              color: selected
+                  ? Colors.transparent
+                  : const Color(0xFFE0E8F5),
+            ),
+            boxShadow: selected
+                ? const [
+                    BoxShadow(
+                      color: Color(0x332054E8),
+                      blurRadius: 14,
+                      offset: Offset(0, 6),
+                    ),
+                  ]
+                : null,
           ),
           child: Row(
+            mainAxisSize: MainAxisSize.min,
             children: [
               Icon(
                 tab.icon,
-                size: 16,
+                size: 17,
                 color: selected ? Colors.white : const Color(0xFF60708F),
               ),
-              const SizedBox(width: 6),
+              const SizedBox(width: 7),
               Text(
                 tab.label,
                 style: TextStyle(
                   color: selected ? Colors.white : SaaptTheme.navy,
-                  fontSize: 12,
-                  fontWeight: FontWeight.w900,
+                  fontSize: 13,
+                  fontWeight: FontWeight.w800,
+                  letterSpacing: -0.1,
                 ),
               ),
             ],
           ),
         ),
+      ),
+    );
+  }
+}
+
+class _ChildTabIntro extends StatelessWidget {
+  const _ChildTabIntro({required this.tab});
+
+  final _ChildTabConfig tab;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Container(
+          width: 44,
+          height: 44,
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(14),
+            gradient: const LinearGradient(
+              colors: [Color(0xFFEAF1FF), Color(0xFFF4F7FD)],
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+            ),
+            border: Border.all(color: const Color(0xFFDDE7F7)),
+          ),
+          child: Icon(tab.icon, color: SaaptTheme.primary, size: 22),
+        ),
+        const SizedBox(width: 12),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                tab.label,
+                style: const TextStyle(
+                  color: SaaptTheme.navy,
+                  fontSize: 18,
+                  fontWeight: FontWeight.w900,
+                  letterSpacing: -0.3,
+                ),
+              ),
+              const SizedBox(height: 3),
+              Text(
+                tab.caption,
+                style: const TextStyle(
+                  color: Color(0xFF60708F),
+                  fontSize: 13,
+                  height: 1.35,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _ChildEmptyState extends StatelessWidget {
+  const _ChildEmptyState({
+    required this.icon,
+    required this.title,
+    required this.message,
+  });
+
+  final IconData icon;
+  final String title;
+  final String message;
+
+  @override
+  Widget build(BuildContext context) {
+    return ParentCard(
+      padding: const EdgeInsets.fromLTRB(22, 28, 22, 28),
+      child: Column(
+        children: [
+          Container(
+            width: 64,
+            height: 64,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              color: const Color(0xFFEAF1FF),
+              border: Border.all(color: const Color(0xFFD5E2F8)),
+            ),
+            child: Icon(icon, color: SaaptTheme.primary, size: 28),
+          ),
+          const SizedBox(height: 16),
+          Text(
+            title,
+            textAlign: TextAlign.center,
+            style: const TextStyle(
+              color: SaaptTheme.navy,
+              fontSize: 16,
+              fontWeight: FontWeight.w900,
+            ),
+          ),
+          const SizedBox(height: 6),
+          Text(
+            message,
+            textAlign: TextAlign.center,
+            style: const TextStyle(
+              color: Color(0xFF60708F),
+              fontSize: 13.5,
+              height: 1.4,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -1592,6 +2202,12 @@ class _DataPanel extends StatelessWidget {
     if (tabKey == 'profile') {
       return _ProfileTabPanel(data: data);
     }
+    if (tabKey == 'parents') {
+      return _ParentsTabPanel(data: data);
+    }
+    if (tabKey == 'documents') {
+      return _DocumentsTabPanel(data: data);
+    }
     if (tabKey == 'library') {
       return _LibraryTabPanel(data: data);
     }
@@ -1600,20 +2216,329 @@ class _DataPanel extends StatelessWidget {
     }
     final records = _recordsForTab(tabKey, data);
     if (records.isEmpty) {
-      return EmptyPanel(message: 'No $title records available.');
+      final tab = _childDetailTabs.firstWhere(
+        (item) => item.key == tabKey,
+        orElse: () => _childDetailTabs.first,
+      );
+      return _ChildEmptyState(
+        icon: tab.icon,
+        title: 'No $title yet',
+        message: 'Nothing to show here for this student right now.',
+      );
     }
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: records
-          .map(
-            (record) => Padding(
-              padding: const EdgeInsets.only(bottom: 14),
-              child: _SummaryRecordTile(record: record),
-            ),
-          )
-          .toList(),
+    return _GroupedRecordsTabPanel(
+      tabKey: tabKey,
+      title: title,
+      records: records,
     );
   }
+}
+
+class _TabVisual {
+  const _TabVisual(this.icon, this.accent, this.soft);
+
+  final IconData icon;
+  final Color accent;
+  final Color soft;
+
+  static _TabVisual forKey(String tabKey) {
+    switch (tabKey) {
+      case 'fees':
+        return const _TabVisual(
+          Icons.receipt_long_outlined,
+          Color(0xFF2054E8),
+          Color(0xFFEAF1FF),
+        );
+      case 'transport':
+        return const _TabVisual(
+          Icons.directions_bus_outlined,
+          Color(0xFF0369A1),
+          Color(0xFFE0F2FE),
+        );
+      case 'library':
+        return const _TabVisual(
+          Icons.local_library_outlined,
+          Color(0xFF7C3AED),
+          Color(0xFFF3E8FF),
+        );
+      case 'dormitory':
+        return const _TabVisual(
+          Icons.bed_outlined,
+          Color(0xFF0F766E),
+          Color(0xFFE7F7F4),
+        );
+      case 'exam':
+        return const _TabVisual(
+          Icons.assignment_outlined,
+          Color(0xFFB45309),
+          Color(0xFFFFF4E5),
+        );
+      case 'documents':
+        return const _TabVisual(
+          Icons.folder_outlined,
+          Color(0xFF2054E8),
+          Color(0xFFEAF1FF),
+        );
+      case 'timeline':
+        return const _TabVisual(
+          Icons.timeline_outlined,
+          Color(0xFFDB2777),
+          Color(0xFFFCE7F3),
+        );
+      default:
+        return const _TabVisual(
+          Icons.info_outline_rounded,
+          SaaptTheme.primary,
+          Color(0xFFEAF1FF),
+        );
+    }
+  }
+}
+
+class _GroupedRecordsTabPanel extends StatelessWidget {
+  const _GroupedRecordsTabPanel({
+    required this.tabKey,
+    required this.title,
+    required this.records,
+  });
+
+  final String tabKey;
+  final String title;
+  final List<_DisplayRecord> records;
+
+  @override
+  Widget build(BuildContext context) {
+    final visual = _TabVisual.forKey(tabKey);
+    final groups = <String, List<_DisplayRecord>>{};
+    for (final record in records) {
+      final key = record.category.trim().isEmpty ? title : record.category;
+      groups.putIfAbsent(key, () => []).add(record);
+    }
+
+    final isTimeline = tabKey == 'timeline';
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        for (final entry in groups.entries) ...[
+          if (groups.length > 1 || entry.key != title) ...[
+            _DocumentGroupHeader(
+              title: entry.key,
+              count: entry.value.length,
+            ),
+            const SizedBox(height: 10),
+          ],
+          if (isTimeline)
+            _TimelineList(records: entry.value, visual: visual)
+          else
+            for (final record in entry.value)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 12),
+                child: _ContentRecordCard(
+                  record: record,
+                  visual: visual,
+                ),
+              ),
+          const SizedBox(height: 6),
+        ],
+      ],
+    );
+  }
+}
+
+class _TimelineList extends StatelessWidget {
+  const _TimelineList({required this.records, required this.visual});
+
+  final List<_DisplayRecord> records;
+  final _TabVisual visual;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      children: [
+        for (var i = 0; i < records.length; i++)
+          _TimelineRecordCard(
+            record: records[i],
+            visual: visual,
+            isFirst: i == 0,
+            isLast: i == records.length - 1,
+          ),
+      ],
+    );
+  }
+}
+
+class _TimelineRecordCard extends StatelessWidget {
+  const _TimelineRecordCard({
+    required this.record,
+    required this.visual,
+    required this.isFirst,
+    required this.isLast,
+  });
+
+  final _DisplayRecord record;
+  final _TabVisual visual;
+  final bool isFirst;
+  final bool isLast;
+
+  @override
+  Widget build(BuildContext context) {
+    final facts = _previewFacts(record.data, limit: 3);
+    return IntrinsicHeight(
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          SizedBox(
+            width: 28,
+            child: Column(
+              children: [
+                Expanded(
+                  child: Container(
+                    width: 2,
+                    color: isFirst
+                        ? Colors.transparent
+                        : visual.accent.withValues(alpha: 0.25),
+                  ),
+                ),
+                Container(
+                  width: 14,
+                  height: 14,
+                  decoration: BoxDecoration(
+                    color: visual.accent,
+                    shape: BoxShape.circle,
+                    border: Border.all(color: Colors.white, width: 2),
+                    boxShadow: [
+                      BoxShadow(
+                        color: visual.accent.withValues(alpha: 0.35),
+                        blurRadius: 8,
+                        offset: const Offset(0, 3),
+                      ),
+                    ],
+                  ),
+                ),
+                Expanded(
+                  child: Container(
+                    width: 2,
+                    color: isLast
+                        ? Colors.transparent
+                        : visual.accent.withValues(alpha: 0.25),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Padding(
+              padding: EdgeInsets.only(
+                top: isFirst ? 0 : 6,
+                bottom: isLast ? 0 : 12,
+              ),
+              child: ParentCard(
+                padding: EdgeInsets.zero,
+                child: InkWell(
+                  borderRadius: BorderRadius.circular(16),
+                  onTap: () => _showRecordDetailSheet(context, record),
+                  child: Padding(
+                    padding: const EdgeInsets.all(14),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            Container(
+                              width: 40,
+                              height: 40,
+                              decoration: BoxDecoration(
+                                color: visual.soft,
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                              child: Icon(
+                                record.icon,
+                                color: visual.accent,
+                                size: 20,
+                              ),
+                            ),
+                            const SizedBox(width: 10),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    record.title,
+                                    maxLines: 2,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: const TextStyle(
+                                      color: SaaptTheme.navy,
+                                      fontSize: 14.5,
+                                      fontWeight: FontWeight.w900,
+                                    ),
+                                  ),
+                                  if (record.subtitle.trim().isNotEmpty) ...[
+                                    const SizedBox(height: 3),
+                                    Text(
+                                      record.subtitle,
+                                      maxLines: 2,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: const TextStyle(
+                                        color: Color(0xFF60708F),
+                                        fontSize: 12.5,
+                                        fontWeight: FontWeight.w600,
+                                      ),
+                                    ),
+                                  ],
+                                ],
+                              ),
+                            ),
+                          ],
+                        ),
+                        if (facts.isNotEmpty) ...[
+                          const SizedBox(height: 12),
+                          Wrap(
+                            spacing: 8,
+                            runSpacing: 8,
+                            children: [
+                              for (final fact in facts)
+                                _MiniFactChip(
+                                  label: fact.$1,
+                                  value: fact.$2,
+                                ),
+                            ],
+                          ),
+                        ],
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+List<(String, String)> _previewFacts(
+  Map<String, dynamic> data, {
+  int limit = 4,
+  Set<String> skipValues = const {},
+}) {
+  final facts = <(String, String)>[];
+  for (final entry in data.entries) {
+    if (facts.length >= limit) break;
+    final key = entry.key.toString();
+    if (_shouldHideKey(key)) continue;
+    if (entry.value is Map || entry.value is List) continue;
+    if (_isEmptyData(entry.value)) continue;
+    final value = _displayValue(entry.value);
+    if (value.trim().isEmpty) continue;
+    if (skipValues.any((skip) => skip.toLowerCase() == value.toLowerCase())) {
+      continue;
+    }
+    facts.add((_labelForKey(key), value));
+  }
+  return facts;
 }
 
 class _ProfileTabPanel extends StatelessWidget {
@@ -1621,45 +2546,1130 @@ class _ProfileTabPanel extends StatelessWidget {
 
   final Object? data;
 
+  static const _sectionMeta = <String, (IconData, Color, Color)>{
+    'admission': (Icons.badge_outlined, Color(0xFF2054E8), Color(0xFFEAF1FF)),
+    'personal': (Icons.person_outline_rounded, Color(0xFF0F766E), Color(0xFFE7F7F4)),
+    'address': (Icons.home_outlined, Color(0xFFB45309), Color(0xFFFFF4E5)),
+    'medical': (Icons.medical_services_outlined, Color(0xFFDC2626), Color(0xFFFFEDED)),
+  };
+
   @override
   Widget build(BuildContext context) {
     final map = _asMap(data);
     final sections = <Widget>[];
     for (final key in const ['admission', 'personal', 'address', 'medical']) {
       final section = _asMap(map[key]);
-      if (!_isEmptyData(section)) {
-        sections.add(_RecordCard(title: _labelForKey(key), data: section));
-      }
+      if (_isEmptyData(section)) continue;
+      final meta = _sectionMeta[key]!;
+      sections.add(
+        _InfoSectionCard(
+          title: _labelForKey(key),
+          icon: meta.$1,
+          accent: meta.$2,
+          soft: meta.$3,
+          data: section,
+        ),
+      );
     }
 
     final siblings = _recordsFromGroup('Siblings', map['siblings']);
     if (siblings.isNotEmpty) {
       sections.add(
-        _SimpleSection(
-          title: 'Siblings',
-          children: siblings
-              .map((record) => _SummaryRecordTile(record: record))
-              .toList(),
-        ),
+        _SiblingSection(records: siblings),
       );
     }
 
     if (sections.isEmpty) {
-      return const EmptyPanel(message: 'No profile records available.');
+      return const _ChildEmptyState(
+        icon: Icons.person_outline_rounded,
+        title: 'No profile records',
+        message: 'Profile details for this student are not available yet.',
+      );
     }
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: sections
-          .map(
-            (section) => Padding(
-              padding: const EdgeInsets.only(bottom: 14),
-              child: section,
-            ),
-          )
-          .toList(),
+      children: [
+        for (final section in sections)
+          Padding(
+            padding: const EdgeInsets.only(bottom: 14),
+            child: section,
+          ),
+      ],
     );
   }
+}
+
+class _InfoSectionCard extends StatelessWidget {
+  const _InfoSectionCard({
+    required this.title,
+    required this.icon,
+    required this.accent,
+    required this.soft,
+    required this.data,
+  });
+
+  final String title;
+  final IconData icon;
+  final Color accent;
+  final Color soft;
+  final Map<String, dynamic> data;
+
+  @override
+  Widget build(BuildContext context) {
+    final entries = data.entries
+        .where((entry) => !_shouldHideKey(entry.key.toString()))
+        .where((entry) => !_isEmptyData(entry.value))
+        .toList();
+    if (entries.isEmpty) return const SizedBox.shrink();
+
+    return ParentCard(
+      padding: EdgeInsets.zero,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Container(
+            padding: const EdgeInsets.fromLTRB(16, 14, 16, 14),
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                colors: [soft, Colors.white],
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+              ),
+              borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
+            ),
+            child: Row(
+              children: [
+                Container(
+                  width: 40,
+                  height: 40,
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: accent.withValues(alpha: 0.18)),
+                  ),
+                  child: Icon(icon, color: accent, size: 20),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Text(
+                    title,
+                    style: const TextStyle(
+                      color: SaaptTheme.navy,
+                      fontSize: 16,
+                      fontWeight: FontWeight.w900,
+                      letterSpacing: -0.2,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(12, 4, 12, 12),
+            child: LayoutBuilder(
+              builder: (context, constraints) {
+                final gap = 8.0;
+                final half = (constraints.maxWidth - gap) / 2;
+                return Wrap(
+                  spacing: gap,
+                  runSpacing: gap,
+                  children: [
+                    for (final entry in entries)
+                      SizedBox(
+                        width: _displayValue(entry.value).length > 28 ||
+                                entries.length == 1
+                            ? constraints.maxWidth
+                            : half,
+                        child: _FactChip(
+                          label: _labelForKey(entry.key.toString()),
+                          value: _displayValue(entry.value),
+                        ),
+                      ),
+                  ],
+                );
+              },
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _FactChip extends StatelessWidget {
+  const _FactChip({
+    required this.label,
+    required this.value,
+  });
+
+  final String label;
+  final String value;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
+      decoration: BoxDecoration(
+        color: const Color(0xFFF7FAFF),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: const Color(0xFFE5ECF7)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            label.toUpperCase(),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: const TextStyle(
+              color: Color(0xFF8EA0BA),
+              fontSize: 10,
+              letterSpacing: 0.5,
+              fontWeight: FontWeight.w800,
+            ),
+          ),
+          const SizedBox(height: 5),
+          Text(
+            value,
+            style: const TextStyle(
+              color: SaaptTheme.navy,
+              fontSize: 14,
+              height: 1.3,
+              fontWeight: FontWeight.w800,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _SiblingSection extends StatelessWidget {
+  const _SiblingSection({required this.records});
+
+  final List<_DisplayRecord> records;
+
+  @override
+  Widget build(BuildContext context) {
+    return ParentCard(
+      padding: EdgeInsets.zero,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Container(
+            padding: const EdgeInsets.fromLTRB(16, 14, 16, 14),
+            decoration: const BoxDecoration(
+              color: Color(0xFFF4F7FD),
+              borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+            ),
+            child: const Row(
+              children: [
+                Icon(Icons.people_outline_rounded, color: SaaptTheme.primary),
+                SizedBox(width: 10),
+                Text(
+                  'Siblings',
+                  style: TextStyle(
+                    color: SaaptTheme.navy,
+                    fontSize: 16,
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          for (var i = 0; i < records.length; i++) ...[
+            if (i > 0)
+              const Divider(
+                height: 1,
+                thickness: 0.7,
+                indent: 72,
+                color: Color(0xFFE6EBF3),
+              ),
+            _SummaryRecordTile(record: records[i], embedded: true),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+class _ParentsTabPanel extends StatelessWidget {
+  const _ParentsTabPanel({required this.data});
+
+  final Object? data;
+
+  @override
+  Widget build(BuildContext context) {
+    final records = _parentRecords(data);
+    if (records.isEmpty) {
+      return const _ChildEmptyState(
+        icon: Icons.family_restroom_rounded,
+        title: 'No parent records',
+        message: 'Guardian details are not available for this student yet.',
+      );
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        for (final record in records)
+          Padding(
+            padding: const EdgeInsets.only(bottom: 12),
+            child: _ParentPersonCard(record: record),
+          ),
+      ],
+    );
+  }
+}
+
+class _ParentPersonCard extends StatelessWidget {
+  const _ParentPersonCard({required this.record});
+
+  final _DisplayRecord record;
+
+  Color get _roleColor {
+    final role = record.category.toLowerCase();
+    if (role.contains('father')) return const Color(0xFF2054E8);
+    if (role.contains('mother')) return const Color(0xFFDB2777);
+    if (role.contains('guardian')) return const Color(0xFF0F766E);
+    return SaaptTheme.primary;
+  }
+
+  Color get _roleSoft {
+    final role = record.category.toLowerCase();
+    if (role.contains('father')) return const Color(0xFFEAF1FF);
+    if (role.contains('mother')) return const Color(0xFFFCE7F3);
+    if (role.contains('guardian')) return const Color(0xFFE7F7F4);
+    return const Color(0xFFEAF1FF);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final phone = _firstString(record.data, [
+      'phone',
+      'mobile',
+      'contactNumber',
+      'phoneNumber',
+    ]);
+    final email = _firstString(record.data, ['email', 'emailAddress']);
+    final occupation = _firstString(record.data, [
+      'occupation',
+      'relationship',
+      'relation',
+    ]);
+    final initials = _initialsFor(record.title);
+
+    return ParentCard(
+      padding: EdgeInsets.zero,
+      child: InkWell(
+        borderRadius: BorderRadius.circular(16),
+        onTap: () => _showRecordDetailSheet(context, record),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 16, 16, 14),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  _PersonAvatar(
+                    imageUrl: record.imageUrl,
+                    initials: initials,
+                    color: _roleColor,
+                    soft: _roleSoft,
+                  ),
+                  const SizedBox(width: 14),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            Expanded(
+                              child: Text(
+                                record.title,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: const TextStyle(
+                                  color: SaaptTheme.navy,
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.w900,
+                                  letterSpacing: -0.2,
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 10,
+                                vertical: 5,
+                              ),
+                              decoration: BoxDecoration(
+                                color: _roleSoft,
+                                borderRadius: BorderRadius.circular(999),
+                              ),
+                              child: Text(
+                                record.category,
+                                style: TextStyle(
+                                  color: _roleColor,
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w900,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                        if (occupation != null &&
+                            occupation.toLowerCase() !=
+                                record.category.toLowerCase()) ...[
+                          const SizedBox(height: 6),
+                          Text(
+                            occupation,
+                            style: const TextStyle(
+                              color: Color(0xFF60708F),
+                              fontSize: 13,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ],
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            if (phone != null || email != null) ...[
+              const Divider(height: 1, thickness: 0.7, color: Color(0xFFE6EBF3)),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(8, 6, 8, 8),
+                child: Column(
+                  children: [
+                    if (phone != null)
+                      _ContactActionRow(
+                        icon: Icons.call_rounded,
+                        label: phone,
+                        tint: const Color(0xFF00A884),
+                        soft: const Color(0xFFE8F8F1),
+                        onTap: () => _launchPhone(phone),
+                      ),
+                    if (email != null)
+                      _ContactActionRow(
+                        icon: Icons.mail_outline_rounded,
+                        label: email,
+                        tint: SaaptTheme.primary,
+                        soft: const Color(0xFFEAF1FF),
+                        onTap: () => _launchEmail(email),
+                      ),
+                  ],
+                ),
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _PersonAvatar extends StatelessWidget {
+  const _PersonAvatar({
+    required this.initials,
+    required this.color,
+    required this.soft,
+    this.imageUrl,
+  });
+
+  final String initials;
+  final Color color;
+  final Color soft;
+  final String? imageUrl;
+
+  @override
+  Widget build(BuildContext context) {
+    final url = imageUrl?.trim();
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(18),
+      child: Container(
+        width: 56,
+        height: 56,
+        color: soft,
+        child: url != null && url.isNotEmpty
+            ? Image.network(
+                url,
+                fit: BoxFit.cover,
+                errorBuilder: (_, _, _) => Center(
+                  child: Text(
+                    initials,
+                    style: TextStyle(
+                      color: color,
+                      fontSize: 18,
+                      fontWeight: FontWeight.w900,
+                    ),
+                  ),
+                ),
+              )
+            : Center(
+                child: Text(
+                  initials,
+                  style: TextStyle(
+                    color: color,
+                    fontSize: 18,
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
+              ),
+      ),
+    );
+  }
+}
+
+class _ContactActionRow extends StatelessWidget {
+  const _ContactActionRow({
+    required this.icon,
+    required this.label,
+    required this.tint,
+    required this.soft,
+    required this.onTap,
+  });
+
+  final IconData icon;
+  final String label;
+  final Color tint;
+  final Color soft;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      borderRadius: BorderRadius.circular(12),
+      onTap: onTap,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+        child: Row(
+          children: [
+            Container(
+              width: 34,
+              height: 34,
+              decoration: BoxDecoration(
+                color: soft,
+                borderRadius: BorderRadius.circular(11),
+              ),
+              child: Icon(icon, color: tint, size: 18),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Text(
+                label,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(
+                  color: SaaptTheme.navy,
+                  fontSize: 13.5,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ),
+            Icon(Icons.chevron_right_rounded, color: tint.withValues(alpha: 0.55)),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _DocumentsTabPanel extends StatelessWidget {
+  const _DocumentsTabPanel({required this.data});
+
+  final Object? data;
+
+  @override
+  Widget build(BuildContext context) {
+    final records = _documentRecords(data);
+    if (records.isEmpty) {
+      return const _ChildEmptyState(
+        icon: Icons.folder_outlined,
+        title: 'No documents',
+        message: 'No documents or face profile files for this student yet.',
+      );
+    }
+
+    final groups = <String, List<_DisplayRecord>>{};
+    for (final record in records) {
+      groups.putIfAbsent(record.category, () => []).add(record);
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        for (final entry in groups.entries) ...[
+          _DocumentGroupHeader(
+            title: entry.key,
+            count: entry.value.length,
+          ),
+          const SizedBox(height: 10),
+          for (final record in entry.value)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 10),
+              child: record.category.toLowerCase().contains('face')
+                  ? _FaceProfileCard(record: record)
+                  : _DocumentFileCard(record: record),
+            ),
+          const SizedBox(height: 8),
+        ],
+      ],
+    );
+  }
+}
+
+class _DocumentGroupHeader extends StatelessWidget {
+  const _DocumentGroupHeader({required this.title, required this.count});
+
+  final String title;
+  final int count;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        Expanded(
+          child: Text(
+            title,
+            style: const TextStyle(
+              color: SaaptTheme.navy,
+              fontSize: 14,
+              fontWeight: FontWeight.w900,
+            ),
+          ),
+        ),
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
+          decoration: BoxDecoration(
+            color: const Color(0xFFEAF1FF),
+            borderRadius: BorderRadius.circular(999),
+          ),
+          child: Text(
+            '$count',
+            style: const TextStyle(
+              color: SaaptTheme.primary,
+              fontSize: 12,
+              fontWeight: FontWeight.w900,
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _DocumentFileCard extends StatelessWidget {
+  const _DocumentFileCard({required this.record});
+
+  final _DisplayRecord record;
+
+  (IconData, Color, Color) get _style {
+    final title = '${record.title} ${record.subtitle}'.toLowerCase();
+    if (title.contains('photo') || title.contains('image')) {
+      return (Icons.image_outlined, const Color(0xFF7C3AED), const Color(0xFFF3E8FF));
+    }
+    if (title.contains('pdf')) {
+      return (Icons.picture_as_pdf_outlined, const Color(0xFFDC2626), const Color(0xFFFFEDED));
+    }
+    if (title.contains('certificate') || title.contains('birth')) {
+      return (Icons.workspace_premium_outlined, const Color(0xFFB45309), const Color(0xFFFFF4E5));
+    }
+    return (Icons.description_outlined, SaaptTheme.primary, const Color(0xFFEAF1FF));
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final style = _style;
+    final url = _firstString(record.data, ['url', 'fileUrl', 'documentUrl']) ??
+        record.imageUrl;
+    final facts = _previewFacts(
+      record.data,
+      limit: 3,
+      skipValues: {record.title, record.subtitle, url ?? ''},
+    );
+
+    return ParentCard(
+      padding: EdgeInsets.zero,
+      child: InkWell(
+        borderRadius: BorderRadius.circular(16),
+        onTap: () => _showRecordDetailSheet(context, record),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Container(
+              padding: const EdgeInsets.all(14),
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  colors: [style.$3, Colors.white],
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                ),
+                borderRadius: const BorderRadius.vertical(
+                  top: Radius.circular(16),
+                ),
+              ),
+              child: Row(
+                children: [
+                  Container(
+                    width: 52,
+                    height: 52,
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(16),
+                      border: Border.all(
+                        color: style.$2.withValues(alpha: 0.18),
+                      ),
+                    ),
+                    child: Icon(style.$1, color: style.$2, size: 24),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          record.title,
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                            color: SaaptTheme.navy,
+                            fontSize: 14.5,
+                            fontWeight: FontWeight.w900,
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          record.subtitle.isEmpty
+                              ? record.category
+                              : record.subtitle,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                            color: Color(0xFF60708F),
+                            fontSize: 12.5,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  if (url != null && url.trim().isNotEmpty)
+                    TextButton(
+                      onPressed: () => launchUrl(
+                        Uri.parse(url.trim()),
+                        mode: LaunchMode.externalApplication,
+                      ),
+                      style: TextButton.styleFrom(
+                        foregroundColor: style.$2,
+                        padding: const EdgeInsets.symmetric(horizontal: 10),
+                      ),
+                      child: const Text(
+                        'Open',
+                        style: TextStyle(fontWeight: FontWeight.w900),
+                      ),
+                    )
+                  else
+                    Icon(
+                      Icons.chevron_right_rounded,
+                      color: style.$2.withValues(alpha: 0.7),
+                    ),
+                ],
+              ),
+            ),
+            if (facts.isNotEmpty)
+              Padding(
+                padding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
+                child: Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: [
+                    for (final fact in facts)
+                      _MiniFactChip(label: fact.$1, value: fact.$2),
+                  ],
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _FaceProfileCard extends StatelessWidget {
+  const _FaceProfileCard({required this.record});
+
+  final _DisplayRecord record;
+
+  @override
+  Widget build(BuildContext context) {
+    final status = _displayValue(record.data['status']);
+    final imageUrl = record.imageUrl ?? _imageUrlFrom(record.data);
+
+    return ParentCard(
+      padding: EdgeInsets.zero,
+      child: InkWell(
+        borderRadius: BorderRadius.circular(16),
+        onTap: () => _showRecordDetailSheet(context, record),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Container(
+              height: 148,
+              decoration: const BoxDecoration(
+                borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+                gradient: LinearGradient(
+                  colors: [Color(0xFF1E4FE8), Color(0xFF5B8CFF)],
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                ),
+              ),
+              child: Stack(
+                children: [
+                  Positioned(
+                    right: -20,
+                    top: -30,
+                    child: Container(
+                      width: 120,
+                      height: 120,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        border: Border.all(
+                          color: Colors.white.withValues(alpha: 0.18),
+                          width: 2,
+                        ),
+                      ),
+                    ),
+                  ),
+                  Center(
+                    child: Container(
+                      width: 88,
+                      height: 88,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        border: Border.all(color: Colors.white, width: 3),
+                        boxShadow: const [
+                          BoxShadow(
+                            color: Color(0x33000000),
+                            blurRadius: 18,
+                            offset: Offset(0, 8),
+                          ),
+                        ],
+                      ),
+                      child: ClipOval(
+                        child: imageUrl?.trim().isNotEmpty == true
+                            ? Image.network(
+                                imageUrl!,
+                                fit: BoxFit.cover,
+                                errorBuilder: (_, _, _) => const ColoredBox(
+                                  color: Color(0xFFEAF1FF),
+                                  child: Icon(
+                                    Icons.face_retouching_natural_outlined,
+                                    color: SaaptTheme.primary,
+                                    size: 36,
+                                  ),
+                                ),
+                              )
+                            : const ColoredBox(
+                                color: Color(0xFFEAF1FF),
+                                child: Icon(
+                                  Icons.face_retouching_natural_outlined,
+                                  color: SaaptTheme.primary,
+                                  size: 36,
+                                ),
+                              ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 14, 16, 16),
+              child: Row(
+                children: [
+                  const Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Face Profile',
+                          style: TextStyle(
+                            color: SaaptTheme.navy,
+                            fontSize: 15,
+                            fontWeight: FontWeight.w900,
+                          ),
+                        ),
+                        SizedBox(height: 3),
+                        Text(
+                          'Attendance recognition profile',
+                          style: TextStyle(
+                            color: Color(0xFF60708F),
+                            fontSize: 12.5,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  if (status.trim().isNotEmpty)
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 10,
+                        vertical: 6,
+                      ),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFE9F8EF),
+                        borderRadius: BorderRadius.circular(999),
+                      ),
+                      child: Text(
+                        status,
+                        style: const TextStyle(
+                          color: Color(0xFF059669),
+                          fontSize: 11,
+                          fontWeight: FontWeight.w900,
+                        ),
+                      ),
+                    ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _ContentRecordCard extends StatelessWidget {
+  const _ContentRecordCard({
+    required this.record,
+    this.visual = const _TabVisual(
+      Icons.info_outline_rounded,
+      SaaptTheme.primary,
+      Color(0xFFEAF1FF),
+    ),
+  });
+
+  final _DisplayRecord record;
+  final _TabVisual visual;
+
+  @override
+  Widget build(BuildContext context) {
+    final facts = _previewFacts(
+      record.data,
+      limit: 4,
+      skipValues: {record.title, record.subtitle},
+    );
+
+    return ParentCard(
+      padding: EdgeInsets.zero,
+      child: InkWell(
+        borderRadius: BorderRadius.circular(16),
+        onTap: () => _showRecordDetailSheet(context, record),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Container(
+              padding: const EdgeInsets.fromLTRB(14, 14, 14, 12),
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  colors: [visual.soft, Colors.white],
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                ),
+                borderRadius: const BorderRadius.vertical(
+                  top: Radius.circular(16),
+                ),
+              ),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Container(
+                    width: 52,
+                    height: 52,
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(16),
+                      border: Border.all(
+                        color: visual.accent.withValues(alpha: 0.18),
+                      ),
+                    ),
+                    child: record.imageUrl?.trim().isNotEmpty == true
+                        ? ClipRRect(
+                            borderRadius: BorderRadius.circular(15),
+                            child: Image.network(
+                              record.imageUrl!,
+                              fit: BoxFit.cover,
+                              errorBuilder: (_, _, _) => Icon(
+                                record.icon,
+                                color: visual.accent,
+                              ),
+                            ),
+                          )
+                        : Icon(record.icon, color: visual.accent),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 8,
+                            vertical: 3,
+                          ),
+                          decoration: BoxDecoration(
+                            color: Colors.white.withValues(alpha: 0.85),
+                            borderRadius: BorderRadius.circular(999),
+                          ),
+                          child: Text(
+                            record.category,
+                            style: TextStyle(
+                              color: visual.accent,
+                              fontSize: 10.5,
+                              fontWeight: FontWeight.w800,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 6),
+                        Text(
+                          record.title,
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                            color: SaaptTheme.navy,
+                            fontSize: 15,
+                            fontWeight: FontWeight.w900,
+                            letterSpacing: -0.2,
+                          ),
+                        ),
+                        if (record.subtitle.trim().isNotEmpty) ...[
+                          const SizedBox(height: 4),
+                          Text(
+                            record.subtitle,
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                              color: Color(0xFF60708F),
+                              fontSize: 12.5,
+                              height: 1.3,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ],
+                      ],
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Container(
+                    width: 30,
+                    height: 30,
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: Icon(
+                      Icons.chevron_right_rounded,
+                      color: visual.accent.withValues(alpha: 0.7),
+                      size: 18,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            if (facts.isNotEmpty)
+              Padding(
+                padding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
+                child: LayoutBuilder(
+                  builder: (context, constraints) {
+                    final gap = 8.0;
+                    final half = (constraints.maxWidth - gap) / 2;
+                    return Wrap(
+                      spacing: gap,
+                      runSpacing: gap,
+                      children: [
+                        for (final fact in facts)
+                          SizedBox(
+                            width: facts.length == 1 || fact.$2.length > 24
+                                ? constraints.maxWidth
+                                : half,
+                            child: _FactChip(
+                              label: fact.$1,
+                              value: fact.$2,
+                            ),
+                          ),
+                      ],
+                    );
+                  },
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _MiniFactChip extends StatelessWidget {
+  const _MiniFactChip({required this.label, required this.value});
+
+  final String label;
+  final String value;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+      decoration: BoxDecoration(
+        color: const Color(0xFFF7FAFF),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: const Color(0xFFE5ECF7)),
+      ),
+      child: Text.rich(
+        TextSpan(
+          children: [
+            TextSpan(
+              text: '${label.toUpperCase()}  ',
+              style: const TextStyle(
+                color: Color(0xFF8EA0BA),
+                fontSize: 10,
+                fontWeight: FontWeight.w800,
+                letterSpacing: 0.3,
+              ),
+            ),
+            TextSpan(
+              text: value,
+              style: const TextStyle(
+                color: SaaptTheme.navy,
+                fontSize: 12,
+                fontWeight: FontWeight.w800,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+String _initialsFor(String name) {
+  final parts = name
+      .trim()
+      .split(RegExp(r'\s+'))
+      .where((part) => part.isNotEmpty)
+      .toList();
+  if (parts.isEmpty) return '?';
+  if (parts.length == 1) {
+    final value = parts.first;
+    return value.substring(0, value.length >= 2 ? 2 : 1).toUpperCase();
+  }
+  return '${parts.first[0]}${parts.last[0]}'.toUpperCase();
 }
 
 class _SimpleSection extends StatelessWidget {
@@ -1671,19 +3681,39 @@ class _SimpleSection extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return ParentCard(
+      padding: EdgeInsets.zero,
       child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Text(
-            title,
-            style: const TextStyle(
-              color: SaaptTheme.navy,
-              fontSize: 16,
-              fontWeight: FontWeight.w900,
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 14, 16, 10),
+            child: Row(
+              children: [
+                Container(
+                  width: 8,
+                  height: 8,
+                  decoration: const BoxDecoration(
+                    color: SaaptTheme.primary,
+                    shape: BoxShape.circle,
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Text(
+                  title,
+                  style: const TextStyle(
+                    color: SaaptTheme.navy,
+                    fontSize: 15,
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
+              ],
             ),
           ),
-          const SizedBox(height: 12),
-          ...children,
+          const Divider(height: 1, thickness: 0.7, color: Color(0xFFE6EBF3)),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(12, 8, 12, 12),
+            child: Column(children: children),
+          ),
         ],
       ),
     );
@@ -1702,10 +3732,13 @@ class _FeesTabPanel extends StatelessWidget {
     final invoices = _asList(
       map['invoices'],
     ).map(_asMap).where((item) => !_isEmptyData(item)).toList();
+    final visual = _TabVisual.forKey('fees');
 
     if (invoices.isEmpty) {
-      return const EmptyPanel(
-        message: 'No fee invoices found for this student.',
+      return const _ChildEmptyState(
+        icon: Icons.receipt_long_outlined,
+        title: 'No fee invoices',
+        message: 'No fee invoices found for this student yet.',
       );
     }
 
@@ -1713,23 +3746,75 @@ class _FeesTabPanel extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         ParentCard(
+          padding: EdgeInsets.zero,
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              const Text(
-                'Fees',
-                style: TextStyle(
-                  color: SaaptTheme.navy,
-                  fontSize: 16,
-                  fontWeight: FontWeight.w900,
+              Container(
+                padding: const EdgeInsets.fromLTRB(16, 14, 16, 14),
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    colors: [visual.soft, Colors.white],
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                  ),
+                  borderRadius: const BorderRadius.vertical(
+                    top: Radius.circular(16),
+                  ),
+                ),
+                child: Row(
+                  children: [
+                    Container(
+                      width: 40,
+                      height: 40,
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(
+                          color: visual.accent.withValues(alpha: 0.18),
+                        ),
+                      ),
+                      child: Icon(visual.icon, color: visual.accent, size: 20),
+                    ),
+                    const SizedBox(width: 12),
+                    const Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'Fee overview',
+                            style: TextStyle(
+                              color: SaaptTheme.navy,
+                              fontSize: 16,
+                              fontWeight: FontWeight.w900,
+                              letterSpacing: -0.2,
+                            ),
+                          ),
+                          SizedBox(height: 3),
+                          Text(
+                            'Totals across all invoices',
+                            style: TextStyle(
+                              color: Color(0xFF60708F),
+                              fontSize: 12.5,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
                 ),
               ),
-              const SizedBox(height: 14),
-              _FeeTotalsGrid(invoices: invoices),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(12, 4, 12, 14),
+                child: _FeeTotalsGrid(invoices: invoices),
+              ),
             ],
           ),
         ),
         const SizedBox(height: 14),
+        _DocumentGroupHeader(title: 'Invoices', count: invoices.length),
+        const SizedBox(height: 10),
         ...invoices.map(
           (invoice) => Padding(
             padding: const EdgeInsets.only(bottom: 14),
@@ -1902,11 +3987,30 @@ class _FeeInvoiceCard extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             Container(
-              color: const Color(0xFFF7FAFF),
-              padding: const EdgeInsets.all(14),
+              padding: const EdgeInsets.all(16),
+              decoration: const BoxDecoration(
+                gradient: LinearGradient(
+                  colors: [Color(0xFFF4F7FD), Color(0xFFFFFFFF)],
+                  begin: Alignment.topCenter,
+                  end: Alignment.bottomCenter,
+                ),
+              ),
               child: Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
+                  Container(
+                    width: 46,
+                    height: 46,
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFEAF1FF),
+                      borderRadius: BorderRadius.circular(14),
+                    ),
+                    child: const Icon(
+                      Icons.receipt_long_outlined,
+                      color: SaaptTheme.primary,
+                    ),
+                  ),
+                  const SizedBox(width: 12),
                   Expanded(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
@@ -1919,9 +4023,10 @@ class _FeeInvoiceCard extends StatelessWidget {
                             color: SaaptTheme.navy,
                             fontSize: 15,
                             fontWeight: FontWeight.w900,
+                            letterSpacing: -0.2,
                           ),
                         ),
-                        const SizedBox(height: 3),
+                        const SizedBox(height: 4),
                         Text(
                           invoiceNumber,
                           style: const TextStyle(
@@ -1930,36 +4035,38 @@ class _FeeInvoiceCard extends StatelessWidget {
                             fontWeight: FontWeight.w700,
                           ),
                         ),
+                        const SizedBox(height: 10),
+                        Wrap(
+                          spacing: 6,
+                          runSpacing: 6,
+                          children: [
+                            if (isUpcoming)
+                              const _FeeStatusChip(
+                                label: 'Upcoming',
+                                background: Color(0xFFF1ECFF),
+                                foreground: SaaptTheme.primary,
+                              ),
+                            _FeeStatusChip.forStatus(status),
+                            _FeeStatusChip(
+                              label: 'Due ${_dateValue(dueDate)}',
+                              background: Colors.white,
+                              foreground: const Color(0xFF60708F),
+                            ),
+                          ],
+                        ),
                       ],
                     ),
-                  ),
-                  const SizedBox(width: 8),
-                  Wrap(
-                    spacing: 6,
-                    runSpacing: 6,
-                    alignment: WrapAlignment.end,
-                    children: [
-                      if (isUpcoming)
-                        const _FeeStatusChip(
-                          label: 'Upcoming',
-                          background: Color(0xFFF1ECFF),
-                          foreground: SaaptTheme.primary,
-                        ),
-                      _FeeStatusChip.forStatus(status),
-                      _FeeStatusChip(
-                        label: 'Due ${_dateValue(dueDate)}',
-                        background: Colors.white,
-                        foreground: const Color(0xFF60708F),
-                      ),
-                    ],
                   ),
                 ],
               ),
             ),
-            _FeeAmountGrid(invoice: invoice),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(12, 0, 12, 4),
+              child: _FeeAmountGrid(invoice: invoice),
+            ),
             if (canPay)
               Padding(
-                padding: const EdgeInsets.fromLTRB(14, 14, 14, 0),
+                padding: const EdgeInsets.fromLTRB(14, 10, 14, 0),
                 child: _PayFeeButton(
                   childId: childId!,
                   invoice: invoice,
@@ -2484,7 +4591,11 @@ class _LibraryTabPanel extends StatelessWidget {
       _asMap(data)['memberships'],
     ).map(_asMap).where((item) => !_isEmptyData(item)).toList();
     if (memberships.isEmpty) {
-      return const EmptyPanel(message: 'No library records available.');
+      return const _ChildEmptyState(
+        icon: Icons.local_library_outlined,
+        title: 'No library records',
+        message: 'No library memberships or issues for this student yet.',
+      );
     }
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -2510,173 +4621,43 @@ class _LibraryMembershipPanel extends StatelessWidget {
     final membershipDetails = Map<String, dynamic>.from(membership)
       ..remove('issues');
     final issues = _libraryIssueRecords(membership);
-    return ParentCard(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Row(
-            children: [
-              const Icon(
-                Icons.local_library_outlined,
-                color: SaaptTheme.primary,
-              ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: Text(
-                  _firstString(membership, ['fullName', 'memberCode']) ??
-                      'Library Membership',
-                  style: const TextStyle(
-                    color: SaaptTheme.navy,
-                    fontSize: 16,
-                    fontWeight: FontWeight.w900,
-                  ),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 12),
-          ..._rowsForData(membershipDetails),
-          const SizedBox(height: 14),
-          Row(
-            children: [
-              const Expanded(
-                child: Text(
-                  'Issued Books',
-                  style: TextStyle(
-                    color: SaaptTheme.navy,
-                    fontSize: 15,
-                    fontWeight: FontWeight.w900,
-                  ),
-                ),
-              ),
-              Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 10,
-                  vertical: 6,
-                ),
-                decoration: BoxDecoration(
-                  color: const Color(0xFFEAF1FF),
-                  borderRadius: BorderRadius.circular(999),
-                ),
-                child: Text(
-                  '${issues.length}',
-                  style: const TextStyle(
-                    color: SaaptTheme.primary,
-                    fontSize: 12,
-                    fontWeight: FontWeight.w900,
-                  ),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 10),
-          if (issues.isEmpty)
-            const Text(
-              'No issued books.',
+    final visual = _TabVisual.forKey('library');
+    final title =
+        _firstString(membership, ['fullName', 'memberCode']) ??
+        'Library Membership';
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        _InfoSectionCard(
+          title: title,
+          icon: visual.icon,
+          accent: visual.accent,
+          soft: visual.soft,
+          data: membershipDetails,
+        ),
+        const SizedBox(height: 12),
+        _DocumentGroupHeader(title: 'Issued books', count: issues.length),
+        const SizedBox(height: 10),
+        if (issues.isEmpty)
+          ParentCard(
+            padding: const EdgeInsets.all(16),
+            child: Text(
+              'No issued books right now.',
               style: TextStyle(
-                color: Color(0xFF60708F),
+                color: const Color(0xFF60708F).withValues(alpha: 0.95),
                 fontSize: 13,
-                fontWeight: FontWeight.w700,
-              ),
-            )
-          else
-            ...issues.map(
-              (record) => Padding(
-                padding: const EdgeInsets.only(bottom: 10),
-                child: _LibraryIssueTile(record: record),
+                fontWeight: FontWeight.w600,
               ),
             ),
-        ],
-      ),
-    );
-  }
-}
-
-class _LibraryIssueTile extends StatelessWidget {
-  const _LibraryIssueTile({required this.record});
-
-  final _DisplayRecord record;
-
-  @override
-  Widget build(BuildContext context) {
-    final status = _displayValue(record.data['status']);
-    return InkWell(
-      borderRadius: BorderRadius.circular(12),
-      onTap: () => _showRecordDetailSheet(context, record),
-      child: Container(
-        padding: const EdgeInsets.all(12),
-        decoration: BoxDecoration(
-          color: const Color(0xFFF7FAFF),
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: const Color(0xFFDDE7F7)),
-        ),
-        child: Row(
-          children: [
-            const Icon(
-              Icons.menu_book_outlined,
-              color: SaaptTheme.primary,
-              size: 22,
+          )
+        else
+          for (final record in issues)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 10),
+              child: _ContentRecordCard(record: record, visual: visual),
             ),
-            const SizedBox(width: 10),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    record.title,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
-                      color: SaaptTheme.navy,
-                      fontSize: 14,
-                      fontWeight: FontWeight.w900,
-                    ),
-                  ),
-                  const SizedBox(height: 3),
-                  Text(
-                    record.subtitle,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
-                      color: Color(0xFF60708F),
-                      fontSize: 12,
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(width: 8),
-            _StatusBadge(status: status),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _StatusBadge extends StatelessWidget {
-  const _StatusBadge({required this.status});
-
-  final String status;
-
-  @override
-  Widget build(BuildContext context) {
-    final isReturned = status.toLowerCase().contains('return');
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
-      decoration: BoxDecoration(
-        color: isReturned ? const Color(0xFFE9F8EF) : const Color(0xFFFFF4DF),
-        borderRadius: BorderRadius.circular(999),
-      ),
-      child: Text(
-        status,
-        style: TextStyle(
-          color: isReturned ? const Color(0xFF05A66B) : const Color(0xFFF59E0B),
-          fontSize: 11,
-          fontWeight: FontWeight.w900,
-        ),
-      ),
+      ],
     );
   }
 }
@@ -2777,7 +4758,7 @@ List<_DisplayRecord> _documentRecords(Object? data) {
       _DisplayRecord(
         title: _labelForKey(key),
         subtitle: 'Admission document',
-        category: 'Document',
+        category: 'Admission Documents',
         data: {'type': _labelForKey(key), 'url': value},
         icon: Icons.description_outlined,
         imageUrl: value.toString(),
@@ -2845,17 +4826,21 @@ List<_DisplayRecord> _recordsFromGroup(String group, Object? value) {
 }
 
 class _SummaryRecordTile extends StatelessWidget {
-  const _SummaryRecordTile({required this.record});
+  const _SummaryRecordTile({
+    required this.record,
+    this.embedded = false,
+  });
 
   final _DisplayRecord record;
+  final bool embedded;
 
   @override
   Widget build(BuildContext context) {
-    return ParentCard(
-      padding: const EdgeInsets.all(12),
-      child: InkWell(
-        borderRadius: BorderRadius.circular(12),
-        onTap: () => _showRecordSheet(context, record),
+    final tile = InkWell(
+      borderRadius: BorderRadius.circular(embedded ? 0 : 12),
+      onTap: () => _showRecordDetailSheet(context, record),
+      child: Padding(
+        padding: EdgeInsets.all(embedded ? 14 : 12),
         child: Row(
           children: [
             _RecordThumb(imageUrl: record.imageUrl, icon: record.icon),
@@ -2871,7 +4856,7 @@ class _SummaryRecordTile extends StatelessWidget {
                     style: const TextStyle(
                       color: SaaptTheme.navy,
                       fontSize: 15,
-                      fontWeight: FontWeight.w900,
+                      fontWeight: FontWeight.w800,
                     ),
                   ),
                   const SizedBox(height: 4),
@@ -2883,22 +4868,33 @@ class _SummaryRecordTile extends StatelessWidget {
                       color: Color(0xFF60708F),
                       fontSize: 13,
                       height: 1.3,
-                      fontWeight: FontWeight.w700,
+                      fontWeight: FontWeight.w600,
                     ),
                   ),
                 ],
               ),
             ),
             const SizedBox(width: 8),
-            const Icon(Icons.chevron_right_rounded, color: Color(0xFF8EA0BA)),
+            Container(
+              width: 28,
+              height: 28,
+              decoration: BoxDecoration(
+                color: const Color(0xFFF4F7FD),
+                borderRadius: BorderRadius.circular(9),
+              ),
+              child: const Icon(
+                Icons.chevron_right_rounded,
+                color: Color(0xFF8EA0BA),
+                size: 18,
+              ),
+            ),
           ],
         ),
       ),
     );
-  }
 
-  void _showRecordSheet(BuildContext context, _DisplayRecord record) {
-    _showRecordDetailSheet(context, record);
+    if (embedded) return tile;
+    return ParentCard(padding: EdgeInsets.zero, child: tile);
   }
 }
 
@@ -3068,19 +5064,41 @@ class _RecordCard extends StatelessWidget {
     final rows = _rowsForData(data);
     if (rows.isEmpty) return const SizedBox.shrink();
     return ParentCard(
+      padding: EdgeInsets.zero,
       child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Text(
-            title,
-            style: const TextStyle(
-              color: SaaptTheme.navy,
-              fontSize: 16,
-              fontWeight: FontWeight.w900,
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 14, 16, 10),
+            child: Row(
+              children: [
+                Container(
+                  width: 8,
+                  height: 8,
+                  decoration: const BoxDecoration(
+                    color: SaaptTheme.primary,
+                    shape: BoxShape.circle,
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    title,
+                    style: const TextStyle(
+                      color: SaaptTheme.navy,
+                      fontSize: 15,
+                      fontWeight: FontWeight.w900,
+                    ),
+                  ),
+                ),
+              ],
             ),
           ),
-          const SizedBox(height: 12),
-          ...rows,
+          const Divider(height: 1, thickness: 0.7, color: Color(0xFFE6EBF3)),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 12, 16, 14),
+            child: Column(children: rows),
+          ),
         ],
       ),
     );
@@ -3491,35 +5509,56 @@ class _EditProfilePanel extends StatelessWidget {
   final VoidCallback onSave;
 
   @override
-  Widget build(BuildContext context) => ParentCard(
-    child: Column(
+  Widget build(BuildContext context) {
+    return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        _TextField(label: 'First Name', controller: firstNameController),
-        _TextField(label: 'Last Name', controller: lastNameController),
-        _TextField(
-          label: 'Email',
-          controller: emailController,
-          keyboardType: TextInputType.emailAddress,
+        const _AccountFormHeader(
+          icon: Icons.edit_outlined,
+          accent: Color(0xFF0F766E),
+          soft: Color(0xFFE7F7F4),
+          title: 'Edit profile',
+          subtitle: 'Keep your contact details up to date for school communication.',
         ),
-        _TextField(
-          label: 'Mobile Number',
-          controller: phoneController,
-          keyboardType: TextInputType.phone,
-        ),
-        const SizedBox(height: 8),
-        ElevatedButton(
-          style: ElevatedButton.styleFrom(
-            minimumSize: const Size.fromHeight(52),
-            backgroundColor: SaaptTheme.primary,
-            foregroundColor: Colors.white,
+        const SizedBox(height: 14),
+        ParentCard(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              _TextField(label: 'First Name', controller: firstNameController),
+              _TextField(label: 'Last Name', controller: lastNameController),
+              _TextField(
+                label: 'Email',
+                controller: emailController,
+                keyboardType: TextInputType.emailAddress,
+              ),
+              _TextField(
+                label: 'Mobile Number',
+                controller: phoneController,
+                keyboardType: TextInputType.phone,
+              ),
+              const SizedBox(height: 4),
+              FilledButton(
+                style: FilledButton.styleFrom(
+                  minimumSize: const Size.fromHeight(52),
+                  backgroundColor: SaaptTheme.primary,
+                  foregroundColor: Colors.white,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(14),
+                  ),
+                ),
+                onPressed: saving ? null : onSave,
+                child: Text(
+                  saving ? 'Saving...' : 'Save Profile',
+                  style: const TextStyle(fontWeight: FontWeight.w900),
+                ),
+              ),
+            ],
           ),
-          onPressed: saving ? null : onSave,
-          child: Text(saving ? 'Saving...' : 'Save Profile'),
         ),
       ],
-    ),
-  );
+    );
+  }
 }
 
 class _ViewProfilePanel extends StatelessWidget {
@@ -3528,44 +5567,106 @@ class _ViewProfilePanel extends StatelessWidget {
   final ParentProfile profile;
 
   @override
-  Widget build(BuildContext context) => ParentCard(
-    child: Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
+  Widget build(BuildContext context) {
+    final facts = <(String, String)>[
+      ('Name', profile.name.trim().isEmpty ? '-' : profile.name.trim()),
+      (
+        'First Name',
+        profile.firstName?.trim().isNotEmpty == true
+            ? profile.firstName!.trim()
+            : '-',
+      ),
+      (
+        'Last Name',
+        profile.lastName?.trim().isNotEmpty == true
+            ? profile.lastName!.trim()
+            : '-',
+      ),
+      ('Email', profile.email.trim().isEmpty ? '-' : profile.email.trim()),
+      (
+        'Mobile',
+        profile.phone?.trim().isNotEmpty == true ? profile.phone!.trim() : '-',
+      ),
+      (
+        'School',
+        profile.schoolName?.trim().isNotEmpty == true
+            ? profile.schoolName!.trim()
+            : '-',
+      ),
+      ('Children', profile.children.length.toString()),
+    ];
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        _DetailRow(label: 'Name', value: profile.name),
-        _DetailRow(
-          label: 'First Name',
-          value: profile.firstName?.trim().isNotEmpty == true
-              ? profile.firstName!
-              : '-',
+        const _AccountFormHeader(
+          icon: Icons.person_outline_rounded,
+          accent: SaaptTheme.primary,
+          soft: Color(0xFFEAF1FF),
+          title: 'Your profile',
+          subtitle: 'Parent account details linked to this school login.',
         ),
-        _DetailRow(
-          label: 'Last Name',
-          value: profile.lastName?.trim().isNotEmpty == true
-              ? profile.lastName!
-              : '-',
-        ),
-        _DetailRow(label: 'Email', value: profile.email),
-        _DetailRow(
-          label: 'Mobile Number',
-          value: profile.phone?.trim().isNotEmpty == true
-              ? profile.phone!
-              : '-',
-        ),
-        _DetailRow(
-          label: 'School',
-          value: profile.schoolName?.trim().isNotEmpty == true
-              ? profile.schoolName!
-              : '-',
-        ),
-        _DetailRow(
-          label: 'Mapped Children',
-          value: profile.children.length.toString(),
-          last: true,
+        const SizedBox(height: 14),
+        ParentCard(
+          padding: EdgeInsets.zero,
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(12, 12, 12, 12),
+            child: LayoutBuilder(
+              builder: (context, constraints) {
+                final gap = 8.0;
+                final half = (constraints.maxWidth - gap) / 2;
+                return Wrap(
+                  spacing: gap,
+                  runSpacing: gap,
+                  children: [
+                    for (final fact in facts)
+                      SizedBox(
+                        width: fact.$2.length > 28 || facts.length == 1
+                            ? constraints.maxWidth
+                            : half,
+                        child: Container(
+                          width: double.infinity,
+                          padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFF7FAFF),
+                            borderRadius: BorderRadius.circular(14),
+                            border: Border.all(color: const Color(0xFFE5ECF7)),
+                          ),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                fact.$1.toUpperCase(),
+                                style: const TextStyle(
+                                  color: Color(0xFF8EA0BA),
+                                  fontSize: 10,
+                                  letterSpacing: 0.4,
+                                  fontWeight: FontWeight.w800,
+                                ),
+                              ),
+                              const SizedBox(height: 5),
+                              Text(
+                                fact.$2,
+                                style: const TextStyle(
+                                  color: SaaptTheme.navy,
+                                  fontSize: 14,
+                                  height: 1.3,
+                                  fontWeight: FontWeight.w800,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                  ],
+                );
+              },
+            ),
+          ),
         ),
       ],
-    ),
-  );
+    );
+  }
 }
 
 class _ChangePasswordPanel extends StatelessWidget {
@@ -3584,38 +5685,134 @@ class _ChangePasswordPanel extends StatelessWidget {
   final VoidCallback onSave;
 
   @override
-  Widget build(BuildContext context) => ParentCard(
-    child: Column(
+  Widget build(BuildContext context) {
+    return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        _TextField(
-          label: 'Current Password',
-          controller: currentPasswordController,
-          obscureText: true,
+        const _AccountFormHeader(
+          icon: Icons.lock_outline_rounded,
+          accent: Color(0xFFB45309),
+          soft: Color(0xFFFFF4E5),
+          title: 'Change password',
+          subtitle: 'Use a strong password you do not reuse elsewhere.',
         ),
-        _TextField(
-          label: 'New Password',
-          controller: newPasswordController,
-          obscureText: true,
-        ),
-        _TextField(
-          label: 'Confirm Password',
-          controller: confirmPasswordController,
-          obscureText: true,
-        ),
-        const SizedBox(height: 8),
-        ElevatedButton(
-          style: ElevatedButton.styleFrom(
-            minimumSize: const Size.fromHeight(52),
-            backgroundColor: SaaptTheme.primary,
-            foregroundColor: Colors.white,
+        const SizedBox(height: 14),
+        ParentCard(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              _TextField(
+                label: 'Current Password',
+                controller: currentPasswordController,
+                obscureText: true,
+              ),
+              _TextField(
+                label: 'New Password',
+                controller: newPasswordController,
+                obscureText: true,
+              ),
+              _TextField(
+                label: 'Confirm Password',
+                controller: confirmPasswordController,
+                obscureText: true,
+              ),
+              const SizedBox(height: 4),
+              FilledButton(
+                style: FilledButton.styleFrom(
+                  minimumSize: const Size.fromHeight(52),
+                  backgroundColor: SaaptTheme.primary,
+                  foregroundColor: Colors.white,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(14),
+                  ),
+                ),
+                onPressed: saving ? null : onSave,
+                child: Text(
+                  saving ? 'Changing...' : 'Change Password',
+                  style: const TextStyle(fontWeight: FontWeight.w900),
+                ),
+              ),
+            ],
           ),
-          onPressed: saving ? null : onSave,
-          child: Text(saving ? 'Changing...' : 'Change Password'),
         ),
       ],
-    ),
-  );
+    );
+  }
+}
+
+class _AccountFormHeader extends StatelessWidget {
+  const _AccountFormHeader({
+    required this.icon,
+    required this.accent,
+    required this.soft,
+    required this.title,
+    required this.subtitle,
+  });
+
+  final IconData icon;
+  final Color accent;
+  final Color soft;
+  final String title;
+  final String subtitle;
+
+  @override
+  Widget build(BuildContext context) {
+    return ParentCard(
+      padding: EdgeInsets.zero,
+      child: Container(
+        padding: const EdgeInsets.fromLTRB(16, 14, 16, 14),
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            colors: [soft, Colors.white],
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+          ),
+          borderRadius: BorderRadius.circular(16),
+        ),
+        child: Row(
+          children: [
+            Container(
+              width: 44,
+              height: 44,
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(14),
+                border: Border.all(color: accent.withValues(alpha: 0.18)),
+              ),
+              child: Icon(icon, color: accent),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    title,
+                    style: const TextStyle(
+                      color: SaaptTheme.navy,
+                      fontSize: 16,
+                      fontWeight: FontWeight.w900,
+                      letterSpacing: -0.2,
+                    ),
+                  ),
+                  const SizedBox(height: 3),
+                  Text(
+                    subtitle,
+                    style: const TextStyle(
+                      color: Color(0xFF60708F),
+                      fontSize: 12.5,
+                      height: 1.35,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
 }
 
 class _DetailRow extends StatelessWidget {
@@ -3631,33 +5828,33 @@ class _DetailRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Container(
-    padding: EdgeInsets.only(bottom: last ? 0 : 14),
-    margin: EdgeInsets.only(bottom: last ? 0 : 14),
+    padding: EdgeInsets.only(bottom: last ? 0 : 12),
+    margin: EdgeInsets.only(bottom: last ? 0 : 12),
     decoration: BoxDecoration(
       border: last
           ? null
-          : const Border(bottom: BorderSide(color: Color(0xFFE2EAF7))),
+          : const Border(bottom: BorderSide(color: Color(0xFFF0F4FA))),
     ),
-    child: Row(
+    child: Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        SizedBox(
-          width: 120,
-          child: Text(
-            label,
-            style: const TextStyle(
-              color: Color(0xFF91A1BB),
-              fontWeight: FontWeight.w900,
-            ),
+        Text(
+          label.toUpperCase(),
+          style: const TextStyle(
+            color: Color(0xFF91A1BB),
+            fontSize: 11,
+            letterSpacing: 0.4,
+            fontWeight: FontWeight.w800,
           ),
         ),
-        Expanded(
-          child: Text(
-            value,
-            style: const TextStyle(
-              color: SaaptTheme.navy,
-              fontWeight: FontWeight.w900,
-            ),
+        const SizedBox(height: 5),
+        Text(
+          value,
+          style: const TextStyle(
+            color: SaaptTheme.navy,
+            fontSize: 14.5,
+            height: 1.35,
+            fontWeight: FontWeight.w800,
           ),
         ),
       ],
@@ -3672,31 +5869,32 @@ class _InfoPanel extends StatelessWidget {
   final String body;
 
   @override
-  Widget build(BuildContext context) => ParentCard(
-    child: Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        Text(
-          title,
-          style: const TextStyle(
-            color: SaaptTheme.navy,
-            fontSize: 18,
-            fontWeight: FontWeight.w900,
-          ),
+        _AccountFormHeader(
+          icon: Icons.article_outlined,
+          accent: SaaptTheme.primary,
+          soft: const Color(0xFFEAF1FF),
+          title: title,
+          subtitle: 'Reference information for parents',
         ),
-        const SizedBox(height: 12),
-        Text(
-          body,
-          style: const TextStyle(
-            color: Color(0xFF60708F),
-            fontSize: 14,
-            height: 1.5,
-            fontWeight: FontWeight.w700,
+        const SizedBox(height: 14),
+        ParentCard(
+          child: Text(
+            body,
+            style: const TextStyle(
+              color: Color(0xFF586985),
+              fontSize: 14.5,
+              height: 1.55,
+              fontWeight: FontWeight.w600,
+            ),
           ),
         ),
       ],
-    ),
-  );
+    );
+  }
 }
 
 class _TextField extends StatelessWidget {
@@ -3730,6 +5928,8 @@ class _MenuTile extends StatelessWidget {
     required this.title,
     required this.subtitle,
     required this.onTap,
+    this.accent = SaaptTheme.primary,
+    this.soft = const Color(0xFFEAF1FF),
     this.danger = false,
   });
 
@@ -3737,25 +5937,73 @@ class _MenuTile extends StatelessWidget {
   final String title;
   final String subtitle;
   final VoidCallback onTap;
+  final Color accent;
+  final Color soft;
   final bool danger;
 
   @override
-  Widget build(BuildContext context) => ListTile(
-    leading: Icon(
-      icon,
-      color: danger ? const Color(0xFFEF4444) : SaaptTheme.primary,
-    ),
-    title: Text(
-      title,
-      style: TextStyle(
-        fontWeight: FontWeight.w900,
-        color: danger ? const Color(0xFFEF4444) : SaaptTheme.navy,
+  Widget build(BuildContext context) {
+    final color = danger ? const Color(0xFFDC2626) : accent;
+    final softColor = danger ? const Color(0xFFFFEDED) : soft;
+    return InkWell(
+      onTap: onTap,
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(14, 12, 12, 12),
+        child: Row(
+          children: [
+            Container(
+              width: 42,
+              height: 42,
+              decoration: BoxDecoration(
+                color: softColor,
+                borderRadius: BorderRadius.circular(13),
+              ),
+              child: Icon(icon, color: color, size: 20),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    title,
+                    style: TextStyle(
+                      color: danger ? const Color(0xFFDC2626) : SaaptTheme.navy,
+                      fontSize: 14.5,
+                      fontWeight: FontWeight.w900,
+                    ),
+                  ),
+                  const SizedBox(height: 3),
+                  Text(
+                    subtitle,
+                    style: const TextStyle(
+                      color: Color(0xFF60708F),
+                      fontSize: 12.5,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(width: 8),
+            Container(
+              width: 28,
+              height: 28,
+              decoration: BoxDecoration(
+                color: const Color(0xFFF4F7FD),
+                borderRadius: BorderRadius.circular(9),
+              ),
+              child: Icon(
+                Icons.chevron_right_rounded,
+                color: color.withValues(alpha: 0.7),
+                size: 18,
+              ),
+            ),
+          ],
+        ),
       ),
-    ),
-    subtitle: Text(subtitle),
-    trailing: const Icon(Icons.chevron_right_rounded),
-    onTap: onTap,
-  );
+    );
+  }
 }
 
 class _StaticTile extends StatelessWidget {
@@ -3763,18 +6011,60 @@ class _StaticTile extends StatelessWidget {
     required this.icon,
     required this.title,
     required this.subtitle,
+    this.accent = SaaptTheme.primary,
+    this.soft = const Color(0xFFEAF1FF),
   });
 
   final IconData icon;
   final String title;
   final String subtitle;
+  final Color accent;
+  final Color soft;
 
   @override
-  Widget build(BuildContext context) => ListTile(
-    leading: Icon(icon, color: SaaptTheme.primary),
-    title: Text(title, style: const TextStyle(fontWeight: FontWeight.w900)),
-    subtitle: Text(subtitle),
-  );
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
+      child: Row(
+        children: [
+          Container(
+            width: 42,
+            height: 42,
+            decoration: BoxDecoration(
+              color: soft,
+              borderRadius: BorderRadius.circular(13),
+            ),
+            child: Icon(icon, color: accent, size: 20),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  title,
+                  style: const TextStyle(
+                    color: SaaptTheme.navy,
+                    fontSize: 14.5,
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
+                const SizedBox(height: 3),
+                Text(
+                  subtitle,
+                  style: const TextStyle(
+                    color: Color(0xFF60708F),
+                    fontSize: 12.5,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
 }
 
 class _SwitchTile extends StatelessWidget {
@@ -3793,14 +6083,57 @@ class _SwitchTile extends StatelessWidget {
   final ValueChanged<bool> onChanged;
 
   @override
-  Widget build(BuildContext context) => SwitchListTile(
-    secondary: const Icon(
-      Icons.notifications_active_outlined,
-      color: SaaptTheme.primary,
-    ),
-    title: Text(title, style: const TextStyle(fontWeight: FontWeight.w900)),
-    subtitle: Text(loading ? 'Loading preference...' : subtitle),
-    value: value,
-    onChanged: loading ? null : onChanged,
-  );
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(14, 12, 10, 12),
+      child: Row(
+        children: [
+          Container(
+            width: 42,
+            height: 42,
+            decoration: BoxDecoration(
+              color: const Color(0xFFEAF1FF),
+              borderRadius: BorderRadius.circular(13),
+            ),
+            child: const Icon(
+              Icons.notifications_active_outlined,
+              color: SaaptTheme.primary,
+              size: 20,
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  title,
+                  style: const TextStyle(
+                    color: SaaptTheme.navy,
+                    fontSize: 14.5,
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
+                const SizedBox(height: 3),
+                Text(
+                  loading ? 'Loading preference...' : subtitle,
+                  style: const TextStyle(
+                    color: Color(0xFF60708F),
+                    fontSize: 12.5,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          Switch.adaptive(
+            value: value,
+            onChanged: loading ? null : onChanged,
+            activeThumbColor: Colors.white,
+            activeTrackColor: SaaptTheme.primary,
+          ),
+        ],
+      ),
+    );
+  }
 }

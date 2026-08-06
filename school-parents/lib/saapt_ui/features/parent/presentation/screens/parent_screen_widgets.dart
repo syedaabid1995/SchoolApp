@@ -148,6 +148,94 @@ class ParentHero extends StatelessWidget {
   }
 }
 
+/// Sticky [ParentHero] header with a scrollable body underneath.
+///
+/// Use this on parent screens so the header stays fixed while only the
+/// content below scrolls.
+class ParentStickyScaffold extends StatelessWidget {
+  const ParentStickyScaffold({
+    super.key,
+    required this.badge,
+    required this.title,
+    required this.subtitle,
+    required this.body,
+    this.leading,
+    this.trailing,
+    this.showDefaultTrailing = true,
+    this.showMenu = false,
+    this.showChildSwitcher = false,
+    this.titleWidget,
+    this.onRefresh,
+    this.padding = const EdgeInsets.fromLTRB(20, 22, 20, 32),
+    this.bottomBar,
+    this.backgroundColor,
+    this.wrapBody = true,
+    this.refreshColor,
+  });
+
+  final String badge;
+  final String title;
+  final String subtitle;
+  final Widget body;
+  final Widget? leading;
+  final Widget? trailing;
+  final bool showDefaultTrailing;
+  final bool showMenu;
+  final bool showChildSwitcher;
+  final Widget? titleWidget;
+  final Future<void> Function()? onRefresh;
+  final EdgeInsetsGeometry padding;
+  final Widget? bottomBar;
+  final Color? backgroundColor;
+
+  /// When true (default), [body] is placed inside a scrollable [ListView].
+  /// Set false when [body] is already a scroll view (e.g. [CustomScrollView]).
+  final bool wrapBody;
+  final Color? refreshColor;
+
+  @override
+  Widget build(BuildContext context) {
+    final hero = ParentHero(
+      badge: badge,
+      title: title,
+      subtitle: subtitle,
+      leading: leading,
+      trailing: trailing,
+      showDefaultTrailing: showDefaultTrailing,
+      showMenu: showMenu,
+      showChildSwitcher: showChildSwitcher,
+      titleWidget: titleWidget,
+    );
+
+    Widget content = wrapBody
+        ? ListView(
+            physics: const AlwaysScrollableScrollPhysics(),
+            padding: padding,
+            children: [body],
+          )
+        : body;
+
+    if (onRefresh != null) {
+      content = RefreshIndicator(
+        color: refreshColor,
+        onRefresh: onRefresh!,
+        child: content,
+      );
+    }
+
+    return Scaffold(
+      backgroundColor: backgroundColor,
+      body: Column(
+        children: [
+          hero,
+          Expanded(child: content),
+          ?bottomBar,
+        ],
+      ),
+    );
+  }
+}
+
 class ParentChildTitleSwitcher extends ConsumerWidget {
   const ParentChildTitleSwitcher({super.key, this.fallbackTitle = 'Student'});
 

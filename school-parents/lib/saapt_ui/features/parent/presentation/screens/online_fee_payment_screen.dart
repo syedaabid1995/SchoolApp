@@ -68,177 +68,152 @@ class _OnlineFeePaymentScreenState
         ? null
         : ref.watch(parentFeeBreakdownProvider(selectedId));
 
-    return Scaffold(
-      backgroundColor: SaaptTheme.canvas,
-      body: Stack(
-        children: [
-          childrenState.when(
-            loading: () => const LoadingPanel(),
-            error: (error, _) => EmptyPanel(
+    return Stack(
+      children: [
+        childrenState.when(
+          loading: () => const Scaffold(body: LoadingPanel()),
+          error: (error, _) => Scaffold(
+            body: EmptyPanel(
               message: parentApiError(error, 'Unable to load children'),
             ),
-            data: (kids) {
-              if (kids.isEmpty) {
-                return CustomScrollView(
-                  slivers: [
-                    SliverToBoxAdapter(child: _buildHero(context, null)),
-                    const SliverPadding(
-                      padding: EdgeInsets.all(20),
-                      sliver: SliverToBoxAdapter(
-                        child: EmptyPanel(
-                          message:
-                              'No children are linked to this parent account.',
+          ),
+          data: (kids) {
+            final backButton = IconButton(
+              tooltip: 'Back',
+              style: IconButton.styleFrom(
+                backgroundColor: Colors.white.withValues(alpha: 0.16),
+                foregroundColor: Colors.white,
+              ),
+              onPressed: () => Navigator.of(context).maybePop(),
+              icon: const Icon(Icons.arrow_back_rounded),
+            );
+
+            if (kids.isEmpty) {
+              return ParentStickyScaffold(
+                showChildSwitcher: true,
+                showDefaultTrailing: false,
+                badge: '💳 Online Fee Payment',
+                title: 'Online Fee Payment',
+                subtitle: 'Select a student to pay fees',
+                leading: backButton,
+                backgroundColor: SaaptTheme.canvas,
+                body: const EmptyPanel(
+                  message: 'No children are linked to this parent account.',
+                ),
+              );
+            }
+
+            return ParentStickyScaffold(
+              showChildSwitcher: true,
+              showDefaultTrailing: false,
+              badge: '💳 Online Fee Payment',
+              title: selectedChild?.name ?? 'Online Fee Payment',
+              subtitle: selectedChild == null
+                  ? 'Select a student to pay fees'
+                  : '${selectedChild.classLabel} • Pay school fees online',
+              leading: backButton,
+              backgroundColor: SaaptTheme.canvas,
+              onRefresh: () async {
+                if (selectedId != null) {
+                  ref.invalidate(parentFeeBreakdownProvider(selectedId));
+                }
+                ref.invalidate(parentChildrenProvider);
+              },
+              padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
+              bottomBar: _PayNowBar(
+                enabled:
+                    !_paying &&
+                    selectedId != null &&
+                    _selectedInvoiceIds.isNotEmpty,
+                count: _selectedInvoiceIds.length,
+                onPressed: () => _openAmountSheet(
+                  selectedId!,
+                  breakdownState?.asData?.value,
+                ),
+              ),
+              body: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  const Text(
+                    'Fee Breakdown',
+                    style: TextStyle(
+                      color: SaaptTheme.primary,
+                      fontSize: 20,
+                      fontWeight: FontWeight.w900,
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  if (selectedId == null || breakdownState == null)
+                    const EmptyPanel(
+                      message: 'Select a student from the header.',
+                    )
+                  else
+                    breakdownState.when(
+                      loading: () => const Padding(
+                        padding: EdgeInsets.symmetric(vertical: 48),
+                        child: Center(child: CircularProgressIndicator()),
+                      ),
+                      error: (error, _) => EmptyPanel(
+                        message: parentApiError(
+                          error,
+                          'Unable to load fee breakdown',
                         ),
+                      ),
+                      data: (breakdown) => _BreakdownBody(
+                        breakdown: breakdown,
+                        selectedInvoiceIds: _selectedInvoiceIds,
+                        expandedInvoiceIds: _expandedInvoiceIds,
+                        money: _money,
+                        onToggleExpand: (id) {
+                          setState(() {
+                            if (_expandedInvoiceIds.contains(id)) {
+                              _expandedInvoiceIds.remove(id);
+                            } else {
+                              _expandedInvoiceIds.add(id);
+                            }
+                          });
+                        },
+                        onToggleSelect: (item, selected) {
+                          if (!item.canPay) return;
+                          setState(() {
+                            if (selected) {
+                              _selectedInvoiceIds.add(item.id);
+                            } else {
+                              _selectedInvoiceIds.remove(item.id);
+                            }
+                          });
+                        },
+                      ),
+                    ),
+                ],
+              ),
+            );
+          },
+        ),
+        if (_paying)
+          ColoredBox(
+            color: const Color(0x66000000),
+            child: Center(
+              child: ParentCard(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const CircularProgressIndicator(),
+                    const SizedBox(height: 14),
+                    Text(
+                      _payProgress ?? 'Opening payment...',
+                      textAlign: TextAlign.center,
+                      style: const TextStyle(
+                        color: SaaptTheme.navy,
+                        fontWeight: FontWeight.w800,
                       ),
                     ),
                   ],
-                );
-              }
-              return Column(
-                children: [
-                  Expanded(
-                    child: RefreshIndicator(
-                      onRefresh: () async {
-                        if (selectedId != null) {
-                          ref.invalidate(parentFeeBreakdownProvider(selectedId));
-                        }
-                        ref.invalidate(parentChildrenProvider);
-                      },
-                      child: ListView(
-                        padding: EdgeInsets.zero,
-                        children: [
-                          _buildHero(context, selectedChild),
-                          Padding(
-                            padding: const EdgeInsets.fromLTRB(16, 16, 16, 120),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.stretch,
-                              children: [
-                                const Text(
-                                  'Fee Breakdown',
-                                  style: TextStyle(
-                                    color: SaaptTheme.primary,
-                                    fontSize: 20,
-                                    fontWeight: FontWeight.w900,
-                                  ),
-                                ),
-                                const SizedBox(height: 12),
-                                if (selectedId == null || breakdownState == null)
-                                  const EmptyPanel(
-                                    message:
-                                        'Select a student from the header.',
-                                  )
-                                else
-                                  breakdownState.when(
-                                    loading: () => const Padding(
-                                      padding: EdgeInsets.symmetric(
-                                        vertical: 48,
-                                      ),
-                                      child: Center(
-                                        child: CircularProgressIndicator(),
-                                      ),
-                                    ),
-                                    error: (error, _) => EmptyPanel(
-                                      message: parentApiError(
-                                        error,
-                                        'Unable to load fee breakdown',
-                                      ),
-                                    ),
-                                    data: (breakdown) => _BreakdownBody(
-                                      breakdown: breakdown,
-                                      selectedInvoiceIds: _selectedInvoiceIds,
-                                      expandedInvoiceIds: _expandedInvoiceIds,
-                                      money: _money,
-                                      onToggleExpand: (id) {
-                                        setState(() {
-                                          if (_expandedInvoiceIds.contains(
-                                            id,
-                                          )) {
-                                            _expandedInvoiceIds.remove(id);
-                                          } else {
-                                            _expandedInvoiceIds.add(id);
-                                          }
-                                        });
-                                      },
-                                      onToggleSelect: (item, selected) {
-                                        if (!item.canPay) return;
-                                        setState(() {
-                                          if (selected) {
-                                            _selectedInvoiceIds.add(item.id);
-                                          } else {
-                                            _selectedInvoiceIds.remove(item.id);
-                                          }
-                                        });
-                                      },
-                                    ),
-                                  ),
-                              ],
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                  _PayNowBar(
-                    enabled:
-                        !_paying &&
-                        selectedId != null &&
-                        _selectedInvoiceIds.isNotEmpty,
-                    count: _selectedInvoiceIds.length,
-                    onPressed: () => _openAmountSheet(
-                      selectedId!,
-                      breakdownState?.asData?.value,
-                    ),
-                  ),
-                ],
-              );
-            },
-          ),
-          if (_paying)
-            ColoredBox(
-              color: const Color(0x66000000),
-              child: Center(
-                child: ParentCard(
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      const CircularProgressIndicator(),
-                      const SizedBox(height: 14),
-                      Text(
-                        _payProgress ?? 'Opening payment...',
-                        textAlign: TextAlign.center,
-                        style: const TextStyle(
-                          color: SaaptTheme.navy,
-                          fontWeight: FontWeight.w800,
-                        ),
-                      ),
-                    ],
-                  ),
                 ),
               ),
             ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildHero(BuildContext context, ParentChild? selectedChild) {
-    return ParentHero(
-      showChildSwitcher: true,
-      showDefaultTrailing: false,
-      badge: '💳 Online Fee Payment',
-      title: selectedChild?.name ?? 'Online Fee Payment',
-      subtitle: selectedChild == null
-          ? 'Select a student to pay fees'
-          : '${selectedChild.classLabel} • Pay school fees online',
-      leading: IconButton(
-        tooltip: 'Back',
-        style: IconButton.styleFrom(
-          backgroundColor: Colors.white.withValues(alpha: 0.16),
-          foregroundColor: Colors.white,
-        ),
-        onPressed: () => Navigator.of(context).maybePop(),
-        icon: const Icon(Icons.arrow_back_rounded),
-      ),
+          ),
+      ],
     );
   }
 

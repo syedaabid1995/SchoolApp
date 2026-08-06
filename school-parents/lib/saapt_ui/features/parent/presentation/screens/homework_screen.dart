@@ -25,12 +25,15 @@ class _ParentHomeworkScreenState extends ConsumerState<ParentHomeworkScreen> {
     final selectedChild = ref.watch(effectiveSelectedChildProvider);
 
     return selectedChild.when(
-      loading: () => const LoadingPanel(),
-      error: (error, _) => EmptyPanel(message: parentApiError(error)),
+      loading: () => const Scaffold(body: LoadingPanel()),
+      error: (error, _) =>
+          Scaffold(body: EmptyPanel(message: parentApiError(error))),
       data: (child) {
         if (child == null) {
-          return const EmptyPanel(
-            message: 'Select a child from Home to view homework.',
+          return const Scaffold(
+            body: EmptyPanel(
+              message: 'Select a child from Home to view homework.',
+            ),
           );
         }
 
@@ -38,8 +41,13 @@ class _ParentHomeworkScreenState extends ConsumerState<ParentHomeworkScreen> {
           parentHomeworksProvider((child: child, date: _selectedDate)),
         );
 
-        return RefreshIndicator(
-          color: SaaptTheme.primary,
+        return ParentStickyScaffold(
+          showMenu: true,
+          showChildSwitcher: true,
+          badge: '📚 Homework',
+          title: child.name,
+          subtitle: '${child.classLabel} • View assigned homework by date',
+          refreshColor: SaaptTheme.primary,
           onRefresh: () async {
             ref.invalidate(
               parentHomeworksProvider((child: child, date: _selectedDate)),
@@ -51,46 +59,24 @@ class _ParentHomeworkScreenState extends ConsumerState<ParentHomeworkScreen> {
               )).future,
             );
           },
-          child: ListView(
-            padding: EdgeInsets.zero,
+          padding: const EdgeInsets.all(18),
+          body: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              ParentHero(
-                showMenu: true,
-                showChildSwitcher: true,
-                badge: '📚 Homework',
-                title: child.name,
-                subtitle:
-                    '${child.classLabel} • View assigned homework by date',
+              _DateSelector(
+                date: _selectedDate,
+                onChanged: (date) => setState(() {
+                  _selectedDate = DateTime(date.year, date.month, date.day);
+                }),
               ),
-              Padding(
-                padding: const EdgeInsets.all(18),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    _DateSelector(
-                      date: _selectedDate,
-                      onChanged: (date) => setState(() {
-                        _selectedDate = DateTime(
-                          date.year,
-                          date.month,
-                          date.day,
-                        );
-                      }),
-                    ),
-                    const SizedBox(height: 16),
-                    homeworkState.when(
-                      loading: () => const LoadingPanel(),
-                      error: (error, _) => EmptyPanel(
-                        message: parentApiError(
-                          error,
-                          'Unable to load homework',
-                        ),
-                      ),
-                      data: (items) =>
-                          _HomeworkList(items: items, date: _selectedDate),
-                    ),
-                  ],
+              const SizedBox(height: 16),
+              homeworkState.when(
+                loading: () => const LoadingPanel(),
+                error: (error, _) => EmptyPanel(
+                  message: parentApiError(error, 'Unable to load homework'),
                 ),
+                data: (items) =>
+                    _HomeworkList(items: items, date: _selectedDate),
               ),
             ],
           ),

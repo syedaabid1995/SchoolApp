@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 
 import '../../../../app/theme/saapt_theme.dart';
@@ -17,37 +16,23 @@ class ParentHomeScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final childrenState = ref.watch(parentChildrenProvider);
     final selectedChild = ref.watch(effectiveSelectedChildProvider).asData?.value;
-    return Scaffold(
-      body: RefreshIndicator(
-        onRefresh: () async => ref.invalidate(parentChildrenProvider),
-        child: CustomScrollView(
-          slivers: [
-            SliverToBoxAdapter(
-              child: ParentHero(
-                showMenu: true,
-                showChildSwitcher: true,
-                badge: '👨‍👩‍👧 Parent App',
-                title: selectedChild?.name ?? 'Select Child',
-                subtitle: childrenState.maybeWhen(
-                  data: (children) => selectedChild == null
-                      ? '${children.length} ${children.length == 1 ? 'student' : 'students'} mapped to this parent account'
-                      : '${selectedChild.classLabel} • ${children.length} ${children.length == 1 ? 'student' : 'students'} mapped',
-                  orElse: () => 'Loading mapped children',
-                ),
-              ),
-            ),
-            SliverPadding(
-              padding: const EdgeInsets.fromLTRB(20, 24, 20, 32),
-              sliver: SliverToBoxAdapter(
-                child: childrenState.when(
-                  loading: () => const LoadingPanel(),
-                  error: (error, _) => EmptyPanel(message: error.toString()),
-                  data: (children) => _DashboardContent(children: children),
-                ),
-              ),
-            ),
-          ],
-        ),
+    return ParentStickyScaffold(
+      showMenu: true,
+      showChildSwitcher: true,
+      badge: '👨‍👩‍👧 Parent App',
+      title: selectedChild?.name ?? 'Select Child',
+      subtitle: childrenState.maybeWhen(
+        data: (children) => selectedChild == null
+            ? '${children.length} ${children.length == 1 ? 'student' : 'students'} mapped to this parent account'
+            : '${selectedChild.classLabel} • ${children.length} ${children.length == 1 ? 'student' : 'students'} mapped',
+        orElse: () => 'Loading mapped children',
+      ),
+      onRefresh: () async => ref.invalidate(parentChildrenProvider),
+      padding: const EdgeInsets.fromLTRB(20, 24, 20, 32),
+      body: childrenState.when(
+        loading: () => const LoadingPanel(),
+        error: (error, _) => EmptyPanel(message: error.toString()),
+        data: (children) => _DashboardContent(children: children),
       ),
     );
   }
@@ -99,21 +84,6 @@ class _DashboardContentState extends ConsumerState<_DashboardContent> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        Row(
-          children: [
-            StatCard(
-              value: widget.children.length.toString(),
-              label: 'Children',
-            ),
-            const SizedBox(width: 14),
-            const StatCard(
-              value: 'Active',
-              label: 'Status',
-              color: SaaptTheme.success,
-            ),
-          ],
-        ),
-        const SizedBox(height: 22),
         attendanceState.when(
           loading: () => const LoadingPanel(),
           error: (error, _) => EmptyPanel(message: error.toString()),
@@ -158,18 +128,6 @@ class _DashboardContentState extends ConsumerState<_DashboardContent> {
                   childId: selected.id,
                   childName: selected.name,
                   date: date,
-                ),
-              ),
-              const SizedBox(height: 12),
-              FilledButton.icon(
-                onPressed: () => context.go('/attendance'),
-                icon: const Icon(Icons.calendar_month_rounded),
-                label: const Text('Open Attendance'),
-                style: FilledButton.styleFrom(
-                  backgroundColor: SaaptTheme.primary,
-                  foregroundColor: Colors.white,
-                  padding: const EdgeInsets.symmetric(vertical: 15),
-                  textStyle: const TextStyle(fontWeight: FontWeight.w900),
                 ),
               ),
             ],
