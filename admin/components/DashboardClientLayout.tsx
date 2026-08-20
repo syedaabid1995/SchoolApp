@@ -12,6 +12,7 @@ import {
 import { akademifyyBrand, getCurrentPlatformBrand } from '../lib/platform-brand';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { getRequiredPermissionForPath } from '../config/employee-permissions';
+import { isPathModuleEnabled } from '../config/module-flags';
 import AccessDeniedPanel from './AccessDeniedPanel';
 import FullPageLoader from './FullPageLoader';
 import { registerCurrentWebPushDevice } from '../lib/webPushRegistration';
@@ -32,14 +33,15 @@ export default function DashboardClientLayout({
   const { data: session, isLoading: isSessionLoading } = useQuery({
     queryKey: ['session'],
     queryFn: getSession,
-    refetchOnWindowFocus: false,
-    staleTime: 60_000,
+    refetchOnWindowFocus: 'always',
+    staleTime: 0,
   });
   const pathname = usePathname();
   const router = useRouter();
   const searchParams = useSearchParams();
   const isSubscriptionRestricted = Boolean(session?.subscriptionRestricted);
   const permissionCodes = session?.permissionCodes ?? [];
+  const moduleFlags = session?.moduleFlags ?? {};
   const effectiveRole = session?.role ?? role;
   const hasAnyRole = Boolean(effectiveRole);
   const isSuperAdmin = effectiveRole === 'SUPER_ADMIN';
@@ -111,6 +113,9 @@ export default function DashboardClientLayout({
     isAccountRoute ||
     !isSuperAdmin ||
     superAdminAllowedPaths.some((allowedPath) => pathname === allowedPath || pathname.startsWith(`${allowedPath}/`));
+  const currentSearch = searchParams.toString();
+  const currentRoute = currentSearch ? `${pathname}?${currentSearch}` : pathname;
+  const isCurrentModuleEnabled = isPathModuleEnabled(moduleFlags, currentRoute);
 
   const resolvedThemeMode: DashboardResolvedThemeMode = themeMode === 'system' ? systemThemeMode : themeMode;
 
@@ -245,7 +250,7 @@ export default function DashboardClientLayout({
     );
   }
 
-  if (!isSuperAdmin && !canAccessRoute) {
+  if (!isCurrentModuleEnabled || (!isSuperAdmin && !canAccessRoute)) {
     return (
       <div
         className={`dashboard-shell dashboard-shell-${resolvedThemeMode} flex h-screen w-full overflow-hidden bg-[var(--shell-bg)] text-[var(--shell-text)]`}
@@ -257,6 +262,7 @@ export default function DashboardClientLayout({
           onClose={() => setIsSidebarOpen(false)}
           schoolName={session?.schoolName ?? undefined}
           permissionCodes={permissionCodes}
+          moduleFlags={moduleFlags}
           platformName={platformSettings.platformName}
           platformSubtitle={platformSettings.consoleName}
           platformLogoUrl={platformSettings.logoUrl}
@@ -276,7 +282,14 @@ export default function DashboardClientLayout({
             impersonatedByEmail={session?.impersonatedByEmail}
           />
           <main className="min-w-0 flex-1 overflow-y-auto overflow-x-hidden bg-[var(--shell-bg)] p-4 transition-all duration-200 sm:p-6">
-            <AccessDeniedPanel />
+            <AccessDeniedPanel
+              title={isCurrentModuleEnabled ? undefined : 'Module disabled'}
+              message={
+                isCurrentModuleEnabled
+                  ? undefined
+                  : 'This module is disabled by the platform administrator.'
+              }
+            />
           </main>
         </div>
       </div>
@@ -298,6 +311,7 @@ export default function DashboardClientLayout({
         onClose={() => setIsSidebarOpen(false)}
         schoolName={session?.schoolName ?? undefined}
         permissionCodes={permissionCodes}
+        moduleFlags={moduleFlags}
         platformName={platformSettings.platformName}
         platformSubtitle={platformSettings.consoleName}
         platformLogoUrl={platformSettings.logoUrl}

@@ -72,6 +72,7 @@ export type SessionInfo = {
   displayName?: string | null;
   schoolName?: string | null;
   permissionCodes?: string[];
+  moduleFlags?: Record<string, boolean>;
   isImpersonating?: boolean;
   impersonatedByEmail?: string | null;
   hasDashboardAccess?: boolean;
@@ -253,6 +254,7 @@ export const getSession = async () => {
       mustChangePassword: false,
       schoolName: null,
       permissionCodes: [],
+      moduleFlags: {},
       hasDashboardAccess: false,
     };
   }

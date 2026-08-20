@@ -21,6 +21,7 @@ import { getSession } from '../../../services/auth.service';
 import FullPageLoader from '../../../components/FullPageLoader';
 import PageHeader from '../../../components/PageHeader';
 import Button from '../../../components/Button';
+import { ModuleFeatureKeys } from '../../../config/module-flags';
 import BrandingPage from './branding/page';
 import SecurityPage from './security/page';
 import SmsPage from './sms/page';
@@ -153,11 +154,13 @@ const setupTabRedirects: Record<string, string> = {
 };
 
 const moduleCatalog = [
+  { key: 'module_ai_assistant', label: 'AI Assistant', description: 'AI assistant page, chat, and confirmed assistant actions.' },
   { key: 'module_attendance', label: 'Attendance', description: 'Attendance pages and related workflows.' },
   { key: 'module_academics', label: 'Academics', description: 'Academic setup, classes, sections, and terms.' },
   { key: 'module_timetable', label: 'Timetable', description: 'Scheduling and timetable management.' },
   { key: 'module_exams', label: 'Exams', description: 'Exams, marks upload, and results workflows.' },
   { key: 'module_fees', label: 'Fees', description: 'Fee collection and finance workflows.' },
+  { key: 'module_expenses', label: 'Expenses', description: 'School expense tracking, categories, approvals, and exports.' },
   { key: 'module_library', label: 'Library', description: 'Library and book issue workflows.' },
   { key: 'module_transport', label: 'Transport', description: 'Routes, vehicles, and transport assignment.' },
   { key: 'module_homework', label: 'Homework', description: 'Homework creation, evaluation, and reporting workflows.' },
@@ -167,6 +170,220 @@ const moduleCatalog = [
   { key: 'module_parent_portal', label: 'Parent Portal', description: 'Parent portal access and school-facing communication.' },
   { key: 'module_id_cards', label: 'ID Cards', description: 'Student ID card generation workflows.' },
 ];
+
+type FeatureMenuItem = {
+  key: string;
+  label: string;
+  description?: string;
+};
+
+type FeatureMenuGroup = {
+  id: string;
+  label: string;
+  scope: 'Platform' | 'School';
+  items: FeatureMenuItem[];
+};
+
+const featureMenuGroups: FeatureMenuGroup[] = [
+  {
+    id: 'platform-overview',
+    label: 'Overview',
+    scope: 'Platform',
+    items: [
+      { key: ModuleFeatureKeys.dashboard, label: 'Dashboard' },
+      { key: ModuleFeatureKeys.reportsCenter, label: 'Reports' },
+      { key: ModuleFeatureKeys.expenses, label: 'Expense Reports' },
+      { key: ModuleFeatureKeys.bulkImports, label: 'Bulk Imports' },
+    ],
+  },
+  {
+    id: 'platform-schools',
+    label: 'Schools & Users',
+    scope: 'Platform',
+    items: [
+      { key: ModuleFeatureKeys.schools, label: 'Schools' },
+      { key: ModuleFeatureKeys.users, label: 'Users' },
+    ],
+  },
+  {
+    id: 'platform-subscriptions',
+    label: 'Subscriptions',
+    scope: 'Platform',
+    items: [
+      { key: ModuleFeatureKeys.subscriptions, label: 'Subscriptions' },
+      { key: ModuleFeatureKeys.billing, label: 'Billing' },
+      { key: ModuleFeatureKeys.catalog, label: 'Catalog' },
+    ],
+  },
+  {
+    id: 'platform-operations',
+    label: 'Operations',
+    scope: 'Platform',
+    items: [
+      { key: ModuleFeatureKeys.demoRequests, label: 'Demo Requests' },
+      { key: ModuleFeatureKeys.supportTickets, label: 'Support Tickets' },
+      { key: ModuleFeatureKeys.auditLogs, label: 'Audit Logs' },
+      { key: ModuleFeatureKeys.systemHealth, label: 'System Health' },
+    ],
+  },
+  {
+    id: 'platform-settings',
+    label: 'System Setup',
+    scope: 'Platform',
+    items: [
+      { key: ModuleFeatureKeys.settingsBrand, label: 'Branding & Theme' },
+      { key: ModuleFeatureKeys.settingsSecurity, label: 'Security' },
+      { key: ModuleFeatureKeys.settingsFeatureFlags, label: 'Feature Flags' },
+      { key: ModuleFeatureKeys.settingsModules, label: 'Modules' },
+      { key: ModuleFeatureKeys.settingsAccess, label: 'Access' },
+      { key: ModuleFeatureKeys.settingsCompliance, label: 'Compliance' },
+      { key: ModuleFeatureKeys.backups, label: 'Backups' },
+      { key: ModuleFeatureKeys.settingsAdvanced, label: 'Advanced' },
+      { key: ModuleFeatureKeys.changePassword, label: 'Change Password' },
+    ],
+  },
+  {
+    id: 'school-dashboard',
+    label: 'Dashboard',
+    scope: 'School',
+    items: [
+      { key: ModuleFeatureKeys.dashboard, label: 'Dashboard' },
+      { key: ModuleFeatureKeys.onboardingReadiness, label: 'Onboarding Readiness' },
+      { key: ModuleFeatureKeys.aiAssistant, label: 'AI Assistant' },
+      { key: ModuleFeatureKeys.bulkImports, label: 'Bulk Imports' },
+    ],
+  },
+  {
+    id: 'school-academic-setup',
+    label: 'Academic Setup',
+    scope: 'School',
+    items: [
+      { key: ModuleFeatureKeys.academicSetup, label: 'Setup' },
+      { key: ModuleFeatureKeys.timetable, label: 'Timetable' },
+      { key: ModuleFeatureKeys.attendanceSettings, label: 'Attendance Settings' },
+    ],
+  },
+  {
+    id: 'school-students',
+    label: 'Students',
+    scope: 'School',
+    items: [
+      { key: ModuleFeatureKeys.studentList, label: 'Student List' },
+      { key: ModuleFeatureKeys.addStudent, label: 'Add Student' },
+      { key: ModuleFeatureKeys.studentPromotion, label: 'Promotion' },
+      { key: ModuleFeatureKeys.idCards, label: 'ID Cards' },
+    ],
+  },
+  {
+    id: 'school-staff',
+    label: 'Staff',
+    scope: 'School',
+    items: [
+      { key: ModuleFeatureKeys.staffList, label: 'Employee List' },
+      { key: ModuleFeatureKeys.teacherOnboarding, label: 'Teacher Onboarding' },
+      { key: ModuleFeatureKeys.addTeacher, label: 'Add Teacher' },
+    ],
+  },
+  {
+    id: 'school-attendance',
+    label: 'Attendance',
+    scope: 'School',
+    items: [
+      { key: ModuleFeatureKeys.markAttendance, label: 'Mark Attendance' },
+      { key: ModuleFeatureKeys.studentAttendance, label: 'Student Attendance' },
+      { key: ModuleFeatureKeys.staffAttendance, label: 'Staff Attendance' },
+      { key: ModuleFeatureKeys.applyLeave, label: 'Apply Leave' },
+      { key: ModuleFeatureKeys.leaveManagement, label: 'Leave Management' },
+    ],
+  },
+  {
+    id: 'school-examinations',
+    label: 'Examinations',
+    scope: 'School',
+    items: [
+      { key: ModuleFeatureKeys.examList, label: 'Exams' },
+      { key: ModuleFeatureKeys.marks, label: 'Marks' },
+      { key: ModuleFeatureKeys.examCenters, label: 'Centers' },
+      { key: ModuleFeatureKeys.examRooms, label: 'Rooms' },
+      { key: ModuleFeatureKeys.examSeating, label: 'Seating' },
+      { key: ModuleFeatureKeys.examInvigilators, label: 'Invigilators' },
+      { key: ModuleFeatureKeys.examHallTickets, label: 'Hall Tickets' },
+    ],
+  },
+  {
+    id: 'school-fees',
+    label: 'Fees',
+    scope: 'School',
+    items: [
+      { key: ModuleFeatureKeys.feeOverview, label: 'Fee Overview' },
+      { key: ModuleFeatureKeys.feeGroups, label: 'Fee Groups' },
+      { key: ModuleFeatureKeys.feeTypes, label: 'Fee Types' },
+      { key: ModuleFeatureKeys.feeMasters, label: 'Fee Masters' },
+      { key: ModuleFeatureKeys.feeCollection, label: 'Fee Collection' },
+      { key: ModuleFeatureKeys.feeDiscounts, label: 'Fee Discounts' },
+      { key: ModuleFeatureKeys.feeReports, label: 'Fee Reports' },
+    ],
+  },
+  {
+    id: 'school-communication',
+    label: 'Communicate',
+    scope: 'School',
+    items: [
+      { key: ModuleFeatureKeys.noticeBoard, label: 'Notice Board' },
+      { key: ModuleFeatureKeys.messagingProviders, label: 'Messaging Providers' },
+      { key: ModuleFeatureKeys.sendEmail, label: 'Send Email' },
+      { key: ModuleFeatureKeys.sendSms, label: 'Send SMS' },
+      { key: ModuleFeatureKeys.sendPush, label: 'Send Push' },
+      { key: ModuleFeatureKeys.communicationLogs, label: 'Logs' },
+      { key: ModuleFeatureKeys.loginCredentialsSend, label: 'Login Credentials Send' },
+      { key: ModuleFeatureKeys.emailTemplates, label: 'Email Template' },
+      { key: ModuleFeatureKeys.smsTemplates, label: 'SMS Template' },
+      { key: ModuleFeatureKeys.pushTemplates, label: 'Push Template' },
+    ],
+  },
+  {
+    id: 'school-accounts',
+    label: 'Accounts',
+    scope: 'School',
+    items: [
+      { key: ModuleFeatureKeys.payroll, label: 'Payroll' },
+      { key: ModuleFeatureKeys.payrollReport, label: 'Payroll Report' },
+      { key: ModuleFeatureKeys.expenses, label: 'Expenses' },
+      { key: ModuleFeatureKeys.paymentMethods, label: 'Payment Methods' },
+      { key: ModuleFeatureKeys.feeChallan, label: 'Fee Challan' },
+    ],
+  },
+  {
+    id: 'school-settings',
+    label: 'Settings',
+    scope: 'School',
+    items: [
+      { key: ModuleFeatureKeys.branding, label: 'Branding' },
+      { key: ModuleFeatureKeys.baseSetup, label: 'Base Setup' },
+      { key: ModuleFeatureKeys.changePassword, label: 'Change Password' },
+    ],
+  },
+  {
+    id: 'school-singletons',
+    label: 'Other Menus',
+    scope: 'School',
+    items: [
+      { key: ModuleFeatureKeys.homework, label: 'Homework' },
+      { key: ModuleFeatureKeys.transport, label: 'Transport' },
+      { key: ModuleFeatureKeys.library, label: 'Library' },
+      { key: ModuleFeatureKeys.dormitory, label: 'Dormitory' },
+      { key: ModuleFeatureKeys.reportsCenter, label: 'Reports' },
+      { key: ModuleFeatureKeys.auditLogs, label: 'Audit Logs' },
+      { key: ModuleFeatureKeys.users, label: 'Users' },
+      { key: ModuleFeatureKeys.rolePermissions, label: 'Role Permissions' },
+      { key: ModuleFeatureKeys.plans, label: 'Plans' },
+    ],
+  },
+];
+
+const featureLabelByKey = new Map(
+  featureMenuGroups.flatMap((group) => group.items.map((item) => [item.key, item.label] as const)),
+);
 
 const formatJson = (value: unknown) => JSON.stringify(value ?? {}, null, 2);
 
@@ -471,6 +688,10 @@ function FeatureConfigSettingsTab({ advancedOnly = false }: { advancedOnly?: boo
   const [configDrafts, setConfigDrafts] = useState<Record<string, ConfigDraft>>({});
   const [flagError, setFlagError] = useState('');
   const [configError, setConfigError] = useState('');
+  const [openFeatureGroups, setOpenFeatureGroups] = useState<Record<string, boolean>>({
+    'school-fees': true,
+    'school-settings': true,
+  });
 
   const flagsQuery = useQuery({
     queryKey: ['feature-flags'],
@@ -535,15 +756,41 @@ function FeatureConfigSettingsTab({ advancedOnly = false }: { advancedOnly?: boo
     onError: (error) => setConfigError(getApiErrorMessage(error)),
   });
 
+  const flags = flagsQuery.data ?? [];
+  const flagsByKey = useMemo(() => new Map(flags.map((flag) => [flag.key, flag])), [flags]);
+  const configs = (configsQuery.data ?? []).filter((config) => !managedConfigKeys.has(config.key));
+
+  const updateFeatureTreeMutation = useMutation({
+    mutationFn: async ({ items, status }: { items: FeatureMenuItem[]; status: FeatureFlagStatus }) => {
+      await Promise.all(
+        items.map((item) => {
+          const existing = flagsByKey.get(item.key);
+          if (existing) {
+            return updateFeatureFlag(existing.id, { status });
+          }
+          return createFeatureFlag({
+            key: item.key,
+            name: item.label,
+            description: item.description,
+            status,
+          });
+        }),
+      );
+    },
+    onSuccess: () => {
+      setFlagError('');
+      refreshFlags();
+    },
+    onError: (error) => setFlagError(getApiErrorMessage(error)),
+  });
+
   const isBusy =
     createFlagMutation.isPending ||
     updateFlagMutation.isPending ||
     deleteFlagMutation.isPending ||
+    updateFeatureTreeMutation.isPending ||
     createConfigMutation.isPending ||
     updateConfigMutation.isPending;
-
-  const flags = flagsQuery.data ?? [];
-  const configs = (configsQuery.data ?? []).filter((config) => !managedConfigKeys.has(config.key));
 
   const getFlagDraft = (flag: FeatureFlag): FlagDraft =>
     flagDrafts[flag.id] ?? {
@@ -611,6 +858,12 @@ function FeatureConfigSettingsTab({ advancedOnly = false }: { advancedOnly?: boo
     });
   };
 
+  const isFeatureItemEnabled = (key: string) => flagsByKey.get(key)?.status !== 'DISABLED';
+
+  const toggleFeatureItems = (items: FeatureMenuItem[], status: FeatureFlagStatus) => {
+    updateFeatureTreeMutation.mutate({ items, status });
+  };
+
   const handleCreateConfig = () => {
     const key = configForm.key.trim();
     if (!key) {
@@ -668,6 +921,96 @@ function FeatureConfigSettingsTab({ advancedOnly = false }: { advancedOnly?: boo
           <div className="flex flex-col gap-1">
             <h2 className="text-lg font-bold text-[var(--shell-text)]">Feature Flags</h2>
             <p className="text-sm text-[var(--shell-muted)]">Toggle global feature behavior and module readiness.</p>
+          </div>
+
+          <div className="mt-5 space-y-3">
+            {featureMenuGroups.map((group) => {
+              const isOpen = openFeatureGroups[group.id] ?? false;
+              const enabledItems = group.items.filter((item) => isFeatureItemEnabled(item.key));
+              const allEnabled = enabledItems.length === group.items.length;
+              const allDisabled = enabledItems.length === 0;
+              const groupStatus = allEnabled ? 'ENABLED' : allDisabled ? 'DISABLED' : 'PARTIAL';
+              const childControlsDisabled = allDisabled || updateFeatureTreeMutation.isPending;
+
+              return (
+                <div key={group.id} className="rounded-xl border border-[var(--shell-border)] bg-[var(--shell-subtle)]">
+                  <div className="flex flex-col gap-3 px-4 py-3 lg:flex-row lg:items-center lg:justify-between">
+                    <button
+                      type="button"
+                      onClick={() => setOpenFeatureGroups((current) => ({ ...current, [group.id]: !isOpen }))}
+                      className="flex min-w-0 flex-1 items-center gap-3 text-left"
+                    >
+                      <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-[var(--shell-border)] bg-[var(--shell-card)] text-sm font-black text-[var(--shell-text)]">
+                        {isOpen ? '-' : '+'}
+                      </span>
+                      <span className="min-w-0">
+                        <span className="block text-sm font-black text-[var(--shell-text)]">{group.label}</span>
+                        <span className="block text-xs font-semibold text-[var(--shell-muted)]">
+                          {group.scope} menu - {enabledItems.length}/{group.items.length} enabled
+                        </span>
+                      </span>
+                    </button>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span
+                        className={`rounded-full px-2.5 py-1 text-xs font-black ${
+                          groupStatus === 'ENABLED'
+                            ? 'bg-emerald-100 text-emerald-700'
+                            : groupStatus === 'DISABLED'
+                              ? 'bg-slate-200 text-slate-700'
+                              : 'bg-amber-100 text-amber-700'
+                        }`}
+                      >
+                        {groupStatus}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => toggleFeatureItems(group.items, allEnabled ? 'DISABLED' : 'ENABLED')}
+                        disabled={updateFeatureTreeMutation.isPending}
+                        className={`rounded-lg px-3 py-2 text-xs font-bold transition-colors disabled:cursor-not-allowed disabled:opacity-60 ${
+                          allEnabled
+                            ? 'border border-rose-200 bg-rose-50 text-rose-700 hover:bg-rose-100'
+                            : 'border border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100'
+                        }`}
+                      >
+                        {allEnabled ? 'Disable Menu' : 'Enable Menu'}
+                      </button>
+                    </div>
+                  </div>
+                  {isOpen ? (
+                    <div className="border-t border-[var(--shell-border)] p-3">
+                      <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-3">
+                        {group.items.map((item) => {
+                          const itemEnabled = isFeatureItemEnabled(item.key);
+                          return (
+                            <div key={`${group.id}-${item.key}`} className="rounded-lg border border-[var(--shell-border)] bg-[var(--shell-card)] p-3">
+                              <div className="flex items-start justify-between gap-3">
+                                <div className="min-w-0">
+                                  <p className="text-sm font-bold text-[var(--shell-text)]">{item.label}</p>
+                                  <p className="mt-1 break-all text-[11px] font-semibold text-[var(--shell-muted)]">{item.key}</p>
+                                </div>
+                                <span className={`h-2.5 w-2.5 shrink-0 rounded-full ${itemEnabled ? 'bg-emerald-500' : 'bg-slate-400'}`} />
+                              </div>
+                              <button
+                                type="button"
+                                onClick={() => toggleFeatureItems([item], itemEnabled ? 'DISABLED' : 'ENABLED')}
+                                disabled={childControlsDisabled}
+                                className={`mt-3 w-full rounded-lg px-3 py-2 text-xs font-bold transition-colors disabled:cursor-not-allowed disabled:opacity-60 ${
+                                  itemEnabled
+                                    ? 'border border-rose-200 bg-rose-50 text-rose-700 hover:bg-rose-100'
+                                    : 'border border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100'
+                                }`}
+                              >
+                                {itemEnabled ? 'Disable' : 'Enable'}
+                              </button>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  ) : null}
+                </div>
+              );
+            })}
           </div>
 
           <div className="mt-5 grid gap-3 md:grid-cols-4">

@@ -17,6 +17,7 @@ import {
   updateExpenseCategory,
 } from '../controllers/expense.controller';
 import { authMiddleware } from '../middlewares/auth.middleware';
+import { requireModuleFeatureEnabled } from '../middlewares/feature-flag.middleware';
 
 const receiptFilter: multer.Options['fileFilter'] = (_req, file, cb) => {
   const allowed = [
@@ -59,6 +60,7 @@ const runReceiptUpload = (req: Request, res: Response, next: NextFunction) => {
 export const expenseRouter = Router();
 
 expenseRouter.use(authMiddleware);
+expenseRouter.use(requireModuleFeatureEnabled('module_expenses', 'Expenses module is disabled by the platform administrator'));
 
 expenseRouter.get('/metadata', getExpenseMetadata);
 

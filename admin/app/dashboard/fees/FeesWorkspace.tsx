@@ -15,6 +15,7 @@ import {
 import FullPageLoader from '../../../components/FullPageLoader';
 import PageHeader from '../../../components/PageHeader';
 import { useNotify } from '../../../components/NotificationProvider';
+import { isModuleEnabled, ModuleFeatureKeys, type ModuleFeatureKey } from '../../../config/module-flags';
 import { getSession } from '../../../services/auth.service';
 import { listAcademicYears } from '../../../services/academic.service';
 import { listSchools } from '../../../services/school.service';
@@ -167,6 +168,11 @@ const sectionViewPermissions: Record<TabId, string> = {
   fines: 'fees.fines.view',
   ledger: 'fees.ledger.view',
   reports: 'fees.reports.view',
+};
+
+const sectionFeatureKeys: Partial<Record<TabId, ModuleFeatureKey>> = {
+  collection: ModuleFeatureKeys.feeCollection,
+  reports: ModuleFeatureKeys.feeReports,
 };
 
 const feeSectionIds = tabs.map((tab) => tab.id);
@@ -739,11 +745,22 @@ export default function FeesWorkspace({ initialSection }: { initialSection?: Fee
   const isSuperAdmin = role === 'SUPER_ADMIN';
   const isSchoolAdmin = role === 'SCHOOL_ADMIN';
   const permissionCodes = session?.permissionCodes ?? [];
+  const moduleFlags = session?.moduleFlags ?? {};
   const can = useCallback(
     (permissionCode: string) => isSuperAdmin || isSchoolAdmin || permissionCodes.includes(permissionCode),
     [isSchoolAdmin, isSuperAdmin, permissionCodes],
   );
-  const canViewSection = useCallback((section: TabId) => can(sectionViewPermissions[section]), [can]);
+  const canUseFeatureSection = useCallback(
+    (section: TabId) => {
+      const featureKey = sectionFeatureKeys[section];
+      return featureKey ? isModuleEnabled(moduleFlags, featureKey) : true;
+    },
+    [moduleFlags],
+  );
+  const canViewSection = useCallback(
+    (section: TabId) => can(sectionViewPermissions[section]) && canUseFeatureSection(section),
+    [can, canUseFeatureSection],
+  );
   const canUseFees = isSuperAdmin || isSchoolAdmin || permissionCodes.some((permissionCode) => permissionCode.startsWith('fees.'));
   const canCreateParticular = can('fees.particulars.create');
   const canUpdateParticular = can('fees.particulars.update');
@@ -765,8 +782,10 @@ export default function FeesWorkspace({ initialSection }: { initialSection?: Fee
   const canDeleteAssignment = can('fees.assignments.delete');
   const canCreateInvoice = can('fees.invoice-generate.create');
   const canCancelInvoice = can('fees.invoices.cancel');
-  const canCreateCollection = can('fees.collection.create');
-  const canReversePayment = can('fees.collection.reverse');
+  const canUseFeeCollection = canUseFeatureSection('collection');
+  const canUseFeeReports = canUseFeatureSection('reports');
+  const canCreateCollection = canUseFeeCollection && can('fees.collection.create');
+  const canReversePayment = canUseFeeCollection && can('fees.collection.reverse');
   const canPrintReceipt = can('fees.receipts.print');
   const canCreateDiscount = can('fees.discounts.create');
   const canUpdateDiscount = can('fees.discounts.update');
@@ -775,7 +794,7 @@ export default function FeesWorkspace({ initialSection }: { initialSection?: Fee
   const canCreateFine = can('fees.fines.create');
   const canDeleteFine = can('fees.fines.delete');
   const canLedgerExport = can('fees.ledger.export');
-  const canReportsExport = can('fees.reports.export');
+  const canReportsExport = canUseFeeReports && can('fees.reports.export');
 
   const requestConfirmation = useCallback((action: ConfirmAction) => setConfirmAction(action), []);
 
@@ -959,17 +978,17 @@ export default function FeesWorkspace({ initialSection }: { initialSection?: Fee
       sortBy: 'paymentDate',
       sortOrder: 'desc',
     }),
-    enabled: canQuery && Boolean(scopedWithSession.academicSessionId),
+    enabled: canQuery && canUseFeeCollection && Boolean(scopedWithSession.academicSessionId),
   });
   const collectionStudentsQuery = useQuery({
     queryKey: ['fees', 'collection-students', effectiveSchoolId, scopedWithSession.academicSessionId, collectionSearch],
     queryFn: () => searchFeeCollectionStudents({ ...scopedWithSession, search: collectionSearch || undefined }),
-    enabled: canQuery && Boolean(scopedWithSession.academicSessionId),
+    enabled: canQuery && canUseFeeCollection && Boolean(scopedWithSession.academicSessionId),
   });
   const collectionInvoicesQuery = useQuery({
     queryKey: ['fees', 'collection-invoices', effectiveSchoolId, scopedWithSession.academicSessionId, selectedCollectionStudentId],
     queryFn: () => listStudentCollectionInvoices(selectedCollectionStudentId, scopedWithSession),
-    enabled: canQuery && Boolean(scopedWithSession.academicSessionId && selectedCollectionStudentId),
+    enabled: canQuery && canUseFeeCollection && Boolean(scopedWithSession.academicSessionId && selectedCollectionStudentId),
   });
   const discountsQuery = useQuery({
     queryKey: ['fees', 'discounts', effectiveSchoolId, scopedWithSession.academicSessionId, discountPage, discountFilters],
@@ -983,7 +1002,7 @@ export default function FeesWorkspace({ initialSection }: { initialSection?: Fee
       sortBy: 'createdAt',
       sortOrder: 'desc',
     }),
-    enabled: canQuery && Boolean(scopedWithSession.academicSessionId),
+    enabled: canQuery && canUseFeeReports && Boolean(scopedWithSession.academicSessionId),
   });
   const finesQuery = useQuery({
     queryKey: ['fees', 'fines', effectiveSchoolId, scopedWithSession.academicSessionId, finePage, fineFilters],
@@ -1897,7 +1916,18 @@ export default function FeesWorkspace({ initialSection }: { initialSection?: Fee
           ]}
           actions={
             <div className="flex flex-wrap items-center gap-2">
-              <SecondaryButton onClick={() => reportsQuery.refetch()} disabled={reportsQuery.isFetching}>Refresh</SecondaryButton>
+              <SecondaryButton
+                onClick={() => {
+                  if (activeTab === 'reports' && canUseFeeReports) {
+                    reportsQuery.refetch();
+                    return;
+                  }
+                  queryClient.invalidateQueries({ queryKey: ['fees'] });
+                }}
+                disabled={activeTab === 'reports' && reportsQuery.isFetching}
+              >
+                Refresh
+              </SecondaryButton>
               {canViewSection('collection') ? <PrimaryButton onClick={() => goToTab('collection')}>Collect Fee</PrimaryButton> : null}
             </div>
           }
@@ -1999,20 +2029,22 @@ export default function FeesWorkspace({ initialSection }: { initialSection?: Fee
             <Card title="Recent Invoices" actions={<SecondaryButton onClick={() => goToTab('invoices')}>View all</SecondaryButton>}>
               <DataTable columns={invoiceColumns.slice(0, 6)} data={invoices.slice(0, 5)} emptyMessage="No invoices generated yet." isLoading={invoicesQuery.isLoading} />
             </Card>
-            <Card title="Daily Collection Trend">
-              <div className="space-y-3">
-                {Object.entries(reports?.dailyCollection ?? {}).slice(0, 10).map(([date, amount]) => (
-                  <div key={date} className="grid gap-2 sm:grid-cols-[8rem_1fr_7rem] sm:items-center">
-                    <span className="text-sm font-bold text-slate-600">{date}</span>
-                    <div className="h-3 overflow-hidden rounded-full bg-slate-100">
-                      <div className="h-full rounded-full bg-violet-600" style={{ width: `${Math.max(4, (amount / reportMaxDaily) * 100)}%` }} />
+            {canUseFeeReports ? (
+              <Card title="Daily Collection Trend">
+                <div className="space-y-3">
+                  {Object.entries(reports?.dailyCollection ?? {}).slice(0, 10).map(([date, amount]) => (
+                    <div key={date} className="grid gap-2 sm:grid-cols-[8rem_1fr_7rem] sm:items-center">
+                      <span className="text-sm font-bold text-slate-600">{date}</span>
+                      <div className="h-3 overflow-hidden rounded-full bg-slate-100">
+                        <div className="h-full rounded-full bg-violet-600" style={{ width: `${Math.max(4, (amount / reportMaxDaily) * 100)}%` }} />
+                      </div>
+                      <span className="text-sm font-black text-slate-950 sm:text-right">{money(amount)}</span>
                     </div>
-                    <span className="text-sm font-black text-slate-950 sm:text-right">{money(amount)}</span>
-                  </div>
-                ))}
-                {!Object.keys(reports?.dailyCollection ?? {}).length ? <p className="rounded-xl bg-slate-50 p-4 text-sm text-slate-500">No collections found for this session yet.</p> : null}
-              </div>
-            </Card>
+                  ))}
+                  {!Object.keys(reports?.dailyCollection ?? {}).length ? <p className="rounded-xl bg-slate-50 p-4 text-sm text-slate-500">No collections found for this session yet.</p> : null}
+                </div>
+              </Card>
+            ) : null}
           </div>
         ) : null}
 

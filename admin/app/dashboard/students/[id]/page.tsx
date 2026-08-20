@@ -7,6 +7,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import PageHeader from '../../../../components/PageHeader';
 import FullPageLoader from '../../../../components/FullPageLoader';
 import { useNotify } from '../../../../components/NotificationProvider';
+import { isModuleEnabled, ModuleFeatureKeys } from '../../../../config/module-flags';
 import { getSession } from '../../../../services/auth.service';
 import { listAcademicYears } from '../../../../services/academic.service';
 import { listSetupClasses, listSetupSections } from '../../../../services/academic-setup.service';
@@ -222,6 +223,9 @@ export default function StudentDetailPage() {
   const isSuperAdmin = session?.role === 'SUPER_ADMIN';
   const isSchoolAdmin = session?.role === 'SCHOOL_ADMIN';
   const permissionCodes = session?.permissionCodes ?? [];
+  const moduleFlags = session?.moduleFlags ?? {};
+  const canUseFeesModule = isModuleEnabled(moduleFlags, ModuleFeatureKeys.fees);
+  const canUseFeeCollection = canUseFeesModule && isModuleEnabled(moduleFlags, ModuleFeatureKeys.feeCollection);
   const hasPermission = (code: string) => isSuperAdmin || isSchoolAdmin || permissionCodes.includes(code);
   const canViewStudent = hasPermission('students.list') || hasPermission('student.view');
   const canEditStudent = hasPermission('student.edit');
@@ -268,7 +272,7 @@ export default function StudentDetailPage() {
   const feeInvoicesQuery = useQuery({
     queryKey: ['student-fee-invoices', studentId, student?.academicSessionId],
     queryFn: () => listFeeInvoices({ studentId, academicSessionId: student?.academicSessionId ?? undefined, limit: 100, sortBy: 'dueDate', sortOrder: 'desc' }),
-    enabled: Boolean(studentId) && Boolean(student?.id) && canViewStudent && tab === 'fees',
+    enabled: Boolean(studentId) && Boolean(student?.id) && canViewStudent && canUseFeesModule && tab === 'fees',
   });
 
   const transportQuery = useQuery({
@@ -509,6 +513,12 @@ export default function StudentDetailPage() {
     onError: (error: any) => notify.error('Notification failed', error?.response?.data?.error?.message ?? error?.message ?? 'Unable to send payment notification.'),
   });
 
+  useEffect(() => {
+    if (tab === 'fees' && !canUseFeesModule) {
+      setTab('profile');
+    }
+  }, [canUseFeesModule, tab]);
+
   const createLibraryMemberMutation = useMutation({
     mutationFn: () => createLibraryMember({ schoolId: effectiveSchoolId, memberType: 'STUDENT', memberId: studentId }),
     onSuccess: () => {
@@ -704,7 +714,7 @@ export default function StudentDetailPage() {
           <main className="space-y-5">
             <div className="rounded-2xl border border-slate-200 bg-white p-2 shadow-sm">
               <div className="flex flex-wrap gap-2">
-                {tabs.map((item) => (
+                {tabs.filter((item) => item.key !== 'fees' || canUseFeesModule).map((item) => (
                   <button
                     key={item.key}
                     onClick={() => setTab(item.key)}
@@ -1118,17 +1128,21 @@ export default function StudentDetailPage() {
                 <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
                   <h2 className="text-lg font-bold text-slate-950">Fees</h2>
                   <div className="flex flex-wrap gap-2">
-                    <button
-                      type="button"
-                      onClick={() => notifyPaymentMutation.mutate()}
-                      disabled={notifyPaymentMutation.isPending || feeInvoicesQuery.isLoading}
-                      className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-sm font-bold text-amber-700 disabled:cursor-not-allowed disabled:opacity-50"
-                    >
-                      {notifyPaymentMutation.isPending ? 'Sending...' : 'Notify payment'}
-                    </button>
-                    <Link href={`/dashboard/fees/collection?studentId=${student.id}`} className="rounded-xl border border-violet-200 bg-violet-50 px-3 py-2 text-sm font-bold text-violet-700">
-                      Open fee collection
-                    </Link>
+                    {canUseFeeCollection ? (
+                      <>
+                        <button
+                          type="button"
+                          onClick={() => notifyPaymentMutation.mutate()}
+                          disabled={notifyPaymentMutation.isPending || feeInvoicesQuery.isLoading}
+                          className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-sm font-bold text-amber-700 disabled:cursor-not-allowed disabled:opacity-50"
+                        >
+                          {notifyPaymentMutation.isPending ? 'Sending...' : 'Notify payment'}
+                        </button>
+                        <Link href={`/dashboard/fees/collection?studentId=${student.id}`} className="rounded-xl border border-violet-200 bg-violet-50 px-3 py-2 text-sm font-bold text-violet-700">
+                          Open fee collection
+                        </Link>
+                      </>
+                    ) : null}
                   </div>
                 </div>
                 {feeInvoicesQuery.isLoading ? (

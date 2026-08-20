@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { usePathname, useSearchParams } from 'next/navigation';
 import { useContext, useEffect, useMemo, useState } from 'react';
 import { getRequiredPermissionForPath } from '../config/employee-permissions';
+import { isPathModuleEnabled, type ModuleFeatureFlags } from '../config/module-flags';
 import { isSuperAdmin } from '../utils/roles';
 import { AppIcon, type AppIconName } from './AppIcon';
 import { ThemeContext } from './ThemeProvider';
@@ -143,12 +144,12 @@ const platformSections: NavSection[] = [
     items: [
       { href: '/dashboard/settings?tab=brand', label: 'Branding & Theme', icon: 'palette' },
       { href: '/dashboard/settings?tab=security', label: 'Security', icon: 'shield' },
-      // { href: '/dashboard/settings?tab=features', label: 'Feature Flags', icon: 'activity' },
-      // { href: '/dashboard/settings?tab=modules', label: 'Modules', icon: 'package' },
+      { href: '/dashboard/settings?tab=features', label: 'Feature Flags', icon: 'activity' },
+      { href: '/dashboard/settings?tab=modules', label: 'Modules', icon: 'package' },
       { href: '/dashboard/settings?tab=access', label: 'Access', icon: 'lock' },
       { href: '/dashboard/settings?tab=compliance', label: 'Compliance', icon: 'scale' },
       { href: '/dashboard/backups', label: 'Backups', icon: 'backup' },
-      // { href: '/dashboard/settings?tab=advanced', label: 'Advanced', icon: 'settings' },
+      { href: '/dashboard/settings?tab=advanced', label: 'Advanced', icon: 'settings' },
       { href: '/change-password', label: 'Change Password', icon: 'lock' },
     ],
   },
@@ -170,6 +171,7 @@ export const Sidebar = ({
   onClose,
   schoolName,
   permissionCodes = [],
+  moduleFlags = {},
   platformName = 'SAAPT',
   platformSubtitle = 'Platform Admin',
   platformLogoUrl = '',
@@ -179,6 +181,7 @@ export const Sidebar = ({
   onClose?: () => void;
   schoolName?: string;
   permissionCodes?: string[];
+  moduleFlags?: ModuleFeatureFlags;
   platformName?: string;
   platformSubtitle?: string;
   platformLogoUrl?: string;
@@ -220,10 +223,12 @@ export const Sidebar = ({
   const sectionHasActiveItem = (section: NavSection) => section.items.some((item) => isActive(item.href));
 
   const isAllowedNavItem = (href: string) => {
+    const path = hrefPath(href);
+    if (!isPathModuleEnabled(moduleFlags, href)) return false;
     if (href === '/change-password') return true;
     if (isPlatform) return true;
     if (!hasAnyRole) return false;
-    const code = getRequiredPermissionForPath(hrefPath(href));
+    const code = getRequiredPermissionForPath(path);
     if (!code) return false;
     return allowedCodes.has(code);
   };
@@ -397,9 +402,17 @@ export const Sidebar = ({
     return sections
       .map((section) => ({ ...section, items: filterItems(section.items) }))
       .filter((section) => section.items.length > 0);
-  }, [hasAnyRole, isPlatform, allowedCodes]);
+  }, [hasAnyRole, isPlatform, allowedCodes, moduleFlags]);
 
-  const sections = isPlatform ? platformSections : schoolSections;
+  const filteredPlatformSections = useMemo<NavSection[]>(
+    () =>
+      platformSections
+        .map((section) => ({ ...section, items: filterItems(section.items) }))
+        .filter((section) => section.items.length > 0),
+    [moduleFlags],
+  );
+
+  const sections = isPlatform ? filteredPlatformSections : schoolSections;
 
   useEffect(() => {
     const activeSectionId = sections.find((section) => sectionHasActiveItem(section))?.id;

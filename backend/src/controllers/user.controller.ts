@@ -20,6 +20,7 @@ import { timetableReadService } from '../modules/timetable/services/timetable-re
 import { toLegacyClassRoutineRow } from '../modules/timetable/services/timetable-response-mapper';
 import { PermissionCodes as P } from '../permissions/permission-manifest';
 import { getSchoolProfilesByIds } from '../services/schoolProfile.service';
+import { getEffectiveModuleFeatureFlags } from '../services/feature-flag.service';
 import {
   decryptStaffSensitiveFields,
   encryptStaffSensitiveFields,
@@ -185,6 +186,10 @@ export const getMe = async (req: Request, res: Response) => {
     user.schoolId && role
       ? await AuthorizationService.getEffectivePermissionCodesForUser(user.schoolId, user.id, role)
       : [];
+  const moduleFlags = await getEffectiveModuleFeatureFlags({
+    schoolId: user.schoolId,
+    userId: user.id,
+  });
   const schoolProfile = user.schoolId
     ? (await getSchoolProfilesByIds([user.schoolId]))[0] ?? null
     : null;
@@ -198,6 +203,7 @@ export const getMe = async (req: Request, res: Response) => {
     role,
     displayName,
     permissionCodes,
+    moduleFlags,
     teacherProfile: user.teacherProfile,
     employeeProfile: user.teacherProfile,
     schoolProfile,

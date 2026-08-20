@@ -1,9 +1,13 @@
 'use client';
 
 import { FormEvent, useMemo, useState } from 'react';
-import { useMutation } from '@tanstack/react-query';
+import { useMutation, useQuery } from '@tanstack/react-query';
 import PageHeader from '../../../components/PageHeader';
 import Button from '../../../components/Button';
+import AccessDeniedPanel from '../../../components/AccessDeniedPanel';
+import FullPageLoader from '../../../components/FullPageLoader';
+import { ModuleFeatureKeys, isModuleEnabled } from '../../../config/module-flags';
+import { getSession } from '../../../services/auth.service';
 import {
   sendAiAssistantMessage,
   type AiAssistantAction,
@@ -82,6 +86,8 @@ export default function AssistantPage() {
   ]);
   const [pendingAction, setPendingAction] = useState<AiAssistantAction | null>(null);
   const [error, setError] = useState('');
+  const sessionQuery = useQuery({ queryKey: ['session'], queryFn: getSession });
+  const assistantEnabled = isModuleEnabled(sessionQuery.data?.moduleFlags, ModuleFeatureKeys.aiAssistant);
 
   const mutation = useMutation({
     mutationFn: sendAiAssistantMessage,
@@ -106,6 +112,19 @@ export default function AssistantPage() {
   });
 
   const canSend = useMemo(() => input.trim().length > 0 && !mutation.isPending, [input, mutation.isPending]);
+
+  if (sessionQuery.isLoading) {
+    return <FullPageLoader label="Checking module access..." />;
+  }
+
+  if (!assistantEnabled) {
+    return (
+      <AccessDeniedPanel
+        title="AI Assistant disabled"
+        message="AI Assistant is disabled by the platform administrator."
+      />
+    );
+  }
 
   const submitMessage = (message: string, confirmActionId?: string) => {
     const trimmed = message.trim();

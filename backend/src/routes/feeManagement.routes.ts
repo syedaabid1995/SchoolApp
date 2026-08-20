@@ -66,12 +66,14 @@ import {
   updateFeeType,
 } from '../controllers/feeManagement.controller';
 import { authMiddleware } from '../middlewares/auth.middleware';
+import { requireModuleFeatureEnabled } from '../middlewares/feature-flag.middleware';
 import { blockSuperAdminSchoolOperations } from '../middlewares/rbac.middleware';
 
 export const feeManagementRouter = Router();
 
 feeManagementRouter.use(authMiddleware);
 feeManagementRouter.use(blockSuperAdminSchoolOperations('Super Admin cannot manage school fee operations'));
+feeManagementRouter.use(requireModuleFeatureEnabled('module_fees', 'Fees module is disabled by the platform administrator'));
 
 feeManagementRouter.get('/metadata', getFeeMetadata);
 
@@ -122,12 +124,12 @@ feeManagementRouter.post('/carry-forwards', createFeeCarryForward);
 feeManagementRouter.post('/carry-forwards/:id/generate-invoice', generateCarryForwardInvoice);
 feeManagementRouter.patch('/carry-forwards/:id/cancel', cancelFeeCarryForward);
 
-feeManagementRouter.get('/payments', listFeePayments);
-feeManagementRouter.post('/payments', collectFeePayment);
-feeManagementRouter.post('/payments/:id/reverse', reverseFeePayment);
-feeManagementRouter.get('/collection/students', searchFeeCollectionStudents);
-feeManagementRouter.post('/collection/students/:studentId/notify-payment', notifyStudentFeePayment);
-feeManagementRouter.get('/collection/students/:studentId/invoices', listStudentCollectionInvoices);
+feeManagementRouter.get('/payments', requireModuleFeatureEnabled('feature_fee_collection', 'Fee Collection is disabled by the platform administrator'), listFeePayments);
+feeManagementRouter.post('/payments', requireModuleFeatureEnabled('feature_fee_collection', 'Fee Collection is disabled by the platform administrator'), collectFeePayment);
+feeManagementRouter.post('/payments/:id/reverse', requireModuleFeatureEnabled('feature_fee_collection', 'Fee Collection is disabled by the platform administrator'), reverseFeePayment);
+feeManagementRouter.get('/collection/students', requireModuleFeatureEnabled('feature_fee_collection', 'Fee Collection is disabled by the platform administrator'), searchFeeCollectionStudents);
+feeManagementRouter.post('/collection/students/:studentId/notify-payment', requireModuleFeatureEnabled('feature_fee_collection', 'Fee Collection is disabled by the platform administrator'), notifyStudentFeePayment);
+feeManagementRouter.get('/collection/students/:studentId/invoices', requireModuleFeatureEnabled('feature_fee_collection', 'Fee Collection is disabled by the platform administrator'), listStudentCollectionInvoices);
 
 feeManagementRouter.get('/ledger', getStudentFeeLedger);
 feeManagementRouter.get('/ledger/export.pdf', exportFeeLedgerPdf);
@@ -153,5 +155,5 @@ feeManagementRouter.get('/fine-rules', listFeeFineRules);
 feeManagementRouter.patch('/fine-rules/:id', updateFeeFineRule);
 feeManagementRouter.delete('/fine-rules/:id', deleteFeeFineRule);
 
-feeManagementRouter.get('/reports/export', exportFeeReports);
-feeManagementRouter.get('/reports', getFeeReports);
+feeManagementRouter.get('/reports/export', requireModuleFeatureEnabled('feature_fee_reports', 'Fee Reports are disabled by the platform administrator'), exportFeeReports);
+feeManagementRouter.get('/reports', requireModuleFeatureEnabled('feature_fee_reports', 'Fee Reports are disabled by the platform administrator'), getFeeReports);

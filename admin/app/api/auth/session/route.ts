@@ -12,6 +12,7 @@ const emptySession = (mustChangePassword = false) => ({
   mustChangePassword,
   displayName: null,
   permissionCodes: [],
+  moduleFlags: {},
   hasDashboardAccess: false,
 });
 
@@ -123,6 +124,7 @@ export async function GET(req: Request) {
     let subscriptionRestricted = Boolean(payload?.subscriptionRestricted);
     let displayName: string | null = null;
     let permissionCodes: string[] = [];
+    let moduleFlags: Record<string, boolean> = {};
     let resolvedRole = (payload?.role as string | undefined) ?? null;
     let resolvedSchoolId = (payload?.schoolId as string | undefined) ?? null;
 
@@ -161,6 +163,7 @@ export async function GET(req: Request) {
       permissionCodes?: string[];
       role?: string | null;
       schoolId?: string | null;
+      moduleFlags?: Record<string, boolean>;
       employeeProfile?: { roleName?: string | null } | null;
       teacherProfile?: { roleName?: string | null } | null;
     };
@@ -168,6 +171,7 @@ export async function GET(req: Request) {
     resolvedRole = data.employeeProfile?.roleName ?? data.teacherProfile?.roleName ?? data.role ?? resolvedRole;
     resolvedSchoolId = data.schoolId ?? resolvedSchoolId;
     permissionCodes = Array.isArray(data.permissionCodes) ? data.permissionCodes : [];
+    moduleFlags = data.moduleFlags && typeof data.moduleFlags === 'object' ? data.moduleFlags : {};
 
     if (payload?.schoolId) {
       try {
@@ -195,6 +199,7 @@ export async function GET(req: Request) {
       mustChangePassword,
       displayName,
       permissionCodes,
+      moduleFlags,
       isImpersonating: Boolean(payload?.impersonatedByUserId && hasSuperAdminReturnSession),
       impersonatedByEmail: (payload?.impersonatedByEmail as string | undefined) ?? null,
       hasDashboardAccess: Boolean(resolvedRole && (resolvedRole === 'SUPER_ADMIN' || permissionCodes.length > 0)),

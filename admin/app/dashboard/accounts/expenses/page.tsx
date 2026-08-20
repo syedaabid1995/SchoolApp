@@ -3,7 +3,9 @@
 import { FormEvent, useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import PageHeader from '../../../../components/PageHeader';
+import AccessDeniedPanel from '../../../../components/AccessDeniedPanel';
 import { useNotify } from '../../../../components/NotificationProvider';
+import { ModuleFeatureKeys, isModuleEnabled } from '../../../../config/module-flags';
 import { getSession } from '../../../../services/auth.service';
 import { listSchools } from '../../../../services/school.service';
 import {
@@ -90,6 +92,7 @@ export default function ExpensesPage() {
 
   const sessionQuery = useQuery({ queryKey: ['session'], queryFn: getSession });
   const session = sessionQuery.data;
+  const expensesEnabled = isModuleEnabled(session?.moduleFlags, ModuleFeatureKeys.expenses);
   const isPlatform = session?.role === 'SUPER_ADMIN';
   const isSchoolAdmin = session?.role === 'SCHOOL_ADMIN';
   const permissionCodes = useMemo(() => new Set(session?.permissionCodes ?? []), [session?.permissionCodes]);
@@ -99,25 +102,25 @@ export default function ExpensesPage() {
   const schoolsQuery = useQuery({
     queryKey: ['expense-schools'],
     queryFn: () => listSchools({ page: 1, limit: 200, status: 'ACTIVE' }),
-    enabled: isPlatform,
+    enabled: isPlatform && expensesEnabled,
   });
 
   const metadataQuery = useQuery({
     queryKey: ['expense-metadata', activeSchoolId],
     queryFn: () => getExpenseMetadata(activeSchoolId),
-    enabled: !isPlatform || Boolean(activeSchoolId),
+    enabled: expensesEnabled && (!isPlatform || Boolean(activeSchoolId)),
   });
 
   const expensesQuery = useQuery({
     queryKey: ['expenses', activeSchoolId, filters],
     queryFn: () => listExpenses({ schoolId: activeSchoolId, ...filters, page: 1, limit: 50 }),
-    enabled: Boolean(session),
+    enabled: Boolean(session && expensesEnabled),
   });
 
   const requestsQuery = useQuery({
     queryKey: ['expense-change-requests', activeSchoolId],
     queryFn: () => listExpenseChangeRequests({ schoolId: activeSchoolId, status: 'PENDING' }),
-    enabled: Boolean(activeSchoolId && hasPermission('expenses.approve')),
+    enabled: Boolean(expensesEnabled && activeSchoolId && hasPermission('expenses.approve')),
   });
 
   const categories = metadataQuery.data?.categories ?? [];
@@ -248,6 +251,15 @@ export default function ExpensesPage() {
 
   if (sessionQuery.isLoading) {
     return <div className="p-8 text-sm text-slate-500">Loading expenses...</div>;
+  }
+
+  if (!expensesEnabled) {
+    return (
+      <AccessDeniedPanel
+        title="Expenses disabled"
+        message="Expenses module is disabled by the platform administrator."
+      />
+    );
   }
 
   return (

@@ -3,6 +3,7 @@ import type { Prisma } from '@prisma/client';
 import { z } from 'zod';
 import { prisma } from '../config/db';
 import { HttpError } from '../middlewares/error.middleware';
+import { ensureModuleFeatureFlags } from '../services/feature-flag.service';
 import { resolveSchoolId } from '../utils/tenant';
 
 const featureFlagKeySchema = z
@@ -104,6 +105,7 @@ export const createFeatureFlag = async (req: Request, res: Response) => {
 };
 
 export const listFeatureFlags = async (_req: Request, res: Response) => {
+  await ensureModuleFeatureFlags();
   const flags = await prisma.featureFlag.findMany({ orderBy: { key: 'asc' } });
   res.status(200).json(flags);
 };

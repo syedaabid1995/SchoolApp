@@ -52,6 +52,7 @@ import { hashPassword, verifyPassword } from '../../../../utils/password';
 import { schoolIdentifierWhere } from '../../../../utils/schoolDomain';
 import { hashToken } from '../../../../utils/token';
 import { getSchoolProfilesByIds } from '../../../../services/schoolProfile.service';
+import { getEffectiveModuleFeatureFlags } from '../../../../services/feature-flag.service';
 import {
   changePasswordSchema,
   forgotPasswordSchema,
@@ -372,6 +373,10 @@ const issueAuthenticatedResponse = async (params: {
   const permissions = user.schoolId
     ? await AuthorizationService.getEffectivePermissionCodesForUser(user.schoolId, user.id, roleName)
     : [];
+  const moduleFlags = await getEffectiveModuleFeatureFlags({
+    schoolId: user.schoolId ?? null,
+    userId: user.id,
+  });
   const schoolProfile = user.schoolId ? (await getSchoolProfilesByIds([user.schoolId]))[0] ?? null : null;
 
   const accessToken = signToken({ ...payloadBase, typ: 'access' }, ACCESS_TOKEN_TTL);
@@ -430,6 +435,7 @@ const issueAuthenticatedResponse = async (params: {
       school: user.school ?? null,
       schoolProfile,
       permissions,
+      moduleFlags,
     },
   });
 };

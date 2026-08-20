@@ -55,6 +55,7 @@ import {
 } from '../controllers/studentOperations.controller';
 import { authMiddleware } from '../middlewares/auth.middleware';
 import { HttpError } from '../middlewares/error.middleware';
+import { requireModuleFeatureEnabled } from '../middlewares/feature-flag.middleware';
 
 export const studentRouter = Router();
 
@@ -80,8 +81,8 @@ studentRouter.get('/categories', listStudentCategories);
 studentRouter.post('/categories', createStudentCategory);
 studentRouter.patch('/categories/:id', updateStudentCategory);
 studentRouter.delete('/categories/:id', deleteStudentCategory);
-studentRouter.get('/promotions/preview', previewStudentPromotion);
-studentRouter.post('/promotions', promoteStudents);
+studentRouter.get('/promotions/preview', requireModuleFeatureEnabled('feature_student_promotion', 'Student Promotion is disabled by the platform administrator'), previewStudentPromotion);
+studentRouter.post('/promotions', requireModuleFeatureEnabled('feature_student_promotion', 'Student Promotion is disabled by the platform administrator'), promoteStudents);
 studentRouter.get('/disabled', listDisabledStudents);
 studentRouter.post('/students/:id/disable', disableStudent);
 studentRouter.post('/disabled/:id/restore', restoreDisabledStudent);

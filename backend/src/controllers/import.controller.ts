@@ -9,6 +9,7 @@ import { importRequestSchema } from '../validations/import.validation';
 import { importQueue } from '../queues';
 import { enforceLimits } from '../services/subscription.service';
 import { AuthorizationService } from '../services/authorization.service';
+import { assertModuleFeatureEnabled } from '../services/feature-flag.service';
 import { buildRuntimeObjectKey, putRuntimeObject, sanitizeFilename } from '../services/runtimeStorage.service';
 import {
   buildImportTemplateCsv,
@@ -45,6 +46,14 @@ const permissionForImportType = (type: BulkImportType): PermissionCode => {
 
 const assertImportPermission = async (req: Request, type: BulkImportType) => {
   const auth = requireImportUser(req);
+  if (type === 'EXPENSE' || type === 'EXPENSE_CATEGORY') {
+    await assertModuleFeatureEnabled({
+      key: 'module_expenses',
+      schoolId: auth.schoolId ?? null,
+      userId: auth.userId,
+      message: 'Expenses module is disabled by the platform administrator',
+    });
+  }
   await AuthorizationService.assertPermission(auth, permissionForImportType(type), {
     message: 'You do not have permission to import this module',
   });

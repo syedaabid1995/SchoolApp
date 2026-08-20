@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import FullPageLoader from '../../../components/FullPageLoader';
 import { useNotify } from '../../../components/NotificationProvider';
+import { isPathModuleEnabled, type ModuleFeatureFlags } from '../../../config/module-flags';
 import { PLAN_PERMISSION_MODULES, buildPlanPermissionGroups } from '../../../config/plan-module-permissions';
 import { getSession } from '../../../services/auth.service';
 import {
@@ -90,10 +91,10 @@ function Badge({ children, className }: { children: ReactNode; className: string
   return <span className={`inline-flex rounded-full px-2.5 py-1 text-xs font-semibold ring-1 ${className}`}>{children}</span>;
 }
 
-const buildPlanSectionDefinitions = (): PlanSectionView[] => {
+const buildPlanSectionDefinitions = (moduleFlags?: ModuleFeatureFlags): PlanSectionView[] => {
   const sections = new Map<string, Set<string>>();
 
-  PLAN_PERMISSION_MODULES.forEach((definition) => {
+  PLAN_PERMISSION_MODULES.filter((definition) => isPathModuleEnabled(moduleFlags, definition.path)).forEach((definition) => {
     const sectionCodes = sections.get(definition.parent) ?? new Set<string>();
     definition.codes.forEach((code) => sectionCodes.add(code));
     sections.set(definition.parent, sectionCodes);
@@ -104,8 +105,6 @@ const buildPlanSectionDefinitions = (): PlanSectionView[] => {
     codes: Array.from(codes),
   }));
 };
-
-const planSectionDefinitions = buildPlanSectionDefinitions();
 
 const getGroupCodes = (group: PlanPermissionGroupView) =>
   Array.from(new Set(group.modules.flatMap((module) => module.permissions.map((permission) => permission.code))));
@@ -165,10 +164,14 @@ export default function CatalogPage() {
   const { data: session, isLoading: isSessionLoading } = useQuery({
     queryKey: ['session'],
     queryFn: getSession,
-    staleTime: 60_000,
-    refetchOnWindowFocus: false,
+    staleTime: 0,
+    refetchOnWindowFocus: 'always',
   });
   const isSuperAdmin = session?.role === 'SUPER_ADMIN';
+  const visiblePlanSectionDefinitions = useMemo(
+    () => buildPlanSectionDefinitions(session?.moduleFlags),
+    [session?.moduleFlags],
+  );
 
   useEffect(() => {
     if (!isSessionLoading && session?.role && !isSuperAdmin) {
@@ -439,7 +442,7 @@ export default function CatalogPage() {
           plan={null}
           form={planForm}
           saving={planCreateMutation.isPending}
-          moduleSections={planSectionDefinitions}
+          moduleSections={visiblePlanSectionDefinitions}
           enabledCodes={editedPermissionCodes}
           onFormChange={(patch) => setPlanForm((current) => ({ ...current, ...patch }))}
           onModuleChange={setEditedPermissionCodes}
@@ -465,6 +468,7 @@ export default function CatalogPage() {
           plan={selectedPlan}
           permissions={modulePermissions?.permissions ?? []}
           editedCodes={editedPermissionCodes}
+          moduleFlags={session?.moduleFlags}
           loading={isModulePermissionsLoading}
           saving={modulePermissionMutation.isPending}
           onChange={setEditedPermissionCodes}
@@ -694,6 +698,7 @@ function PlanModulesModal({
   plan,
   permissions,
   editedCodes,
+  moduleFlags,
   loading,
   saving,
   onChange,
@@ -703,16 +708,30 @@ function PlanModulesModal({
   plan: SubscriptionPlan | null;
   permissions: PlanPermissionItem[];
   editedCodes: string[];
+  moduleFlags?: ModuleFeatureFlags;
   loading: boolean;
   saving: boolean;
   onChange: (codes: string[]) => void;
   onClose: () => void;
   onSubmit: () => void;
 }) {
-  const groups = useMemo(() => buildPlanPermissionGroups(permissions), [permissions]);
+  const groups = useMemo(
+    () =>
+      buildPlanPermissionGroups(permissions)
+        .map((group) => ({
+          ...group,
+          modules: group.modules.filter((module) => isPathModuleEnabled(moduleFlags, module.path)),
+        }))
+        .filter((group) => group.modules.length > 0),
+    [moduleFlags, permissions],
+  );
   const sections = useMemo(() => getSectionsFromGroups(groups), [groups]);
   const enabledSet = useMemo(() => new Set(editedCodes), [editedCodes]);
-  const allCodes = useMemo(() => Array.from(new Set(permissions.map((permission) => permission.code))), [permissions]);
+  const allVisibleCodes = useMemo(() => Array.from(new Set(groups.flatMap((group) => getGroupCodes(group)))), [groups]);
+  const hiddenEnabledCodes = useMemo(
+    () => editedCodes.filter((code) => !allVisibleCodes.includes(code)),
+    [allVisibleCodes, editedCodes],
+  );
   const includedSectionCount = useMemo(() => countIncludedSections(sections, enabledSet), [sections, enabledSet]);
 
   const setCodes = (codes: string[]) => onChange(Array.from(new Set(codes)));
@@ -728,10 +747,10 @@ function PlanModulesModal({
             <p className="mt-1 text-sm text-[var(--shell-muted)]">{includedSectionCount} of {sections.length} sections enabled</p>
           </div>
           <div className="flex flex-wrap gap-2">
-            <button type="button" onClick={() => setCodes(allCodes)} disabled={loading} className="rounded-md border border-[var(--shell-border)] px-3 py-2 text-sm font-semibold text-[var(--shell-text)] disabled:opacity-50">
+            <button type="button" onClick={() => setCodes([...hiddenEnabledCodes, ...allVisibleCodes])} disabled={loading} className="rounded-md border border-[var(--shell-border)] px-3 py-2 text-sm font-semibold text-[var(--shell-text)] disabled:opacity-50">
               Enable All
             </button>
-            <button type="button" onClick={() => onChange([])} disabled={loading} className="rounded-md border border-[var(--shell-border)] px-3 py-2 text-sm font-semibold text-[var(--shell-text)] disabled:opacity-50">
+            <button type="button" onClick={() => onChange(hiddenEnabledCodes)} disabled={loading} className="rounded-md border border-[var(--shell-border)] px-3 py-2 text-sm font-semibold text-[var(--shell-text)] disabled:opacity-50">
               Disable All
             </button>
             <button type="button" onClick={onClose} className="rounded-md border border-[var(--shell-border)] px-3 py-2 text-sm font-semibold text-[var(--shell-text)]">
