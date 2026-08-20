@@ -35,6 +35,11 @@ import {
 } from '../services/s3.service';
 import { Readable } from 'stream';
 import { normalizeStudentDocumentFiles } from '../modules/students/utils/student-document-files';
+import { decryptStudentSensitiveFields } from '../modules/students/utils/student-sensitive-fields';
+import {
+  decryptParentProfileSensitiveFieldList,
+  encryptParentProfileSensitiveFields,
+} from '../modules/students/utils/parent-profile-sensitive-fields';
 
 type RazorpayOrder = {
   id: string;
@@ -70,9 +75,10 @@ type RazorpayPaymentLink = {
 };
 
 const resolveParentProfiles = async (userId: string) => {
-  return prisma.parentProfile.findMany({
+  const parents = await prisma.parentProfile.findMany({
     where: { userId },
   });
+  return decryptParentProfileSensitiveFieldList(parents);
 };
 
 const resolveChildren = async (userId: string) => {
@@ -480,7 +486,7 @@ const resolveParentChildStorageRef = async (params: {
   }
 
   if (type === 'admission' && key) {
-    const student = await prisma.student.findFirst({
+    const studentRecord = await prisma.student.findFirst({
       where: { id: params.studentId },
       select: {
         docBirthCert: true,
@@ -489,7 +495,8 @@ const resolveParentChildStorageRef = async (params: {
         docReportCard: true,
       },
     });
-    if (!student) return null;
+    if (!studentRecord) return null;
+    const student = decryptStudentSensitiveFields(studentRecord);
     const map: Record<string, string | null | undefined> = {
       birthCertificate: student.docBirthCert,
       transferCertificate: student.docTransferCert,
@@ -815,7 +822,7 @@ export const getParentChildDetail = async (req: Request, res: Response) => {
   const auth = requireAuth(req);
   const { child } = await requireChildAccess(auth.userId, req.params.childId);
 
-  const student = await prisma.student.findFirst({
+  const studentRecord = await prisma.student.findFirst({
     where: { id: child.id, schoolId: child.schoolId },
     include: {
       school: { select: { id: true, name: true } },
@@ -1013,7 +1020,8 @@ export const getParentChildDetail = async (req: Request, res: Response) => {
     },
   });
 
-  if (!student) throw new HttpError(404, 'Student not found');
+  if (!studentRecord) throw new HttpError(404, 'Student not found');
+  const student = decryptStudentSensitiveFields(studentRecord);
 
   const documents = await serializeDocumentsForParent(student);
 
@@ -1321,12 +1329,12 @@ export const updateParentProfile = async (req: Request, res: Response) => {
   await prisma.$transaction([
     prisma.parentProfile.updateMany({
       where: { userId: auth.userId },
-      data: {
+      data: encryptParentProfileSensitiveFields({
         firstName: payload.firstName,
         lastName: payload.lastName,
         email: payload.email,
         phone: payload.phone?.trim() || null,
-      },
+      }),
     }),
     prisma.user.update({
       where: { id: auth.userId },

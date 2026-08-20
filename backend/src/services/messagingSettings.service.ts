@@ -1,7 +1,10 @@
 import { NotificationChannel, Prisma } from '@prisma/client';
 import { prisma } from '../config/db';
 import { HttpError } from '../middlewares/error.middleware';
-import { encryptSecret, isEncryptedSecret } from '../utils/cryptoVault';
+import {
+  decryptMessagingCredentials,
+  encryptMessagingCredentialsForStorage,
+} from '../utils/messagingCredentialsCrypto';
 import { PlatformEmailProvider } from './email/platformEmailProvider';
 
 export const TWILIO_SERVICE_CODE = 'TWILIO';
@@ -67,7 +70,7 @@ const mergeSavedCredentials = (
   existingCredentials: unknown,
   incomingCredentials: Record<string, string>,
 ) => ({
-  ...readStringCredentials(existingCredentials),
+  ...decryptMessagingCredentials(existingCredentials),
   ...cleanCredentials(incomingCredentials),
 });
 
@@ -76,13 +79,9 @@ const prepareCredentialsForStorage = (
   channel: NotificationChannel,
   credentials: Record<string, string>,
 ) => {
-  if (serviceCode !== SMTP_SERVICE_CODE || channel !== 'EMAIL') return credentials;
-  const password = credentials.password?.trim();
-  if (!password || isEncryptedSecret(password)) return credentials;
-  return {
-    ...credentials,
-    password: encryptSecret(password),
-  };
+  void serviceCode;
+  void channel;
+  return encryptMessagingCredentialsForStorage(credentials);
 };
 
 const validateCredentials = (serviceCode: string, channel: NotificationChannel, credentials: Record<string, string>) => {
@@ -113,16 +112,6 @@ const validateCredentials = (serviceCode: string, channel: NotificationChannel, 
       throw new HttpError(400, 'SendGrid replyToEmail must be a valid email address');
     }
   }
-};
-
-const readStringCredentials = (value: unknown) => {
-  if (!value || typeof value !== 'object' || Array.isArray(value)) return {};
-  return Object.entries(value as Record<string, unknown>).reduce<Record<string, string>>((acc, [key, entry]) => {
-    if (typeof entry === 'string') {
-      acc[key] = entry;
-    }
-    return acc;
-  }, {});
 };
 
 export const ensureDefaultMessagingServices = async () => {
@@ -210,8 +199,8 @@ export const getSchoolMessagingConfig = async (schoolId: string, channel: Notifi
     serviceId: config.serviceId,
     serviceCode: config.service.code,
     serviceName: config.service.name,
-    credentialKeys: Object.keys((config.credentials as Record<string, unknown>) ?? {}),
-    maskedCredentials: maskCredentials((config.credentials as Record<string, unknown>) ?? {}),
+    credentialKeys: Object.keys(decryptMessagingCredentials(config.credentials)),
+    maskedCredentials: maskCredentials(decryptMessagingCredentials(config.credentials)),
   };
 };
 
@@ -341,6 +330,6 @@ export const resolveSchoolMessagingProvider = async (params: {
 
   return {
     serviceCode: config.service.code,
-    credentials: (config.credentials as Record<string, string>) ?? {},
+    credentials: decryptMessagingCredentials(config.credentials),
   };
 };

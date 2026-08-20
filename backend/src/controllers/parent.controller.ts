@@ -12,6 +12,13 @@ import {
   setOffsetPaginationHeaders,
   toOffsetPageInfo,
 } from '../utils/pagination';
+import {
+  decryptParentProfileSensitiveFieldList,
+  decryptParentProfileSensitiveFields,
+  encryptParentProfileSensitiveFields,
+  parentProfileAnyContactWhere,
+  parentProfileContactWhere,
+} from '../modules/students/utils/parent-profile-sensitive-fields';
 
 const createSchema = z.object({
   firstName: z.string().min(1),
@@ -78,9 +85,9 @@ export const createParent = async (req: Request, res: Response) => {
     let tempPassword: string | null = null;
     let created = false;
     const contactMatches = [
-      payload.phone ? { phone: payload.phone } : null,
-      payload.email ? { email: payload.email } : null,
-    ].filter(Boolean) as Array<{ phone: string } | { email: string }>;
+      ...(payload.phone ? parentProfileContactWhere('phone', [payload.phone]) : []),
+      ...(payload.email ? parentProfileContactWhere('email', [payload.email]) : []),
+    ];
     const existingContactProfile = contactMatches.length
       ? await tx.parentProfile.findFirst({
           where: { OR: contactMatches },
@@ -135,11 +142,11 @@ export const createParent = async (req: Request, res: Response) => {
       if (needsUserLink || needsContactUpdate) {
         const updatedProfile = await tx.parentProfile.update({
           where: { id: existingContactProfile.id },
-          data: {
+          data: encryptParentProfileSensitiveFields({
             userId: needsUserLink ? userId : undefined,
             phone: payload.phone && !existingContactProfile.phone ? payload.phone : undefined,
             email: payload.email && !existingContactProfile.email ? payload.email : undefined,
-          },
+          }),
           select: parentProfileSelect,
         });
         return { parent: updatedProfile, tempPassword, created: false };
@@ -158,31 +165,33 @@ export const createParent = async (req: Request, res: Response) => {
     }
 
     const parent = await tx.parentProfile.create({
-      data: {
+      data: encryptParentProfileSensitiveFields({
         userId,
         firstName: payload.firstName,
         lastName: payload.lastName,
         phone: payload.phone ?? null,
         email: payload.email ?? null,
-      },
+      }),
     });
 
     created = true;
     return { parent, tempPassword, created };
   });
 
+  const responseParent = decryptParentProfileSensitiveFields(result.parent);
+
   if (result.created) {
     await logAudit(req, {
       schoolId,
       entityType: 'PARENT',
-      entityId: result.parent.id,
+      entityId: responseParent.id,
       action: 'CREATE',
       afterState: {
-        firstName: result.parent.firstName,
-        lastName: result.parent.lastName,
-        phone: result.parent.phone,
-        email: result.parent.email,
-        userId: result.parent.userId,
+        firstName: responseParent.firstName,
+        lastName: responseParent.lastName,
+        phone: responseParent.phone,
+        email: responseParent.email,
+        userId: responseParent.userId,
       },
     });
   }
@@ -192,15 +201,15 @@ export const createParent = async (req: Request, res: Response) => {
     ? await sendAccountCreatedWhatsapp({
         role: 'PARENT',
         schoolId,
-        email: result.parent.email ?? `${result.parent.phone ?? 'parent'}@parent.local`,
-        mobile: result.parent.phone,
+        email: responseParent.email ?? `${responseParent.phone ?? 'parent'}@parent.local`,
+        mobile: responseParent.phone,
         tempPassword: result.tempPassword,
-        fullName: `${result.parent.firstName} ${result.parent.lastName}`.trim(),
+        fullName: `${responseParent.firstName} ${responseParent.lastName}`.trim(),
       })
     : null;
 
   res.status(result.created ? 201 : 200).json({
-    ...result.parent,
+    ...responseParent,
     mappedSchoolId: schoolId,
     tempPassword: result.tempPassword,
     reusedExisting: !result.created,
@@ -224,6 +233,7 @@ export const listParents = async (req: Request, res: Response) => {
           OR: [
             { firstName: { contains: query, mode: 'insensitive' as const } },
             { lastName: { contains: query, mode: 'insensitive' as const } },
+            ...parentProfileAnyContactWhere(query),
             { phone: { contains: query, mode: 'insensitive' as const } },
             { email: { contains: query, mode: 'insensitive' as const } },
             { links: { some: { student: { admissionNo: { contains: query, mode: 'insensitive' as const } } } } },
@@ -244,7 +254,7 @@ export const listParents = async (req: Request, res: Response) => {
   ]);
   setOffsetPaginationHeaders(res, toOffsetPageInfo(pagination, total));
 
-  res.status(200).json(parents);
+  res.status(200).json(decryptParentProfileSensitiveFieldList(parents));
 };
 
 export const lookupParentByPhone = async (req: Request, res: Response) => {
@@ -288,7 +298,7 @@ export const getParent = async (req: Request, res: Response) => {
     throw new HttpError(404, 'Parent not found');
   }
 
-  res.status(200).json(parent);
+  res.status(200).json(decryptParentProfileSensitiveFields(parent));
 };
 
 export const updateParent = async (req: Request, res: Response) => {
@@ -307,32 +317,34 @@ export const updateParent = async (req: Request, res: Response) => {
 
   const parent = await prisma.parentProfile.update({
     where: { id },
-    data: {
+    data: encryptParentProfileSensitiveFields({
       firstName: payload.firstName ?? undefined,
       lastName: payload.lastName ?? undefined,
       phone: payload.phone === undefined ? undefined : payload.phone,
       email: payload.email === undefined ? undefined : payload.email,
       userId: payload.userId === undefined ? undefined : payload.userId,
-    },
+    }),
   });
+  const decryptedExisting = decryptParentProfileSensitiveFields(existing);
+  const decryptedParent = decryptParentProfileSensitiveFields(parent);
 
   await logAudit(req, {
     schoolId,
     entityType: 'PARENT',
-    entityId: parent.id,
+    entityId: decryptedParent.id,
     action: 'UPDATE',
-    beforeState: existing,
+    beforeState: decryptedExisting,
     afterState: {
-      firstName: parent.firstName,
-      lastName: parent.lastName,
-      phone: parent.phone,
-      email: parent.email,
-      userId: parent.userId,
+      firstName: decryptedParent.firstName,
+      lastName: decryptedParent.lastName,
+      phone: decryptedParent.phone,
+      email: decryptedParent.email,
+      userId: decryptedParent.userId,
     },
   });
   await invalidateStudentCache(schoolId);
 
-  res.status(200).json(parent);
+  res.status(200).json(decryptedParent);
 };
 
 export const deleteParent = async (req: Request, res: Response) => {
@@ -355,7 +367,7 @@ export const deleteParent = async (req: Request, res: Response) => {
     entityType: 'PARENT',
     entityId: id,
     action: 'DELETE',
-    beforeState: existing,
+    beforeState: decryptParentProfileSensitiveFields(existing),
   });
   await invalidateStudentCache(schoolId);
 

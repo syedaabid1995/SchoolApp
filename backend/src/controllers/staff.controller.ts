@@ -16,6 +16,13 @@ import { PermissionCodes as P } from '../permissions/permission-manifest';
 import { sendAccountCreatedWhatsapp } from '../services/accountOnboardingWhatsapp.service';
 import { resolveSchoolId } from '../utils/tenant';
 import { isAllowedDocumentMimeType, validateUploadedDocumentFile } from '../utils/documentUploadValidation';
+import {
+  decryptStaffSensitiveFields,
+  decryptTeacherBankDetails,
+  encryptStaffSensitiveFields,
+  encryptTeacherBankDetailsForStorage,
+  staffContactHashWhere,
+} from '../modules/staff/utils/staff-sensitive-fields';
 
 const staffRoles = ['SCHOOL_ADMIN', 'TEACHER', 'ACCOUNTANT', 'LIBRARIAN', 'STAFF'] as const;
 const attendanceStatuses = ['PRESENT', 'LATE', 'ABSENT', 'HOLIDAY', 'HALF_DAY', 'LEAVE', 'LOP', 'CASUAL_LEAVE'] as const;
@@ -295,7 +302,9 @@ const formatLeaveBalances = (balances: any[] | undefined) =>
     remainingDays: Math.max(0, Number(balance.totalDays ?? 0) - Number(balance.usedDays ?? 0)),
   }));
 
-const formatStaff = (staff: any, options: { includeSensitive?: boolean } = {}) => {
+const formatStaff = (rawStaff: any, options: { includeSensitive?: boolean } = {}) => {
+  const staff = decryptStaffSensitiveFields(rawStaff);
+  const bankDetails = decryptTeacherBankDetails(staff.bankDetails);
   const safe = {
     id: staff.id,
     userId: staff.userId,
@@ -345,8 +354,8 @@ const formatStaff = (staff: any, options: { includeSensitive?: boolean } = {}) =
     leaveBalances: formatLeaveBalances(staff.leaveBalances),
     payrolls: staff.payrolls,
     payrollInfo: staff.payrollInfo ?? null,
-    bankDetails: staff.bankDetails ?? null,
-    bankInfo: staff.bankDetails ?? null,
+    bankDetails: bankDetails ?? null,
+    bankInfo: bankDetails ?? null,
   };
 };
 
@@ -365,27 +374,22 @@ const upsertBankDetails = async (tx: Prisma.TransactionClient, staffId: string, 
   if (!bankDetails) return;
   const hasAny = Object.values(bankDetails).some((value) => Boolean(normalizeText(value ?? null)));
   if (!hasAny) return;
+  const encryptedBankDetails = encryptTeacherBankDetailsForStorage({
+    accountHolderName: normalizeNullable(bankDetails.accountHolderName),
+    accountNumber: normalizeNullable(bankDetails.accountNumber),
+    ifscCode: normalizeNullable(bankDetails.ifscCode),
+    accountType: normalizeNullable(bankDetails.accountType),
+    bankName: normalizeNullable(bankDetails.bankName),
+    branchName: normalizeNullable(bankDetails.branchName),
+    panNumber: normalizeNullable(bankDetails.panNumber),
+  });
   await tx.teacherBankDetails.upsert({
     where: { teacherId: staffId },
     create: {
       teacherId: staffId,
-      accountHolderName: normalizeNullable(bankDetails.accountHolderName),
-      accountNumber: normalizeNullable(bankDetails.accountNumber),
-      ifscCode: normalizeNullable(bankDetails.ifscCode),
-      accountType: normalizeNullable(bankDetails.accountType),
-      bankName: normalizeNullable(bankDetails.bankName),
-      branchName: normalizeNullable(bankDetails.branchName),
-      panNumber: normalizeNullable(bankDetails.panNumber),
+      ...encryptedBankDetails,
     },
-    update: {
-      accountHolderName: normalizeNullable(bankDetails.accountHolderName),
-      accountNumber: normalizeNullable(bankDetails.accountNumber),
-      ifscCode: normalizeNullable(bankDetails.ifscCode),
-      accountType: normalizeNullable(bankDetails.accountType),
-      bankName: normalizeNullable(bankDetails.bankName),
-      branchName: normalizeNullable(bankDetails.branchName),
-      panNumber: normalizeNullable(bankDetails.panNumber),
-    },
+    update: encryptedBankDetails,
   });
 };
 
@@ -574,6 +578,7 @@ export const listStaff = async (req: Request, res: Response) => {
             { lastName: { contains: query.search, mode: 'insensitive' } },
             { employeeNo: { contains: query.search, mode: 'insensitive' } },
             { phone: { contains: query.search, mode: 'insensitive' } },
+            ...staffContactHashWhere(query.search),
             { department: { name: { contains: query.search, mode: 'insensitive' } } },
             { designation: { name: { contains: query.search, mode: 'insensitive' } } },
             { user: { email: { contains: query.search, mode: 'insensitive' } } },
@@ -630,7 +635,7 @@ export const createStaff = async (req: Request, res: Response) => {
 
       const employeeNo = requestedEmployeeNo ?? (await generateEmployeeNo(tx, schoolId, payload.roleName));
       const staff = await tx.teacherProfile.create({
-        data: {
+        data: encryptStaffSensitiveFields({
           schoolId,
           userId: user.id,
           roleName: payload.roleName,
@@ -655,7 +660,7 @@ export const createStaff = async (req: Request, res: Response) => {
           experience: normalizeNullable(payload.experience),
           maritalStatus: normalizeNullable(payload.maritalStatus),
           isActive: true,
-        },
+        }),
       });
       await createOfferLetterDocument(tx, { schoolId, staffId: staff.id, employeeNo, uploadedById: userId });
       await upsertBankDetails(tx, staff.id, payload.bankDetails);
@@ -677,13 +682,14 @@ export const createStaff = async (req: Request, res: Response) => {
 
   const staff = await prisma.teacherProfile.findFirst({ where: { id: result.staff.id, schoolId }, include: staffInclude });
   const includeSensitive = await canViewPayrollProjection(req);
+  const createdStaff = decryptStaffSensitiveFields(result.staff);
   const whatsapp = await sendAccountCreatedWhatsapp({
     role: payload.roleName,
     schoolId,
     email: result.user.email,
-    mobile: result.staff.phone,
+    mobile: createdStaff.phone,
     tempPassword: payload.password ? null : tempPassword,
-    fullName: `${result.staff.firstName} ${result.staff.lastName}`.trim(),
+    fullName: `${createdStaff.firstName} ${createdStaff.lastName}`.trim(),
   });
 
   res.status(201).json({
@@ -734,7 +740,7 @@ export const updateStaff = async (req: Request, res: Response) => {
       }
       const staff = await tx.teacherProfile.update({
         where: { id: existing.id },
-        data: {
+        data: encryptStaffSensitiveFields({
           roleName: payload.roleName ?? undefined,
           employeeNo: payload.employeeNo === undefined ? undefined : normalizeNullable(payload.employeeNo),
           firstName: payload.firstName ?? undefined,
@@ -756,7 +762,7 @@ export const updateStaff = async (req: Request, res: Response) => {
           qualifications: payload.qualifications === undefined ? undefined : normalizeNullable(payload.qualifications),
           experience: payload.experience === undefined ? undefined : normalizeNullable(payload.experience),
           maritalStatus: payload.maritalStatus === undefined ? undefined : normalizeNullable(payload.maritalStatus),
-        },
+        }),
       });
       await upsertBankDetails(tx, existing.id, payload.bankDetails);
       await upsertPayrollInfo(tx, existing.id, payload.payrollInfo);
@@ -768,7 +774,7 @@ export const updateStaff = async (req: Request, res: Response) => {
     }, staffTransactionOptions)
     .catch(rethrowStaffTransactionError);
 
-  res.status(200).json(updated);
+  res.status(200).json(decryptStaffSensitiveFields(updated));
 };
 
 export const deleteStaff = async (req: Request, res: Response) => {

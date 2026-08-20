@@ -91,6 +91,6 @@ test('generic notification dispatcher no longer falls back from tenant email to 
 test('tenant SMTP passwords are encrypted before storage', () => {
   const messagingSettings = source('src/services/messagingSettings.service.ts');
   assert.match(messagingSettings, /prepareCredentialsForStorage/);
-  assert.match(messagingSettings, /encryptSecret\(password\)/);
+  assert.match(messagingSettings, /encryptMessagingCredentialsForStorage/);
   assert.match(messagingSettings, /Tenant email must use the school SMTP provider/);
 });

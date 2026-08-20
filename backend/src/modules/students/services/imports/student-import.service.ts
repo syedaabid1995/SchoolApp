@@ -17,6 +17,11 @@ import { buildQueryFingerprint, cacheKeys } from '../../../../services/cache/cac
 import { rememberCache, setCacheHeader } from '../../../../services/cache/cache.service';
 import { cacheTTL } from '../../../../services/cache/cache.ttl';
 import { invalidateStudentCache, invalidateAttendanceCache } from '../../../../services/cache/cache.invalidation';
+import { encryptStudentSensitiveFields } from '../../utils/student-sensitive-fields';
+import {
+  encryptParentGuardianSensitiveFields,
+  parentGuardianContactWhere,
+} from '../../utils/parent-guardian-sensitive-fields';
 
 const requireSchoolAdmin = (req: Request) => {
   if (!req.auth?.userId) throw new HttpError(401, 'Unauthorized');
@@ -375,6 +380,9 @@ export const importStudents = async (req: Request, res: Response) => {
   const guardianEmails = rows.map((row) => row.email).filter(Boolean);
   const guardianPhones = rows.map((row) => row.father_phone || row.mother_phone || row.phone).filter(Boolean);
 
+  const guardianEmailWhere = parentGuardianContactWhere(schoolId, 'email', guardianEmails);
+  const guardianPhoneWhere = parentGuardianContactWhere(schoolId, 'phone', guardianPhones);
+
   const [existingStudents, existingRolls, existingGuardiansByEmail, existingGuardiansByPhone] = await Promise.all([
     StudentImportRepository.student.findMany({ where: { schoolId, admissionNo: { in: admissionNos } }, select: { admissionNo: true } }),
     StudentImportRepository.studentEnrollment.findMany({
@@ -387,8 +395,12 @@ export const importStudents = async (req: Request, res: Response) => {
       },
       select: { rollNo: true },
     }),
-    StudentImportRepository.parentGuardian.findMany({ where: { schoolId, email: { in: guardianEmails } }, select: { email: true } }),
-    StudentImportRepository.parentGuardian.findMany({ where: { schoolId, phone: { in: guardianPhones } }, select: { phone: true } }),
+    guardianEmailWhere.length
+      ? StudentImportRepository.parentGuardian.findMany({ where: { OR: guardianEmailWhere }, select: { email: true } })
+      : Promise.resolve([]),
+    guardianPhoneWhere.length
+      ? StudentImportRepository.parentGuardian.findMany({ where: { OR: guardianPhoneWhere }, select: { phone: true } })
+      : Promise.resolve([]),
   ]);
   const existingAdmissionSet = new Set(existingStudents.map((item) => item.admissionNo));
   const existingRollSet = new Set(existingRolls.map((item) => item.rollNo).filter(Boolean));
@@ -439,7 +451,7 @@ export const importStudents = async (req: Request, res: Response) => {
       const lastName = normalizeText(row.last_name) ?? 'Student';
       const fullName = `${firstName} ${lastName}`.trim();
       const student = await tx.student.create({
-        data: {
+        data: encryptStudentSensitiveFields({
           schoolId,
           academicSessionId: payload.academicSessionId,
           classId: payload.classId,
@@ -474,7 +486,7 @@ export const importStudents = async (req: Request, res: Response) => {
           permanentAddress: nullableText(row.permanent_address),
           addressLine1: nullableText(row.present_address),
           status: 'ENROLLED',
-        },
+        }),
       });
       await tx.studentEnrollment.create({
         data: {
@@ -495,15 +507,17 @@ export const importStudents = async (req: Request, res: Response) => {
       if (guardians.length) {
         await tx.parentGuardian.createMany({
           data: guardians.map((guardian) => ({
-            schoolId,
-            studentId: student.id,
-            type: guardian.type,
-            name: guardian.name!,
-            occupation: guardian.occupation ?? null,
-            phone: guardian.phone ?? null,
-            email: guardian.email ?? null,
-            relation: guardian.relation,
-            isPrimary: guardian.isPrimary,
+            ...encryptParentGuardianSensitiveFields({
+              schoolId,
+              studentId: student.id,
+              type: guardian.type,
+              name: guardian.name!,
+              occupation: guardian.occupation ?? null,
+              phone: guardian.phone ?? null,
+              email: guardian.email ?? null,
+              relation: guardian.relation,
+              isPrimary: guardian.isPrimary,
+            }),
           })),
         });
       }

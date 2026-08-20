@@ -6,6 +6,7 @@ import { createAuditLog } from './auditLog.service';
 import { env } from '../config/env';
 import { hasActiveMessagingGateway } from './messagingSettings.service';
 import { sendNotification } from './notification.service';
+import { parentProfileContactWhere } from '../modules/students/utils/parent-profile-sensitive-fields';
 
 const OTP_TTL_MINUTES = 5;
 const PURPOSE = 'PARENT_LOGIN';
@@ -104,7 +105,7 @@ export const verifyOtp = async (params: { schoolId: string; phone: string; code:
 
   // Optional audit log if parent user exists.
   const parent = await prisma.parentProfile.findFirst({
-    where: { phone },
+    where: { OR: parentProfileContactWhere('phone', [phone]) },
     select: { userId: true },
   });
 

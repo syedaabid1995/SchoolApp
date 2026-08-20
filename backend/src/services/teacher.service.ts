@@ -4,6 +4,12 @@ import { prisma } from '../config/db';
 import { HttpError } from '../middlewares/error.middleware';
 import { hashPassword } from '../utils/password';
 import { incrementUsage, enforceLimits } from './subscription.service';
+import {
+  decryptStaffRecord,
+  decryptStaffSensitiveFields,
+  encryptStaffSensitiveFields,
+  encryptTeacherBankDetailsForStorage,
+} from '../modules/staff/utils/staff-sensitive-fields';
 
 export type TeacherCreateInput = {
   schoolId: string;
@@ -73,7 +79,7 @@ export const createTeacher = async (payload: TeacherCreateInput) => {
       });
 
       const profile = await tx.teacherProfile.create({
-        data: {
+        data: encryptStaffSensitiveFields({
           schoolId: payload.schoolId,
           userId: user.id,
           firstName: payload.firstName,
@@ -82,7 +88,7 @@ export const createTeacher = async (payload: TeacherCreateInput) => {
           phone: payload.phone ?? null,
           address: payload.address ?? null,
           isActive: true,
-        },
+        }),
       });
 
       if (payload.bankDetails) {
@@ -99,13 +105,15 @@ export const createTeacher = async (payload: TeacherCreateInput) => {
           await tx.teacherBankDetails.create({
             data: {
               teacherId: profile.id,
-              accountHolderName: details.accountHolderName ?? null,
-              accountNumber: details.accountNumber ?? null,
-              ifscCode: details.ifscCode ?? null,
-              accountType: details.accountType ?? null,
-              bankName: details.bankName ?? null,
-              branchName: details.branchName ?? null,
-              panNumber: details.panNumber ?? null,
+              ...encryptTeacherBankDetailsForStorage({
+                accountHolderName: details.accountHolderName ?? null,
+                accountNumber: details.accountNumber ?? null,
+                ifscCode: details.ifscCode ?? null,
+                accountType: details.accountType ?? null,
+                bankName: details.bankName ?? null,
+                branchName: details.branchName ?? null,
+                panNumber: details.panNumber ?? null,
+              }),
             },
           });
         }
@@ -116,7 +124,11 @@ export const createTeacher = async (payload: TeacherCreateInput) => {
 
     await incrementUsage(payload.schoolId, 'teachers', 1);
 
-    return { ...teacher, tempPassword: mustChangePassword ? tempPassword : null };
+    return {
+      ...teacher,
+      profile: decryptStaffSensitiveFields(teacher.profile),
+      tempPassword: mustChangePassword ? tempPassword : null,
+    };
   } catch (error) {
     if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002' && Array.isArray(error.meta?.target)) {
       const target = error.meta.target as string[];
@@ -171,7 +183,7 @@ export const listTeachers = async (params: {
   ]);
 
   return {
-    items,
+    items: items.map((item) => decryptStaffRecord(item)),
     page: params.page,
     limit: params.limit,
     total,
@@ -180,7 +192,7 @@ export const listTeachers = async (params: {
 };
 
 export const getTeacher = async (teacherId: string, schoolId: string) => {
-  return prisma.teacherProfile.findFirst({
+  const teacher = await prisma.teacherProfile.findFirst({
     where: { schoolId, OR: [{ id: teacherId }, { userId: teacherId }] },
     include: {
       user: { select: { email: true, status: true } },
@@ -189,6 +201,7 @@ export const getTeacher = async (teacherId: string, schoolId: string) => {
       subjectAssignments: { include: { subject: true } },
     },
   });
+  return teacher ? decryptStaffRecord(teacher) : teacher;
 };
 
 export const updateTeacher = async (teacherId: string, schoolId: string, payload: TeacherUpdateInput) => {
@@ -211,14 +224,14 @@ export const updateTeacher = async (teacherId: string, schoolId: string, payload
 
     const profile = await tx.teacherProfile.update({
       where: { id: existing.id },
-      data: {
+      data: encryptStaffSensitiveFields({
         firstName: payload.firstName ?? undefined,
         lastName: payload.lastName ?? undefined,
         employeeNo: payload.employeeNo === undefined ? undefined : payload.employeeNo,
         phone: payload.phone === undefined ? undefined : payload.phone,
         address: payload.address === undefined ? undefined : payload.address,
         isActive: payload.isActive ?? undefined,
-      },
+      }),
     });
 
     if (payload.bankDetails) {
@@ -237,6 +250,17 @@ export const updateTeacher = async (teacherId: string, schoolId: string, payload
           where: { teacherId: existing.id },
           create: {
             teacherId: existing.id,
+            ...encryptTeacherBankDetailsForStorage({
+              accountHolderName: details.accountHolderName ?? null,
+              accountNumber: details.accountNumber ?? null,
+              ifscCode: details.ifscCode ?? null,
+              accountType: details.accountType ?? null,
+              bankName: details.bankName ?? null,
+              branchName: details.branchName ?? null,
+              panNumber: details.panNumber ?? null,
+            }),
+          },
+          update: encryptTeacherBankDetailsForStorage({
             accountHolderName: details.accountHolderName ?? null,
             accountNumber: details.accountNumber ?? null,
             ifscCode: details.ifscCode ?? null,
@@ -244,16 +268,7 @@ export const updateTeacher = async (teacherId: string, schoolId: string, payload
             bankName: details.bankName ?? null,
             branchName: details.branchName ?? null,
             panNumber: details.panNumber ?? null,
-          },
-          update: {
-            accountHolderName: details.accountHolderName ?? null,
-            accountNumber: details.accountNumber ?? null,
-            ifscCode: details.ifscCode ?? null,
-            accountType: details.accountType ?? null,
-            bankName: details.bankName ?? null,
-            branchName: details.branchName ?? null,
-            panNumber: details.panNumber ?? null,
-          },
+          }),
         });
       }
     }
@@ -261,5 +276,5 @@ export const updateTeacher = async (teacherId: string, schoolId: string, payload
     return profile;
   });
 
-  return updated;
+  return decryptStaffSensitiveFields(updated);
 };

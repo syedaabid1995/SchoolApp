@@ -3,6 +3,8 @@ import { HttpError } from '../middlewares/error.middleware';
 import { createAuditLog } from './auditLog.service';
 import { buildRuntimeObjectKey, getSignedDownloadUrlForStoredRef, putRuntimeObject } from './runtimeStorage.service';
 import { DEFAULT_EXPORT_ROW_LIMIT } from '../utils/pagination';
+import { decryptStudentSensitiveFieldList } from '../modules/students/utils/student-sensitive-fields';
+import { decryptParentProfileSensitiveFieldList } from '../modules/students/utils/parent-profile-sensitive-fields';
 
 export const exportTenantData = async (params: {
   schoolId: string;
@@ -35,12 +37,14 @@ export const exportTenantData = async (params: {
     throw new HttpError(413, `Tenant data export exceeds ${DEFAULT_EXPORT_ROW_LIMIT} rows in at least one dataset. Use a background export worker before exporting this school.`);
   }
 
+  const students = await prisma.student.findMany({ where: { schoolId: params.schoolId } });
+  const parents = await prisma.parentProfile.findMany({
+    where: { links: { some: { student: { schoolId: params.schoolId } } } },
+  });
   const exportData = {
     schools: await prisma.school.findMany({ where: { id: params.schoolId } }),
-    students: await prisma.student.findMany({ where: { schoolId: params.schoolId } }),
-    parents: await prisma.parentProfile.findMany({
-      where: { links: { some: { student: { schoolId: params.schoolId } } } },
-    }),
+    students: decryptStudentSensitiveFieldList(students),
+    parents: decryptParentProfileSensitiveFieldList(parents),
     teachers: await prisma.teacherProfile.findMany({ where: { schoolId: params.schoolId } }),
     attendance: await prisma.attendanceSession.findMany({ where: { schoolId: params.schoolId }, include: { records: true } }),
   };

@@ -1,5 +1,5 @@
 import { prisma } from '../../config/db';
-import { decryptSecret, isEncryptedSecret } from '../../utils/cryptoVault';
+import { decryptMessagingCredentials } from '../../utils/messagingCredentialsCrypto';
 import type { EmailMessage, EmailProviderDeliveryResult, TenantEmailIntent } from './email.types';
 import { SMTPTransport } from './transports';
 
@@ -33,19 +33,6 @@ const normalizeEncryption = (credentials: Record<string, string>, port: number) 
   };
 };
 
-const decryptPasswordForDelivery = (password: string | undefined) => {
-  if (!password) return undefined;
-  return isEncryptedSecret(password) ? decryptSecret(password) : password;
-};
-
-const readCredentials = (value: unknown) => {
-  if (!value || typeof value !== 'object' || Array.isArray(value)) return {};
-  return Object.entries(value as Record<string, unknown>).reduce<Record<string, string>>((acc, [key, entry]) => {
-    if (typeof entry === 'string') acc[key] = entry;
-    return acc;
-  }, {});
-};
-
 export const TenantEmailProvider = {
   async resolveConfig(schoolId: string): Promise<TenantSmtpConfig | null> {
     const config = await prisma.schoolMessagingConfig.findUnique({
@@ -55,7 +42,7 @@ export const TenantEmailProvider = {
     if (!config || !config.isEnabled || config.service.status !== 'ACTIVE') return null;
     if (config.service.code !== 'SMTP') return null;
 
-    const credentials = readCredentials(config.credentials);
+    const credentials = decryptMessagingCredentials(config.credentials);
     const port = Number.parseInt(credentials.port ?? '', 10);
     if (!credentials.host || !Number.isInteger(port) || port < 1 || port > 65535 || !isValidEmail(credentials.fromEmail)) {
       return null;
@@ -65,7 +52,7 @@ export const TenantEmailProvider = {
       host: credentials.host,
       port,
       username: credentials.username,
-      password: decryptPasswordForDelivery(credentials.password),
+      password: credentials.password,
       fromEmail: credentials.fromEmail,
       fromName: credentials.fromName,
       replyToEmail: credentials.replyToEmail,
@@ -84,7 +71,7 @@ export const TenantEmailProvider = {
     });
     if (!config || !config.isEnabled || config.service.status !== 'ACTIVE') return null;
     if (config.service.code !== 'SMTP') return null;
-    const credentials = readCredentials(config.credentials);
+    const credentials = decryptMessagingCredentials(config.credentials);
     const port = Number.parseInt(credentials.port ?? '', 10);
     if (!credentials.host || !Number.isInteger(port) || port < 1 || port > 65535 || !isValidEmail(credentials.fromEmail)) {
       return null;

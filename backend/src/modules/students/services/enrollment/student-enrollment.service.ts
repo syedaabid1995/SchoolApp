@@ -20,6 +20,11 @@ import { invalidateStudentCache, invalidateAttendanceCache } from '../../../../s
 import { logger } from '../../../../config/logger';
 import { feeGenerationQueue } from '../../../../queues';
 import { clearStudentFaceRegistration, registerStudentFaceImageRefs } from '../../../../services/face.service';
+import {
+  decryptStudentSensitiveFields,
+  encryptStudentSensitiveFields,
+} from '../../utils/student-sensitive-fields';
+import { encryptParentGuardianSensitiveFields } from '../../utils/parent-guardian-sensitive-fields';
 
 const requireSchoolAdmin = (req: Request) => {
   if (!req.auth?.userId) throw new HttpError(401, 'Unauthorized');
@@ -475,7 +480,7 @@ export const createStudent = async (req: Request, res: Response) => {
 
   const result = await StudentEnrollmentRepository.$transaction(async (tx) => {
     const createdStudent = await tx.student.create({
-      data: {
+      data: encryptStudentSensitiveFields({
         admissionNo: normalizeText(payload.admissionNo)!,
         rollNo: normalizeText(payload.rollNo) ?? null,
         academicSessionId: payload.academicSessionId ?? null,
@@ -525,7 +530,7 @@ export const createStudent = async (req: Request, res: Response) => {
         classId: payload.classId ?? null,
         sectionId: payload.sectionId ?? null,
         schoolId,
-      },
+      }),
     });
 
     if (payload.academicSessionId && payload.classId && payload.sectionId) {
@@ -577,16 +582,18 @@ export const createStudent = async (req: Request, res: Response) => {
     if (guardians.length) {
       await tx.parentGuardian.createMany({
         data: guardians.map((guardian) => ({
-          schoolId,
-          studentId: createdStudent.id,
-          type: guardian.type,
-          name: guardian.name!,
-          occupation: guardian.occupation ?? null,
-          phone: guardian.phone ?? null,
-          email: guardian.email ?? null,
-          photoUrl: guardian.photoUrl ?? null,
-          relation: guardian.relation ?? null,
-          isPrimary: guardian.isPrimary,
+          ...encryptParentGuardianSensitiveFields({
+            schoolId,
+            studentId: createdStudent.id,
+            type: guardian.type,
+            name: guardian.name!,
+            occupation: guardian.occupation ?? null,
+            phone: guardian.phone ?? null,
+            email: guardian.email ?? null,
+            photoUrl: guardian.photoUrl ?? null,
+            relation: guardian.relation ?? null,
+            isPrimary: guardian.isPrimary,
+          }),
         })),
       });
     }
@@ -699,7 +706,7 @@ export const createStudent = async (req: Request, res: Response) => {
   }
 
   res.status(201).json({
-    ...result.student,
+    ...decryptStudentSensitiveFields(result.student),
     feeInvoiceGenerationJob: result.feeInvoiceGenerationJob,
     faceRegistration,
   });
@@ -749,7 +756,7 @@ export const updateStudent = async (req: Request, res: Response) => {
   const result = await StudentEnrollmentRepository.$transaction(async (tx) => {
     const updated = await tx.student.update({
       where: { id },
-      data: {
+      data: encryptStudentSensitiveFields({
         admissionNo: payload.admissionNo === undefined ? undefined : normalizeText(payload.admissionNo),
         rollNo: payload.rollNo === undefined ? undefined : nullableText(payload.rollNo),
         academicSessionId: payload.academicSessionId === undefined ? undefined : payload.academicSessionId,
@@ -798,7 +805,7 @@ export const updateStudent = async (req: Request, res: Response) => {
         docReportCard: payload.docReportCard === undefined ? undefined : payload.docReportCard,
         classId: payload.classId === undefined ? undefined : payload.classId,
         sectionId: payload.sectionId === undefined ? undefined : payload.sectionId,
-      },
+      }),
     });
 
     if (nextAcademic.academicSessionId && nextAcademic.classId && nextAcademic.sectionId) {
@@ -955,7 +962,7 @@ export const updateStudent = async (req: Request, res: Response) => {
   }
 
   res.status(200).json({
-    ...result.student,
+    ...decryptStudentSensitiveFields(result.student),
     feeInvoiceGenerationJob: result.feeInvoiceGenerationJob,
     faceRegistration,
   });
@@ -1039,7 +1046,7 @@ export const changeStudentStatus = async (req: Request, res: Response) => {
 
   await invalidateStudentCache(schoolId, updated.id);
 
-  res.status(200).json(updated);
+  res.status(200).json(decryptStudentSensitiveFields(updated));
 };
 
 export const StudentEnrollmentService = {

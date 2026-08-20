@@ -6,6 +6,8 @@ import {
   buildLegacyReferenceWhere,
   classifyFileReference,
   maskReference,
+  prepareLegacyFileRecord,
+  prepareLegacyFileUpdateData,
   referenceNeedsMigration,
   resolveLegacyReferenceToLocalFile,
   type LegacyStorageCategory,
@@ -116,14 +118,15 @@ const main = async () => {
       if (!delegate?.findMany) continue;
 
       const rows = await delegate.findMany({
-        where: buildLegacyReferenceWhere(target, options.schoolId),
+        where: buildLegacyReferenceWhere(target, options.schoolId, { scanEncryptedStudentFields: true }),
         select: target.select,
         take: options.limit,
       });
 
       scannedRows += rows.length;
 
-      for (const row of rows) {
+      for (const rawRow of rows) {
+        const row = prepareLegacyFileRecord(target, rawRow);
         if (options.limit && candidates >= options.limit) break;
         const schoolId = target.getSchoolId(row);
 
@@ -199,8 +202,8 @@ const main = async () => {
           });
 
           const updateResult = await delegate.updateMany({
-            where: { id: row.id, [field]: value },
-            data: { [field]: uploaded.storageRef },
+            where: { id: row.id, [field]: rawRow[field] },
+            data: prepareLegacyFileUpdateData(target, field, uploaded.storageRef),
           });
 
           if (updateResult.count === 1) {

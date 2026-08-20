@@ -9,6 +9,7 @@ import { hashPassword } from '../utils/password';
 import { buildSchoolDomainUrl, normalizeSchoolSubdomain } from '../utils/schoolDomain';
 import { createRefreshSession } from './refreshSession.service';
 import { upsertSubscription } from './subscription.service';
+import { seedSchoolTenantDefaults } from './schoolTenantDefaults.service';
 
 export type SchoolCreateInput = {
   name: string;
@@ -482,6 +483,8 @@ export const createSchool = async (payload: SchoolCreateInput) => {
         teachers: 0,
       },
     });
+
+    await seedSchoolTenantDefaults(tx, school.id);
 
     if (!payload.adminEmail) {
       return { school };

@@ -33,6 +33,9 @@ const envSchema = z.object({
   DATABASE_URL: z.string().min(1),
   JWT_SECRET: z.string().min(32),
   TOTP_ENCRYPTION_KEY: z.string().min(32).optional(),
+  SENSITIVE_FIELD_ENCRYPTION_ENABLED: boolEnv(false).default(false),
+  SENSITIVE_FIELD_ENCRYPTION_KEY: z.string().min(32).optional(),
+  OLD_SENSITIVE_FIELD_ENCRYPTION_KEY: z.string().min(32).optional(),
   AUTH_TWO_STEP_ENABLED: boolEnv(false).default(false),
   OTP_EXPOSE_CODE_IN_DEV: boolEnv(false).default(false),
   REDIS_URL: z.string().min(1),
@@ -160,6 +163,10 @@ const normalizedEnv = {
 
 if (normalizedEnv.LOAD_TESTING_ENABLED && !normalizedEnv.LOAD_TESTING_SECRET) {
   throw new Error('LOAD_TESTING_SECRET is required when LOAD_TESTING_ENABLED=true');
+}
+
+if (normalizedEnv.SENSITIVE_FIELD_ENCRYPTION_ENABLED && !normalizedEnv.SENSITIVE_FIELD_ENCRYPTION_KEY) {
+  throw new Error('SENSITIVE_FIELD_ENCRYPTION_KEY is required when SENSITIVE_FIELD_ENCRYPTION_ENABLED=true');
 }
 
 if (normalizedEnv.NODE_ENV === 'production') {

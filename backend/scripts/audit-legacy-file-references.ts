@@ -3,6 +3,7 @@ import {
   buildLegacyReferenceWhere,
   classifyFileReference,
   maskReference,
+  prepareLegacyFileRecord,
 } from '../src/services/legacyFileReferences.service';
 
 type Options = {
@@ -46,14 +47,15 @@ const main = async () => {
       if (!delegate?.findMany) continue;
 
       const rows = await delegate.findMany({
-        where: buildLegacyReferenceWhere(target, options.schoolId),
+        where: buildLegacyReferenceWhere(target, options.schoolId, { scanEncryptedStudentFields: true }),
         select: target.select,
         take: options.limit,
       });
 
       scannedRows += rows.length;
 
-      for (const row of rows) {
+      for (const rawRow of rows) {
+        const row = prepareLegacyFileRecord(target, rawRow);
         const schoolId = target.getSchoolId(row);
         for (const field of target.fields) {
           const value = row[field];

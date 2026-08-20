@@ -20,6 +20,12 @@ import { timetableReadService } from '../modules/timetable/services/timetable-re
 import { toLegacyClassRoutineRow } from '../modules/timetable/services/timetable-response-mapper';
 import { PermissionCodes as P } from '../permissions/permission-manifest';
 import { getSchoolProfilesByIds } from '../services/schoolProfile.service';
+import {
+  decryptStaffSensitiveFields,
+  encryptStaffSensitiveFields,
+  encryptTeacherBankDetailsForStorage,
+} from '../modules/staff/utils/staff-sensitive-fields';
+import { decryptParentProfileSensitiveFieldList } from '../modules/students/utils/parent-profile-sensitive-fields';
 
 const bankDetailsSchema = z
   .object({
@@ -628,14 +634,16 @@ export const getUserById = async (req: Request, res: Response) => {
   const parentName = user.parentProfiles[0]
     ? `${user.parentProfiles[0].firstName} ${user.parentProfiles[0].lastName}`.trim()
     : null;
+  const teacherProfile = decryptStaffSensitiveFields(user.teacherProfile);
+  const parentProfiles = decryptParentProfileSensitiveFieldList(user.parentProfiles);
 
   res.status(200).json({
     id: user.id,
     email: user.email,
     schoolId: user.schoolId,
     role,
-    teacherProfile: user.teacherProfile,
-    parentProfiles: user.parentProfiles,
+    teacherProfile,
+    parentProfiles,
     displayName: teacherName || parentName || user.email,
     createdAt: user.createdAt,
   });
@@ -753,7 +761,7 @@ export const createSchoolUserApi = async (req: Request, res: Response) => {
   });
 
   const profile = await prisma.teacherProfile.create({
-    data: {
+    data: encryptStaffSensitiveFields({
       schoolId,
       userId: user.id,
       firstName: payload.firstName,
@@ -762,7 +770,7 @@ export const createSchoolUserApi = async (req: Request, res: Response) => {
       phone: payload.phone ?? null,
       address: payload.address ?? null,
       isActive: true,
-    },
+    }),
   });
 
   if (
@@ -778,13 +786,15 @@ export const createSchoolUserApi = async (req: Request, res: Response) => {
     await prisma.teacherBankDetails.create({
       data: {
         teacherId: profile.id,
-        accountHolderName: payload.bankDetails.accountHolderName ?? null,
-        accountNumber: payload.bankDetails.accountNumber ?? null,
-        ifscCode: payload.bankDetails.ifscCode ?? null,
-        accountType: payload.bankDetails.accountType ?? null,
-        bankName: payload.bankDetails.bankName ?? null,
-        branchName: payload.bankDetails.branchName ?? null,
-        panNumber: payload.bankDetails.panNumber ?? null,
+        ...encryptTeacherBankDetailsForStorage({
+          accountHolderName: payload.bankDetails.accountHolderName ?? null,
+          accountNumber: payload.bankDetails.accountNumber ?? null,
+          ifscCode: payload.bankDetails.ifscCode ?? null,
+          accountType: payload.bankDetails.accountType ?? null,
+          bankName: payload.bankDetails.bankName ?? null,
+          branchName: payload.bankDetails.branchName ?? null,
+          panNumber: payload.bankDetails.panNumber ?? null,
+        }),
       },
     });
   }

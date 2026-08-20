@@ -804,7 +804,9 @@ model Student {
   caste                String?
   category             String?
   email                String?
+  emailHash            String?       @map("email_hash")
   phone                String?
+  phoneHash            String?       @map("phone_hash")
   admissionDate        DateTime?     @map("admission_date")
   height               Decimal?      @db.Decimal(6, 2)
   weight               Decimal?      @db.Decimal(6, 2)
@@ -812,16 +814,20 @@ model Student {
   fatherName           String?       @map("father_name")
   fatherOccupation     String?       @map("father_occupation")
   fatherPhone          String?       @map("father_phone")
+  fatherPhoneHash      String?       @map("father_phone_hash")
   fatherPhotoUrl       String?       @map("father_photo_url")
   motherName           String?       @map("mother_name")
   motherOccupation     String?       @map("mother_occupation")
   motherPhone          String?       @map("mother_phone")
+  motherPhoneHash      String?       @map("mother_phone_hash")
   motherPhotoUrl       String?       @map("mother_photo_url")
   guardianName         String?       @map("guardian_name")
   guardianRelationship String?       @map("guardian_relationship")
   guardianPhotoUrl     String?       @map("guardian_photo_url")
   parentPhone          String?       @map("parent_phone")
+  parentPhoneHash      String?       @map("parent_phone_hash")
   parentEmail          String?       @map("parent_email")
+  parentEmailHash      String?       @map("parent_email_hash")
   presentAddress       String?       @map("present_address")
   permanentAddress     String?       @map("permanent_address")
   addressLine1         String?       @map("address_line1")
@@ -830,12 +836,15 @@ model Student {
   state                String?       @map("state")
   pincode              String?       @map("pincode")
   emergencyContact     String?       @map("emergency_contact")
+  emergencyContactHash String?       @map("emergency_contact_hash")
   medicalConditions    String?       @map("medical_conditions")
   allergies            String?       @map("allergies")
   doctorContact        String?       @map("doctor_contact")
+  doctorContactHash    String?       @map("doctor_contact_hash")
   docBirthCert         String?       @map("doc_birth_cert")
   docTransferCert      String?       @map("doc_transfer_cert")
   docAadhaar           String?       @map("doc_aadhaar")
+  docAadhaarHash       String?       @map("doc_aadhaar_hash")
   docReportCard        String?       @map("doc_report_card")
   status               StudentStatus @default(ENROLLED)
   createdAt            DateTime      @default(now()) @map("created_at")
@@ -887,6 +896,15 @@ model Student {
   @@index([academicSessionId])
   @@index([schoolId])
   @@index([schoolId, status, createdAt])
+  @@index([schoolId, docAadhaarHash])
+  @@index([schoolId, emailHash])
+  @@index([schoolId, phoneHash])
+  @@index([schoolId, fatherPhoneHash])
+  @@index([schoolId, motherPhoneHash])
+  @@index([schoolId, parentPhoneHash])
+  @@index([schoolId, parentEmailHash])
+  @@index([schoolId, emergencyContactHash])
+  @@index([schoolId, doctorContactHash])
   @@index([classId])
   @@index([sectionId])
   @@index([studentGroupId])
@@ -1274,7 +1292,9 @@ model ParentGuardian {
   name       String
   occupation String?
   phone      String?
+  phoneHash  String?  @map("phone_hash")
   email      String?
+  emailHash  String?  @map("email_hash")
   photoUrl   String?  @map("photo_url")
   relation   String?
   isPrimary  Boolean  @default(false) @map("is_primary")
@@ -1287,7 +1307,9 @@ model ParentGuardian {
   @@index([schoolId])
   @@index([studentId])
   @@index([phone])
+  @@index([schoolId, phoneHash])
   @@index([email])
+  @@index([schoolId, emailHash])
   @@map("parent_guardians")
 }
 
@@ -1581,7 +1603,9 @@ model ParentProfile {
   firstName String   @map("first_name")
   lastName  String   @map("last_name")
   phone     String?
+  phoneHash String?  @map("phone_hash")
   email     String?
+  emailHash String?  @map("email_hash")
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
@@ -1593,37 +1617,41 @@ model ParentProfile {
 
   @@unique([userId])
   @@index([userId])
+  @@index([phoneHash])
+  @@index([emailHash])
   @@map("parent_profiles")
 }
 
 model TeacherProfile {
-  id               String    @id @default(uuid()) @db.Uuid
-  schoolId         String    @map("school_id") @db.Uuid
-  userId           String    @unique @map("user_id") @db.Uuid
-  employeeNo       String?   @map("employee_no")
-  firstName        String    @map("first_name")
-  lastName         String    @map("last_name")
-  phone            String?
-  address          String?
-  roleName         RoleName  @default(TEACHER) @map("role_name")
-  departmentId     String?   @map("department_id") @db.Uuid
-  designationId    String?   @map("designation_id") @db.Uuid
-  fatherName       String?   @map("father_name")
-  motherName       String?   @map("mother_name")
-  gender           String?
-  dateOfBirth      DateTime? @map("date_of_birth")
-  dateOfJoining    DateTime? @map("date_of_joining")
-  emergencyMobile  String?   @map("emergency_mobile")
-  photoUrl         String?   @map("photo_url")
-  drivingLicense   String?   @map("driving_license")
-  currentAddress   String?   @map("current_address")
-  permanentAddress String?   @map("permanent_address")
-  qualifications   String?
-  experience       String?
-  maritalStatus    String?   @map("marital_status")
-  isActive         Boolean   @default(true) @map("is_active")
-  createdAt        DateTime  @default(now()) @map("created_at")
-  updatedAt        DateTime  @updatedAt @map("updated_at")
+  id                  String    @id @default(uuid()) @db.Uuid
+  schoolId            String    @map("school_id") @db.Uuid
+  userId              String    @unique @map("user_id") @db.Uuid
+  employeeNo          String?   @map("employee_no")
+  firstName           String    @map("first_name")
+  lastName            String    @map("last_name")
+  phone               String?
+  phoneHash           String?   @map("phone_hash")
+  address             String?
+  roleName            RoleName  @default(TEACHER) @map("role_name")
+  departmentId        String?   @map("department_id") @db.Uuid
+  designationId       String?   @map("designation_id") @db.Uuid
+  fatherName          String?   @map("father_name")
+  motherName          String?   @map("mother_name")
+  gender              String?
+  dateOfBirth         DateTime? @map("date_of_birth")
+  dateOfJoining       DateTime? @map("date_of_joining")
+  emergencyMobile     String?   @map("emergency_mobile")
+  emergencyMobileHash String?   @map("emergency_mobile_hash")
+  photoUrl            String?   @map("photo_url")
+  drivingLicense      String?   @map("driving_license")
+  currentAddress      String?   @map("current_address")
+  permanentAddress    String?   @map("permanent_address")
+  qualifications      String?
+  experience          String?
+  maritalStatus       String?   @map("marital_status")
+  isActive            Boolean   @default(true) @map("is_active")
+  createdAt           DateTime  @default(now()) @map("created_at")
+  updatedAt           DateTime  @updatedAt @map("updated_at")
 
   school                              School                          @relation(fields: [schoolId], references: [id], onDelete: Cascade)
   user                                User                            @relation(fields: [userId], references: [id], onDelete: Cascade)
@@ -1655,6 +1683,8 @@ model TeacherProfile {
   @@index([schoolId])
   @@index([schoolId, roleName])
   @@index([schoolId, isActive, createdAt])
+  @@index([schoolId, phoneHash])
+  @@index([schoolId, emergencyMobileHash])
   @@index([departmentId])
   @@index([designationId])
   @@map("employee_profiles")

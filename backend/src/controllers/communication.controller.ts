@@ -9,6 +9,7 @@ import { sendNotification } from '../services/notification.service';
 import { invalidateNotificationCache } from '../services/cache/cache.invalidation';
 import { resolveSchoolId } from '../utils/tenant';
 import { noticeAudienceMatchesRole } from '../utils/noticeAudience';
+import { decryptStudentSensitiveFieldList } from '../modules/students/utils/student-sensitive-fields';
 
 const channelSchema = z.enum(['EMAIL', 'SMS', 'PUSH']);
 const pushPrioritySchema = z.enum(['normal', 'high', 'urgent']);
@@ -241,8 +242,9 @@ const getStudentsForTarget = async (params: {
     orderBy: { fullName: 'asc' },
   });
 
-  if (!params.birthdayOnly) return students;
-  return students.filter((student) => isBirthdayToday(student.dob));
+  const decryptedStudents = decryptStudentSensitiveFieldList(students);
+  if (!params.birthdayOnly) return decryptedStudents;
+  return decryptedStudents.filter((student) => isBirthdayToday(student.dob));
 };
 
 const resolveRecipients = async (params: {

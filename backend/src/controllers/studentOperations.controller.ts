@@ -6,6 +6,10 @@ import { logAudit } from '../utils/audit';
 import { invalidateStudentCache } from '../services/cache/cache.invalidation';
 import { attendanceReadService } from '../modules/attendance/services/attendance-read.service';
 import { attendanceCompatibilityService } from '../modules/attendance/services/attendance-compatibility.service';
+import {
+  decryptStudentSensitiveFieldList,
+  decryptStudentSensitiveFields,
+} from '../modules/students/utils/student-sensitive-fields';
 
 const uuidSchema = z.string().uuid();
 const dateOnlySchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Use date format YYYY-MM-DD');
@@ -653,7 +657,7 @@ export const listDisabledStudents = async (req: Request, res: Response) => {
     },
     orderBy: { updatedAt: 'desc' },
   });
-  res.status(200).json(students);
+  res.status(200).json(decryptStudentSensitiveFieldList(students));
 };
 
 const disabledActionSchema = z.object({
@@ -674,7 +678,7 @@ export const disableStudent = async (req: Request, res: Response) => {
     return record;
   });
   await invalidateStudentCache(schoolId, id);
-  res.status(200).json(updated);
+  res.status(200).json(decryptStudentSensitiveFields(updated));
 };
 
 export const restoreDisabledStudent = async (req: Request, res: Response) => {
@@ -691,7 +695,7 @@ export const restoreDisabledStudent = async (req: Request, res: Response) => {
     return record;
   });
   await invalidateStudentCache(schoolId, id);
-  res.status(200).json(updated);
+  res.status(200).json(decryptStudentSensitiveFields(updated));
 };
 
 export const deleteDisabledStudent = async (req: Request, res: Response) => {

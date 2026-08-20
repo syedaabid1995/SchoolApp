@@ -23,6 +23,11 @@ import {
   setCursorPaginationHeaders,
   toCursorPage,
 } from '../../../../utils/pagination';
+import {
+  decryptStudentSensitiveFieldList,
+  decryptStudentSensitiveFields,
+  studentAnyContactHashWhere,
+} from '../../utils/student-sensitive-fields';
 
 const requireSchoolAdmin = (req: Request) => {
   if (!req.auth?.userId) throw new HttpError(401, 'Unauthorized');
@@ -372,6 +377,9 @@ export const listStudents = async (req: Request, res: Response) => {
     limit: pagination.limit,
     cursor: pagination.cursor ?? null,
   });
+  const contactHashPredicates = search
+    ? (studentAnyContactHashWhere(schoolId, search).OR as Prisma.StudentWhereInput[] | undefined) ?? []
+    : [];
   const { value: rows, status: cacheStatus } = await rememberCache(
     cacheKeys.studentsList(schoolId, queryFingerprint),
     cacheTTL.STUDENTS,
@@ -390,7 +398,13 @@ export const listStudents = async (req: Request, res: Response) => {
                   { rollNo: { contains: search, mode: 'insensitive' } },
                   { fullName: { contains: search, mode: 'insensitive' } },
                   { fatherName: { contains: search, mode: 'insensitive' } },
+                  ...contactHashPredicates,
+                  { email: { contains: search, mode: 'insensitive' } },
+                  { phone: { contains: search, mode: 'insensitive' } },
+                  { fatherPhone: { contains: search, mode: 'insensitive' } },
+                  { motherPhone: { contains: search, mode: 'insensitive' } },
                   { parentPhone: { contains: search, mode: 'insensitive' } },
+                  { parentEmail: { contains: search, mode: 'insensitive' } },
                 ],
               }
             : {}),
@@ -403,7 +417,7 @@ export const listStudents = async (req: Request, res: Response) => {
   const { data: students, pageInfo } = toCursorPage(rows, pagination.limit);
   setCacheHeader(res, cacheStatus);
   setCursorPaginationHeaders(res, pageInfo);
-  res.status(200).json(students);
+  res.status(200).json(decryptStudentSensitiveFieldList(students));
 };
 
 export const getStudent = async (req: Request, res: Response) => {
@@ -426,7 +440,7 @@ export const getStudent = async (req: Request, res: Response) => {
   }
 
   setCacheHeader(res, cacheStatus);
-  res.status(200).json(student);
+  res.status(200).json(decryptStudentSensitiveFields(student));
 };
 
 export const StudentProfileService = {

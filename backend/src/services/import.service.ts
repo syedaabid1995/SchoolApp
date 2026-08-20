@@ -8,6 +8,8 @@ import { prisma } from '../config/db';
 import { hashPassword } from '../utils/password';
 import { incrementUsage, enforceLimits } from './subscription.service';
 import { withTemporaryStoredObjectFile } from './runtimeStorage.service';
+import { encryptStudentSensitiveFields } from '../modules/students/utils/student-sensitive-fields';
+import { encryptStaffSensitiveFields } from '../modules/staff/utils/staff-sensitive-fields';
 
 export type ImportRowError = {
   rowNumber: number;
@@ -486,7 +488,7 @@ const createTeacherUser = async (tx: Prisma.TransactionClient, schoolId: string,
   });
 
   await tx.teacherProfile.create({
-    data: {
+    data: encryptStaffSensitiveFields({
       schoolId,
       userId: user.id,
       employeeNo: nullableText(getValue(row, ['employee_no'])),
@@ -494,7 +496,7 @@ const createTeacherUser = async (tx: Prisma.TransactionClient, schoolId: string,
       lastName: normalizeText(getValue(row, ['last_name'])),
       phone: nullableText(getValue(row, ['phone'])),
       address: nullableText(getValue(row, ['address'])),
-    },
+    }),
   });
 };
 
@@ -568,7 +570,7 @@ const applyImportRows = async (schoolId: string, userId: string | null, type: Bu
         const lastName = normalizeText(getValue(row, ['last_name']));
         const admissionDate = getValue(row, ['admission_date']);
         const student = await tx.student.create({
-          data: {
+          data: encryptStudentSensitiveFields({
             schoolId,
             academicSessionId: academicYear?.id ?? null,
             classId: foundClass?.id ?? null,
@@ -590,7 +592,7 @@ const applyImportRows = async (schoolId: string, userId: string | null, type: Bu
             parentPhone: nullableText(getValue(row, ['father_phone']) || getValue(row, ['mother_phone']) || getValue(row, ['phone'])),
             parentEmail: nullableText(getValue(row, ['email'])),
             status: 'ENROLLED',
-          },
+          }),
         });
         if (academicYear && foundClass && section) {
           await tx.studentEnrollment.create({

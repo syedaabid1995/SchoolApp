@@ -7,6 +7,7 @@ import { StudentRepository } from '../../repositories/student.repository';
 import { HttpError } from '../../../../middlewares/error.middleware';
 import { resolveSchoolId } from '../../../../utils/tenant';
 import { buildStudentAttendanceReport } from '../../../../services/attendanceStudentReport.service';
+import { decryptStudentSensitiveFields } from '../../utils/student-sensitive-fields';
 
 const uuidSchema = z.string().uuid();
 
@@ -179,11 +180,12 @@ export const downloadStudentReportWorkbook = async (req: Request, res: Response)
   const schoolId = resolveSchoolId(req, query.schoolId);
   const { id } = req.params;
 
-  const student = await StudentProfileRepository.student.findFirst({
+  const studentRecord = await StudentProfileRepository.student.findFirst({
     where: { id, schoolId },
     include: StudentRepository.detailInclude(),
   });
-  if (!student) throw new HttpError(404, 'Student not found');
+  if (!studentRecord) throw new HttpError(404, 'Student not found');
+  const student = decryptStudentSensitiveFields(studentRecord);
 
   const academicSession =
     (query.academicSessionId

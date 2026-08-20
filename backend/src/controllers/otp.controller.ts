@@ -10,6 +10,10 @@ import { prisma } from '../config/db';
 import { env } from '../config/env';
 import { HttpError } from '../middlewares/error.middleware';
 import { hashPassword } from '../utils/password';
+import {
+  decryptParentProfileSensitiveFields,
+  parentProfileContactWhere,
+} from '../modules/students/utils/parent-profile-sensitive-fields';
 
 const requestSchema = z.object({
   phone: z.string().min(8),
@@ -36,7 +40,7 @@ const resolveSchoolForPhone = async (req: Request, phone: string, schoolId?: str
     return resolveSchoolId(req, schoolId);
   }
   const parents = await prisma.parentProfile.findMany({
-    where: { phone: normalizePhone(phone) },
+    where: { OR: parentProfileContactWhere('phone', [normalizePhone(phone)]) },
     select: { id: true },
   });
   if (!parents.length) {
@@ -98,9 +102,10 @@ export const verifyOtpApi = async (req: Request, res: Response) => {
   });
 
   const phone = normalizePhone(payload.phone);
-  const parentProfile = await prisma.parentProfile.findFirst({
-    where: { phone },
+  const rawParentProfile = await prisma.parentProfile.findFirst({
+    where: { OR: parentProfileContactWhere('phone', [phone]) },
   });
+  const parentProfile = decryptParentProfileSensitiveFields(rawParentProfile);
   if (!parentProfile) {
     throw new HttpError(404, 'Parent not found');
   }

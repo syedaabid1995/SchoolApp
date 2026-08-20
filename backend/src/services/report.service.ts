@@ -6,6 +6,7 @@ import { attendanceReadService } from '../modules/attendance/services/attendance
 import { calculateGrade, evaluateFailCriteria, getExamGradingSettings } from './grade.service';
 import type { StudentDailyAttendance } from '../modules/attendance/models/attendance-read-model';
 import { timetableReadService } from '../modules/timetable/services/timetable-read.service';
+import { decryptParentProfileSensitiveFields } from '../modules/students/utils/parent-profile-sensitive-fields';
 
 export const generateTermReport = async (params: {
   schoolId: string;
@@ -536,15 +537,18 @@ const reports: ReportDefinition[] = [
       ]);
       return {
         total,
-        rows: rows.map((link) => ({
-          admissionNo: link.student.admissionNo,
-          studentName: fullName(link.student),
-          class: link.student.class?.name ?? '',
-          section: link.student.section?.name ?? '',
-          parentName: fullName(link.parent),
-          phone: link.parent.phone ?? '',
-          email: link.parent.email ?? '',
-        })),
+        rows: rows.map((link) => {
+          const parent = decryptParentProfileSensitiveFields(link.parent);
+          return {
+            admissionNo: link.student.admissionNo,
+            studentName: fullName(link.student),
+            class: link.student.class?.name ?? '',
+            section: link.student.section?.name ?? '',
+            parentName: fullName(parent),
+            phone: parent.phone ?? '',
+            email: parent.email ?? '',
+          };
+        }),
       };
     },
   },
@@ -572,13 +576,16 @@ const reports: ReportDefinition[] = [
       ]);
       return {
         total,
-        rows: rows.map((parent) => ({
-          parentName: fullName(parent),
-          phone: parent.phone ?? '',
-          email: parent.email ?? parent.user?.email ?? '',
-          linkedStudents: parent._count.links,
-          portalUser: parent.userId ? 'Yes' : 'No',
-        })),
+        rows: rows.map((rawParent) => {
+          const parent = decryptParentProfileSensitiveFields(rawParent);
+          return {
+            parentName: fullName(parent),
+            phone: parent.phone ?? '',
+            email: parent.email ?? rawParent.user?.email ?? '',
+            linkedStudents: rawParent._count.links,
+            portalUser: rawParent.userId ? 'Yes' : 'No',
+          };
+        }),
       };
     },
   },

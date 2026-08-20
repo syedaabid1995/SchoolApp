@@ -20,6 +20,10 @@ import {
   feeReportFormats,
   parseFeeReportQuery,
 } from '../fee-report.service';
+import {
+  decryptStudentSensitiveFields,
+  studentAnyContactHashWhere,
+} from '../../../students/utils/student-sensitive-fields';
 
 const uuidSchema = z.string().uuid();
 const uuidParam = (req: Request, name = 'id') => uuidSchema.parse(req.params[name]);
@@ -1050,6 +1054,9 @@ export const searchFeeCollectionStudents = async (req: Request, res: Response) =
   const search = typeof req.query.search === 'string' ? normalizeText(req.query.search) : '';
   const classId = typeof req.query.classId === 'string' ? req.query.classId : undefined;
   const sectionId = typeof req.query.sectionId === 'string' ? req.query.sectionId : undefined;
+  const contactHashPredicates = search
+    ? (studentAnyContactHashWhere(scope.schoolId, search).OR as Prisma.StudentWhereInput[] | undefined) ?? []
+    : [];
   const students = await FeeCollectionRepository.student.findMany({
     where: {
       schoolId: scope.schoolId,
@@ -1063,10 +1070,12 @@ export const searchFeeCollectionStudents = async (req: Request, res: Response) =
               { fullName: { contains: search, mode: 'insensitive' } },
               { admissionNo: { contains: search, mode: 'insensitive' } },
               { rollNo: { contains: search, mode: 'insensitive' } },
+              ...contactHashPredicates,
               { phone: { contains: search, mode: 'insensitive' } },
               { parentPhone: { contains: search, mode: 'insensitive' } },
               { fatherPhone: { contains: search, mode: 'insensitive' } },
               { motherPhone: { contains: search, mode: 'insensitive' } },
+              { parentEmail: { contains: search, mode: 'insensitive' } },
               { class: { name: { contains: search, mode: 'insensitive' } } },
               { section: { name: { contains: search, mode: 'insensitive' } } },
             ],
@@ -1100,7 +1109,7 @@ export const searchFeeCollectionStudents = async (req: Request, res: Response) =
     items: students.map((student) => {
       const due = dueByStudent.get(student.id);
       return {
-        ...student,
+        ...decryptStudentSensitiveFields(student),
         pendingInvoiceCount: due?._count._all ?? 0,
         pendingAmount: due?._sum.dueAmount ?? toDecimal(0),
       };

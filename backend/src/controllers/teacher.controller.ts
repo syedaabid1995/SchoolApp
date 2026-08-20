@@ -10,6 +10,7 @@ import { rememberCache, setCacheHeader } from '../services/cache/cache.service';
 import { cacheTTL } from '../services/cache/cache.ttl';
 import { invalidateTeacherCache } from '../services/cache/cache.invalidation';
 import { sendAccountCreatedWhatsapp } from '../services/accountOnboardingWhatsapp.service';
+import { decryptStaffSensitiveFields } from '../modules/staff/utils/staff-sensitive-fields';
 
 const createSchema = z.object({
   email: z.string().email(),
@@ -163,6 +164,8 @@ export const updateTeacherApi = async (req: Request, res: Response) => {
     }
 
     const updated = await updateTeacher(req.params.id, schoolId, payload);
+    const existingForAudit = decryptStaffSensitiveFields(existing);
+    const updatedForAudit = decryptStaffSensitiveFields(updated);
 
     await logAudit(req, {
       schoolId,
@@ -170,21 +173,21 @@ export const updateTeacherApi = async (req: Request, res: Response) => {
       entityId: updated.id,
       action: 'UPDATE',
       beforeState: {
-        firstName: existing.firstName,
-        lastName: existing.lastName,
-        employeeNo: existing.employeeNo,
-        phone: existing.phone,
-        address: existing.address,
-        isActive: existing.isActive,
+        firstName: existingForAudit.firstName,
+        lastName: existingForAudit.lastName,
+        employeeNo: existingForAudit.employeeNo,
+        phone: existingForAudit.phone,
+        address: existingForAudit.address,
+        isActive: existingForAudit.isActive,
         email: existing.user.email,
       },
       afterState: {
-        firstName: updated.firstName,
-        lastName: updated.lastName,
-        employeeNo: updated.employeeNo,
-        phone: updated.phone,
-        address: updated.address,
-        isActive: updated.isActive,
+        firstName: updatedForAudit.firstName,
+        lastName: updatedForAudit.lastName,
+        employeeNo: updatedForAudit.employeeNo,
+        phone: updatedForAudit.phone,
+        address: updatedForAudit.address,
+        isActive: updatedForAudit.isActive,
       },
     });
 

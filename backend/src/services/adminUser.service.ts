@@ -4,6 +4,14 @@ import { prisma } from '../config/db';
 import { HttpError } from '../middlewares/error.middleware';
 import { createAuditLog } from './auditLog.service';
 import { hashPassword } from '../utils/password';
+import {
+  decryptParentProfileSensitiveFields,
+  parentProfileAnyContactWhere,
+} from '../modules/students/utils/parent-profile-sensitive-fields';
+import {
+  decryptStaffSensitiveFields,
+  staffContactHashWhere,
+} from '../modules/staff/utils/staff-sensitive-fields';
 
 type SortBy = 'name' | 'email' | 'role' | 'schoolName' | 'status' | 'lastLoginAt' | 'createdAt';
 type SortOrder = 'asc' | 'desc';
@@ -62,7 +70,9 @@ const displayNameForUser = (user: SafeUserRecord) => {
 };
 
 const phoneForUser = (user: SafeUserRecord) =>
-  user.teacherProfile?.phone ?? user.parentProfiles[0]?.phone ?? null;
+  decryptStaffSensitiveFields(user.teacherProfile)?.phone ??
+  decryptParentProfileSensitiveFields(user.parentProfiles[0])?.phone ??
+  null;
 
 const profileForUser = (user: SafeUserRecord) => {
   const role = pickRole(user);
@@ -118,9 +128,11 @@ const buildUserWhere = (params: AdminUserListParams): Prisma.UserWhereInput => {
       { school: { is: { code: { contains: search, mode: 'insensitive' } } } },
       { teacherProfile: { is: { firstName: { contains: search, mode: 'insensitive' } } } },
       { teacherProfile: { is: { lastName: { contains: search, mode: 'insensitive' } } } },
+      ...staffContactHashWhere(search).map((predicate) => ({ teacherProfile: { is: predicate } })),
       { teacherProfile: { is: { phone: { contains: search, mode: 'insensitive' } } } },
       { parentProfiles: { some: { firstName: { contains: search, mode: 'insensitive' } } } },
       { parentProfiles: { some: { lastName: { contains: search, mode: 'insensitive' } } } },
+      ...parentProfileAnyContactWhere(search).map((predicate) => ({ parentProfiles: { some: predicate } })),
       { parentProfiles: { some: { phone: { contains: search, mode: 'insensitive' } } } },
       { parentProfiles: { some: { email: { contains: search, mode: 'insensitive' } } } },
     ];

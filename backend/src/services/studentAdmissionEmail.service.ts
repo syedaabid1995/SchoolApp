@@ -1,6 +1,8 @@
 import { prisma } from '../config/db';
 import { logger } from '../config/logger';
 import { sendNotification } from './notification.service';
+import { decryptStudentSensitiveFields } from '../modules/students/utils/student-sensitive-fields';
+import { decryptParentProfileSensitiveFields } from '../modules/students/utils/parent-profile-sensitive-fields';
 
 const formatDate = (value?: Date | string | null) => {
   if (!value) return 'Not provided';
@@ -167,7 +169,7 @@ export const sendStudentAdmissionAccountEmail = async (params: {
   parentId: string;
   tempPassword?: string | null;
 }) => {
-  const [student, parent, generationJob] = await Promise.all([
+  const [studentRecord, parent, generationJob] = await Promise.all([
     prisma.student.findFirst({
       where: { id: params.studentId, schoolId: params.schoolId },
       include: {
@@ -227,7 +229,9 @@ export const sendStudentAdmissionAccountEmail = async (params: {
     }),
   ]);
 
-  if (!student || !parent) return null;
+  if (!studentRecord || !parent) return null;
+  const student = decryptStudentSensitiveFields(studentRecord);
+  const decryptedParent = decryptParentProfileSensitiveFields(parent);
 
   const discountIds = stringArray(payloadRecord(generationJob?.payload).discountIds);
   const discounts = discountIds.length
@@ -243,10 +247,10 @@ export const sendStudentAdmissionAccountEmail = async (params: {
       })
     : [];
 
-  const recipient = optionalText(parent.email);
+  const recipient = optionalText(decryptedParent.email);
   if (!recipient || recipient.endsWith('@parent.local')) return null;
 
-  const parentName = `${parent.firstName} ${parent.lastName}`.trim() || 'Parent';
+  const parentName = `${decryptedParent.firstName} ${decryptedParent.lastName}`.trim() || 'Parent';
   const loginEmail = optionalText(parent.user?.email) ?? recipient;
   const schoolName = student.school.name || 'School';
   const subject = `Parent account created for ${student.fullName}`;

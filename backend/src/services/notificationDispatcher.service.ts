@@ -11,7 +11,6 @@ import { WatiAdapter } from '../notifications/WatiAdapter';
 import { EmailAdapter } from '../notifications/EmailAdapter';
 import { SmtpEmailAdapter } from '../notifications/SmtpEmailAdapter';
 import { SendGridEmailAdapter } from '../notifications/SendGridEmailAdapter';
-import { decryptSecret, isEncryptedSecret } from '../utils/cryptoVault';
 
 const adapters: Record<string, NotificationAdapter> = {
   PUSH: new PushAdapter(),
@@ -68,12 +67,11 @@ const resolveAdapter = async (params: {
   }
 
   if (provider.serviceCode === 'SMTP' && params.channel === 'EMAIL') {
-    const password = provider.credentials.password;
     return new SmtpEmailAdapter({
       host: provider.credentials.host ?? '',
       port: provider.credentials.port ?? '',
       username: provider.credentials.username,
-      password: isEncryptedSecret(password) ? decryptSecret(password) : password,
+      password: provider.credentials.password,
       fromEmail: provider.credentials.fromEmail ?? '',
       fromName: provider.credentials.fromName,
       replyToEmail: provider.credentials.replyToEmail,

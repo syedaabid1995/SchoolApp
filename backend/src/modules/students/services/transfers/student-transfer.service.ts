@@ -22,6 +22,10 @@ import {
   moveStoredObjectSchoolScope,
   rewriteStorageRefSchoolScope,
 } from '../../../../services/runtimeStorage.service';
+import {
+  decryptStudentSensitiveFields,
+  encryptStudentSensitiveFields,
+} from '../../utils/student-sensitive-fields';
 
 const requireSchoolAdmin = (req: Request) => {
   if (!req.auth?.userId) throw new HttpError(401, 'Unauthorized');
@@ -516,12 +520,14 @@ export const acceptTransferRequest = async (req: Request, res: Response) => {
     );
   }
 
+  const decryptedStudentAssets = decryptStudentSensitiveFields(studentAssets);
+
   const objectRefs = [
-    studentAssets?.photoUrl,
-    studentAssets?.docBirthCert,
-    studentAssets?.docTransferCert,
-    studentAssets?.docAadhaar,
-    studentAssets?.docReportCard,
+    decryptedStudentAssets?.photoUrl,
+    decryptedStudentAssets?.docBirthCert,
+    decryptedStudentAssets?.docTransferCert,
+    decryptedStudentAssets?.docAadhaar,
+    decryptedStudentAssets?.docReportCard,
     ...photos.map((photo) => photo.url),
   ]
     .filter((value): value is string => Boolean(value))
@@ -532,6 +538,13 @@ export const acceptTransferRequest = async (req: Request, res: Response) => {
   }
 
   const result = await StudentTransferRepository.$transaction(async (tx) => {
+    const rewrittenDocumentRefs = encryptStudentSensitiveFields({
+      docBirthCert: decryptedStudentAssets?.docBirthCert ? rewriteUrl(decryptedStudentAssets.docBirthCert) : null,
+      docTransferCert: decryptedStudentAssets?.docTransferCert ? rewriteUrl(decryptedStudentAssets.docTransferCert) : null,
+      docAadhaar: decryptedStudentAssets?.docAadhaar ? rewriteUrl(decryptedStudentAssets.docAadhaar) : null,
+      docReportCard: decryptedStudentAssets?.docReportCard ? rewriteUrl(decryptedStudentAssets.docReportCard) : null,
+    });
+
     await tx.student.update({
       where: { id: studentId },
       data: {
@@ -539,11 +552,8 @@ export const acceptTransferRequest = async (req: Request, res: Response) => {
         classId: null,
         sectionId: null,
         status: 'ENROLLED',
-        photoUrl: studentAssets?.photoUrl ? rewriteUrl(studentAssets.photoUrl) : null,
-        docBirthCert: studentAssets?.docBirthCert ? rewriteUrl(studentAssets.docBirthCert) : null,
-        docTransferCert: studentAssets?.docTransferCert ? rewriteUrl(studentAssets.docTransferCert) : null,
-        docAadhaar: studentAssets?.docAadhaar ? rewriteUrl(studentAssets.docAadhaar) : null,
-        docReportCard: studentAssets?.docReportCard ? rewriteUrl(studentAssets.docReportCard) : null,
+        photoUrl: decryptedStudentAssets?.photoUrl ? rewriteUrl(decryptedStudentAssets.photoUrl) : null,
+        ...rewrittenDocumentRefs,
       },
     });
 

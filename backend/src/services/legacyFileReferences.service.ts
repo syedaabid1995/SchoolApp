@@ -1,6 +1,11 @@
 import crypto from 'crypto';
 import fs from 'fs/promises';
 import path from 'path';
+import {
+  decryptStudentSensitiveFields,
+  encryptStudentSensitiveFields,
+  isStudentSensitiveField,
+} from '../modules/students/utils/student-sensitive-fields';
 
 export type LegacyReferenceType =
   | 'storage-s3'
@@ -206,6 +211,38 @@ export const LEGACY_FILE_TARGETS: LegacyFileTarget[] = [
   },
 ];
 
+export const legacyTargetHasEncryptedStudentFields = (target: LegacyFileTarget) =>
+  target.delegateName === 'student' && target.fields.some(isStudentSensitiveField);
+
+export const prepareLegacyFileRecord = <T>(target: LegacyFileTarget, record: T): T =>
+  legacyTargetHasEncryptedStudentFields(target) ? decryptStudentSensitiveFields(record as any) as T : record;
+
+export const prepareLegacyFileUpdateValue = (
+  target: LegacyFileTarget,
+  field: string,
+  value: string,
+) => {
+  if (!legacyTargetHasEncryptedStudentFields(target) || !isStudentSensitiveField(field)) {
+    return value;
+  }
+  return encryptStudentSensitiveFields({ [field]: value })[field];
+};
+
+export const prepareLegacyFileUpdateData = (
+  target: LegacyFileTarget,
+  field: string,
+  value: string,
+) => {
+  if (!legacyTargetHasEncryptedStudentFields(target) || !isStudentSensitiveField(field)) {
+    return { [field]: value };
+  }
+
+  const encrypted = encryptStudentSensitiveFields({ [field]: value });
+  return field === 'docAadhaar'
+    ? { [field]: encrypted[field], docAadhaarHash: encrypted.docAadhaarHash ?? null }
+    : { [field]: encrypted[field] };
+};
+
 const stripQueryAndFragment = (value: string) => value.replace(/[?#].*$/, '');
 
 const decodePathPart = (value: string) => {
@@ -369,7 +406,15 @@ export const buildLegacyMigrationObjectKey = (params: {
   ].join('/');
 };
 
-export const buildLegacyReferenceWhere = (target: LegacyFileTarget, schoolId?: string | null) => {
+export const buildLegacyReferenceWhere = (
+  target: LegacyFileTarget,
+  schoolId?: string | null,
+  options: { scanEncryptedStudentFields?: boolean } = {},
+) => {
+  if (options.scanEncryptedStudentFields && legacyTargetHasEncryptedStudentFields(target)) {
+    return schoolId && target.schoolWhere ? target.schoolWhere(schoolId) : {};
+  }
+
   const patternWhere = {
     OR: target.fields.flatMap((field) =>
       LEGACY_REFERENCE_PATTERNS.map((pattern) => ({
