@@ -740,9 +740,6 @@ export default function AddStaffPage() {
                 <Field label="Mobile" labelClass={labelClass}>
                   <input className={inputClass} value={form.phone ?? ''} onChange={(event) => setForm({ ...form, phone: event.target.value })} />
                 </Field>
-                <Field label="Photo URL" labelClass={labelClass}>
-                  <input className={inputClass} value={form.photoUrl ?? ''} onChange={(event) => setForm({ ...form, photoUrl: event.target.value })} />
-                </Field>
                 <Field label="Current Address" labelClass={labelClass} className="md:col-span-2">
                   <textarea className={inputClass} rows={3} value={form.currentAddress ?? ''} onChange={(event) => setForm({ ...form, currentAddress: event.target.value })} />
                 </Field>
