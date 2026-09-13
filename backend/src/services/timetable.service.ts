@@ -1,3 +1,4 @@
+import { Prisma } from '@prisma/client';
 import { HttpError } from '../middlewares/error.middleware';
 import { prisma } from '../config/db';
 import { createAuditLog } from './auditLog.service';
@@ -29,6 +30,21 @@ const toDateOnly = (value: string | Date) => {
 const toDayOfWeek = (date: Date) => {
   const day = date.getUTCDay();
   return day === 6 ? 1 : day + 2;
+};
+
+const normalizeRoomLabel = (room?: string | null) => room?.trim().toLowerCase() || null;
+
+const isPrismaUniqueError = (err: unknown): err is Prisma.PrismaClientKnownRequestError =>
+  err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002';
+
+const throwTimetableConflict = (err: unknown): never => {
+  if (isPrismaUniqueError(err)) {
+    throw new HttpError(
+      409,
+      'Timetable slot conflicts with an existing class, teacher, or room assignment for this day and period',
+    );
+  }
+  throw err;
 };
 
 export const createTimetableVersion = async (params: {
@@ -216,10 +232,29 @@ const validateEntries = async (params: {
   }
 
   const duplicateKeys = new Set<string>();
+  const activeTeacherKeys = new Set<string>();
+  const activeRoomKeys = new Set<string>();
   for (const entry of params.entries) {
     const key = `${entry.classId}:${entry.sectionId ?? 'ALL'}:${entry.dayOfWeek}:${entry.attendancePeriodId}`;
     if (duplicateKeys.has(key)) throw new HttpError(409, 'Duplicate class/section/day/period entries are not allowed');
     duplicateKeys.add(key);
+
+    if (entry.isActive === false) continue;
+
+    const teacherKey = `${entry.dayOfWeek}:${entry.attendancePeriodId}:${entry.teacherId}`;
+    if (activeTeacherKeys.has(teacherKey)) {
+      throw new HttpError(409, 'Teacher is already assigned to another class for this day and period');
+    }
+    activeTeacherKeys.add(teacherKey);
+
+    const normalizedRoom = normalizeRoomLabel(entry.room);
+    if (normalizedRoom) {
+      const roomKey = `${entry.dayOfWeek}:${entry.attendancePeriodId}:${normalizedRoom}`;
+      if (activeRoomKeys.has(roomKey)) {
+        throw new HttpError(409, 'Room is already assigned to another class for this day and period');
+      }
+      activeRoomKeys.add(roomKey);
+    }
   }
 };
 
@@ -245,56 +280,71 @@ export const bulkUpsertTimetableEntries = async (params: {
   });
 
   const changedIds: string[] = [];
-  await prisma.$transaction(async (tx) => {
-    for (const entry of params.entries) {
-      const existing = await tx.timetableEntry.findFirst({
-        where: {
-          timetableVersionId: version.id,
-          classId: entry.classId,
-          sectionId: entry.sectionId ?? null,
-          dayOfWeek: entry.dayOfWeek,
-          attendancePeriodId: entry.attendancePeriodId,
-        },
-        select: { id: true },
-      });
+  try {
+    await prisma.$transaction(async (tx) => {
+      if (params.replace) {
+        await tx.timetableEntry.updateMany({
+          where: {
+            schoolId: params.schoolId,
+            timetableVersionId: version.id,
+            isActive: true,
+          },
+          data: { isActive: false },
+        });
+      }
 
-      const data = {
-        subjectId: entry.subjectId,
-        teacherId: entry.teacherId,
-        classRoomId: entry.classRoomId ?? null,
-        room: entry.room?.trim() || null,
-        isActive: entry.isActive ?? true,
-      };
+      for (const entry of params.entries) {
+        const existing = await tx.timetableEntry.findFirst({
+          where: {
+            timetableVersionId: version.id,
+            classId: entry.classId,
+            sectionId: entry.sectionId ?? null,
+            dayOfWeek: entry.dayOfWeek,
+            attendancePeriodId: entry.attendancePeriodId,
+          },
+          select: { id: true },
+        });
 
-      const saved = existing
-        ? await tx.timetableEntry.update({
-            where: { id: existing.id },
-            data,
-          })
-        : await tx.timetableEntry.create({
-            data: {
-              schoolId: params.schoolId,
-              timetableVersionId: version.id,
-              academicYearId: version.academicYearId,
-              classId: entry.classId,
-              sectionId: entry.sectionId ?? null,
-              attendancePeriodId: entry.attendancePeriodId,
-              dayOfWeek: entry.dayOfWeek,
-              ...data,
-            },
-          });
-      changedIds.push(saved.id);
-    }
+        const data = {
+          subjectId: entry.subjectId,
+          teacherId: entry.teacherId,
+          classRoomId: entry.classRoomId ?? null,
+          room: entry.room?.trim() || null,
+          isActive: entry.isActive ?? true,
+        };
 
-    if (params.replace) {
-      await tx.timetableEntry.deleteMany({
-        where: {
-          timetableVersionId: version.id,
-          ...(changedIds.length ? { id: { notIn: changedIds } } : {}),
-        },
-      });
-    }
-  });
+        const saved = existing
+          ? await tx.timetableEntry.update({
+              where: { id: existing.id },
+              data,
+            })
+          : await tx.timetableEntry.create({
+              data: {
+                schoolId: params.schoolId,
+                timetableVersionId: version.id,
+                academicYearId: version.academicYearId,
+                classId: entry.classId,
+                sectionId: entry.sectionId ?? null,
+                attendancePeriodId: entry.attendancePeriodId,
+                dayOfWeek: entry.dayOfWeek,
+                ...data,
+              },
+            });
+        changedIds.push(saved.id);
+      }
+
+      if (params.replace) {
+        await tx.timetableEntry.deleteMany({
+          where: {
+            timetableVersionId: version.id,
+            ...(changedIds.length ? { id: { notIn: changedIds } } : {}),
+          },
+        });
+      }
+    });
+  } catch (err) {
+    throwTimetableConflict(err);
+  }
 
   await invalidateTimetableCache(params.schoolId);
   await createAuditLog({
@@ -411,10 +461,7 @@ export const updateTimetableEntry = async (params: {
       select: timetableEntrySelect,
     });
   } catch (err) {
-    if ((err as { code?: string }).code === 'P2002') {
-      throw new HttpError(409, 'Timetable entry already exists for this class, section, day, and period');
-    }
-    throw err;
+    throwTimetableConflict(err);
   }
 
   await invalidateTimetableCache(params.schoolId);
