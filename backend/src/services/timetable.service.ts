@@ -247,39 +247,43 @@ export const bulkUpsertTimetableEntries = async (params: {
   const changedIds: string[] = [];
   await prisma.$transaction(async (tx) => {
     for (const entry of params.entries) {
-      const upserted = await tx.timetableEntry.upsert({
+      const existing = await tx.timetableEntry.findFirst({
         where: {
-          timetableVersionId_classId_sectionId_dayOfWeek_attendancePeriodId: {
-            timetableVersionId: version.id,
-            classId: entry.classId,
-            sectionId: entry.sectionId ?? null,
-            dayOfWeek: entry.dayOfWeek,
-            attendancePeriodId: entry.attendancePeriodId,
-          },
-        },
-        update: {
-          subjectId: entry.subjectId,
-          teacherId: entry.teacherId,
-          classRoomId: entry.classRoomId ?? null,
-          room: entry.room?.trim() || null,
-          isActive: entry.isActive ?? true,
-        },
-        create: {
-          schoolId: params.schoolId,
           timetableVersionId: version.id,
-          academicYearId: version.academicYearId,
           classId: entry.classId,
           sectionId: entry.sectionId ?? null,
-          attendancePeriodId: entry.attendancePeriodId,
           dayOfWeek: entry.dayOfWeek,
-          subjectId: entry.subjectId,
-          teacherId: entry.teacherId,
-          classRoomId: entry.classRoomId ?? null,
-          room: entry.room?.trim() || null,
-          isActive: entry.isActive ?? true,
+          attendancePeriodId: entry.attendancePeriodId,
         },
+        select: { id: true },
       });
-      changedIds.push(upserted.id);
+
+      const data = {
+        subjectId: entry.subjectId,
+        teacherId: entry.teacherId,
+        classRoomId: entry.classRoomId ?? null,
+        room: entry.room?.trim() || null,
+        isActive: entry.isActive ?? true,
+      };
+
+      const saved = existing
+        ? await tx.timetableEntry.update({
+            where: { id: existing.id },
+            data,
+          })
+        : await tx.timetableEntry.create({
+            data: {
+              schoolId: params.schoolId,
+              timetableVersionId: version.id,
+              academicYearId: version.academicYearId,
+              classId: entry.classId,
+              sectionId: entry.sectionId ?? null,
+              attendancePeriodId: entry.attendancePeriodId,
+              dayOfWeek: entry.dayOfWeek,
+              ...data,
+            },
+          });
+      changedIds.push(saved.id);
     }
 
     if (params.replace) {
