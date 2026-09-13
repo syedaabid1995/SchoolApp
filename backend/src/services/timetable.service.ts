@@ -118,8 +118,15 @@ const validateEntries = async (params: {
     }),
     sectionIds.length
       ? prisma.section.findMany({
-          where: { id: { in: sectionIds }, class: { schoolId: params.schoolId } },
-          select: { id: true, classId: true },
+          where: { schoolId: params.schoolId, id: { in: sectionIds } },
+          select: {
+            id: true,
+            classId: true,
+            classSections: {
+              where: { schoolId: params.schoolId, classId: { in: classIds } },
+              select: { classId: true },
+            },
+          },
         })
       : Promise.resolve([]),
     prisma.subject.findMany({
@@ -150,16 +157,36 @@ const validateEntries = async (params: {
 
   const sectionsByClass = new Map<string, Set<string>>();
   for (const section of sections) {
-    if (!sectionsByClass.has(section.classId)) sectionsByClass.set(section.classId, new Set());
-    sectionsByClass.get(section.classId)?.add(section.id);
+    const linkedClassIds = new Set([
+      ...(section.classId ? [section.classId] : []),
+      ...section.classSections.map((link) => link.classId),
+    ]);
+    for (const classId of linkedClassIds) {
+      if (!sectionsByClass.has(classId)) sectionsByClass.set(classId, new Set());
+      sectionsByClass.get(classId)?.add(section.id);
+    }
   }
 
-  const sectionCounts = await prisma.section.groupBy({
-    by: ['classId'],
-    where: { classId: { in: classIds }, class: { schoolId: params.schoolId } },
-    _count: { _all: true },
-  });
-  const sectionCountByClass = new Map(sectionCounts.map((entry) => [entry.classId, entry._count._all]));
+  const [directSectionCounts, linkedSectionCounts] = await Promise.all([
+    prisma.section.groupBy({
+      by: ['classId'],
+      where: { schoolId: params.schoolId, classId: { in: classIds } },
+      _count: { _all: true },
+    }),
+    prisma.classSection.groupBy({
+      by: ['classId'],
+      where: { schoolId: params.schoolId, classId: { in: classIds } },
+      _count: { _all: true },
+    }),
+  ]);
+  const sectionCountByClass = new Map<string, number>();
+  for (const entry of directSectionCounts) {
+    if (!entry.classId) continue;
+    sectionCountByClass.set(entry.classId, (sectionCountByClass.get(entry.classId) ?? 0) + entry._count._all);
+  }
+  for (const entry of linkedSectionCounts) {
+    sectionCountByClass.set(entry.classId, (sectionCountByClass.get(entry.classId) ?? 0) + entry._count._all);
+  }
 
   const subjectById = new Map(subjects.map((subject) => [subject.id, subject]));
   for (const entry of params.entries) {
