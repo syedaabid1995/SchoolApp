@@ -43,6 +43,19 @@ type IconName = 'user' | 'briefcase' | 'money' | 'calendar' | 'bank' | 'map' | '
 
 const roles: StaffRole[] = ['SCHOOL_ADMIN', 'TEACHER', 'ACCOUNTANT', 'LIBRARIAN', 'STAFF'];
 
+type StaffFieldKey =
+  | 'email'
+  | 'password'
+  | 'roleName'
+  | 'firstName'
+  | 'lastName'
+  | 'departmentId'
+  | 'designationId'
+  | 'basicSalary'
+  | 'documents';
+
+type StaffFieldErrors = Partial<Record<StaffFieldKey, string>>;
+
 const presets: Preset[] = [
   { key: 'teacher', title: 'Teacher', roleName: 'TEACHER', department: 'Academics', designation: 'Teacher', basicSalary: 45000, contractType: 'Full Time' },
   { key: 'senior-teacher', title: 'Senior Teacher', roleName: 'TEACHER', department: 'Academics', designation: 'Senior Teacher', basicSalary: 58000, contractType: 'Full Time' },
@@ -116,6 +129,44 @@ const findByName = <T extends Department | Designation>(items: T[] | undefined, 
 const money = (value: number | string | null | undefined) =>
   new Intl.NumberFormat(undefined, { style: 'currency', currency: 'INR', maximumFractionDigits: 0 }).format(Number(value ?? 0));
 
+const isValidEmail = (value: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
+
+const apiFieldMap: Record<string, StaffFieldKey> = {
+  email: 'email',
+  password: 'password',
+  roleName: 'roleName',
+  firstName: 'firstName',
+  lastName: 'lastName',
+  departmentId: 'departmentId',
+  designationId: 'designationId',
+  'payrollInfo.basicSalary': 'basicSalary',
+  basicSalary: 'basicSalary',
+};
+
+const getApiFieldErrors = (error: unknown): StaffFieldErrors => {
+  const data = (error as { response?: { data?: { errors?: Array<{ field?: string; message?: string }>; error?: { message?: string }; message?: string } } })?.response?.data;
+  const nextErrors: StaffFieldErrors = {};
+
+  if (Array.isArray(data?.errors)) {
+    for (const issue of data.errors) {
+      const normalizedField = issue.field?.replace(/^body\./, '') ?? '';
+      const fieldKey = apiFieldMap[normalizedField];
+      if (fieldKey && issue.message) nextErrors[fieldKey] = issue.message;
+    }
+  }
+
+  const message = data?.error?.message || data?.message || (error as Error)?.message || '';
+  if (/email/i.test(message)) nextErrors.email = message;
+  if (/department/i.test(message)) nextErrors.departmentId = message;
+  if (/designation/i.test(message)) nextErrors.designationId = message;
+  return nextErrors;
+};
+
+const getApiErrorMessage = (error: unknown) => {
+  const data = (error as { response?: { data?: { error?: { message?: string }; message?: string } } })?.response?.data;
+  return data?.error?.message || data?.message || (error as Error)?.message || 'Unable to save employee.';
+};
+
 export default function AddStaffPage() {
   const notify = useNotify();
   const router = useRouter();
@@ -130,6 +181,7 @@ export default function AddStaffPage() {
   const [appliedPresetKey, setAppliedPresetKey] = useState('');
   const [autoSetupRequested, setAutoSetupRequested] = useState(false);
   const [documentRows, setDocumentRows] = useState<DocumentCollectionRow[]>(initialDocumentRows);
+  const [fieldErrors, setFieldErrors] = useState<StaffFieldErrors>({});
 
   const { data: session, isLoading: sessionLoading } = useQuery({ queryKey: ['session'], queryFn: getSession });
   const isSchoolAdmin = session?.role === 'SCHOOL_ADMIN';
@@ -255,20 +307,21 @@ export default function AddStaffPage() {
   });
 
   const validate = () => {
-    if (!form.email.trim()) return 'Email is required.';
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email.trim())) return 'Enter a valid email.';
-    if (form.password && form.password.length < 8) return 'Password must be at least 8 characters.';
-    if (!form.firstName.trim()) return 'First name is required.';
-    if (!form.lastName.trim()) return 'Last name is required.';
-    if (!form.roleName) return 'Login role is required.';
-    if (!form.designationId) return 'Designation is required.';
-    if (!form.departmentId) return 'Department is required.';
-    if (baseSalary < 0) return 'Salary cannot be negative.';
+    const nextErrors: StaffFieldErrors = {};
+    if (!form.email.trim()) nextErrors.email = 'Email is required.';
+    else if (!isValidEmail(form.email.trim())) nextErrors.email = 'Enter a valid email.';
+    if (form.password && form.password.length < 8) nextErrors.password = 'Password must be at least 8 characters.';
+    if (!form.firstName.trim()) nextErrors.firstName = 'First name is required.';
+    if (!form.lastName.trim()) nextErrors.lastName = 'Last name is required.';
+    if (!form.roleName) nextErrors.roleName = 'Login role is required.';
+    if (!form.departmentId) nextErrors.departmentId = 'Department is required.';
+    if (!form.designationId) nextErrors.designationId = 'Designation is required.';
+    if (baseSalary < 0) nextErrors.basicSalary = 'Salary cannot be negative.';
     const invalidDocument = documentRows
       .filter((row) => row.title.trim() || row.documentNumber.trim() || row.files.length)
       .find((row) => !row.title.trim() || !row.files.length);
-    if (invalidDocument) return 'Each document row needs a document name and at least one file.';
-    return '';
+    if (invalidDocument) nextErrors.documents = 'Each document row needs a document name and at least one file.';
+    return nextErrors;
   };
 
   const buildPayload = (): StaffPayload => {
@@ -290,14 +343,26 @@ export default function AddStaffPage() {
 
   const saveMutation = useMutation({
     mutationFn: async () => {
-      const error = validate();
-      if (error) throw new Error(error);
+      const errors = validate();
+      const firstError = Object.values(errors)[0];
+      if (firstError) {
+        setFieldErrors(errors);
+        const firstField = Object.keys(errors)[0];
+        window.requestAnimationFrame(() => {
+          document.querySelector<HTMLElement>(`[data-staff-field="${firstField}"] input, [data-staff-field="${firstField}"] select, [data-staff-field="${firstField}"] textarea`)?.focus();
+        });
+        throw new Error(firstError);
+      }
+      setFieldErrors({});
       const payload = buildPayload();
       const result = editId ? await updateStaff(editId, payload) : await createStaff(payload);
       const savedStaffId = editId || (result as any)?.staff?.id || (result as any)?.id;
       const pendingDocuments = documentRows.filter((row) => row.title.trim() || row.documentNumber.trim() || row.files.length);
       const invalidDocument = pendingDocuments.find((row) => !row.title.trim() || !row.files.length);
-      if (invalidDocument) throw new Error('Each document row needs a document name and at least one file.');
+      if (invalidDocument) {
+        setFieldErrors({ documents: 'Each document row needs a document name and at least one file.' });
+        throw new Error('Each document row needs a document name and at least one file.');
+      }
       if (savedStaffId && pendingDocuments.length) {
         await Promise.all(
           pendingDocuments.flatMap((row) =>
@@ -313,11 +378,16 @@ export default function AddStaffPage() {
       if (result?.tempPassword || !editId) {
         setCreatedLogin({ email: result?.staff?.user?.email ?? form.email, password: result?.tempPassword ?? null });
       }
+      setFieldErrors({});
       setDocumentRows(initialDocumentRows());
       notify.success(editId ? 'Employee updated' : 'Employee created', 'Profile, login, payroll, and leave details were saved.');
       if (editId) router.push(`/dashboard/staff/${editId}`);
     },
-    onError: (error: any) => notify.error('Save failed', error?.response?.data?.error?.message ?? error.message ?? 'Unable to save employee.'),
+    onError: (error: any) => {
+      const apiFieldErrors = getApiFieldErrors(error);
+      if (Object.keys(apiFieldErrors).length) setFieldErrors((current) => ({ ...current, ...apiFieldErrors }));
+      notify.error('Save failed', getApiErrorMessage(error));
+    },
   });
 
   const uploadPhoto = async (file?: File) => {
@@ -333,6 +403,10 @@ export default function AddStaffPage() {
   const applyPreset = (preset: Preset) => {
     const departmentId = findByName(departmentsQuery.data, preset.department);
     const designationId = findByName(designationsQuery.data, preset.designation);
+    setFieldErrors((current) => {
+      const { roleName: _roleName, departmentId: _departmentId, designationId: _designationId, ...remaining } = current;
+      return remaining;
+    });
     setForm((current) => ({
       ...current,
       roleName: preset.roleName,
@@ -377,6 +451,16 @@ export default function AddStaffPage() {
 
   const inputClass = 'w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-900 outline-none transition focus:border-[var(--theme-button-bg)] focus:ring-4 focus:ring-violet-100';
   const labelClass = 'mb-1 block text-xs font-bold uppercase tracking-wide text-slate-500';
+  const errorInputClass = 'border-rose-400 bg-rose-50/50 focus:border-rose-500 focus:ring-rose-100';
+  const getInputClass = (field: StaffFieldKey) => `${inputClass} ${fieldErrors[field] ? errorInputClass : ''}`;
+  const clearFieldError = (field: StaffFieldKey) => {
+    setFieldErrors((current) => {
+      if (!current[field]) return current;
+      const { [field]: _removed, ...remaining } = current;
+      return remaining;
+    });
+  };
+  const validationMessages = Object.values(fieldErrors).filter(Boolean);
 
   return (
     <div className="min-h-screen bg-slate-100 pb-10">
@@ -454,27 +538,42 @@ export default function AddStaffPage() {
             <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
               <h2 className="flex items-center gap-2 text-lg font-black text-slate-950"><Icon name="user" /> Login & Personal Details</h2>
               <div className="mt-4 grid gap-4 md:grid-cols-3">
-                <Field label="Login Role" labelClass={labelClass}>
-                  <select className={inputClass} value={form.roleName} onChange={(event) => setForm({ ...form, roleName: event.target.value as StaffRole, leaveBalances: [] })}>
+                <Field label="Login Role" labelClass={labelClass} required error={fieldErrors.roleName} fieldKey="roleName">
+                  <select className={getInputClass('roleName')} value={form.roleName} onChange={(event) => {
+                    clearFieldError('roleName');
+                    setForm({ ...form, roleName: event.target.value as StaffRole, leaveBalances: [] });
+                  }}>
                     {roles.map((role) => <option key={role} value={role}>{labelForRole(role)}</option>)}
                   </select>
                 </Field>
                 <Field label="Employee No (Auto)" labelClass={labelClass}>
                   <input className={inputClass} value={form.employeeNo ?? ''} onChange={(event) => setForm({ ...form, employeeNo: event.target.value })} placeholder="Auto generated if empty" />
                 </Field>
-                <Field label="Email" labelClass={labelClass}>
-                  <input className={inputClass} value={form.email} onChange={(event) => setForm({ ...form, email: event.target.value })} placeholder="name@school.com" />
+                <Field label="Email" labelClass={labelClass} required error={fieldErrors.email} fieldKey="email">
+                  <input className={getInputClass('email')} value={form.email} onChange={(event) => {
+                    clearFieldError('email');
+                    setForm({ ...form, email: event.target.value });
+                  }} placeholder="name@school.com" aria-invalid={Boolean(fieldErrors.email)} />
                 </Field>
                 {!editId ? (
-                  <Field label="Password" labelClass={labelClass}>
-                    <input className={inputClass} type="password" value={form.password ?? ''} onChange={(event) => setForm({ ...form, password: event.target.value })} placeholder="Leave empty to auto-generate" />
+                  <Field label="Password" labelClass={labelClass} error={fieldErrors.password} fieldKey="password">
+                    <input className={getInputClass('password')} type="password" value={form.password ?? ''} onChange={(event) => {
+                      clearFieldError('password');
+                      setForm({ ...form, password: event.target.value });
+                    }} placeholder="Leave empty to auto-generate" aria-invalid={Boolean(fieldErrors.password)} />
                   </Field>
                 ) : null}
-                <Field label="First Name" labelClass={labelClass}>
-                  <input className={inputClass} value={form.firstName} onChange={(event) => setForm({ ...form, firstName: event.target.value })} />
+                <Field label="First Name" labelClass={labelClass} required error={fieldErrors.firstName} fieldKey="firstName">
+                  <input className={getInputClass('firstName')} value={form.firstName} onChange={(event) => {
+                    clearFieldError('firstName');
+                    setForm({ ...form, firstName: event.target.value });
+                  }} aria-invalid={Boolean(fieldErrors.firstName)} />
                 </Field>
-                <Field label="Last Name" labelClass={labelClass}>
-                  <input className={inputClass} value={form.lastName} onChange={(event) => setForm({ ...form, lastName: event.target.value })} />
+                <Field label="Last Name" labelClass={labelClass} required error={fieldErrors.lastName} fieldKey="lastName">
+                  <input className={getInputClass('lastName')} value={form.lastName} onChange={(event) => {
+                    clearFieldError('lastName');
+                    setForm({ ...form, lastName: event.target.value });
+                  }} aria-invalid={Boolean(fieldErrors.lastName)} />
                 </Field>
                 <Field label="Gender" labelClass={labelClass}>
                   <select className={inputClass} value={form.gender ?? ''} onChange={(event) => setForm({ ...form, gender: event.target.value })}>
@@ -510,9 +609,12 @@ export default function AddStaffPage() {
             <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
               <h2 className="flex items-center gap-2 text-lg font-black text-slate-950"><Icon name="briefcase" /> Employment</h2>
               <div className="mt-4 grid gap-4 md:grid-cols-2">
-                <Field label="Department" labelClass={labelClass}>
+                <Field label="Department" labelClass={labelClass} required error={fieldErrors.departmentId} fieldKey="departmentId">
                   <div className="grid gap-2 sm:grid-cols-[1fr_auto]">
-                    <select className={inputClass} value={form.departmentId ?? ''} onChange={(event) => setForm({ ...form, departmentId: event.target.value })}>
+                    <select className={getInputClass('departmentId')} value={form.departmentId ?? ''} onChange={(event) => {
+                      clearFieldError('departmentId');
+                      setForm({ ...form, departmentId: event.target.value });
+                    }} aria-invalid={Boolean(fieldErrors.departmentId)}>
                       <option value="">Select department</option>
                       {(departmentsQuery.data ?? []).map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
                     </select>
@@ -522,9 +624,12 @@ export default function AddStaffPage() {
                   </div>
                   <input className={`${inputClass} mt-2`} placeholder="New department" value={newDepartment} onChange={(event) => setNewDepartment(event.target.value)} />
                 </Field>
-                <Field label="Designation" labelClass={labelClass}>
+                <Field label="Designation" labelClass={labelClass} required error={fieldErrors.designationId} fieldKey="designationId">
                   <div className="grid gap-2 sm:grid-cols-[1fr_auto]">
-                    <select className={inputClass} value={form.designationId ?? ''} onChange={(event) => setForm({ ...form, designationId: event.target.value })}>
+                    <select className={getInputClass('designationId')} value={form.designationId ?? ''} onChange={(event) => {
+                      clearFieldError('designationId');
+                      setForm({ ...form, designationId: event.target.value });
+                    }} aria-invalid={Boolean(fieldErrors.designationId)}>
                       <option value="">Select designation</option>
                       {(designationsQuery.data ?? []).map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
                     </select>
@@ -552,8 +657,11 @@ export default function AddStaffPage() {
             <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
               <h2 className="flex items-center gap-2 text-lg font-black text-slate-950"><Icon name="money" /> Salary & Payroll</h2>
               <div className="mt-4 grid gap-4 md:grid-cols-4">
-                <Field label="Basic Salary" labelClass={labelClass}>
-                  <input className={inputClass} type="number" min={0} value={form.payrollInfo?.basicSalary ?? 0} onChange={(event) => setForm({ ...form, payrollInfo: { ...form.payrollInfo, basicSalary: Number(event.target.value) } })} />
+                <Field label="Basic Salary" labelClass={labelClass} error={fieldErrors.basicSalary} fieldKey="basicSalary">
+                  <input className={getInputClass('basicSalary')} type="number" min={0} value={form.payrollInfo?.basicSalary ?? 0} onChange={(event) => {
+                    clearFieldError('basicSalary');
+                    setForm({ ...form, payrollInfo: { ...form.payrollInfo, basicSalary: Number(event.target.value) } });
+                  }} aria-invalid={Boolean(fieldErrors.basicSalary)} />
                 </Field>
                 <Field label="EPF No" labelClass={labelClass}>
                   <input className={inputClass} value={form.payrollInfo?.epfNo ?? ''} onChange={(event) => setForm({ ...form, payrollInfo: { ...form.payrollInfo, epfNo: event.target.value } })} />
@@ -664,10 +772,18 @@ export default function AddStaffPage() {
 
             <DocumentCollectionCard
               rows={documentRows}
-              onChange={setDocumentRows}
+              onChange={(rows) => {
+                clearFieldError('documents');
+                setDocumentRows(rows);
+              }}
               onError={(message) => notify.error('Invalid document', message)}
               title="Staff Documents"
             />
+            {fieldErrors.documents ? (
+              <p data-staff-field="documents" className="-mt-3 rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm font-semibold text-rose-700">
+                {fieldErrors.documents}
+              </p>
+            ) : null}
 
             {editId ? (
               <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
@@ -687,6 +803,12 @@ export default function AddStaffPage() {
             ) : null}
 
             <div className="flex flex-wrap justify-end gap-2">
+              {validationMessages.length ? (
+                <div className="mr-auto w-full rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700 lg:w-auto">
+                  <p className="font-black">Please fix the highlighted fields</p>
+                  <p className="mt-1 font-semibold">{validationMessages.join(' ')}</p>
+                </div>
+              ) : null}
               <Link href="/dashboard/staff" className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-bold text-slate-700">Cancel</Link>
               <button
                 onClick={() => saveMutation.mutate()}
@@ -704,11 +826,31 @@ export default function AddStaffPage() {
   );
 }
 
-function Field({ label, labelClass, className = '', children }: { label: string; labelClass: string; className?: string; children: ReactNode }) {
+function Field({
+  label,
+  labelClass,
+  className = '',
+  required = false,
+  error,
+  fieldKey,
+  children,
+}: {
+  label: string;
+  labelClass: string;
+  className?: string;
+  required?: boolean;
+  error?: string;
+  fieldKey?: StaffFieldKey;
+  children: ReactNode;
+}) {
   return (
-    <label className={className}>
-      <span className={labelClass}>{label}</span>
+    <label className={className} data-staff-field={fieldKey}>
+      <span className={`${labelClass} ${error ? 'text-rose-600' : ''}`}>
+        {label}
+        {required ? <span className="ml-1 text-rose-600">*</span> : null}
+      </span>
       {children}
+      {error ? <span className="mt-1 block text-xs font-semibold text-rose-600">{error}</span> : null}
     </label>
   );
 }
