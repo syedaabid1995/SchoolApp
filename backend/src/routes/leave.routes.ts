@@ -3,21 +3,27 @@ import { authMiddleware } from '../middlewares/auth.middleware';
 import { blockSuperAdminSchoolOperations } from '../middlewares/rbac.middleware';
 import {
   approveLeaveApplication,
+  approveStudentLeaveRequest,
   createLeaveApplication,
   createLeaveDefine,
   createLeaveType,
   deleteLeaveApplication,
   deleteLeaveDefine,
+  deleteStudentLeaveRequest,
   deleteLeaveType,
   getLeaveApplication,
+  getStudentLeaveRequest,
   leaveAttachmentUploadMiddleware,
   listLeaveApplications,
   listLeaveDefines,
+  listStudentLeaveRequests,
   listLeaveTypes,
   listMyLeaveBalances,
   rejectLeaveApplication,
+  rejectStudentLeaveRequest,
   updateLeaveApplication,
   updateLeaveDefine,
+  updateStudentLeaveStatus,
   updateLeaveStatus,
   updateLeaveType,
 } from '../controllers/leave.controller';
@@ -53,3 +59,10 @@ leaveRouter.patch('/requests/:id', leaveAttachmentUploadMiddleware, updateLeaveA
 leaveRouter.delete('/requests/:id', deleteLeaveApplication);
 leaveRouter.patch('/requests/:id/approve', approveLeaveApplication);
 leaveRouter.patch('/requests/:id/reject', rejectLeaveApplication);
+
+leaveRouter.get('/student-requests', listStudentLeaveRequests);
+leaveRouter.get('/student-requests/:id', getStudentLeaveRequest);
+leaveRouter.patch('/student-requests/:id/status', updateStudentLeaveStatus);
+leaveRouter.patch('/student-requests/:id/approve', approveStudentLeaveRequest);
+leaveRouter.patch('/student-requests/:id/reject', rejectStudentLeaveRequest);
+leaveRouter.delete('/student-requests/:id', deleteStudentLeaveRequest);

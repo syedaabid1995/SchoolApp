@@ -536,7 +536,10 @@ export default function AddStaffPage() {
             </section>
 
             <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-              <h2 className="flex items-center gap-2 text-lg font-black text-slate-950"><Icon name="user" /> Login & Personal Details</h2>
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <h2 className="flex items-center gap-2 text-lg font-black text-slate-950"><Icon name="user" /> Login & Personal Details</h2>
+                <span className="text-xs font-bold uppercase tracking-wide text-rose-600">* Required fields</span>
+              </div>
               <div className="mt-4 grid gap-4 md:grid-cols-3">
                 <Field label="Login Role" labelClass={labelClass} required error={fieldErrors.roleName} fieldKey="roleName">
                   <select className={getInputClass('roleName')} value={form.roleName} onChange={(event) => {
@@ -844,7 +847,7 @@ function Field({
     <label className={className} data-staff-field={fieldKey}>
       <span className={`${labelClass} ${error ? 'text-rose-600' : ''}`}>
         {label}
-        {required ? <span className="ml-1 text-rose-600">*</span> : null}
+        {required ? <span className="ml-1 align-middle text-base leading-none text-rose-600" aria-label="required">*</span> : null}
       </span>
       {children}
       {error ? <span className="mt-1 block text-xs font-semibold text-rose-600">{error}</span> : null}

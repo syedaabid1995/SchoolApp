@@ -2,10 +2,12 @@ import crypto from 'crypto';
 import multer from 'multer';
 import path from 'path';
 import type { Request, Response } from 'express';
-import { Prisma, type LeaveApplicationStatus, type RoleName } from '@prisma/client';
+import { Prisma, type LeaveApplicationStatus, type LeaveRequestStatus, type RoleName } from '@prisma/client';
 import { z } from 'zod';
 import { prisma } from '../config/db';
+import { logger } from '../config/logger';
 import { HttpError } from '../middlewares/error.middleware';
+import { sendNotification } from '../services/notification.service';
 import { uploadBuffer } from '../services/s3.service';
 import { logAudit } from '../utils/audit';
 import {
@@ -16,6 +18,7 @@ import {
 
 const staffRoles = ['SCHOOL_ADMIN', 'TEACHER', 'ACCOUNTANT', 'LIBRARIAN', 'STAFF'] as const;
 const leaveStatuses = ['PENDING', 'APPROVED', 'REJECTED', 'CANCELLED'] as const;
+const studentLeaveStatuses = ['PENDING', 'APPROVED', 'REJECTED'] as const;
 
 const requireSchoolMember = (req: Request) => {
   if (!req.auth?.userId) throw new HttpError(401, 'Unauthorized');
@@ -113,6 +116,21 @@ const statusSchema = z.object({
   reason: z.string().trim().max(1000).optional().nullable(),
 });
 
+const studentLeaveListSchema = z.object({
+  schoolId: z.string().uuid().optional(),
+  status: z.enum(studentLeaveStatuses).optional(),
+  classId: z.string().uuid().optional(),
+  sectionId: z.string().uuid().optional(),
+  search: z.string().trim().optional(),
+});
+
+const studentLeaveStatusSchema = z.object({
+  schoolId: z.string().uuid().optional(),
+  status: z.enum(studentLeaveStatuses),
+  note: z.string().trim().max(1000).optional().nullable(),
+  reason: z.string().trim().max(1000).optional().nullable(),
+});
+
 const staffSelect = {
   id: true,
   schoolId: true,
@@ -135,6 +153,34 @@ const appInclude = {
   reviewedBy: { select: { id: true, email: true } },
 } satisfies Prisma.LeaveApplicationInclude;
 
+const studentLeaveInclude = {
+  student: {
+    select: {
+      id: true,
+      admissionNo: true,
+      rollNo: true,
+      firstName: true,
+      lastName: true,
+      fullName: true,
+      classId: true,
+      sectionId: true,
+      class: { select: { id: true, name: true } },
+      section: { select: { id: true, name: true } },
+    },
+  },
+  parent: {
+    select: {
+      id: true,
+      firstName: true,
+      lastName: true,
+      phone: true,
+      email: true,
+      user: { select: { id: true, email: true, status: true } },
+    },
+  },
+  reviewedBy: { select: { id: true, email: true } },
+} satisfies Prisma.StudentLeaveRequestInclude;
+
 const formatStaff = (staff: any) => ({
   ...staff,
   user: staff.user
@@ -153,6 +199,57 @@ const formatApplication = (application: any) => ({
   staff: application.staff ? formatStaff(application.staff) : undefined,
   duration: application.durationDays,
 });
+
+const skippedDaysArray = (value: unknown) => {
+  if (!Array.isArray(value)) return [];
+  return value
+    .filter((item): item is Record<string, unknown> => Boolean(item) && typeof item === 'object' && !Array.isArray(item))
+    .map((item) => ({
+      date: String(item.date ?? ''),
+      reason: String(item.reason ?? 'Holiday'),
+      type: String(item.type ?? 'HOLIDAY'),
+    }))
+    .filter((item) => item.date);
+};
+
+const formatStudentLeaveRequest = (request: Prisma.StudentLeaveRequestGetPayload<{ include: typeof studentLeaveInclude }>) => {
+  const studentName = request.student.fullName || `${request.student.firstName ?? ''} ${request.student.lastName ?? ''}`.trim() || 'Student';
+  const parentName = `${request.parent.firstName ?? ''} ${request.parent.lastName ?? ''}`.trim() || 'Parent';
+  const classLabel = [request.student.class?.name, request.student.section?.name].filter(Boolean).join(' ');
+  return {
+    id: request.id,
+    schoolId: request.schoolId,
+    studentId: request.studentId,
+    childId: request.studentId,
+    studentName,
+    childName: studentName,
+    admissionNo: request.student.admissionNo,
+    rollNo: request.student.rollNo,
+    classId: request.student.classId,
+    sectionId: request.student.sectionId,
+    className: request.student.class?.name ?? null,
+    sectionName: request.student.section?.name ?? null,
+    classLabel,
+    parentId: request.parentId,
+    parentName,
+    parentPhone: request.parent.phone,
+    parentEmail: request.parent.email,
+    parentUser: request.parent.user,
+    leaveType: request.leaveType,
+    fromDate: request.fromDate,
+    toDate: request.toDate,
+    requestedDays: request.requestedDays,
+    workingDays: request.workingDays,
+    skippedDays: skippedDaysArray(request.skippedDays),
+    reason: request.reason,
+    status: request.status,
+    reviewedBy: request.reviewedBy,
+    reviewedAt: request.reviewedAt,
+    reviewNote: request.reviewNote,
+    createdAt: request.createdAt,
+    updatedAt: request.updatedAt,
+  };
+};
 
 const getOwnStaffProfile = async (schoolId: string, userId: string) => {
   const staff = await prisma.teacherProfile.findFirst({
@@ -558,6 +655,171 @@ export const updateLeaveStatus = async (req: Request, res: Response) => {
   await syncBalance(schoolId, updated.staffId, updated.leaveTypeId);
   await logAudit(req, { schoolId, entityType: 'LEAVE_APPLICATION', entityId: updated.id, action: 'STATUS_CHANGE', beforeState: { status: existing.status }, afterState: { status: updated.status, note } });
   res.status(200).json(formatApplication(updated));
+};
+
+const hasApprovedStudentLeaveOverlap = async (params: {
+  schoolId: string;
+  studentId: string;
+  fromDate: Date;
+  toDate: Date;
+  excludeId?: string;
+}) => {
+  const overlap = await prisma.studentLeaveRequest.findFirst({
+    where: {
+      schoolId: params.schoolId,
+      studentId: params.studentId,
+      status: 'APPROVED',
+      ...(params.excludeId ? { id: { not: params.excludeId } } : {}),
+      fromDate: { lte: params.toDate },
+      toDate: { gte: params.fromDate },
+    },
+    select: { id: true },
+  });
+  return Boolean(overlap);
+};
+
+const notifyParentAboutStudentLeaveReview = async (
+  request: Prisma.StudentLeaveRequestGetPayload<{ include: typeof studentLeaveInclude }>,
+) => {
+  const parentUserId = request.parent.user?.id;
+  if (!parentUserId || request.status === 'PENDING') return;
+
+  const studentName = request.student.fullName || `${request.student.firstName ?? ''} ${request.student.lastName ?? ''}`.trim() || 'Student';
+  const statusText = request.status === 'APPROVED' ? 'approved' : 'rejected';
+  const from = request.fromDate.toISOString().slice(0, 10);
+  const to = request.toDate.toISOString().slice(0, 10);
+  const body = `${studentName}'s ${request.leaveType} request from ${from} to ${to} was ${statusText}.`;
+
+  try {
+    await sendNotification({
+      schoolId: request.schoolId,
+      userId: request.reviewedById ?? null,
+      channel: 'PUSH',
+      data: {
+        to: parentUserId,
+        subject: 'Student leave request updated',
+        body,
+        recipientName: `${request.parent.firstName ?? ''} ${request.parent.lastName ?? ''}`.trim() || 'Parent',
+        recipientType: 'PARENT',
+        route: '/leave',
+        module: 'leave',
+        category: 'leave',
+        priority: 'high',
+        alertType: 'STUDENT_LEAVE_REVIEW',
+        leaveRequestId: request.id,
+        childId: request.studentId,
+        childName: studentName,
+        leaveType: request.leaveType,
+        status: request.status,
+        fromDate: from,
+        toDate: to,
+        reviewNote: request.reviewNote ?? '',
+      },
+    });
+  } catch (error) {
+    logger.warn({ err: error, leaveRequestId: request.id, parentUserId }, 'student leave review push failed');
+  }
+};
+
+export const listStudentLeaveRequests = async (req: Request, res: Response) => {
+  const auth = assertRequestedSchool(req, z.string().uuid().optional().parse(req.query.schoolId));
+  const query = studentLeaveListSchema.parse(req.query);
+  const pagination = parseOffsetPagination(req.query, { defaultLimit: 50, maxLimit: 100 });
+  const where: Prisma.StudentLeaveRequestWhereInput = {
+    schoolId: auth.schoolId,
+    ...(query.status ? { status: query.status } : {}),
+    ...(query.classId || query.sectionId
+      ? {
+          student: {
+            ...(query.classId ? { classId: query.classId } : {}),
+            ...(query.sectionId ? { sectionId: query.sectionId } : {}),
+          },
+        }
+      : {}),
+    ...(query.search
+      ? {
+          OR: [
+            { student: { firstName: { contains: query.search, mode: 'insensitive' } } },
+            { student: { lastName: { contains: query.search, mode: 'insensitive' } } },
+            { student: { fullName: { contains: query.search, mode: 'insensitive' } } },
+            { student: { admissionNo: { contains: query.search, mode: 'insensitive' } } },
+            { student: { rollNo: { contains: query.search, mode: 'insensitive' } } },
+            { parent: { firstName: { contains: query.search, mode: 'insensitive' } } },
+            { parent: { lastName: { contains: query.search, mode: 'insensitive' } } },
+            { parent: { email: { contains: query.search, mode: 'insensitive' } } },
+            { leaveType: { contains: query.search, mode: 'insensitive' } },
+          ],
+        }
+      : {}),
+  };
+
+  const [items, total] = await Promise.all([
+    prisma.studentLeaveRequest.findMany({
+      where,
+      include: studentLeaveInclude,
+      orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+      skip: pagination.skip,
+      take: pagination.limit,
+    }),
+    prisma.studentLeaveRequest.count({ where }),
+  ]);
+  setOffsetPaginationHeaders(res, toOffsetPageInfo(pagination, total));
+  res.status(200).json(items.map(formatStudentLeaveRequest));
+};
+
+export const getStudentLeaveRequest = async (req: Request, res: Response) => {
+  const auth = assertRequestedSchool(req, z.string().uuid().optional().parse(req.query.schoolId));
+  const request = await prisma.studentLeaveRequest.findFirst({
+    where: { id: req.params.id, schoolId: auth.schoolId },
+    include: studentLeaveInclude,
+  });
+  if (!request) throw new HttpError(404, 'Student leave request not found');
+  res.status(200).json(formatStudentLeaveRequest(request));
+};
+
+export const updateStudentLeaveStatus = async (req: Request, res: Response) => {
+  const { schoolId, userId } = requireSchoolAdmin(req);
+  const payload = studentLeaveStatusSchema.parse(req.body);
+  assertRequestedSchool(req, payload.schoolId);
+  const existing = await prisma.studentLeaveRequest.findFirst({ where: { id: req.params.id, schoolId } });
+  if (!existing) throw new HttpError(404, 'Student leave request not found');
+  if (payload.status === 'APPROVED' && (await hasApprovedStudentLeaveOverlap({ schoolId, studentId: existing.studentId, fromDate: existing.fromDate, toDate: existing.toDate, excludeId: existing.id }))) {
+    throw new HttpError(409, 'An approved leave request already overlaps this date range');
+  }
+
+  const note = normalizeNullable(payload.note ?? payload.reason);
+  const updated = await prisma.studentLeaveRequest.update({
+    where: { id: existing.id },
+    data: {
+      status: payload.status as LeaveRequestStatus,
+      reviewedById: payload.status === 'PENDING' ? null : userId,
+      reviewedAt: payload.status === 'PENDING' ? null : new Date(),
+      reviewNote: note,
+    },
+    include: studentLeaveInclude,
+  });
+  await logAudit(req, { schoolId, entityType: 'STUDENT_LEAVE_REQUEST', entityId: updated.id, action: 'STATUS_CHANGE', beforeState: { status: existing.status }, afterState: { status: updated.status, note } });
+  await notifyParentAboutStudentLeaveReview(updated);
+  res.status(200).json(formatStudentLeaveRequest(updated));
+};
+
+export const deleteStudentLeaveRequest = async (req: Request, res: Response) => {
+  const auth = assertRequestedSchool(req, z.string().uuid().optional().parse(req.query.schoolId));
+  const existing = await prisma.studentLeaveRequest.findFirst({ where: { id: req.params.id, schoolId: auth.schoolId } });
+  if (!existing) throw new HttpError(404, 'Student leave request not found');
+  await prisma.studentLeaveRequest.delete({ where: { id: existing.id } });
+  await logAudit(req, { schoolId: auth.schoolId, entityType: 'STUDENT_LEAVE_REQUEST', entityId: existing.id, action: 'DELETE', beforeState: { status: existing.status, studentId: existing.studentId } });
+  res.status(204).send();
+};
+
+export const approveStudentLeaveRequest = async (req: Request, res: Response) => {
+  req.body = { ...req.body, status: 'APPROVED' };
+  return updateStudentLeaveStatus(req, res);
+};
+
+export const rejectStudentLeaveRequest = async (req: Request, res: Response) => {
+  req.body = { ...req.body, status: 'REJECTED' };
+  return updateStudentLeaveStatus(req, res);
 };
 
 export const approveLeaveApplication = async (req: Request, res: Response) => {

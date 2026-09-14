@@ -20,6 +20,60 @@ interface NotificationContextType {
 
 const NotificationContext = createContext<NotificationContextType | undefined>(undefined);
 
+const titleReplacements: Record<string, string> = {
+  'Action failed': 'Unable to complete action',
+  'Auto assign failed': 'Unable to auto assign',
+  'Assignment failed': 'Unable to assign',
+  'Approval failed': 'Unable to approve request',
+  'Carry-forward failed': 'Unable to create carry-forward',
+  'Carry-forward preview failed': 'Unable to preview carry-forward',
+  'Copy failed': 'Unable to copy',
+  'Delete failed': 'Unable to delete',
+  'Department failed': 'Unable to add department',
+  'Designation failed': 'Unable to add designation',
+  'Download failed': 'Unable to download',
+  'Export failed': 'Unable to export',
+  'Generation failed': 'Unable to generate',
+  'Invoice generation failed': 'Unable to generate invoices',
+  'Print blocked': 'Unable to print',
+  'Promotion failed': 'Unable to promote students',
+  'Rejection failed': 'Unable to reject request',
+  'Remove failed': 'Unable to remove',
+  'Save failed': 'Unable to save changes',
+  'Setup failed': 'Unable to prepare setup',
+  'Validation error': 'Please check the highlighted fields',
+};
+
+const successTitleReplacements: Record<string, string> = {
+  Approved: 'Request approved',
+  Assigned: 'Assignment saved',
+  Copied: 'Copied to clipboard',
+  Deleted: 'Deleted successfully',
+  Downloaded: 'Download ready',
+  Rejected: 'Request rejected',
+  Removed: 'Removed successfully',
+  Saved: 'Saved successfully',
+};
+
+const fallbackMessages: Partial<Record<NotificationType, string>> = {
+  error: 'Please review the details and try again.',
+  warning: 'Please review the highlighted details.',
+};
+
+const cleanNotification = (notification: Omit<Notification, 'id'>): Omit<Notification, 'id'> => {
+  const title = notification.title.trim();
+  const replacements = notification.type === 'success' ? successTitleReplacements : titleReplacements;
+  const cleanedTitle = replacements[title] ?? title;
+  const message = notification.message?.trim();
+  const genericMessage = !message || message === 'Something went wrong' || message === 'Failed' || message === 'Action failed';
+
+  return {
+    ...notification,
+    title: cleanedTitle,
+    message: genericMessage ? fallbackMessages[notification.type] : message,
+  };
+};
+
 export const useNotifications = () => {
   const context = useContext(NotificationContext);
   if (!context) {
@@ -71,7 +125,7 @@ export const NotificationProvider = ({ children }: { children: ReactNode }) => {
 
   const addNotification = useCallback((notification: Omit<Notification, 'id'>) => {
     const id = Math.random().toString(36).substr(2, 9);
-    const newNotification = { ...notification, id };
+    const newNotification = { ...cleanNotification(notification), id };
     
     setNotifications(prev => [newNotification, ...prev]);
 

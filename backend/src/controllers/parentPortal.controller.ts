@@ -1880,7 +1880,7 @@ export const getParentAttendance = async (req: Request, res: Response) => {
       where: {
         schoolId: child.schoolId,
         studentId: child.id,
-        status: { in: ['PENDING', 'APPROVED'] },
+        status: 'APPROVED',
         fromDate: { lte: endInclusive },
         toDate: { gte: start },
       },

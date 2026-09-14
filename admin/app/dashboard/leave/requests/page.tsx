@@ -12,24 +12,31 @@ import {
   createLeaveType,
   deleteLeaveApplication,
   deleteLeaveDefine,
+  deleteStudentLeaveRequest,
   deleteLeaveType,
   getLeaveApplication,
+  getStudentLeaveRequest,
   listLeaveApplications,
   listLeaveDefines,
+  listStudentLeaveRequests,
   listLeaveTypes,
   updateLeaveDefine,
+  updateStudentLeaveStatus,
   updateLeaveStatus,
   updateLeaveType,
   type LeaveApplication,
   type LeaveDefine,
   type LeaveStatus,
   type LeaveType,
+  type StudentLeaveRequest,
+  type StudentLeaveStatus,
 } from '../../../../services/leave.service';
 
-type TabKey = 'requests' | 'types' | 'defines';
+type TabKey = 'student-requests' | 'requests' | 'types' | 'defines';
 
 const roles = ['SCHOOL_ADMIN', 'TEACHER', 'ACCOUNTANT', 'LIBRARIAN', 'STAFF'];
 const statuses: LeaveStatus[] = ['PENDING', 'APPROVED', 'REJECTED', 'CANCELLED'];
+const studentStatuses: StudentLeaveStatus[] = ['PENDING', 'APPROVED', 'REJECTED'];
 
 const statusClass: Record<string, string> = {
   PENDING: 'border-amber-200 bg-amber-50 text-amber-700',
@@ -45,6 +52,7 @@ const formatDate = (value?: string | null) => {
 };
 
 const staffName = (item?: LeaveApplication['staff'] | null) => item ? item.fullName ?? `${item.firstName ?? ''} ${item.lastName ?? ''}`.trim() : '-';
+const studentName = (item?: StudentLeaveRequest | null) => item?.studentName || item?.childName || '-';
 
 const exportCsv = (items: LeaveApplication[]) => {
   const headers = ['Name', 'Type', 'From', 'To', 'Apply date', 'Duration', 'Status', 'Reason'];
@@ -58,15 +66,42 @@ const exportCsv = (items: LeaveApplication[]) => {
   URL.revokeObjectURL(url);
 };
 
+const exportStudentCsv = (items: StudentLeaveRequest[]) => {
+  const headers = ['Student', 'Admission No', 'Class', 'Parent', 'Type', 'From', 'To', 'Requested days', 'Working days', 'Status', 'Reason'];
+  const body = items.map((item) => [
+    studentName(item),
+    item.admissionNo ?? '',
+    item.classLabel ?? '',
+    item.parentName ?? '',
+    item.leaveType,
+    item.fromDate,
+    item.toDate,
+    item.requestedDays,
+    item.workingDays,
+    item.status,
+    item.reason,
+  ]);
+  const csv = [headers, ...body].map((row) => row.map((value) => `"${String(value).replace(/"/g, '""')}"`).join(',')).join('\n');
+  const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }));
+  const anchor = document.createElement('a');
+  anchor.href = url;
+  anchor.download = 'student-leave-requests.csv';
+  anchor.click();
+  URL.revokeObjectURL(url);
+};
+
 export default function LeaveRequestsPage() {
   const notify = useNotify();
   const queryClient = useQueryClient();
-  const [tab, setTab] = useState<TabKey>('requests');
+  const [tab, setTab] = useState<TabKey>('student-requests');
   const [typeForm, setTypeForm] = useState({ id: '', name: '', totalDays: 0 });
   const [defineForm, setDefineForm] = useState({ id: '', roleName: 'TEACHER', leaveTypeId: '', days: 0 });
   const [filters, setFilters] = useState({ status: '', roleName: '', staffId: '', search: '' });
+  const [studentFilters, setStudentFilters] = useState({ status: '', search: '' });
   const [selectedId, setSelectedId] = useState('');
+  const [selectedStudentId, setSelectedStudentId] = useState('');
   const [statusForm, setStatusForm] = useState<{ status: LeaveStatus; note: string }>({ status: 'PENDING', note: '' });
+  const [studentStatusForm, setStudentStatusForm] = useState<{ status: StudentLeaveStatus; note: string }>({ status: 'PENDING', note: '' });
 
   const { data: session, isLoading: sessionLoading } = useQuery({ queryKey: ['session'], queryFn: getSession });
   const isSchoolAdmin = session?.role === 'SCHOOL_ADMIN';
@@ -94,8 +129,15 @@ export default function LeaveRequestsPage() {
     enabled: canViewLeaveRequests,
   });
   const detailQuery = useQuery({ queryKey: ['leave-application-detail', selectedId], queryFn: () => getLeaveApplication(selectedId), enabled: Boolean(canViewLeaveRequests && selectedId) });
+  const studentRequestsQuery = useQuery({
+    queryKey: ['student-leave-requests', studentFilters],
+    queryFn: () => listStudentLeaveRequests({ status: studentFilters.status as StudentLeaveStatus || undefined, search: studentFilters.search || undefined }),
+    enabled: canViewLeaveRequests,
+  });
+  const studentDetailQuery = useQuery({ queryKey: ['student-leave-request-detail', selectedStudentId], queryFn: () => getStudentLeaveRequest(selectedStudentId), enabled: Boolean(canViewLeaveRequests && selectedStudentId) });
 
   const requests = useMemo(() => requestsQuery.data ?? [], [requestsQuery.data]);
+  const studentRequests = useMemo(() => studentRequestsQuery.data ?? [], [studentRequestsQuery.data]);
   const types = typesQuery.data ?? [];
   const defines = definesQuery.data ?? [];
 
@@ -165,10 +207,38 @@ export default function LeaveRequestsPage() {
     onError: (error: any) => notify.error('Delete failed', error?.response?.data?.error?.message ?? 'Unable to delete leave request.'),
   });
 
+  const studentStatusMutation = useMutation({
+    mutationFn: () => updateStudentLeaveStatus(selectedStudentId, studentStatusForm),
+    onSuccess: () => {
+      notify.success('Student leave status updated');
+      setSelectedStudentId('');
+      queryClient.invalidateQueries({ queryKey: ['student-leave-requests'] });
+      queryClient.invalidateQueries({ queryKey: ['student-leave-request-detail'] });
+    },
+    onError: (error: any) => notify.error('Unable to update student leave status', error?.response?.data?.error?.message ?? 'Please try again.'),
+  });
+
+  const deleteStudentRequestMutation = useMutation({
+    mutationFn: deleteStudentLeaveRequest,
+    onSuccess: () => {
+      notify.success('Student leave request deleted');
+      queryClient.invalidateQueries({ queryKey: ['student-leave-requests'] });
+    },
+    onError: (error: any) => notify.error('Delete failed', error?.response?.data?.error?.message ?? 'Unable to delete student leave request.'),
+  });
+
   const openDetail = (id: string) => {
     const item = requests.find((request) => request.id === id);
     setStatusForm({ status: item?.status ?? 'PENDING', note: item?.reviewNote ?? '' });
+    setSelectedStudentId('');
     setSelectedId(id);
+  };
+
+  const openStudentDetail = (id: string) => {
+    const item = studentRequests.find((request) => request.id === id);
+    setStudentStatusForm({ status: item?.status ?? 'PENDING', note: item?.reviewNote ?? '' });
+    setSelectedId('');
+    setSelectedStudentId(id);
   };
 
   if (sessionLoading || !session?.role) return <FullPageLoader label="Checking leave access..." />;
@@ -181,23 +251,25 @@ export default function LeaveRequestsPage() {
   }
 
   const selected = detailQuery.data;
+  const selectedStudent = studentDetailQuery.data;
 
   return (
     <div className="min-h-screen bg-slate-100 pb-10">
       <div className="mx-auto w-full max-w-[1500px] px-4 py-6 lg:px-8">
         <PageHeader
           title="Leave Management"
-          subtitle="Define leave types, configure role-wise leave days, and approve staff leave requests."
+          subtitle="Define leave types, configure role-wise leave days, and review staff and student leave requests."
           breadcrumbs={[{ label: 'Dashboard', href: '/dashboard' }, { label: 'Leave' }, { label: 'Management' }]}
-          actions={<button onClick={() => requestsQuery.refetch()} className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-bold text-slate-700">Refresh</button>}
+          actions={<button onClick={() => { requestsQuery.refetch(); studentRequestsQuery.refetch(); }} className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-bold text-slate-700">Refresh</button>}
         />
 
         <section className="mb-5 rounded-2xl border border-blue-100 bg-blue-50 px-5 py-4 text-sm font-semibold text-blue-900">
-          Approval responsibility: School Admins and users with leave approval permission can approve or reject leave requests.
+          Approval responsibility: School Admins and users with leave approval permission can approve or reject staff and student leave requests.
         </section>
 
         <div className="mb-5 flex flex-wrap gap-2">
           {([
+            ['student-requests', 'Student Leave Requests', canViewLeaveRequests],
             ['requests', 'Approve Leave Request', canViewLeaveRequests],
             ['types', 'Leave Type', canViewLeaveTypes],
             ['defines', 'Leave Define', canViewLeaveDefines],
@@ -207,6 +279,77 @@ export default function LeaveRequestsPage() {
             </button>
           ))}
         </div>
+
+        {tab === 'student-requests' && canViewLeaveRequests ? (
+          <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+            <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <h2 className="text-lg font-bold text-slate-950">Student Leave Requests</h2>
+                <p className="text-sm text-slate-500">Review leave requests submitted by parents from the mobile app.</p>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                <button onClick={() => exportStudentCsv(studentRequests)} className="rounded-xl border border-slate-200 px-3 py-2 text-sm font-bold">Export</button>
+                <button onClick={() => window.print()} className="rounded-xl border border-slate-200 px-3 py-2 text-sm font-bold">PDF / Print</button>
+              </div>
+            </div>
+            <div className="mb-4 grid gap-3 md:grid-cols-2">
+              <input value={studentFilters.search} onChange={(event) => setStudentFilters({ ...studentFilters, search: event.target.value })} placeholder="Search student, parent, admission no, leave type" className="rounded-xl border border-slate-200 px-3 py-2 text-sm" />
+              <select value={studentFilters.status} onChange={(event) => setStudentFilters({ ...studentFilters, status: event.target.value })} className="rounded-xl border border-slate-200 px-3 py-2 text-sm">
+                <option value="">All status</option>
+                {studentStatuses.map((status) => <option key={status} value={status}>{status}</option>)}
+              </select>
+            </div>
+            <div className="overflow-x-auto rounded-2xl border border-slate-200">
+              <table className="min-w-full divide-y divide-slate-100 text-sm">
+                <thead className="bg-slate-50 text-left text-xs uppercase text-slate-500">
+                  <tr>
+                    <th className="px-4 py-3">Student</th>
+                    <th className="px-4 py-3">Class</th>
+                    <th className="px-4 py-3">Parent</th>
+                    <th className="px-4 py-3">Type</th>
+                    <th className="px-4 py-3">From</th>
+                    <th className="px-4 py-3">To</th>
+                    <th className="px-4 py-3">Working days</th>
+                    <th className="px-4 py-3">Status</th>
+                    <th className="px-4 py-3 text-right">Action</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {studentRequestsQuery.isLoading ? (
+                    Array.from({ length: 6 }).map((_, index) => <tr key={index} className="animate-pulse"><td colSpan={9} className="px-4 py-4"><div className="h-4 rounded bg-slate-100" /></td></tr>)
+                  ) : studentRequests.length ? (
+                    studentRequests.map((item) => (
+                      <tr key={item.id}>
+                        <td className="px-4 py-3">
+                          <p className="font-semibold text-slate-950">{studentName(item)}</p>
+                          <p className="text-xs text-slate-500">{item.admissionNo ? `Admission ${item.admissionNo}` : item.rollNo ? `Roll ${item.rollNo}` : '-'}</p>
+                        </td>
+                        <td className="px-4 py-3">{item.classLabel || '-'}</td>
+                        <td className="px-4 py-3">
+                          <p className="font-semibold text-slate-800">{item.parentName || '-'}</p>
+                          <p className="text-xs text-slate-500">{item.parentPhone || item.parentEmail || '-'}</p>
+                        </td>
+                        <td className="px-4 py-3">{item.leaveType}</td>
+                        <td className="px-4 py-3">{formatDate(item.fromDate)}</td>
+                        <td className="px-4 py-3">{formatDate(item.toDate)}</td>
+                        <td className="px-4 py-3">{item.workingDays}</td>
+                        <td className="px-4 py-3"><span className={`rounded-full border px-2.5 py-1 text-xs font-bold ${statusClass[item.status]}`}>{item.status}</span></td>
+                        <td className="px-4 py-3 text-right">
+                          <div className="inline-flex gap-2">
+                            <button onClick={() => openStudentDetail(item.id)} className="rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-bold">{canEditLeaveRequests ? 'View/Edit' : 'View'}</button>
+                            {canDeleteLeaveRequests ? <button onClick={() => window.confirm('Delete this student leave request?') && deleteStudentRequestMutation.mutate(item.id)} className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-1.5 text-xs font-bold text-rose-700">Delete</button> : null}
+                          </div>
+                        </td>
+                      </tr>
+                    ))
+                  ) : (
+                    <tr><td colSpan={9} className="px-4 py-10 text-center text-slate-500">No student leave requests found.</td></tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </section>
+        ) : null}
 
         {tab === 'types' && canViewLeaveTypes ? (
           <div className="grid gap-5 xl:grid-cols-[360px_1fr]">
@@ -315,6 +458,79 @@ export default function LeaveRequestsPage() {
               </table>
             </div>
           </section>
+        ) : null}
+
+        {selectedStudentId ? (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/40 px-4 py-6">
+            <section className="max-h-[92vh] w-full max-w-3xl overflow-y-auto rounded-2xl bg-white p-5 shadow-2xl">
+              <div className="mb-4 flex items-start justify-between gap-3">
+                <div>
+                  <h2 className="text-xl font-bold text-slate-950">Student Leave Details</h2>
+                  <p className="text-sm text-slate-500">{selectedStudent ? studentName(selectedStudent) : 'Loading...'}</p>
+                </div>
+                <button onClick={() => setSelectedStudentId('')} className="rounded-xl border border-slate-200 px-3 py-2 text-sm font-bold">Close</button>
+              </div>
+              {studentDetailQuery.isLoading || !selectedStudent ? (
+                <div className="h-48 animate-pulse rounded-2xl bg-slate-100" />
+              ) : (
+                <>
+                  <div className="grid gap-3 md:grid-cols-3">
+                    <Info label="Student" value={studentName(selectedStudent)} />
+                    <Info label="Admission no" value={selectedStudent.admissionNo} />
+                    <Info label="Class" value={selectedStudent.classLabel} />
+                    <Info label="Parent" value={selectedStudent.parentName} />
+                    <Info label="Parent contact" value={selectedStudent.parentPhone || selectedStudent.parentEmail} />
+                    <Info label="Leave type" value={selectedStudent.leaveType} />
+                    <Info label="Requested days" value={`${selectedStudent.requestedDays} day${selectedStudent.requestedDays === 1 ? '' : 's'}`} />
+                    <Info label="Working days" value={`${selectedStudent.workingDays} day${selectedStudent.workingDays === 1 ? '' : 's'}`} />
+                    <Info label="Status" value={selectedStudent.status} />
+                    <Info label="Leave from" value={formatDate(selectedStudent.fromDate)} />
+                    <Info label="Leave to" value={formatDate(selectedStudent.toDate)} />
+                    <Info label="Applied on" value={formatDate(selectedStudent.createdAt)} />
+                    <Info label="Reviewed by" value={selectedStudent.reviewedBy?.email} />
+                    <Info label="Reviewed on" value={formatDate(selectedStudent.reviewedAt)} />
+                  </div>
+                  <div className="mt-4 rounded-xl border border-slate-100 bg-slate-50 p-4">
+                    <p className="text-xs font-bold uppercase text-slate-500">Reason</p>
+                    <p className="mt-1 text-sm text-slate-800">{selectedStudent.reason}</p>
+                  </div>
+                  {selectedStudent.skippedDays.length ? (
+                    <div className="mt-4 rounded-xl border border-amber-100 bg-amber-50 p-4">
+                      <p className="text-xs font-bold uppercase text-amber-700">Skipped weekends / holidays</p>
+                      <div className="mt-2 flex flex-wrap gap-2">
+                        {selectedStudent.skippedDays.map((day) => (
+                          <span key={`${day.date}-${day.reason}`} className="rounded-full border border-amber-200 bg-white px-3 py-1 text-xs font-bold text-amber-800">
+                            {formatDate(day.date)} - {day.reason}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  ) : null}
+                  <div className="mt-5 grid gap-3 md:grid-cols-[180px_1fr]">
+                    <select value={studentStatusForm.status} onChange={(event) => setStudentStatusForm({ ...studentStatusForm, status: event.target.value as StudentLeaveStatus })} className="rounded-xl border border-slate-200 px-3 py-2 text-sm">
+                      {studentStatuses.map((status) => <option key={status} value={status}>{status}</option>)}
+                    </select>
+                    <input value={studentStatusForm.note} onChange={(event) => setStudentStatusForm({ ...studentStatusForm, note: event.target.value })} placeholder="Review note" className="rounded-xl border border-slate-200 px-3 py-2 text-sm" />
+                  </div>
+                  <div className="mt-5 flex justify-end gap-2">
+                    {canEditLeaveRequests ? (
+                      <>
+                        <button onClick={() => setStudentStatusForm((current) => ({ ...current, status: 'REJECTED' }))} className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-2 text-sm font-bold text-rose-700">
+                          Mark Rejected
+                        </button>
+                        <button onClick={() => setStudentStatusForm((current) => ({ ...current, status: 'APPROVED' }))} className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-2 text-sm font-bold text-emerald-700">
+                          Mark Approved
+                        </button>
+                        <button onClick={() => studentStatusMutation.mutate()} disabled={studentStatusMutation.isPending} className="rounded-xl bg-[var(--theme-button-bg)] px-5 py-2 text-sm font-bold text-[var(--theme-button-text)] disabled:opacity-50">
+                          Save Student Leave Status
+                        </button>
+                      </>
+                    ) : null}
+                  </div>
+                </>
+              )}
+            </section>
+          </div>
         ) : null}
 
         {selectedId ? (

@@ -2,6 +2,7 @@ import { api } from '../lib/api';
 import type { Staff, StaffRole } from './staff.service';
 
 export type LeaveStatus = 'PENDING' | 'APPROVED' | 'REJECTED' | 'CANCELLED';
+export type StudentLeaveStatus = 'PENDING' | 'APPROVED' | 'REJECTED';
 
 export type LeaveType = {
   id: string;
@@ -68,6 +69,40 @@ export type LeaveApplication = {
     changedBy?: { id: string; email: string };
   }>;
   balances?: LeaveBalance[];
+  createdAt?: string;
+  updatedAt?: string;
+};
+
+export type StudentLeaveRequest = {
+  id: string;
+  schoolId: string;
+  studentId: string;
+  childId: string;
+  studentName: string;
+  childName: string;
+  admissionNo?: string | null;
+  rollNo?: string | null;
+  classId?: string | null;
+  sectionId?: string | null;
+  className?: string | null;
+  sectionName?: string | null;
+  classLabel?: string | null;
+  parentId: string;
+  parentName: string;
+  parentPhone?: string | null;
+  parentEmail?: string | null;
+  parentUser?: { id: string; email: string; status: string } | null;
+  leaveType: string;
+  fromDate: string;
+  toDate: string;
+  requestedDays: number;
+  workingDays: number;
+  skippedDays: Array<{ date: string; reason: string; type: string }>;
+  reason: string;
+  status: StudentLeaveStatus;
+  reviewedBy?: { id: string; email: string } | null;
+  reviewedAt?: string | null;
+  reviewNote?: string | null;
   createdAt?: string;
   updatedAt?: string;
 };
@@ -170,4 +205,28 @@ export const deleteLeaveApplication = async (id: string) => {
 export const updateLeaveStatus = async (id: string, payload: { status: LeaveStatus; note?: string | null }) => {
   const { data } = await api.patch<LeaveApplication>(`/leave/applications/${id}/status`, payload);
   return data;
+};
+
+export const listStudentLeaveRequests = async (params?: {
+  status?: StudentLeaveStatus | '';
+  classId?: string;
+  sectionId?: string;
+  search?: string;
+}) => {
+  const { data } = await api.get<StudentLeaveRequest[]>('/leave/student-requests', { params });
+  return data;
+};
+
+export const getStudentLeaveRequest = async (id: string) => {
+  const { data } = await api.get<StudentLeaveRequest>(`/leave/student-requests/${id}`);
+  return data;
+};
+
+export const updateStudentLeaveStatus = async (id: string, payload: { status: StudentLeaveStatus; note?: string | null }) => {
+  const { data } = await api.patch<StudentLeaveRequest>(`/leave/student-requests/${id}/status`, payload);
+  return data;
+};
+
+export const deleteStudentLeaveRequest = async (id: string) => {
+  await api.delete(`/leave/student-requests/${id}`);
 };

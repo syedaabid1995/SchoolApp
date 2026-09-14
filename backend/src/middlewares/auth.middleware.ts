@@ -572,6 +572,13 @@ export const resolvePermissionForPath = (path: string, method = 'GET') => {
     return P.leaveDefineView;
   }
   if (pathOnly.startsWith('/api/v1/leave/balances')) return P.leaveBalanceView;
+  if (/^\/api\/v1\/leave\/student-requests\/[^/]+\/(status|approve|reject)$/.test(pathOnly)) return P.leaveApproveEdit;
+  if (pathOnly.startsWith('/api/v1/leave/student-requests')) {
+    if (verb === 'GET') return P.leaveApproveView;
+    if (verb === 'PATCH' || verb === 'PUT') return P.leaveApproveEdit;
+    if (verb === 'DELETE') return P.leaveApproveDelete;
+    return P.leaveApproveView;
+  }
   if (/^\/api\/v1\/leave\/(applications|requests)\/[^/]+\/(status|approve|reject)$/.test(pathOnly)) return P.leaveApproveEdit;
   if (/^\/api\/v1\/leave\/(applications|requests)/.test(pathOnly)) {
     const isMineRequest = /[?&]mine=true(?:&|$)/.test(path);
