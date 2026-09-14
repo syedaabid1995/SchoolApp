@@ -38,6 +38,14 @@ const paymentLabels: Record<ExpensePaymentMode, string> = {
 const inputClass = 'w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100 disabled:bg-slate-50';
 const buttonClass = 'inline-flex h-10 items-center justify-center rounded-md border border-slate-200 bg-white px-3 text-sm font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-50';
 const primaryButtonClass = 'inline-flex h-10 items-center justify-center rounded-md bg-slate-950 px-4 text-sm font-semibold text-white hover:bg-slate-800 disabled:opacity-50';
+const expenseSaveButtonClass = 'inline-flex h-11 w-full items-center justify-center rounded-md bg-indigo-600 px-5 text-sm font-semibold text-white shadow-sm hover:bg-indigo-700 disabled:cursor-not-allowed disabled:bg-indigo-300 sm:w-auto';
+const iconButtonClass = 'inline-flex h-8 w-8 items-center justify-center rounded-md border border-slate-200 bg-white text-slate-600 transition hover:border-indigo-200 hover:bg-indigo-50 hover:text-indigo-700 disabled:cursor-not-allowed disabled:opacity-50';
+
+const Icon = ({ path }: { path: string }) => (
+  <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d={path} />
+  </svg>
+);
 
 type ExpenseFormState = {
   id?: string;
@@ -305,11 +313,11 @@ export default function ExpensesPage() {
 
       {canManage ? (
         <section className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
-          <div className="mb-4 flex items-center justify-between">
+          <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <h2 className="text-base font-semibold text-slate-950">{form.id ? 'Edit Expense' : 'Add Expense'}</h2>
-            {form.id ? <button className={buttonClass} onClick={() => setForm(emptyForm())}>Cancel Edit</button> : null}
+            {form.id ? <button className={`${buttonClass} w-full sm:w-auto`} onClick={() => setForm(emptyForm())}>Cancel Edit</button> : null}
           </div>
-          <form className="grid gap-3 md:grid-cols-4" onSubmit={submitExpense}>
+          <form className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4" onSubmit={submitExpense}>
             <select className={inputClass} value={form.categoryId} onChange={(event) => setForm((current) => ({ ...current, categoryId: event.target.value }))}>
               <option value="">Category</option>
               {categories.filter((category) => category.status === 'ACTIVE').map((category) => (
@@ -325,12 +333,12 @@ export default function ExpensesPage() {
             <input className={inputClass} value={form.paidTo} placeholder="Paid to / Vendor" onChange={(event) => setForm((current) => ({ ...current, paidTo: event.target.value }))} />
             <input className={inputClass} value={form.referenceNumber} placeholder="Reference number" onChange={(event) => setForm((current) => ({ ...current, referenceNumber: event.target.value }))} />
             <input className={inputClass} type="file" accept="application/pdf,image/*,.doc,.docx" onChange={(event) => setForm((current) => ({ ...current, receipt: event.target.files?.[0] ?? null }))} />
-            <textarea className={`${inputClass} md:col-span-2`} rows={3} value={form.description} placeholder="Description" onChange={(event) => setForm((current) => ({ ...current, description: event.target.value }))} />
+            <textarea className={`${inputClass} sm:col-span-2`} rows={3} value={form.description} placeholder="Description" onChange={(event) => setForm((current) => ({ ...current, description: event.target.value }))} />
             {!isSchoolAdmin && form.id ? (
-              <textarea className={`${inputClass} md:col-span-2`} rows={3} value={form.reason} placeholder="Reason for school admin approval" onChange={(event) => setForm((current) => ({ ...current, reason: event.target.value }))} />
+              <textarea className={`${inputClass} sm:col-span-2`} rows={3} value={form.reason} placeholder="Reason for school admin approval" onChange={(event) => setForm((current) => ({ ...current, reason: event.target.value }))} />
             ) : null}
-            <div className="md:col-span-4">
-              <button className={primaryButtonClass} type="submit" disabled={saveExpenseMutation.isPending}>{form.id && !isSchoolAdmin ? 'Send Approval Request' : 'Save Expense'}</button>
+            <div className="sm:col-span-2 xl:col-span-4">
+              <button className={expenseSaveButtonClass} type="submit" disabled={saveExpenseMutation.isPending}>{form.id && !isSchoolAdmin ? 'Send Approval Request' : 'Save Expense'}</button>
             </div>
           </form>
         </section>
@@ -339,33 +347,46 @@ export default function ExpensesPage() {
       {canManageCategories ? (
         <section className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
           <h2 className="mb-4 text-base font-semibold text-slate-950">Expense Categories</h2>
-          <form className="grid gap-3 md:grid-cols-5" onSubmit={submitCategory}>
+          <form className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5" onSubmit={submitCategory}>
             <input className={inputClass} value={categoryForm.name} placeholder="Category name" onChange={(event) => setCategoryForm((current) => ({ ...current, name: event.target.value }))} />
-            <input className={`${inputClass} md:col-span-2`} value={categoryForm.description} placeholder="Description" onChange={(event) => setCategoryForm((current) => ({ ...current, description: event.target.value }))} />
+            <input className={`${inputClass} sm:col-span-2 lg:col-span-2`} value={categoryForm.description} placeholder="Description" onChange={(event) => setCategoryForm((current) => ({ ...current, description: event.target.value }))} />
             <select className={inputClass} value={categoryForm.status} onChange={(event) => setCategoryForm((current) => ({ ...current, status: event.target.value as 'ACTIVE' | 'INACTIVE' }))}>
               <option value="ACTIVE">Active</option>
               <option value="INACTIVE">Inactive</option>
             </select>
-            <button className={primaryButtonClass} type="submit" disabled={saveCategoryMutation.isPending}>{categoryForm.id ? 'Update' : 'Add'}</button>
+            <button className={expenseSaveButtonClass} type="submit" disabled={saveCategoryMutation.isPending}>{categoryForm.id ? 'Update' : 'Add'}</button>
           </form>
-          <div className="mt-4 flex flex-wrap gap-2">
+          <div className="mt-4 grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
             {categories.map((category: ExpenseCategory) => (
-              <span key={category.id} className="inline-flex items-center gap-2 rounded-md border border-slate-200 px-3 py-2 text-sm">
-                <span className={category.status === 'ACTIVE' ? 'text-slate-900' : 'text-slate-400'}>{category.name}</span>
-                <button className="font-semibold text-indigo-600" onClick={() => setCategoryForm({ id: category.id, name: category.name, description: category.description ?? '', status: category.status })}>Edit</button>
-                <button
-                  className="font-semibold text-rose-600"
-                  onClick={() => {
-                    if (!window.confirm(`Delete ${category.name}?`)) return;
-                    deleteExpenseCategory(category.id, activeSchoolId)
-                      .then(refreshAll)
-                      .then(() => notify.success('Category deleted', 'Expense category was removed.'))
-                      .catch((error: any) => notify.error('Unable to delete category', error?.response?.data?.error?.message ?? error.message));
-                  }}
-                >
-                  Delete
-                </button>
-              </span>
+              <div key={category.id} className="flex min-w-0 items-center justify-between gap-3 rounded-md border border-slate-200 bg-white px-3 py-2 text-sm">
+                <span className={`min-w-0 truncate font-semibold ${category.status === 'ACTIVE' ? 'text-slate-900' : 'text-slate-400'}`}>{category.name}</span>
+                <div className="flex shrink-0 items-center gap-1">
+                  <button
+                    type="button"
+                    className={iconButtonClass}
+                    title="Edit category"
+                    aria-label={`Edit ${category.name}`}
+                    onClick={() => setCategoryForm({ id: category.id, name: category.name, description: category.description ?? '', status: category.status })}
+                  >
+                    <Icon path="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L10.582 16.07a4.5 4.5 0 01-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 011.13-1.897l8.932-8.931z" />
+                  </button>
+                  <button
+                    type="button"
+                    className={`${iconButtonClass} hover:border-rose-200 hover:bg-rose-50 hover:text-rose-700`}
+                    title="Delete category"
+                    aria-label={`Delete ${category.name}`}
+                    onClick={() => {
+                      if (!window.confirm(`Delete ${category.name}?`)) return;
+                      deleteExpenseCategory(category.id, activeSchoolId)
+                        .then(refreshAll)
+                        .then(() => notify.success('Category deleted', 'Expense category was removed.'))
+                        .catch((error: any) => notify.error('Unable to delete category', error?.response?.data?.error?.message ?? error.message));
+                    }}
+                  >
+                    <Icon path="M14.74 9l-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166M18.16 19.673A2.25 2.25 0 0115.916 21H8.084a2.25 2.25 0 01-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 00-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 013.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 00-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 00-7.5 0" />
+                  </button>
+                </div>
+              </div>
             ))}
           </div>
         </section>

@@ -129,6 +129,10 @@ export default function MyLeavePage() {
           actions={<button onClick={() => applicationsQuery.refetch()} className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-bold text-slate-700">Refresh</button>}
         />
 
+        <section className="mb-5 rounded-2xl border border-blue-100 bg-blue-50 px-5 py-4 text-sm font-semibold text-blue-900">
+          Leave requests are reviewed by the School Admin or any staff member with leave approval permission.
+        </section>
+
         <section className="mb-5 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
           <div className="mb-4 flex items-center justify-between">
             <div>

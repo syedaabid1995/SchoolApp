@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useMutation, useQuery } from '@tanstack/react-query';
 import { useRouter } from 'next/navigation';
 import FullPageLoader from '../../../../components/FullPageLoader';
@@ -72,7 +72,7 @@ type AdmissionForm = {
   parentLoginLastName: string;
   parentLoginPhone: string;
   parentLoginEmail: string;
-  parentLoginSendVia: 'SMS' | 'EMAIL' | 'BOTH';
+  parentLoginSendVia: 'EMAIL';
   presentAddress: string;
   permanentAddress: string;
   siblingIds: string[];
@@ -115,13 +115,13 @@ const initialForm: AdmissionForm = {
   guardianRelationship: 'Father',
   parentPhone: '',
   parentEmail: '',
-  createParentLogin: false,
+  createParentLogin: true,
   parentLoginSource: 'father',
   parentLoginFirstName: '',
   parentLoginLastName: '',
   parentLoginPhone: '',
   parentLoginEmail: '',
-  parentLoginSendVia: 'SMS',
+  parentLoginSendVia: 'EMAIL',
   presentAddress: '',
   permanentAddress: '',
   siblingIds: [],
@@ -184,6 +184,8 @@ const isExpired = (value?: string | null) => {
   expiry.setHours(23, 59, 59, 999);
   return expiry.getTime() < Date.now();
 };
+const lettersOnly = (value: string) => value.replace(/[^A-Za-z ]/g, '').replace(/\s{2,}/g, ' ');
+const digitsOnly = (value: string) => value.replace(/\D/g, '');
 
 export default function AddStudentPage() {
   const router = useRouter();
@@ -311,7 +313,7 @@ export default function AddStudentPage() {
       lastName: rest.join(' ') || 'Guardian',
     };
   };
-  const getParentLoginSourceData = (source: ParentLoginSource) => {
+  const getParentLoginSourceData = useCallback((source: ParentLoginSource) => {
     if (source === 'mother') {
       const [firstName, ...rest] = form.motherName.trim().split(/\s+/);
       return {
@@ -337,7 +339,7 @@ export default function AddStudentPage() {
       phone: form.fatherPhone || form.parentPhone,
       email: form.parentEmail,
     };
-  };
+  }, [form.fatherName, form.fatherPhone, form.guardianName, form.motherName, form.motherPhone, form.parentEmail, form.parentPhone]);
   const applyParentLoginSource = (source: ParentLoginSource) => {
     const sourceData = getParentLoginSourceData(source);
     setForm((prev) => ({
@@ -349,6 +351,22 @@ export default function AddStudentPage() {
       parentLoginEmail: sourceData.email,
     }));
   };
+
+  useEffect(() => {
+    if (!form.createParentLogin) return;
+    const sourceData = getParentLoginSourceData(form.parentLoginSource);
+    setForm((prev) => ({
+      ...prev,
+      parentLoginFirstName: prev.parentLoginFirstName || sourceData.firstName,
+      parentLoginLastName: prev.parentLoginLastName || sourceData.lastName,
+      parentLoginPhone: prev.parentLoginPhone || sourceData.phone,
+      parentLoginEmail: prev.parentLoginEmail || sourceData.email,
+    }));
+  }, [
+    form.createParentLogin,
+    form.parentLoginSource,
+    getParentLoginSourceData,
+  ]);
 
   const createMutation = useMutation({
     mutationFn: async () => {
@@ -875,8 +893,8 @@ export default function AddStudentPage() {
             {currentStep === 'student' ? <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
               <h2 className="mb-4 text-lg font-bold text-slate-950">Student Information</h2>
               <div className="grid gap-4 md:grid-cols-4">
-                <Field label="First name" required><input value={form.firstName} onChange={(event) => setValue('firstName', event.target.value)} className={inputClass} /></Field>
-                <Field label="Last name" required><input value={form.lastName} onChange={(event) => setValue('lastName', event.target.value)} className={inputClass} /></Field>
+                <Field label="First name" required><input value={form.firstName} onChange={(event) => setValue('firstName', lettersOnly(event.target.value))} className={inputClass} /></Field>
+                <Field label="Last name" required><input value={form.lastName} onChange={(event) => setValue('lastName', lettersOnly(event.target.value))} className={inputClass} /></Field>
                 <Field label="Gender" required><select value={form.gender} onChange={(event) => setValue('gender', event.target.value)} className={inputClass}><option value="">Select gender</option>{genderOptions.map((item) => <option key={item} value={item}>{item}</option>)}</select></Field>
                 <Field label="Date of birth" required><input type="date" value={form.dob} onChange={(event) => setValue('dob', event.target.value)} className={inputClass} /></Field>
                 <Field label="Blood group"><select value={form.bloodGroup} onChange={(event) => setValue('bloodGroup', event.target.value)} className={inputClass}><option value="">Select blood group</option>{bloodGroupOptions.map((item) => <option key={item} value={item}>{item}</option>)}</select></Field>
@@ -884,7 +902,7 @@ export default function AddStudentPage() {
                 <Field label="Caste"><select value={form.caste} onChange={(event) => setValue('caste', event.target.value)} className={inputClass}><option value="">Select caste</option>{casteOptions.map((item) => <option key={item} value={item}>{item}</option>)}</select></Field>
                 <Field label="Category"><select value={form.category} onChange={(event) => setValue('category', event.target.value)} className={inputClass}>{categories.map((item) => <option key={item}>{item}</option>)}</select></Field>
                 <Field label="Email"><input type="email" value={form.email} onChange={(event) => setValue('email', event.target.value)} className={inputClass} /></Field>
-                <Field label="Phone"><input value={form.phone} onChange={(event) => setValue('phone', event.target.value)} className={inputClass} /></Field>
+                <Field label="Phone"><input inputMode="numeric" value={form.phone} onChange={(event) => setValue('phone', digitsOnly(event.target.value))} className={inputClass} /></Field>
                 <Field label="Height"><input type="number" min="0" step="0.1" value={form.height} onChange={(event) => setValue('height', event.target.value)} className={inputClass} /></Field>
                 <Field label="Weight"><input type="number" min="0" step="0.1" value={form.weight} onChange={(event) => setValue('weight', event.target.value)} className={inputClass} /></Field>
               </div>
@@ -894,15 +912,15 @@ export default function AddStudentPage() {
             <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
               <h2 className="mb-4 text-lg font-bold text-slate-950">Parent / Guardian Information</h2>
               <div className="grid gap-4 md:grid-cols-3">
-                <Field label="Father name"><input value={form.fatherName} onChange={(event) => setValue('fatherName', event.target.value)} className={inputClass} /></Field>
-                <Field label="Father occupation"><input value={form.fatherOccupation} onChange={(event) => setValue('fatherOccupation', event.target.value)} className={inputClass} /></Field>
-                <Field label="Father phone"><input value={form.fatherPhone} onChange={(event) => setValue('fatherPhone', event.target.value)} className={inputClass} /></Field>
-                <Field label="Mother name"><input value={form.motherName} onChange={(event) => setValue('motherName', event.target.value)} className={inputClass} /></Field>
-                <Field label="Mother occupation"><input value={form.motherOccupation} onChange={(event) => setValue('motherOccupation', event.target.value)} className={inputClass} /></Field>
-                <Field label="Mother phone"><input value={form.motherPhone} onChange={(event) => setValue('motherPhone', event.target.value)} className={inputClass} /></Field>
-                <Field label="Guardian name"><input value={form.guardianName} onChange={(event) => setValue('guardianName', event.target.value)} className={inputClass} /></Field>
-                <Field label="Guardian relation"><input value={form.guardianRelationship} onChange={(event) => setValue('guardianRelationship', event.target.value)} className={inputClass} /></Field>
-                <Field label="Parent phone"><input value={form.parentPhone} onChange={(event) => setValue('parentPhone', event.target.value)} className={inputClass} /></Field>
+                <Field label="Father name"><input value={form.fatherName} onChange={(event) => setValue('fatherName', lettersOnly(event.target.value))} className={inputClass} /></Field>
+                <Field label="Father occupation"><input value={form.fatherOccupation} onChange={(event) => setValue('fatherOccupation', lettersOnly(event.target.value))} className={inputClass} /></Field>
+                <Field label="Father phone"><input inputMode="numeric" value={form.fatherPhone} onChange={(event) => setValue('fatherPhone', digitsOnly(event.target.value))} className={inputClass} /></Field>
+                <Field label="Mother name"><input value={form.motherName} onChange={(event) => setValue('motherName', lettersOnly(event.target.value))} className={inputClass} /></Field>
+                <Field label="Mother occupation"><input value={form.motherOccupation} onChange={(event) => setValue('motherOccupation', lettersOnly(event.target.value))} className={inputClass} /></Field>
+                <Field label="Mother phone"><input inputMode="numeric" value={form.motherPhone} onChange={(event) => setValue('motherPhone', digitsOnly(event.target.value))} className={inputClass} /></Field>
+                <Field label="Guardian name"><input value={form.guardianName} onChange={(event) => setValue('guardianName', lettersOnly(event.target.value))} className={inputClass} /></Field>
+                <Field label="Guardian relation"><input value={form.guardianRelationship} onChange={(event) => setValue('guardianRelationship', lettersOnly(event.target.value))} className={inputClass} /></Field>
+                <Field label="Parent phone"><input inputMode="numeric" value={form.parentPhone} onChange={(event) => setValue('parentPhone', digitsOnly(event.target.value))} className={inputClass} /></Field>
                 <Field label="Parent email"><input type="email" value={form.parentEmail} onChange={(event) => setValue('parentEmail', event.target.value)} className={inputClass} /></Field>
               </div>
             </section>
@@ -917,6 +935,7 @@ export default function AddStudentPage() {
                   <input
                     type="checkbox"
                     checked={form.createParentLogin}
+                    disabled
                     onChange={(event) => setForm((prev) => ({
                       ...prev,
                       createParentLogin: event.target.checked,
@@ -952,15 +971,13 @@ export default function AddStudentPage() {
                     </div>
                   </div>
                   <div className="grid gap-4 md:grid-cols-3">
-                  <Field label="Login first name" required><input value={form.parentLoginFirstName} onChange={(event) => setValue('parentLoginFirstName', event.target.value)} className={inputClass} /></Field>
-                  <Field label="Login last name"><input value={form.parentLoginLastName} onChange={(event) => setValue('parentLoginLastName', event.target.value)} className={inputClass} /></Field>
-                  <Field label="Login phone" required><input value={form.parentLoginPhone} onChange={(event) => setValue('parentLoginPhone', event.target.value)} className={inputClass} /></Field>
+                  <Field label="Login first name" required><input value={form.parentLoginFirstName} onChange={(event) => setValue('parentLoginFirstName', lettersOnly(event.target.value))} className={inputClass} /></Field>
+                  <Field label="Login last name"><input value={form.parentLoginLastName} onChange={(event) => setValue('parentLoginLastName', lettersOnly(event.target.value))} className={inputClass} /></Field>
+                  <Field label="Login phone" required><input inputMode="numeric" value={form.parentLoginPhone} onChange={(event) => setValue('parentLoginPhone', digitsOnly(event.target.value))} className={inputClass} /></Field>
                   <Field label="Login email"><input type="email" value={form.parentLoginEmail} onChange={(event) => setValue('parentLoginEmail', event.target.value)} className={inputClass} /></Field>
                   <Field label="Send credentials by">
-                    <select value={form.parentLoginSendVia} onChange={(event) => setValue('parentLoginSendVia', event.target.value)} className={inputClass}>
-                      <option value="SMS">SMS / WhatsApp</option>
+                    <select value={form.parentLoginSendVia} disabled className={inputClass}>
                       <option value="EMAIL">Email</option>
-                      <option value="BOTH">Both</option>
                     </select>
                   </Field>
                   </div>

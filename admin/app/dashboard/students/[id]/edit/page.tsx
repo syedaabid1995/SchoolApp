@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { useEffect, useMemo, useState } from 'react';
-import { useMutation, useQuery } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import FullPageLoader from '../../../../../components/FullPageLoader';
 import PageHeader from '../../../../../components/PageHeader';
@@ -199,6 +199,7 @@ export default function EditStudentPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const notify = useNotify();
+  const queryClient = useQueryClient();
   const studentId = params.id as string;
   const scopedSchoolId = searchParams.get('schoolId') ?? undefined;
   const studentRequestParams = scopedSchoolId ? { schoolId: scopedSchoolId } : undefined;
@@ -446,7 +447,7 @@ export default function EditStudentPage() {
   }, [student]);
 
   const updateMutation = useMutation({
-    mutationFn: async () => {
+    mutationFn: async (options?: { stayOnPage?: boolean }) => {
       const updatedStudent = await updateStudent(
         studentId,
         {
@@ -529,10 +530,10 @@ export default function EditStudentPage() {
         }
       }
 
-      return { student: updatedStudent, parentLogin, parentLoginError };
+      return { student: updatedStudent, parentLogin, parentLoginError, stayOnPage: Boolean(options?.stayOnPage) };
     },
-    onSuccess: ({ student, parentLogin, parentLoginError }) => {
-      notify.success('Student updated', 'Updated details were saved from the review step.');
+    onSuccess: async ({ student, parentLogin, parentLoginError, stayOnPage }) => {
+      notify.success('Student updated', stayOnPage ? `${admissionSteps[currentStepIndex]?.label ?? 'Current'} details were saved.` : 'Updated details were saved.');
       if (student.faceRegistration?.success) {
         notify.success('Face registration complete', `${student.faceRegistration.sampleCount} face sample${student.faceRegistration.sampleCount === 1 ? '' : 's'} registered for AI attendance.`);
       } else if (student.faceRegistration) {
@@ -548,6 +549,8 @@ export default function EditStudentPage() {
       if (parentLoginError) {
         notify.error('Parent login not linked', (parentLoginError as any)?.response?.data?.error?.message ?? 'Student was updated, but parent login linking failed.');
       }
+      await queryClient.invalidateQueries({ queryKey: ['student', studentId] });
+      if (stayOnPage) return;
       router.push(effectiveSchoolId ? `/dashboard/students/${student.id}?schoolId=${encodeURIComponent(effectiveSchoolId)}` : `/dashboard/students/${student.id}`);
     },
     onError: (error: any) => notify.error('Update failed', error?.response?.data?.error?.message ?? 'Unable to update student.'),
@@ -684,7 +687,16 @@ export default function EditStudentPage() {
       notify.error('Validation error', error);
       return;
     }
-    updateMutation.mutate();
+    updateMutation.mutate({ stayOnPage: false });
+  };
+
+  const saveCurrentStep = () => {
+    const error = validateCurrentStep();
+    if (error) {
+      notify.error('Validation error', error);
+      return;
+    }
+    updateMutation.mutate({ stayOnPage: true });
   };
 
   const uploadImage = async (file: File, field: keyof AdmissionForm) => {
@@ -777,6 +789,12 @@ export default function EditStudentPage() {
             <button onClick={goToPreviousStep} disabled={isFirstStep || updateMutation.isPending} className="inline-flex items-center justify-center rounded-xl border border-slate-200 px-5 py-3 text-sm font-bold text-slate-700 disabled:cursor-not-allowed disabled:opacity-50">
               Back
             </button>
+            {!isLastStep ? (
+              <button onClick={saveCurrentStep} disabled={updateMutation.isPending} className="inline-flex items-center justify-center gap-2 rounded-xl border border-violet-200 bg-violet-50 px-5 py-3 text-sm font-bold text-violet-700 shadow-sm transition hover:bg-violet-100 disabled:cursor-not-allowed disabled:opacity-50">
+                <Icon path="M5 13l4 4L19 7" />
+                {updateMutation.isPending ? 'Saving...' : 'Update'}
+              </button>
+            ) : null}
             {isLastStep ? (
               <button onClick={submit} disabled={updateMutation.isPending} className="inline-flex items-center justify-center gap-2 rounded-xl bg-[var(--theme-button-bg)] px-5 py-3 text-sm font-bold text-[var(--theme-button-text)] shadow-sm disabled:opacity-50">
                 <Icon path="M5 13l4 4L19 7" />

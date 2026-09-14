@@ -112,14 +112,36 @@ const primaryButtonClass =
 const dangerButtonClass =
   'inline-flex items-center justify-center rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm font-semibold text-red-700 transition hover:bg-red-100 disabled:cursor-not-allowed disabled:opacity-50';
 
+const indiaTimeZone = 'Asia/Kolkata';
 const todayInput = () => new Date().toISOString().slice(0, 10);
 const nowLocalInput = () => {
   const date = new Date();
-  date.setMinutes(date.getMinutes() - date.getTimezoneOffset());
-  return date.toISOString().slice(0, 16);
+  const parts = new Intl.DateTimeFormat('en-GB', {
+    timeZone: indiaTimeZone,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+  })
+    .formatToParts(date)
+    .reduce<Record<string, string>>((acc, part) => {
+      if (part.type !== 'literal') acc[part.type] = part.value;
+      return acc;
+    }, {});
+  return `${parts.year}-${parts.month}-${parts.day}T${parts.hour}:${parts.minute}`;
+};
+const scheduledInputToIso = (value?: string | null) => {
+  if (!value) return null;
+  const [datePart, timePart = '00:00'] = value.split('T');
+  const [year, month, day] = datePart.split('-').map(Number);
+  const [hour, minute] = timePart.split(':').map(Number);
+  if (![year, month, day, hour, minute].every(Number.isFinite)) return value;
+  return new Date(Date.UTC(year, month - 1, day, hour, minute) - 330 * 60 * 1000).toISOString();
 };
 const formatDateTime = (value?: string | null) =>
-  value ? new Date(value).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' }) : '-';
+  value ? new Date(value).toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short', timeZone: indiaTimeZone }) : '-';
 const errorMessage = (error: unknown, fallback = 'Something went wrong') =>
   (error as any)?.response?.data?.error?.message ||
   (error as any)?.response?.data?.message ||
@@ -1185,7 +1207,7 @@ function SendMessage({
         sectionId: sectionId || null,
         individualRecipient: null,
         individualRecipients: selectedRecipients,
-        scheduledAt: sendMode === 'schedule' ? scheduledAt : null,
+        scheduledAt: sendMode === 'schedule' ? scheduledInputToIso(scheduledAt) : null,
         route: isPush ? route : null,
         module: isPush ? moduleName : null,
         category: isPush ? category : null,
@@ -1361,7 +1383,7 @@ function LoginCredentials({ effectiveSchoolId }: { effectiveSchoolId: string }) 
         classId: classId || null,
         sectionId: sectionId || null,
         individualRecipient: individualRecipient || null,
-        scheduledAt: sendMode === 'schedule' ? scheduledAt : null,
+        scheduledAt: sendMode === 'schedule' ? scheduledInputToIso(scheduledAt) : null,
       }),
     onSuccess: (result) => notify.success(result.scheduled ? 'Credential instructions scheduled' : 'Credential instructions processed', `${result.recipientCount} recipient${result.recipientCount === 1 ? '' : 's'}`),
     onError: (error) => notify.error('Unable to send credential instructions', errorMessage(error)),

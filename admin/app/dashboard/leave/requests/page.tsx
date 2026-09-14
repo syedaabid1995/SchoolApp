@@ -192,6 +192,10 @@ export default function LeaveRequestsPage() {
           actions={<button onClick={() => requestsQuery.refetch()} className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-bold text-slate-700">Refresh</button>}
         />
 
+        <section className="mb-5 rounded-2xl border border-blue-100 bg-blue-50 px-5 py-4 text-sm font-semibold text-blue-900">
+          Approval responsibility: School Admins and users with leave approval permission can approve or reject leave requests.
+        </section>
+
         <div className="mb-5 flex flex-wrap gap-2">
           {([
             ['requests', 'Approve Leave Request', canViewLeaveRequests],

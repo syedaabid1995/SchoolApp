@@ -164,6 +164,7 @@ const createSubjectBatchRow = (): BatchSubjectForm => ({ ...emptySubjectForm, ro
 
 const teacherName = (teacher?: { firstName?: string; lastName?: string; employeeNo?: string | null } | null) =>
   teacher ? `${teacher.firstName ?? ''} ${teacher.lastName ?? ''}`.trim() || teacher.employeeNo || 'Teacher' : 'Unassigned';
+const digitsOnly = (value: string) => value.replace(/\D/g, '');
 
 const formatPeriodType = (type: TimePeriodType | string) =>
   type === 'CLASS_TIME' ? 'Class Time' : type === 'EXAM_TIME' ? 'Exam Time' : 'Break';
@@ -446,8 +447,6 @@ export default function AcademicSetupPage() {
   const [assignSectionId, setAssignSectionId] = useState('');
   const [assignRows, setAssignRows] = useState<Array<{ subjectId: string; teacherId: string }>>([]);
   const [assignDefaultTeacherId, setAssignDefaultTeacherId] = useState('');
-  const [assignSubjectFilter, setAssignSubjectFilter] = useState('');
-  const [assignTeacherFilter, setAssignTeacherFilter] = useState('');
   const [classTeacherForm, setClassTeacherForm] = useState(emptyClassTeacherForm);
   const [routineClassId, setRoutineClassId] = useState('');
   const [routineSectionId, setRoutineSectionId] = useState('');
@@ -819,26 +818,6 @@ export default function AcademicSetupPage() {
   );
   const classTeacherSections = useMemo(() => sectionOptionsForClass(availableClassTeacherClasses, classTeacherForm.classId), [availableClassTeacherClasses, classTeacherForm.classId]);
   const subjects = subjectsQuery.data ?? [];
-  const normalizedAssignSubjectFilter = assignSubjectFilter.trim().toLowerCase();
-  const normalizedAssignTeacherFilter = assignTeacherFilter.trim().toLowerCase();
-  const filteredAssignSubjects = useMemo(
-    () =>
-      normalizedAssignSubjectFilter
-        ? subjects.filter((subject) =>
-            [subject.name, subject.code].some((value) => String(value ?? '').toLowerCase().includes(normalizedAssignSubjectFilter)),
-          )
-        : subjects,
-    [subjects, normalizedAssignSubjectFilter],
-  );
-  const filteredAssignTeachers = useMemo(
-    () =>
-      normalizedAssignTeacherFilter
-        ? teachers.filter((teacher) =>
-            [teacherName(teacher), teacher.employeeNo, teacher.user?.email].some((value) => String(value ?? '').toLowerCase().includes(normalizedAssignTeacherFilter)),
-          )
-        : teachers,
-    [teachers, normalizedAssignTeacherFilter],
-  );
   const selectedAssignSubjectIds = assignRows.map((row) => row.subjectId).filter(Boolean);
   const duplicateAssignSubjectCount = selectedAssignSubjectIds.length - new Set(selectedAssignSubjectIds).size;
   const completedAssignRows = assignRows.filter((row) => row.subjectId && row.teacherId).length;
@@ -890,11 +869,13 @@ export default function AcademicSetupPage() {
   const validateClass = () => {
     if (classForm.id) {
       if (!classForm.name.trim()) return notify.error('Validation error', 'Class name is required.');
+      if (!/^\d+$/.test(classForm.name.trim())) return notify.error('Validation error', 'Class name must contain numbers only.');
       classMutation.mutate();
       return;
     }
     if (!classBatchRows.length) return notify.error('Validation error', 'Add at least one class.');
     if (classBatchRows.some((row) => !row.name.trim())) return notify.error('Validation error', 'Class name is required for every row.');
+    if (classBatchRows.some((row) => !/^\d+$/.test(row.name.trim()))) return notify.error('Validation error', 'Class names must contain numbers only.');
     if (hasDuplicateValues(classBatchRows.map((row) => row.name))) return notify.error('Validation error', 'Remove duplicate class names before saving.');
     classBatchMutation.mutate();
   };
@@ -938,14 +919,14 @@ export default function AcademicSetupPage() {
     timeMutation.mutate();
   };
   const subjectOptionsForAssignRow = (selectedId: string) => {
-    if (!selectedId || filteredAssignSubjects.some((subject) => subject.id === selectedId)) return filteredAssignSubjects;
+    if (!selectedId || subjects.some((subject) => subject.id === selectedId)) return subjects;
     const selected = subjects.find((subject) => subject.id === selectedId);
-    return selected ? [selected, ...filteredAssignSubjects] : filteredAssignSubjects;
+    return selected ? [selected, ...subjects] : subjects;
   };
   const teacherOptionsForAssignRow = (selectedId: string) => {
-    if (!selectedId || filteredAssignTeachers.some((teacher) => teacher.id === selectedId)) return filteredAssignTeachers;
+    if (!selectedId || teachers.some((teacher) => teacher.id === selectedId)) return teachers;
     const selected = teachers.find((teacher) => teacher.id === selectedId);
-    return selected ? [selected, ...filteredAssignTeachers] : filteredAssignTeachers;
+    return selected ? [selected, ...teachers] : teachers;
   };
   const loadSubjectsForAssignment = () => {
     if (!assignClassId || !assignSectionId) return notify.error('Validation error', 'Select class and section first.');
@@ -1242,7 +1223,7 @@ export default function AcademicSetupPage() {
             {classForm.id ? (
               <>
                 <Field label="Class name">
-                  <input className={inputClass} value={classForm.name} onChange={(e) => setClassForm((p) => ({ ...p, name: e.target.value }))} placeholder="Example: Grade 10" />
+                  <input className={inputClass} inputMode="numeric" pattern="[0-9]*" value={classForm.name} onChange={(e) => setClassForm((p) => ({ ...p, name: digitsOnly(e.target.value) }))} placeholder="Example: 10" />
                 </Field>
                 <Field label="Academic year">
                   <select className={inputClass} value={classForm.academicYearId} onChange={(e) => setClassForm((p) => ({ ...p, academicYearId: e.target.value }))}>
@@ -1289,7 +1270,7 @@ export default function AcademicSetupPage() {
                         </div>
                         <div className="grid gap-3 lg:grid-cols-2">
                           <Field label="Class name">
-                            <input className={inputClass} value={row.name} onChange={(e) => setClassBatchRows((rows) => rows.map((item) => item.rowId === row.rowId ? { ...item, name: e.target.value } : item))} placeholder="Example: Class 1" />
+                            <input className={inputClass} inputMode="numeric" pattern="[0-9]*" value={row.name} onChange={(e) => setClassBatchRows((rows) => rows.map((item) => item.rowId === row.rowId ? { ...item, name: digitsOnly(e.target.value) } : item))} placeholder="Example: 1" />
                           </Field>
                           <Field label="Academic year">
                             <select className={inputClass} value={row.academicYearId} onChange={(e) => setClassBatchRows((rows) => rows.map((item) => item.rowId === row.rowId ? { ...item, academicYearId: e.target.value } : item))}>
@@ -1455,7 +1436,7 @@ export default function AcademicSetupPage() {
             subjectForm.id ? (
               <>
                 <Field label="Subject name"><input className={inputClass} value={subjectForm.name} onChange={(e) => setSubjectForm((p) => ({ ...p, name: e.target.value }))} placeholder="Example: Mathematics" /></Field>
-                <Field label="Subject code"><input className={inputClass} value={subjectForm.code} onChange={(e) => setSubjectForm((p) => ({ ...p, code: e.target.value }))} placeholder="Example: MATH10" /></Field>
+                <Field label="Subject code"><input className={inputClass} value={subjectForm.code} onChange={(e) => setSubjectForm((p) => ({ ...p, code: e.target.value }))} placeholder="Example: MATH-G10" /></Field>
                 <Field label="Subject type">
                   <select className={inputClass} value={subjectForm.type} onChange={(e) => setSubjectForm((p) => ({ ...p, type: e.target.value as SubjectType }))}>
                     <option value="THEORY">Theory</option>
@@ -1479,7 +1460,7 @@ export default function AcademicSetupPage() {
                           <input className={inputClass} value={row.name} onChange={(e) => setSubjectBatchRows((rows) => rows.map((item) => item.rowId === row.rowId ? { ...item, name: e.target.value } : item))} placeholder="Example: Mathematics" />
                         </Field>
                         <Field label="Subject code">
-                          <input className={inputClass} value={row.code} onChange={(e) => setSubjectBatchRows((rows) => rows.map((item) => item.rowId === row.rowId ? { ...item, code: e.target.value } : item))} placeholder="Example: MATH10" />
+                          <input className={inputClass} value={row.code} onChange={(e) => setSubjectBatchRows((rows) => rows.map((item) => item.rowId === row.rowId ? { ...item, code: e.target.value } : item))} placeholder="Example: MATH-G10" />
                         </Field>
                         <Field label="Subject type">
                           <select className={inputClass} value={row.type} onChange={(e) => setSubjectBatchRows((rows) => rows.map((item) => item.rowId === row.rowId ? { ...item, type: e.target.value as SubjectType } : item))}>
@@ -1646,20 +1627,14 @@ export default function AcademicSetupPage() {
               onSectionChange={setAssignSectionId}
               sectionOptions={assignedSections}
             />
-            <div className="grid gap-3 rounded-2xl border border-slate-200 bg-slate-50 p-4 xl:grid-cols-[1fr_1fr_1.1fr]">
-              <Field label="Find subject">
-                <input className={inputClass} value={assignSubjectFilter} onChange={(e) => setAssignSubjectFilter(e.target.value)} placeholder="Search by name or code" />
-              </Field>
-              <Field label="Find teacher">
-                <input className={inputClass} value={assignTeacherFilter} onChange={(e) => setAssignTeacherFilter(e.target.value)} placeholder="Search by name, ID, email" />
-              </Field>
+            <div className="grid gap-3 rounded-2xl border border-slate-200 bg-slate-50 p-4 xl:grid-cols-[1fr_1.4fr]">
               <Field label="Default teacher">
                 <select className={inputClass} value={assignDefaultTeacherId} onChange={(e) => setAssignDefaultTeacherId(e.target.value)}>
                   <option value="">Select teacher</option>
                   {teachers.map((teacher) => <option key={teacher.id} value={teacher.id}>{teacherName(teacher)}{teacher.employeeNo ? ` (${teacher.employeeNo})` : ''}</option>)}
                 </select>
               </Field>
-              <div className="flex flex-wrap gap-2 xl:col-span-3">
+              <div className="flex flex-wrap gap-2 xl:items-end">
                 <SecondaryButton icon="plus" onClick={loadSubjectsForAssignment} disabled={!subjects.length}>Load All Subjects</SecondaryButton>
                 <SecondaryButton icon="teacher" onClick={applyDefaultTeacherToAssignments} disabled={!assignRows.length}>Apply Teacher</SecondaryButton>
                 <SecondaryButton icon="shuffle" onClick={balanceAssignmentTeachers} disabled={!assignRows.length || !teachers.length}>Balance Teachers</SecondaryButton>
