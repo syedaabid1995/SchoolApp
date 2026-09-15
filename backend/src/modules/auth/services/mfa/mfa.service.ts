@@ -77,6 +77,7 @@ export type AuthTokenPayload = {
   role: string | null;
   email?: string | null;
   subscriptionRestricted?: boolean;
+  rememberMe?: boolean;
   jti?: string;
   typ: 'access' | 'refresh';
 };
@@ -406,7 +407,7 @@ export const verifyTwoFactor = async (req: Request, res: Response) => {
   const accessToken = signToken({ ...payloadBase, typ: 'access' }, ACCESS_TOKEN_TTL);
   const refreshTokenMaxAge = parsed.data.rememberMe ? REMEMBER_ME_REFRESH_TOKEN_TTL_SECONDS : REFRESH_TOKEN_TTL_SECONDS;
   const refreshTokenExpiresAt = new Date(Date.now() + refreshTokenMaxAge * 1000);
-  const refreshToken = signToken({ ...payloadBase, jti: crypto.randomUUID(), typ: 'refresh' }, refreshTokenMaxAge);
+  const refreshToken = signToken({ ...payloadBase, rememberMe: Boolean(parsed.data.rememberMe), jti: crypto.randomUUID(), typ: 'refresh' }, refreshTokenMaxAge);
 
   await createRefreshSession({
     req,
@@ -610,7 +611,7 @@ export const verifyTotpLogin = async (req: Request, res: Response) => {
   const accessToken = signToken({ ...payloadBase, typ: 'access' }, ACCESS_TOKEN_TTL);
   const refreshTokenMaxAge = parsed.data.rememberMe ? REMEMBER_ME_REFRESH_TOKEN_TTL_SECONDS : REFRESH_TOKEN_TTL_SECONDS;
   const refreshTokenExpiresAt = new Date(Date.now() + refreshTokenMaxAge * 1000);
-  const refreshToken = signToken({ ...payloadBase, jti: crypto.randomUUID(), typ: 'refresh' }, refreshTokenMaxAge);
+  const refreshToken = signToken({ ...payloadBase, rememberMe: Boolean(parsed.data.rememberMe), jti: crypto.randomUUID(), typ: 'refresh' }, refreshTokenMaxAge);
 
   await createRefreshSession({
     req,

@@ -77,6 +77,7 @@ export type AuthTokenPayload = {
   role: string | null;
   email?: string | null;
   subscriptionRestricted?: boolean;
+  rememberMe?: boolean;
   impersonatedByUserId?: string | null;
   impersonatedByRole?: string | null;
   impersonatedByEmail?: string | null;
@@ -371,9 +372,14 @@ export const refreshToken = async (req: Request, res: Response) => {
   };
 
   const accessToken = signToken({ ...payloadBase, typ: 'access' }, ACCESS_TOKEN_TTL);
-  const refreshTokenMaxAge = Math.max(1, Math.floor((session.expiresAt.getTime() - Date.now()) / 1000));
+  const remainingRefreshSeconds = Math.max(1, Math.floor((session.expiresAt.getTime() - Date.now()) / 1000));
+  const shouldRemember =
+    decoded.rememberMe === true ||
+    (decoded.rememberMe === undefined && remainingRefreshSeconds > REFRESH_TOKEN_TTL_SECONDS);
+  const refreshTokenMaxAge = shouldRemember ? REMEMBER_ME_REFRESH_TOKEN_TTL_SECONDS : REFRESH_TOKEN_TTL_SECONDS;
+  const nextRefreshTokenExpiresAt = new Date(Date.now() + refreshTokenMaxAge * 1000);
   const nextRefreshToken = signToken(
-    { ...payloadBase, jti: crypto.randomUUID(), typ: 'refresh' },
+    { ...payloadBase, rememberMe: shouldRemember, jti: crypto.randomUUID(), typ: 'refresh' },
     refreshTokenMaxAge,
   );
 
@@ -383,7 +389,7 @@ export const refreshToken = async (req: Request, res: Response) => {
     userId: user.id,
     schoolId: user.schoolId ?? null,
     refreshToken: nextRefreshToken,
-    expiresAt: session.expiresAt,
+    expiresAt: nextRefreshTokenExpiresAt,
   });
 
   await logAuthAudit({
@@ -395,7 +401,7 @@ export const refreshToken = async (req: Request, res: Response) => {
     afterState: {
       rotated: true,
       role: roleName,
-      expiresAt: session.expiresAt.toISOString(),
+      expiresAt: nextRefreshTokenExpiresAt.toISOString(),
     },
   });
 
@@ -412,7 +418,7 @@ export const refreshToken = async (req: Request, res: Response) => {
     tokenType: 'Bearer',
     expiresIn: ACCESS_TOKEN_TTL,
     refreshTokenMaxAge,
-    refreshTokenExpiresAt: session.expiresAt.toISOString(),
+    refreshTokenExpiresAt: nextRefreshTokenExpiresAt.toISOString(),
     ...(shouldReturnTokensInBody(req) ? { accessToken, refreshToken: nextRefreshToken } : {}),
   });
 };

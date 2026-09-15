@@ -4,7 +4,13 @@ import { useEffect, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Sidebar } from './Sidebar';
 import { Header, type DashboardResolvedThemeMode, type DashboardThemeMode } from './Header';
-import { getSession } from '../services/auth.service';
+import {
+  getSession,
+  getSessionLastActiveAt,
+  logout,
+  markSessionActivity,
+  refreshToken,
+} from '../services/auth.service';
 import {
   defaultLoginBranding,
   getLoginBrandingSettings,
@@ -16,6 +22,9 @@ import { isPathModuleEnabled } from '../config/module-flags';
 import AccessDeniedPanel from './AccessDeniedPanel';
 import FullPageLoader from './FullPageLoader';
 import { registerCurrentWebPushDevice } from '../lib/webPushRegistration';
+
+const SESSION_IDLE_LOGOUT_MS = 30 * 60 * 1000;
+const SESSION_KEEPALIVE_MS = 10 * 60 * 1000;
 
 export default function DashboardClientLayout({ 
   children, 
@@ -118,7 +127,8 @@ export default function DashboardClientLayout({
     superAdminAllowedPaths.some((allowedPath) => pathname === allowedPath || pathname.startsWith(`${allowedPath}/`));
   const currentSearch = searchParams.toString();
   const currentRoute = currentSearch ? `${pathname}?${currentSearch}` : pathname;
-  const isCurrentModuleEnabled = isPathModuleEnabled(moduleFlags, currentRoute);
+  const isSuperAdminFeatureFlagsTab = isSuperAdmin && pathname === '/dashboard/settings' && settingsTab === 'features';
+  const isCurrentModuleEnabled = isSuperAdminFeatureFlagsTab || isPathModuleEnabled(moduleFlags, currentRoute);
 
   const resolvedThemeMode: DashboardResolvedThemeMode = themeMode === 'system' ? systemThemeMode : themeMode;
 
@@ -205,6 +215,69 @@ export default function DashboardClientLayout({
       router.replace('/dashboard/plans');
     }
   }, [isSubscriptionRestricted, pathname, router]);
+
+  useEffect(() => {
+    if (isSessionLoading || !session?.role || isAccountRoute) return;
+
+    let disposed = false;
+    let refreshInFlight = false;
+    let lastActivityWrite = 0;
+
+    const redirectToLogin = () => {
+      if (window.location.pathname !== '/login') {
+        window.location.href = '/login';
+      }
+    };
+
+    const markActivity = () => {
+      const now = Date.now();
+      if (now - lastActivityWrite < 15_000) return;
+      lastActivityWrite = now;
+      markSessionActivity();
+    };
+
+    const renewIfActive = async () => {
+      if (disposed || refreshInFlight) return;
+      const idleFor = Date.now() - getSessionLastActiveAt();
+      if (idleFor >= SESSION_IDLE_LOGOUT_MS) {
+        disposed = true;
+        try {
+          await logout();
+        } finally {
+          redirectToLogin();
+        }
+        return;
+      }
+      if (document.visibilityState === 'hidden') return;
+
+      refreshInFlight = true;
+      try {
+        await refreshToken();
+      } catch {
+        if (Date.now() - getSessionLastActiveAt() >= SESSION_IDLE_LOGOUT_MS) {
+          redirectToLogin();
+        }
+      } finally {
+        refreshInFlight = false;
+      }
+    };
+
+    const activityEvents = ['pointerdown', 'keydown', 'touchstart', 'scroll'];
+    activityEvents.forEach((eventName) => window.addEventListener(eventName, markActivity, { passive: true }));
+    window.addEventListener('focus', renewIfActive);
+    document.addEventListener('visibilitychange', renewIfActive);
+
+    void renewIfActive();
+    const intervalId = window.setInterval(() => void renewIfActive(), SESSION_KEEPALIVE_MS);
+
+    return () => {
+      disposed = true;
+      window.clearInterval(intervalId);
+      activityEvents.forEach((eventName) => window.removeEventListener(eventName, markActivity));
+      window.removeEventListener('focus', renewIfActive);
+      document.removeEventListener('visibilitychange', renewIfActive);
+    };
+  }, [isAccountRoute, isSessionLoading, session?.role]);
 
   useEffect(() => {
     if (isSuperAdmin && !canAccessSuperAdminRoute) {

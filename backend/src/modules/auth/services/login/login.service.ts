@@ -82,6 +82,7 @@ export type AuthTokenPayload = {
   role: string | null;
   email?: string | null;
   subscriptionRestricted?: boolean;
+  rememberMe?: boolean;
   jti?: string;
   typ: 'access' | 'refresh';
 };
@@ -383,7 +384,7 @@ const issueAuthenticatedResponse = async (params: {
   const refreshTokenMaxAge = rememberMe ? REMEMBER_ME_REFRESH_TOKEN_TTL_SECONDS : REFRESH_TOKEN_TTL_SECONDS;
   const refreshTokenExpiresAt = new Date(Date.now() + refreshTokenMaxAge * 1000);
   const refreshToken = signToken(
-    { ...payloadBase, jti: crypto.randomUUID(), typ: 'refresh' },
+    { ...payloadBase, rememberMe: Boolean(rememberMe), jti: crypto.randomUUID(), typ: 'refresh' },
     refreshTokenMaxAge,
   );
 

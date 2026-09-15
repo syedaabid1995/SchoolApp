@@ -4,6 +4,7 @@ export type AuthTokenPayload = {
   role: string | null;
   email?: string | null;
   subscriptionRestricted?: boolean;
+  rememberMe?: boolean;
   jti?: string;
   typ: 'access' | 'refresh';
 };

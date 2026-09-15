@@ -1086,6 +1086,9 @@ test('refresh rotates session and returns tokens only as httpOnly cookies', asyn
 
   const loginRes = await invoke(login, loginRequest());
   const refresh = loginRes.cookies.refresh_token.value;
+  const originalSession = Array.from(refreshSessions.values())[0];
+  originalSession.expiresAt = new Date(Date.now() + 10 * 60 * 1000);
+  const originalExpiresAt = originalSession.expiresAt;
 
   const refreshRes = await invoke(
     refreshToken,
@@ -1104,6 +1107,10 @@ test('refresh rotates session and returns tokens only as httpOnly cookies', asyn
   assert.ok(refreshRes.cookies.refresh_token.value);
   assert.equal(refreshSessions.size, 2);
   assert.equal(Array.from(refreshSessions.values())[0].revokedAt instanceof Date, true);
+  const activeSession = Array.from(refreshSessions.values()).find((session) => !session.revokedAt);
+  assert.ok(activeSession);
+  assert.ok(activeSession.expiresAt > originalExpiresAt);
+  assert.ok((refreshRes.body as any).refreshTokenMaxAge > 10 * 60);
 });
 
 test('revoked refresh token cannot be used', async () => {

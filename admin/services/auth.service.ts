@@ -1,6 +1,25 @@
 import { clearStoredThemes } from './theme.service';
 
 const GENERIC_LOGIN_ERROR = 'Invalid login details. Please try again.';
+const SESSION_ACTIVITY_STORAGE_KEY = 'akademifyy.sessionLastActiveAt';
+
+export const markSessionActivity = () => {
+  if (typeof window === 'undefined') return;
+  window.localStorage.setItem(SESSION_ACTIVITY_STORAGE_KEY, String(Date.now()));
+};
+
+export const clearSessionActivity = () => {
+  if (typeof window === 'undefined') return;
+  window.localStorage.removeItem(SESSION_ACTIVITY_STORAGE_KEY);
+};
+
+export const getSessionLastActiveAt = () => {
+  if (typeof window === 'undefined') return Date.now();
+  const stored = Number(window.localStorage.getItem(SESSION_ACTIVITY_STORAGE_KEY));
+  if (Number.isFinite(stored) && stored > 0) return stored;
+  markSessionActivity();
+  return Date.now();
+};
 
 // Test deployment - updated at $(date)
 export const login = async (payload: {
@@ -25,7 +44,7 @@ export const login = async (payload: {
       (res.status === 429 ? 'Too many attempts. Please try again later.' : GENERIC_LOGIN_ERROR);
     throw new Error(message);
   }
-  return res.json() as Promise<{
+  const data = await res.json() as {
     mustChangePassword?: boolean;
     subscriptionRestricted?: boolean;
     mfaRequired?: boolean;
@@ -38,7 +57,9 @@ export const login = async (payload: {
       role: string | null;
       schoolId: string | null;
     } | null;
-  }>;
+  };
+  if (!data.mfaRequired) markSessionActivity();
+  return data;
 };
 
 export const logout = async () => {
@@ -47,6 +68,7 @@ export const logout = async () => {
     throw new Error('Logout failed');
   }
   clearStoredThemes();
+  clearSessionActivity();
   return res.json();
 };
 
@@ -122,7 +144,7 @@ export const verifyTwoFactor = async (payload: {
   if (!res.ok) {
     throw new Error('Invalid or expired verification code.');
   }
-  return res.json() as Promise<{
+  const data = await res.json() as {
     message: string;
     user: {
       id: string;
@@ -131,7 +153,9 @@ export const verifyTwoFactor = async (payload: {
       role: string | null;
       schoolId: string | null;
     };
-  }>;
+  };
+  markSessionActivity();
+  return data;
 };
 
 export const verifyTotpLogin = async (payload: {
@@ -147,7 +171,7 @@ export const verifyTotpLogin = async (payload: {
   if (!res.ok) {
     throw new Error('Invalid or expired verification code.');
   }
-  return res.json() as Promise<{
+  const data = await res.json() as {
     message: string;
     user: {
       id: string;
@@ -156,7 +180,9 @@ export const verifyTotpLogin = async (payload: {
       role: string | null;
       schoolId: string | null;
     };
-  }>;
+  };
+  markSessionActivity();
+  return data;
 };
 
 export const resendTwoFactor = async (payload: { challengeId: string }) => {

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { isSuperAdmin } from './utils/roles';
 
 const ACCESS_COOKIE = 'access_token';
+const REFRESH_COOKIE = 'refresh_token';
 
 const decodeToken = (token: string) => {
   const parts = token.split('.');
@@ -31,7 +32,8 @@ export function middleware(req: NextRequest) {
 
   if (pathname.startsWith('/change-password')) {
     const token = req.cookies.get(ACCESS_COOKIE)?.value;
-    if (!token) {
+    const refreshToken = req.cookies.get(REFRESH_COOKIE)?.value;
+    if (!token && !refreshToken) {
       return NextResponse.redirect(new URL('/login', req.url));
     }
     return NextResponse.next();
@@ -39,13 +41,17 @@ export function middleware(req: NextRequest) {
 
   if (pathname.startsWith('/dashboard')) {
     const token = req.cookies.get(ACCESS_COOKIE)?.value;
-    if (!token) {
+    const refreshToken = req.cookies.get(REFRESH_COOKIE)?.value;
+    if (!token && !refreshToken) {
       return NextResponse.redirect(new URL('/login', req.url));
     }
 
     const mustChangePassword = req.cookies.get('must_change_password')?.value === '1';
     if (mustChangePassword) {
       return NextResponse.redirect(new URL('/change-password', req.url));
+    }
+    if (!token) {
+      return NextResponse.next();
     }
 
     const tokenData = decodeToken(token);
