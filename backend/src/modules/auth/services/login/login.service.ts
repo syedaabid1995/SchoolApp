@@ -710,7 +710,10 @@ export const login = async (req: Request, res: Response) => {
 
   const hasActiveTotp = Boolean(user.totpCredential?.enabledAt && !user.totpCredential.disabledAt);
   if (await isLoginMfaRequired({ roleName, mfaEnabled: user.mfaEnabled, hasActiveTotp })) {
-    if (hasActiveTotp && (await isAuthenticatorAppVerificationEnabled())) {
+    const shouldUseAuthenticatorApp =
+      hasActiveTotp && (Boolean(user.mfaEnabled) || (await isAuthenticatorAppVerificationEnabled()));
+
+    if (shouldUseAuthenticatorApp) {
       try {
         await consumeMfaChallengeLimit(user.id, user.schoolId ?? null);
       } catch (err) {

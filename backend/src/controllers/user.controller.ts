@@ -135,8 +135,16 @@ export const getMe = async (req: Request, res: Response) => {
       id: true,
       email: true,
       mustChangePassword: true,
+      mfaEnabled: true,
+      mfaMethod: true,
       schoolId: true,
       school: { select: { id: true, name: true, code: true, status: true, domainUrl: true, subdomain: true } },
+      totpCredential: {
+        select: {
+          enabledAt: true,
+          disabledAt: true,
+        },
+      },
       teacherProfile: {
         select: {
           id: true,
@@ -198,6 +206,9 @@ export const getMe = async (req: Request, res: Response) => {
     id: user.id,
     email: user.email,
     mustChangePassword: user.mustChangePassword,
+    mfaEnabled: user.mfaEnabled,
+    mfaMethod: user.mfaMethod,
+    hasActiveTotp: Boolean(user.totpCredential?.enabledAt && !user.totpCredential.disabledAt),
     schoolId: user.schoolId,
     school: user.school,
     role,

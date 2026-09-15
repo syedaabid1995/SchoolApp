@@ -79,6 +79,8 @@ export default function DashboardClientLayout({
   const isSuperAdminLayout = isSuperAdmin || role === 'SUPER_ADMIN';
   const settingsTab = searchParams.get('tab') ?? '';
   const isAccountRoute = pathname === '/change-password';
+  const isAccountSecurityRoute =
+    pathname === '/dashboard/settings/security' || pathname === '/dashboard/settings/security/totp';
   const isSafeSettingsTab =
     pathname === '/dashboard/settings' &&
     (!settingsTab ||
@@ -105,6 +107,7 @@ export default function DashboardClientLayout({
   const canAccessRoute =
     hasAnyRole &&
     (isAccountRoute ||
+      isAccountSecurityRoute ||
       isSuperAdmin ||
       isSafeSettingsTab ||
       isSafeSchoolSetupRoute ||

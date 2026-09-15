@@ -69,13 +69,21 @@ export const isLoginMfaRequired = async (params: {
   hasActiveTotp?: boolean | null;
 }) => {
   const settings = await getAuthSecuritySettings();
+  const hasPersonalMfa =
+    Boolean(params.mfaEnabled) &&
+    (settings.emailOtpEnabled || Boolean(params.hasActiveTotp));
+
+  if (hasPersonalMfa) {
+    return true;
+  }
+
   const hasAvailableMethod =
     settings.emailOtpEnabled || (settings.authenticatorAppEnabled && Boolean(params.hasActiveTotp));
   if (!settings.twoStepEnabled || !hasAvailableMethod) {
     return false;
   }
 
-  return Boolean(params.mfaEnabled) || Boolean(params.roleName && settings.requiredRoles.includes(params.roleName));
+  return Boolean(params.roleName && settings.requiredRoles.includes(params.roleName));
 };
 
 export const createLoginMfaChallenge = async (params: {

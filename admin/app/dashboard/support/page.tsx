@@ -140,6 +140,17 @@ export default function SupportPage() {
   });
 
   const isSuperAdmin = session?.role === 'SUPER_ADMIN';
+  const isSchoolAdmin = session?.role === 'SCHOOL_ADMIN';
+  const listTitle = isSuperAdmin
+    ? 'Support Ticket List'
+    : isSchoolAdmin
+      ? 'School Support Ticket List'
+      : 'My Support Ticket List';
+  const listSummary = isSuperAdmin
+    ? 'Manage support tickets across all schools.'
+    : isSchoolAdmin
+      ? 'Create and track all support tickets for your school.'
+      : 'Create and track only the support tickets raised by your account.';
 
   useEffect(() => {
     const urlSearch = searchParams.get('search') ?? searchParams.get('query') ?? '';
@@ -256,7 +267,7 @@ export default function SupportPage() {
           <div>
             <h1 className="text-2xl font-bold text-[var(--shell-text)]">Support Tickets</h1>
             <p className="mt-1 text-sm text-[var(--shell-muted)]">
-              {isSuperAdmin ? 'Manage support tickets across all schools.' : 'Create and track support tickets for your school.'}
+              {listSummary}
             </p>
           </div>
           <span className="text-sm font-semibold text-[var(--shell-muted)]">Dashboard / Support Tickets</span>
@@ -437,7 +448,7 @@ export default function SupportPage() {
       <section className="overflow-hidden rounded-lg border border-[var(--shell-border)] bg-[var(--shell-card)] shadow-sm">
         <div className="flex flex-col gap-3 border-b border-[var(--shell-border)] px-4 py-3 lg:flex-row lg:items-center lg:justify-between">
           <div>
-            <h2 className="text-base font-bold text-[var(--shell-text)]">Support Ticket List</h2>
+            <h2 className="text-base font-bold text-[var(--shell-text)]">{listTitle}</h2>
             <p className="mt-0.5 text-sm text-[var(--shell-muted)]">
               Showing {pageStart} to {pageEnd} of {totalRows} tickets
             </p>

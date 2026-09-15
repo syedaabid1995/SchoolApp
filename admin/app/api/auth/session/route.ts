@@ -13,6 +13,9 @@ const emptySession = (mustChangePassword = false) => ({
   displayName: null,
   permissionCodes: [],
   moduleFlags: {},
+  mfaEnabled: false,
+  mfaMethod: null,
+  hasActiveTotp: false,
   hasDashboardAccess: false,
 });
 
@@ -125,6 +128,9 @@ export async function GET(req: Request) {
     let displayName: string | null = null;
     let permissionCodes: string[] = [];
     let moduleFlags: Record<string, boolean> = {};
+    let mfaEnabled = false;
+    let mfaMethod: string | null = null;
+    let hasActiveTotp = false;
     let resolvedRole = (payload?.role as string | undefined) ?? null;
     let resolvedSchoolId = (payload?.schoolId as string | undefined) ?? null;
 
@@ -164,6 +170,9 @@ export async function GET(req: Request) {
       role?: string | null;
       schoolId?: string | null;
       moduleFlags?: Record<string, boolean>;
+      mfaEnabled?: boolean;
+      mfaMethod?: string | null;
+      hasActiveTotp?: boolean;
       employeeProfile?: { roleName?: string | null } | null;
       teacherProfile?: { roleName?: string | null } | null;
     };
@@ -172,6 +181,9 @@ export async function GET(req: Request) {
     resolvedSchoolId = data.schoolId ?? resolvedSchoolId;
     permissionCodes = Array.isArray(data.permissionCodes) ? data.permissionCodes : [];
     moduleFlags = data.moduleFlags && typeof data.moduleFlags === 'object' ? data.moduleFlags : {};
+    mfaEnabled = Boolean(data.mfaEnabled);
+    mfaMethod = data.mfaMethod ?? null;
+    hasActiveTotp = Boolean(data.hasActiveTotp);
 
     if (payload?.schoolId) {
       try {
@@ -200,6 +212,9 @@ export async function GET(req: Request) {
       displayName,
       permissionCodes,
       moduleFlags,
+      mfaEnabled,
+      mfaMethod,
+      hasActiveTotp,
       isImpersonating: Boolean(payload?.impersonatedByUserId && hasSuperAdminReturnSession),
       impersonatedByEmail: (payload?.impersonatedByEmail as string | undefined) ?? null,
       hasDashboardAccess: Boolean(resolvedRole && (resolvedRole === 'SUPER_ADMIN' || permissionCodes.length > 0)),

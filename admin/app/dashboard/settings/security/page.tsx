@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
+import Image from 'next/image';
 import { useRouter } from 'next/navigation';
 import FullPageLoader from '../../../../components/FullPageLoader';
 import PageHeader from '../../../../components/PageHeader';
@@ -184,6 +185,11 @@ export default function SecuritySessionsPage() {
   const [sessions, setSessions] = useState<UserSession[]>([]);
   const [authSettings, setAuthSettings] = useState<AuthSecuritySettings | null>(null);
   const [sessionRole, setSessionRole] = useState<string | null>(null);
+  const [accountMfa, setAccountMfa] = useState<{ enabled: boolean; method: string | null; hasActiveTotp: boolean }>({
+    enabled: false,
+    method: null,
+    hasActiveTotp: false,
+  });
   const [loading, setLoading] = useState(true);
   const [settingsLoading, setSettingsLoading] = useState(true);
   const [settingsSaving, setSettingsSaving] = useState(false);
@@ -230,6 +236,11 @@ export default function SecuritySessionsPage() {
       ]);
       setAuthSettings(settings);
       setSessionRole(currentSession.role);
+      setAccountMfa({
+        enabled: Boolean(currentSession.mfaEnabled),
+        method: currentSession.mfaMethod ?? null,
+        hasActiveTotp: Boolean(currentSession.hasActiveTotp),
+      });
     } catch (err) {
       setSettingsError((err as Error)?.message || 'Unable to load authentication security settings.');
     } finally {
@@ -243,6 +254,7 @@ export default function SecuritySessionsPage() {
   }, []);
 
   const canManageAuthSettings = sessionRole === 'SUPER_ADMIN' || sessionRole === 'SCHOOL_ADMIN';
+  const hasOwnAuthenticator = accountMfa.enabled && accountMfa.method === 'totp' && accountMfa.hasActiveTotp;
 
   const handleAuthSettingChange = async (patch: Partial<AuthSecuritySettings>) => {
     if (!authSettings || !canManageAuthSettings) return null;
@@ -290,7 +302,7 @@ export default function SecuritySessionsPage() {
     if (!authSettings || !canManageAuthSettings) return;
 
     if (!checked) {
-      if (!window.confirm('Disable authenticator app as an allowed login verification method?')) return;
+      if (!window.confirm('Disable authenticator app as a school-wide login verification method? Users who already enabled their own authenticator app will still use it for their account.')) return;
       setTotpSetup(null);
       setTotpVerifyCode('');
       setBackupCodes([]);
@@ -298,13 +310,10 @@ export default function SecuritySessionsPage() {
       return;
     }
 
-    const updated = await handleAuthSettingChange({
+    await handleAuthSettingChange({
       twoStepEnabled: true,
       authenticatorAppEnabled: true,
     });
-    if (updated) {
-      await beginTotpSetup();
-    }
   };
 
   const confirmTotpSetup = async () => {
@@ -321,6 +330,7 @@ export default function SecuritySessionsPage() {
       setBackupCodes(result.backupCodes ?? []);
       setTotpSetup(null);
       setTotpVerifyCode('');
+      setAccountMfa({ enabled: true, method: 'totp', hasActiveTotp: true });
       setSettingsMessage(result.message || 'Authenticator app enabled for your account.');
     } catch (err) {
       setSettingsError((err as Error)?.message || 'Invalid authenticator code.');
@@ -344,6 +354,7 @@ export default function SecuritySessionsPage() {
       setTotpDisableCode('');
       setTotpSetup(null);
       setBackupCodes([]);
+      setAccountMfa({ enabled: false, method: null, hasActiveTotp: false });
     } catch (err) {
       setSettingsError((err as Error)?.message || 'Unable to disable authenticator app.');
     } finally {
@@ -395,9 +406,9 @@ export default function SecuritySessionsPage() {
         <section className="mb-6 rounded-2xl border border-slate-200 bg-white/80 p-6 shadow-sm">
           <div className="mb-5 flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
             <div>
-              <h2 className="text-xl font-bold text-slate-950">Login Verification Settings</h2>
+              <h2 className="text-xl font-bold text-slate-950">School Login Verification Defaults</h2>
               <p className="mt-1 text-sm leading-6 text-slate-600">
-                Enable or disable two-step login and the verification methods used during sign in.
+                Enable or disable the school-wide two-step login requirement and default verification methods.
               </p>
             </div>
             <span className={`w-fit rounded-full px-3 py-1 text-xs font-semibold ${
@@ -409,7 +420,7 @@ export default function SecuritySessionsPage() {
 
           {!canManageAuthSettings ? (
             <p className="mb-4 rounded-xl bg-amber-50 px-4 py-3 text-sm font-semibold text-amber-800">
-              Only school admin or super admin can change login verification settings.
+              Only school admin or super admin can change school-wide login verification settings. You can still enable authenticator app verification for your own account below.
             </p>
           ) : null}
           {settingsMessage ? <p className="mb-4 rounded-xl bg-emerald-50 px-4 py-3 text-sm font-semibold text-emerald-700">{settingsMessage}</p> : null}
@@ -418,8 +429,8 @@ export default function SecuritySessionsPage() {
           {authSettings ? (
             <div className="grid gap-3">
               <ToggleRow
-                title="Two-step verification"
-                description="Require privileged users to complete a second verification step after password login."
+                title="Require two-step verification"
+                description="Require every user in the school to complete a second verification step after password login."
                 checked={authSettings.twoStepEnabled}
                 disabled={!canManageAuthSettings || settingsSaving}
                 onChange={(checked) => handleAuthSettingChange({ twoStepEnabled: checked })}
@@ -432,31 +443,38 @@ export default function SecuritySessionsPage() {
                 onChange={(checked) => handleAuthSettingChange({ emailOtpEnabled: checked })}
               />
               <ToggleRow
-                title="Authenticator app"
-                description="Allow app-based one-time codes. When enabled, setup must be verified with the first generated code."
+                title="Authenticator app method"
+                description="Allow authenticator app codes as a school-wide verification method."
                 checked={authSettings.authenticatorAppEnabled}
                 disabled={!canManageAuthSettings || settingsSaving || totpBusy}
                 onChange={handleAuthenticatorAppChange}
               />
 
-              {authSettings.authenticatorAppEnabled ? (
+              {authSettings ? (
                 <section className="overflow-hidden rounded-2xl border border-blue-100 bg-gradient-to-br from-blue-50 via-white to-slate-50 shadow-sm">
                   <div className="border-b border-blue-100 px-5 py-4">
                     <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
                       <div>
-                        <h3 className="text-base font-bold text-slate-950">Authenticator app setup</h3>
+                        <div className="flex flex-wrap items-center gap-2">
+                          <h3 className="text-base font-bold text-slate-950">Your authenticator app</h3>
+                          <span className={`rounded-full px-2.5 py-1 text-xs font-semibold ${
+                            hasOwnAuthenticator ? 'bg-emerald-50 text-emerald-700' : 'bg-slate-100 text-slate-600'
+                          }`}>
+                            {hasOwnAuthenticator ? 'Enabled' : 'Disabled'}
+                          </span>
+                        </div>
                         <p className="mt-1 max-w-3xl text-sm leading-6 text-slate-600">
-                          First-time setup is only saved after you scan the QR code and confirm the 6-digit code from your authenticator app.
+                          Any signed-in user can enable authenticator app verification for their own account. Setup is saved only after the first 6-digit code is verified.
                         </p>
                       </div>
                       <div className="flex flex-wrap gap-2">
                         <button
                           type="button"
                           onClick={beginTotpSetup}
-                          disabled={!canManageAuthSettings || totpBusy}
+                          disabled={totpBusy}
                           className="rounded-xl bg-slate-950 px-4 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
                         >
-                          {totpSetup ? 'Regenerate QR' : 'Start setup'}
+                          {totpSetup ? 'Regenerate QR' : hasOwnAuthenticator ? 'Reset setup' : 'Start setup'}
                         </button>
                         <a
                           href="/dashboard/settings/security/totp"
@@ -471,9 +489,12 @@ export default function SecuritySessionsPage() {
                   {totpSetup ? (
                     <div className="grid gap-5 p-5 lg:grid-cols-[260px_1fr]">
                       <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-                        <img
+                        <Image
                           src={totpSetup.qrCodeDataUrl}
                           alt={`Authenticator QR code for ${totpSetup.label}`}
+                          width={224}
+                          height={224}
+                          unoptimized
                           className="mx-auto h-56 w-56 rounded-xl bg-white p-2"
                         />
                       </div>
@@ -573,7 +594,11 @@ export default function SecuritySessionsPage() {
           <p className="font-medium">Use logout from all devices if you do not recognize an active session.</p>
           <div className="flex flex-col gap-2 sm:flex-row">
             <span className="rounded-lg border border-amber-300 bg-white px-4 py-2 text-center text-sm font-semibold text-amber-900">
-              {authSettings?.twoStepEnabled ? 'Two-step verification enabled' : 'Two-step verification disabled'}
+              {hasOwnAuthenticator
+                ? 'Authenticator enabled for your account'
+                : authSettings?.twoStepEnabled
+                  ? 'Two-step required by school'
+                  : 'Two-step not required by school'}
             </span>
             <button
               type="button"

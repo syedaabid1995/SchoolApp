@@ -23,6 +23,7 @@ import { loginIpRateLimit } from '../../middlewares/rate-limit.middleware';
 import { hashPassword, verifyPassword } from '../../utils/password';
 import { hashToken } from '../../utils/token';
 import { hashOtp } from '../../utils/otp';
+import { isLoginMfaRequired } from '../../services/mfa.service';
 import { createMockRequest } from '../../__tests__/test-utils/mock-request';
 import { createMockResponse, type MockResponse } from '../../__tests__/test-utils/mock-response';
 
@@ -631,6 +632,18 @@ test('normal user without 2FA can login normally and creates a refresh session',
   assert.ok(res.cookies.access_token.value);
   assert.ok(res.cookies.refresh_token.value);
   assert.equal(mfaChallenges.size, 0);
+});
+
+test('personal authenticator MFA is required even when school-wide two-step is off', async () => {
+  disableLoginMfa();
+
+  const required = await isLoginMfaRequired({
+    roleName: 'TEACHER',
+    mfaEnabled: true,
+    hasActiveTotp: true,
+  });
+
+  assert.equal(required, true);
 });
 
 test('super admin login returns mfaRequired without issuing session', async () => {

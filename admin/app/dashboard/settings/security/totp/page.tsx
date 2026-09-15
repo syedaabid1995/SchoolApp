@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import Image from 'next/image';
 import Link from 'next/link';
 import FullPageLoader from '../../../../../components/FullPageLoader';
 import PageHeader from '../../../../../components/PageHeader';
@@ -54,7 +55,7 @@ export default function TotpSettingsPage() {
       <div className="space-y-6">
         {busy ? <FullPageLoader label="Loading authenticator settings..." /> : null}
         <div className="mx-auto max-w-5xl space-y-6 pb-12">
-          <PageHeader title="Authenticator App" subtitle="Checking two-step verification settings." />
+          <PageHeader title="Authenticator App" subtitle="Checking your account security settings." />
           <div className="mb-5">
             <Link href="/dashboard/settings?tab=security" className="text-sm font-semibold text-blue-700 hover:text-blue-800">
               Back to security sessions
@@ -65,27 +66,6 @@ export default function TotpSettingsPage() {
               {error}
             </p>
           ) : null}
-        </div>
-      </div>
-    );
-  }
-
-  if (settings && (!settings.twoStepEnabled || !settings.authenticatorAppEnabled)) {
-    return (
-      <div className="space-y-6">
-        <div className="mx-auto max-w-5xl space-y-6 pb-12">
-          <PageHeader title="Authenticator App" subtitle="Two-step verification is currently disabled." />
-          <div className="mb-5">
-            <Link href="/dashboard/settings?tab=security" className="text-sm font-semibold text-blue-700 hover:text-blue-800">
-              Back to security sessions
-            </Link>
-          </div>
-          <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-            <h2 className="text-xl font-bold text-slate-950">Two-step verification disabled</h2>
-            <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-600">
-              Login will continue with email or username and password only. Enable two-step verification and authenticator app from security settings to use this page.
-            </p>
-          </section>
         </div>
       </div>
     );
@@ -154,7 +134,7 @@ export default function TotpSettingsPage() {
     <div className="space-y-6">
       {busy ? <FullPageLoader label="Updating authenticator settings..." /> : null}
       <div className="mx-auto max-w-5xl space-y-6 pb-12">
-        <PageHeader title="Authenticator App" subtitle="Add app-based verification and one-time backup codes." />
+        <PageHeader title="Authenticator App" subtitle="Add app-based verification and one-time backup codes for your account." />
 
         <div className="mb-5">
           <Link href="/dashboard/settings?tab=security" className="text-sm font-semibold text-blue-700 hover:text-blue-800">
@@ -195,9 +175,12 @@ export default function TotpSettingsPage() {
             {setup ? (
               <div className="mt-6 grid gap-6 lg:grid-cols-[260px_1fr]">
                 <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
-                  <img
+                  <Image
                     src={setup.qrCodeDataUrl}
                     alt={`Authenticator QR code for ${setup.label}`}
+                    width={224}
+                    height={224}
+                    unoptimized
                     className="mx-auto h-56 w-56 rounded-xl bg-white p-2"
                   />
                 </div>

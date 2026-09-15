@@ -73,6 +73,9 @@ export type SessionInfo = {
   schoolName?: string | null;
   permissionCodes?: string[];
   moduleFlags?: Record<string, boolean>;
+  mfaEnabled?: boolean;
+  mfaMethod?: string | null;
+  hasActiveTotp?: boolean;
   isImpersonating?: boolean;
   impersonatedByEmail?: string | null;
   hasDashboardAccess?: boolean;

@@ -82,11 +82,16 @@ const mapTicket = (ticket: any) => ({
   updatedAt: ticket.updatedAt.toISOString(),
 });
 
-const findTicketForAccess = async (ticketId: string, schoolId?: string) => {
+const findTicketForAccess = async (params: {
+  ticketId: string;
+  schoolId?: string;
+  createdById?: string;
+}) => {
   const ticket = await prisma.supportTicket.findFirst({
     where: {
-      id: ticketId,
-      ...(schoolId ? { schoolId } : {}),
+      id: params.ticketId,
+      ...(params.schoolId ? { schoolId: params.schoolId } : {}),
+      ...(params.createdById ? { createdById: params.createdById } : {}),
     },
   });
 
@@ -161,6 +166,7 @@ export const createTicket = async (params: {
 
 export const listTickets = async (params: {
   schoolId?: string;
+  createdById?: string;
   search?: string;
   status?: TicketStatus;
   priority?: TicketPriority;
@@ -171,6 +177,7 @@ export const listTickets = async (params: {
   const tickets = await prisma.supportTicket.findMany({
     where: {
       ...(params.schoolId ? { schoolId: params.schoolId } : {}),
+      ...(params.createdById ? { createdById: params.createdById } : {}),
       ...(params.status ? { status: params.status } : {}),
       ...(params.priority ? { priority: params.priority } : {}),
       ...(params.assignedToId ? { assignedToId: params.assignedToId } : {}),
@@ -199,6 +206,7 @@ export const listTickets = async (params: {
 export const getTicketById = async (params: {
   ticketId: string;
   schoolId?: string;
+  createdById?: string;
   includeInternalComments: boolean;
   actorId: string;
   actorRole: string;
@@ -207,6 +215,7 @@ export const getTicketById = async (params: {
     where: {
       id: params.ticketId,
       ...(params.schoolId ? { schoolId: params.schoolId } : {}),
+      ...(params.createdById ? { createdById: params.createdById } : {}),
     },
     include: ticketInclude(params.includeInternalComments),
   });
@@ -231,12 +240,17 @@ export const getTicketById = async (params: {
 export const addTicketComment = async (params: {
   ticketId: string;
   schoolId?: string;
+  createdById?: string;
   authorId: string;
   actorRole: string;
   body: string;
   isInternal: boolean;
 }) => {
-  const ticket = await findTicketForAccess(params.ticketId, params.schoolId);
+  const ticket = await findTicketForAccess({
+    ticketId: params.ticketId,
+    schoolId: params.schoolId,
+    createdById: params.createdById,
+  });
   const comment = await prisma.ticketComment.create({
     data: {
       ticketId: ticket.id,
@@ -268,6 +282,7 @@ export const addTicketComment = async (params: {
 export const updateTicket = async (params: {
   ticketId: string;
   schoolId?: string;
+  createdById?: string;
   actorId: string;
   actorRole: string;
   status?: TicketStatus;
@@ -275,7 +290,11 @@ export const updateTicket = async (params: {
   assignedToId?: string | null;
   escalation?: boolean;
 }) => {
-  const ticket = await findTicketForAccess(params.ticketId, params.schoolId);
+  const ticket = await findTicketForAccess({
+    ticketId: params.ticketId,
+    schoolId: params.schoolId,
+    createdById: params.createdById,
+  });
   await assertAssignableSupportUser(params.assignedToId);
 
   const updated = await prisma.supportTicket.update({

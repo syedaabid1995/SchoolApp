@@ -17,7 +17,6 @@ import {
   verifyTotpCode,
 } from '../utils/totp';
 import { hashOtp } from '../utils/otp';
-import { assertAuthenticatorAppVerificationEnabled } from './authSecurity.service';
 
 const TOTP_LOGIN_PURPOSE = 'TOTP_LOGIN';
 const TOTP_ERROR_MESSAGE = 'Invalid or expired verification code.';
@@ -96,8 +95,6 @@ const auditTotp = async (params: {
 };
 
 export const startTotpSetup = async (req: Request) => {
-  await assertAuthenticatorAppVerificationEnabled();
-
   const user = await requireAuthUser(req);
 
   const secret = generateTotpSecret();
@@ -227,8 +224,6 @@ const verifyTotpOrBackup = async (params: {
 };
 
 export const verifyTotpSetup = async (req: Request, code: string) => {
-  await assertAuthenticatorAppVerificationEnabled();
-
   const user = await requireAuthUser(req);
   await consumeTotpSetupVerifyLimit(user.id);
 
@@ -302,8 +297,6 @@ export const verifyTotpSetup = async (req: Request, code: string) => {
 };
 
 export const disableTotp = async (req: Request, code: string) => {
-  await assertAuthenticatorAppVerificationEnabled();
-
   const user = await requireAuthUser(req);
   await consumeTotpDisableLimit(user.id);
 
@@ -369,8 +362,6 @@ export const createTotpLoginChallenge = async (params: {
   userId: string;
   schoolId: string | null;
 }) => {
-  await assertAuthenticatorAppVerificationEnabled();
-
   const now = new Date();
   const expiresAt = new Date(now.getTime() + 5 * 60 * 1000);
 
@@ -413,8 +404,6 @@ export const verifyTotpLoginChallenge = async (params: {
   challengeId: string;
   code: string;
 }) => {
-  await assertAuthenticatorAppVerificationEnabled();
-
   const now = new Date();
   const challenge = await prisma.mfaChallenge.findUnique({
     where: { id: params.challengeId },

@@ -35,6 +35,13 @@ const resolveTicketSchoolScope = (req: Request, requestedSchoolId?: string) => {
   return resolveSchoolId(req, requestedSchoolId ?? req.auth?.schoolId);
 };
 
+const resolveTicketAccessScope = (req: Request, requestedSchoolId?: string) => {
+  const auth = requireAuthContext(req);
+  const schoolId = resolveTicketSchoolScope(req, requestedSchoolId);
+  const createdById = auth.role === 'SUPER_ADMIN' || auth.role === 'SCHOOL_ADMIN' ? undefined : auth.userId;
+  return { schoolId, createdById };
+};
+
 const parseTicketId = (req: Request) => ticketIdParamSchema.parse(req.params).id;
 
 export const createTicketApi = async (req: Request, res: Response) => {
@@ -55,12 +62,12 @@ export const createTicketApi = async (req: Request, res: Response) => {
 };
 
 export const listTicketsApi = async (req: Request, res: Response) => {
-  requireAuthContext(req);
   const query = listTicketsQuerySchema.parse(req.query);
-  const schoolId = resolveTicketSchoolScope(req, query.schoolId);
+  const scope = resolveTicketAccessScope(req, query.schoolId);
 
   const tickets = await listTickets({
-    schoolId,
+    schoolId: scope.schoolId,
+    createdById: scope.createdById,
     search: query.search,
     status: query.status,
     priority: query.priority,
@@ -73,11 +80,12 @@ export const getTicketApi = async (req: Request, res: Response) => {
   const auth = requireAuthContext(req);
   const ticketId = parseTicketId(req);
   const query = listTicketsQuerySchema.pick({ schoolId: true }).parse(req.query);
-  const schoolId = resolveTicketSchoolScope(req, query.schoolId);
+  const scope = resolveTicketAccessScope(req, query.schoolId);
 
   const ticket = await getTicketById({
     ticketId,
-    schoolId,
+    schoolId: scope.schoolId,
+    createdById: scope.createdById,
     includeInternalComments: req.auth?.role === 'SUPER_ADMIN',
     actorId: auth.userId,
     actorRole: actorRole(req),
@@ -90,11 +98,12 @@ export const addTicketCommentApi = async (req: Request, res: Response) => {
   const auth = requireAuthContext(req);
   const ticketId = parseTicketId(req);
   const payload = addTicketCommentSchema.parse(req.body);
-  const schoolId = resolveTicketSchoolScope(req);
+  const scope = resolveTicketAccessScope(req);
 
   const comment = await addTicketComment({
     ticketId,
-    schoolId,
+    schoolId: scope.schoolId,
+    createdById: scope.createdById,
     authorId: auth.userId,
     actorRole: actorRole(req),
     body: payload.body,
@@ -107,11 +116,12 @@ export const addTicketCommentApi = async (req: Request, res: Response) => {
 export const updateTicketApi = async (req: Request, res: Response) => {
   const auth = requireAuthContext(req);
   const payload = updateTicketSchema.parse(req.body);
-  const schoolId = resolveTicketSchoolScope(req, payload.schoolId);
+  const scope = resolveTicketAccessScope(req, payload.schoolId);
 
   const ticket = await updateTicket({
     ticketId: parseTicketId(req),
-    schoolId,
+    schoolId: scope.schoolId,
+    createdById: scope.createdById,
     actorId: auth.userId,
     actorRole: actorRole(req),
     status: payload.status,
@@ -126,11 +136,12 @@ export const updateTicketApi = async (req: Request, res: Response) => {
 export const updateTicketStatusApi = async (req: Request, res: Response) => {
   const auth = requireAuthContext(req);
   const payload = updateTicketStatusSchema.parse(req.body);
-  const schoolId = resolveTicketSchoolScope(req);
+  const scope = resolveTicketAccessScope(req);
 
   const ticket = await updateTicket({
     ticketId: parseTicketId(req),
-    schoolId,
+    schoolId: scope.schoolId,
+    createdById: scope.createdById,
     actorId: auth.userId,
     actorRole: actorRole(req),
     status: payload.status,
@@ -142,11 +153,12 @@ export const updateTicketStatusApi = async (req: Request, res: Response) => {
 export const updateTicketPriorityApi = async (req: Request, res: Response) => {
   const auth = requireAuthContext(req);
   const payload = updateTicketPrioritySchema.parse(req.body);
-  const schoolId = resolveTicketSchoolScope(req);
+  const scope = resolveTicketAccessScope(req);
 
   const ticket = await updateTicket({
     ticketId: parseTicketId(req),
-    schoolId,
+    schoolId: scope.schoolId,
+    createdById: scope.createdById,
     actorId: auth.userId,
     actorRole: actorRole(req),
     priority: payload.priority,

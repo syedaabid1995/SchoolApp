@@ -16,6 +16,8 @@ export const SCHOOL_ADMIN_B_ID = '55555555-5555-4555-8555-555555555555';
 export const TEACHER_A_ID = '66666666-6666-4666-8666-666666666666';
 export const PARENT_A_ID = '77777777-7777-4777-8777-777777777777';
 export const STUDENT_A_ID = '88888888-8888-4888-8888-888888888888';
+export const TEST_TICKET_A_ADMIN_ID = '89898989-8989-4898-8989-898989898989';
+export const TEST_TICKET_A_TEACHER_ID = '98989898-9898-4989-8989-989898989898';
 export const TEST_TICKET_B_ID = '99999999-9999-4999-8999-999999999999';
 export const TEST_AUDIT_LOG_ID = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
 export const TEST_EXPORT_ID = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
@@ -309,6 +311,44 @@ const supportUser = (user: TestUser | null) =>
       }
     : null;
 
+const ticketForSchoolAAdmin = () => ({
+  id: TEST_TICKET_A_ADMIN_ID,
+  schoolId: SCHOOL_A_ID,
+  createdById: SCHOOL_ADMIN_A_ID,
+  assignedToId: null,
+  subject: 'School A admin ticket',
+  description: 'School admin support ticket',
+  status: 'OPEN',
+  priority: 'MEDIUM',
+  escalation: false,
+  slaDueAt: null,
+  createdAt: new Date('2026-05-20T00:00:00.000Z'),
+  updatedAt: new Date('2026-05-20T00:00:00.000Z'),
+  school: schoolFor(SCHOOL_A_ID),
+  createdBy: supportUser(userById(SCHOOL_ADMIN_A_ID)),
+  assignedTo: null,
+  comments: [],
+});
+
+const ticketForSchoolATeacher = () => ({
+  id: TEST_TICKET_A_TEACHER_ID,
+  schoolId: SCHOOL_A_ID,
+  createdById: TEACHER_A_ID,
+  assignedToId: null,
+  subject: 'School A teacher ticket',
+  description: 'Teacher support ticket',
+  status: 'IN_PROGRESS',
+  priority: 'LOW',
+  escalation: false,
+  slaDueAt: null,
+  createdAt: new Date('2026-05-20T00:00:00.000Z'),
+  updatedAt: new Date('2026-05-21T00:00:00.000Z'),
+  school: schoolFor(SCHOOL_A_ID),
+  createdBy: supportUser(userById(TEACHER_A_ID)),
+  assignedTo: null,
+  comments: [],
+});
+
 const ticketForSchoolB = () => ({
   id: TEST_TICKET_B_ID,
   schoolId: SCHOOL_B_ID,
@@ -339,6 +379,8 @@ const ticketForSchoolB = () => ({
     },
   ],
 });
+
+const supportTickets = () => [ticketForSchoolAAdmin(), ticketForSchoolATeacher(), ticketForSchoolB()];
 
 const auditLog = () => ({
   id: TEST_AUDIT_LOG_ID,
@@ -936,16 +978,36 @@ export const patchSecurityTestDependencies = () => {
   patchMethod(prisma.configEntry as any, 'update', async ({ where, data }: any) => makeRecord({ id: where.id, ...data }));
 
   patchMethod(prisma.supportTicket as any, 'findFirst', async ({ where }: any) => {
-    const ticket = ticketForSchoolB();
-    if (where?.id && where.id !== ticket.id) return null;
-    if (where?.schoolId && where.schoolId !== ticket.schoolId) return null;
-    return ticket;
+    return supportTickets().find((ticket) => {
+      if (where?.id && where.id !== ticket.id) return false;
+      if (where?.schoolId && where.schoolId !== ticket.schoolId) return false;
+      if (where?.createdById && where.createdById !== ticket.createdById) return false;
+      return true;
+    }) ?? null;
   });
   patchMethod(prisma.supportTicket as any, 'findMany', async ({ where }: any = {}) => {
-    const ticket = ticketForSchoolB();
-    if (where?.schoolId && where.schoolId !== ticket.schoolId) return [];
-    return [ticket];
+    return supportTickets().filter((ticket) => {
+      if (where?.schoolId && where.schoolId !== ticket.schoolId) return false;
+      if (where?.createdById && where.createdById !== ticket.createdById) return false;
+      if (where?.status && where.status !== ticket.status) return false;
+      if (where?.priority && where.priority !== ticket.priority) return false;
+      if (where?.assignedToId && where.assignedToId !== ticket.assignedToId) return false;
+      return true;
+    });
   });
+  patchMethod(prisma.supportTicket as any, 'create', async ({ data }: any) => ({
+    id: randomUUID(),
+    status: 'OPEN',
+    escalation: false,
+    slaDueAt: null,
+    createdAt: new Date('2026-05-20T00:00:00.000Z'),
+    updatedAt: new Date('2026-05-20T00:00:00.000Z'),
+    ...data,
+    school: schoolFor(data.schoolId),
+    createdBy: supportUser(userById(data.createdById)),
+    assignedTo: data.assignedToId ? supportUser(userById(data.assignedToId)) : null,
+    comments: [],
+  }));
   patchMethod(prisma.supportTicket as any, 'groupBy', async () => []);
   patchMethod(prisma.supportTicket as any, 'count', async () => 0);
   patchMethod(prisma.supportTicket as any, 'update', async ({ data }: any) => ({ ...ticketForSchoolB(), ...data }));
