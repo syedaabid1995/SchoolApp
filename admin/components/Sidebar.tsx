@@ -373,6 +373,13 @@ export const Sidebar = ({
         ],
       },
       {
+        id: 'support',
+        label: 'Support',
+        items: [
+          { href: '/dashboard/support', label: 'Support Tickets', icon: 'ticket' },
+        ],
+      },
+      {
         id: 'users-roles',
         label: 'Users & Roles',
         items: [
