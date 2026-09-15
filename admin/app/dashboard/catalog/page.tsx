@@ -5,7 +5,6 @@ import { useRouter } from 'next/navigation';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import FullPageLoader from '../../../components/FullPageLoader';
 import { useNotify } from '../../../components/NotificationProvider';
-import { isPathModuleEnabled, type ModuleFeatureFlags } from '../../../config/module-flags';
 import { PLAN_PERMISSION_MODULES, buildPlanPermissionGroups } from '../../../config/plan-module-permissions';
 import { getSession } from '../../../services/auth.service';
 import {
@@ -91,10 +90,10 @@ function Badge({ children, className }: { children: ReactNode; className: string
   return <span className={`inline-flex rounded-full px-2.5 py-1 text-xs font-semibold ring-1 ${className}`}>{children}</span>;
 }
 
-const buildPlanSectionDefinitions = (moduleFlags?: ModuleFeatureFlags): PlanSectionView[] => {
+const buildPlanSectionDefinitions = (): PlanSectionView[] => {
   const sections = new Map<string, Set<string>>();
 
-  PLAN_PERMISSION_MODULES.filter((definition) => isPathModuleEnabled(moduleFlags, definition.path)).forEach((definition) => {
+  PLAN_PERMISSION_MODULES.forEach((definition) => {
     const sectionCodes = sections.get(definition.parent) ?? new Set<string>();
     definition.codes.forEach((code) => sectionCodes.add(code));
     sections.set(definition.parent, sectionCodes);
@@ -168,10 +167,7 @@ export default function CatalogPage() {
     refetchOnWindowFocus: 'always',
   });
   const isSuperAdmin = session?.role === 'SUPER_ADMIN';
-  const visiblePlanSectionDefinitions = useMemo(
-    () => buildPlanSectionDefinitions(session?.moduleFlags),
-    [session?.moduleFlags],
-  );
+  const visiblePlanSectionDefinitions = useMemo(() => buildPlanSectionDefinitions(), []);
 
   useEffect(() => {
     if (!isSessionLoading && session?.role && !isSuperAdmin) {
@@ -468,7 +464,6 @@ export default function CatalogPage() {
           plan={selectedPlan}
           permissions={modulePermissions?.permissions ?? []}
           editedCodes={editedPermissionCodes}
-          moduleFlags={session?.moduleFlags}
           loading={isModulePermissionsLoading}
           saving={modulePermissionMutation.isPending}
           onChange={setEditedPermissionCodes}
@@ -698,7 +693,6 @@ function PlanModulesModal({
   plan,
   permissions,
   editedCodes,
-  moduleFlags,
   loading,
   saving,
   onChange,
@@ -708,7 +702,6 @@ function PlanModulesModal({
   plan: SubscriptionPlan | null;
   permissions: PlanPermissionItem[];
   editedCodes: string[];
-  moduleFlags?: ModuleFeatureFlags;
   loading: boolean;
   saving: boolean;
   onChange: (codes: string[]) => void;
@@ -716,14 +709,8 @@ function PlanModulesModal({
   onSubmit: () => void;
 }) {
   const groups = useMemo(
-    () =>
-      buildPlanPermissionGroups(permissions)
-        .map((group) => ({
-          ...group,
-          modules: group.modules.filter((module) => isPathModuleEnabled(moduleFlags, module.path)),
-        }))
-        .filter((group) => group.modules.length > 0),
-    [moduleFlags, permissions],
+    () => buildPlanPermissionGroups(permissions),
+    [permissions],
   );
   const sections = useMemo(() => getSectionsFromGroups(groups), [groups]);
   const enabledSet = useMemo(() => new Set(editedCodes), [editedCodes]);

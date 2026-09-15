@@ -41,6 +41,7 @@ const makeAuthReq = (path: string, method = 'GET') => ({
 
 const patchAuthorizationData = (options: {
   planCodes: string[];
+  roleName?: string;
   roleOverrides?: Array<{ permissionCode: string; enabled: boolean }>;
   userOverrides?: Array<{ permissionCode: string; enabled: boolean }>;
   legacyRoleCodes?: string[];
@@ -48,7 +49,7 @@ const patchAuthorizationData = (options: {
   const restores = [
     patch(prisma.school as any, 'findUnique', async () => ({ status: 'ACTIVE', statusReason: null })),
     patch(prisma.userRole as any, 'findMany', async () => [
-      { roleId: ROLE_ID, role: { name: 'SCHOOL_ADMIN' } },
+      { roleId: ROLE_ID, role: { name: options.roleName ?? 'SCHOOL_ADMIN' } },
     ]),
     patch(prisma.rolePermission as any, 'findMany', async () =>
       (options.legacyRoleCodes ?? []).map((code) => ({ permission: { code } })),
@@ -138,6 +139,26 @@ test('AuthorizationService requires every permission for all-permission checks',
       [P.reportsFeesView, P.reportsExport],
     );
     assert.equal(allowed, false);
+  } finally {
+    restore();
+  }
+});
+
+test('Teacher defaults include attendance and reports when the plan allows them', async () => {
+  const restore = patchAuthorizationData({
+    roleName: 'TEACHER',
+    planCodes: [P.attendanceView, P.reportsView, P.reportsAttendanceView],
+  });
+
+  try {
+    const codes = await AuthorizationService.getEffectivePermissionCodesForUser(
+      SCHOOL_ID,
+      USER_ID,
+      'TEACHER',
+    );
+    assert.ok(codes.includes(P.attendanceView));
+    assert.ok(codes.includes(P.reportsView));
+    assert.ok(codes.includes(P.reportsAttendanceView));
   } finally {
     restore();
   }
