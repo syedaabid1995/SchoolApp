@@ -7,6 +7,7 @@ import { env } from '../config/env';
 import { HttpError } from '../middlewares/error.middleware';
 import { hashPassword } from '../utils/password';
 import { buildSchoolDomainUrl, normalizeSchoolSubdomain } from '../utils/schoolDomain';
+import { resolveSchoolRootDomainFromRequest } from '../utils/requestLoginUrl';
 import { createRefreshSession } from './refreshSession.service';
 import { upsertSubscription } from './subscription.service';
 import { seedSchoolTenantDefaults } from './schoolTenantDefaults.service';
@@ -390,7 +391,11 @@ export const createSchoolImpersonationSession = async (req: Request, schoolId: s
     expiresAt: refreshTokenExpiresAt,
   });
 
-  const targetBaseUrl = school.domainUrl || (school.subdomain ? buildSchoolDomainUrl(school.subdomain) : null);
+  const targetSubdomain = normalizeSchoolSubdomain(school.code ?? school.subdomain ?? '');
+  const targetRootDomain = resolveSchoolRootDomainFromRequest(req) ?? undefined;
+  const targetBaseUrl = targetSubdomain
+    ? buildSchoolDomainUrl(targetSubdomain, targetRootDomain)
+    : school.domainUrl;
   if (!targetBaseUrl) {
     throw new HttpError(409, 'School domain is not configured');
   }

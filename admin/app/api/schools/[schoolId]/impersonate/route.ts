@@ -1,27 +1,31 @@
 import { NextResponse } from 'next/server';
 import { cookies } from 'next/headers';
 import { getApiBase } from '../../../../../lib/getApiBase';
+import { resolveSchoolRootDomainFromHost } from '../../../../../lib/school-domain';
 
-const DEFAULT_ROOT_DOMAIN = 'app.akademifyy.in';
+const requestHeaderValue = (req: Request, name: string) => {
+  const value = req.headers.get(name);
+  return value?.trim() || null;
+};
 
-const cookieRootDomain = () => {
-  const root = (process.env.NEXT_PUBLIC_SCHOOL_ROOT_DOMAIN || DEFAULT_ROOT_DOMAIN)
-    .trim()
-    .toLowerCase()
-    .replace(/^https?:\/\//, '')
-    .replace(/\/+$/, '');
-
+const cookieRootDomain = (req: Request) => {
+  const root = resolveSchoolRootDomainFromHost(
+    requestHeaderValue(req, 'x-forwarded-host') ||
+      requestHeaderValue(req, 'host') ||
+      requestHeaderValue(req, 'origin') ||
+      requestHeaderValue(req, 'referer'),
+  );
   if (!root || root === 'localhost' || root === '127.0.0.1') return undefined;
   return root.startsWith('.') ? root : `.${root}`;
 };
 
-const cookieOptions = (maxAge: number) => ({
+const cookieOptions = (req: Request, maxAge: number) => ({
   httpOnly: true,
   sameSite: 'lax' as const,
   secure: process.env.NODE_ENV === 'production',
   path: '/',
   maxAge,
-  domain: cookieRootDomain(),
+  domain: cookieRootDomain(req),
 });
 
 export async function POST(req: Request, context: { params: Promise<{ schoolId: string }> }) {
@@ -64,12 +68,12 @@ export async function POST(req: Request, context: { params: Promise<{ schoolId: 
     school: data.school,
     user: data.user,
   });
-  response.cookies.set('super_admin_access_token', accessToken, cookieOptions(60 * 60));
+  response.cookies.set('super_admin_access_token', accessToken, cookieOptions(req, 60 * 60));
   if (refreshToken) {
-    response.cookies.set('super_admin_refresh_token', refreshToken, cookieOptions(60 * 60));
+    response.cookies.set('super_admin_refresh_token', refreshToken, cookieOptions(req, 60 * 60));
   }
-  response.cookies.set('access_token', data.accessToken, cookieOptions(data.accessTokenMaxAge ?? 15 * 60));
-  response.cookies.set('refresh_token', data.refreshToken, cookieOptions(data.refreshTokenMaxAge ?? 60 * 60));
+  response.cookies.set('access_token', data.accessToken, cookieOptions(req, data.accessTokenMaxAge ?? 15 * 60));
+  response.cookies.set('refresh_token', data.refreshToken, cookieOptions(req, data.refreshTokenMaxAge ?? 60 * 60));
   response.cookies.delete('must_change_password');
 
   return response;
