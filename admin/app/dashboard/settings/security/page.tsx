@@ -242,7 +242,7 @@ export default function SecuritySessionsPage() {
     void loadAuthSettings();
   }, []);
 
-  const canManageAuthSettings = sessionRole === 'SUPER_ADMIN';
+  const canManageAuthSettings = sessionRole === 'SUPER_ADMIN' || sessionRole === 'SCHOOL_ADMIN';
 
   const handleAuthSettingChange = async (patch: Partial<AuthSecuritySettings>) => {
     if (!authSettings || !canManageAuthSettings) return null;
@@ -409,7 +409,7 @@ export default function SecuritySessionsPage() {
 
           {!canManageAuthSettings ? (
             <p className="mb-4 rounded-xl bg-amber-50 px-4 py-3 text-sm font-semibold text-amber-800">
-              Only super admin can change login verification settings.
+              Only school admin or super admin can change login verification settings.
             </p>
           ) : null}
           {settingsMessage ? <p className="mb-4 rounded-xl bg-emerald-50 px-4 py-3 text-sm font-semibold text-emerald-700">{settingsMessage}</p> : null}

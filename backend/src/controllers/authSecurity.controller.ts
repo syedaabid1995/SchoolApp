@@ -25,8 +25,8 @@ const authSecuritySettingsSchema = z
   });
 
 const ensureCanManageAuthSecurity = (req: Request) => {
-  if (req.auth?.role !== 'SUPER_ADMIN') {
-    throw new HttpError(403, 'Only super admin can update authentication security settings');
+  if (req.auth?.role !== 'SUPER_ADMIN' && req.auth?.role !== 'SCHOOL_ADMIN') {
+    throw new HttpError(403, 'Only school admin or super admin can update authentication security settings');
   }
 };
 

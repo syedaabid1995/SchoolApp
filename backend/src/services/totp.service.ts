@@ -99,11 +99,6 @@ export const startTotpSetup = async (req: Request) => {
   await assertAuthenticatorAppVerificationEnabled();
 
   const user = await requireAuthUser(req);
-  const existing = user.totpCredential;
-
-  if (existing?.enabledAt && !existing.disabledAt) {
-    throw new HttpError(409, 'Authenticator app is already enabled.');
-  }
 
   const secret = generateTotpSecret();
   const issuer = user.school?.name || ISSUER;
@@ -115,27 +110,43 @@ export const startTotpSetup = async (req: Request) => {
     width: 240,
   });
 
-  const credential = await prisma.totpCredential.upsert({
-    where: { userId: user.id },
-    create: {
-      userId: user.id,
-      schoolId: user.schoolId ?? null,
-      encryptedSecret: encryptSecret(secret),
-      issuer,
-      label,
-      enabledAt: null,
-      disabledAt: null,
-    },
-    update: {
-      schoolId: user.schoolId ?? null,
-      encryptedSecret: encryptSecret(secret),
-      issuer,
-      label,
-      enabledAt: null,
-      disabledAt: null,
-      setupStartedAt: new Date(),
-    },
-    select: { id: true },
+  const credential = await prisma.$transaction(async (tx) => {
+    const saved = await tx.totpCredential.upsert({
+      where: { userId: user.id },
+      create: {
+        userId: user.id,
+        schoolId: user.schoolId ?? null,
+        encryptedSecret: encryptSecret(secret),
+        issuer,
+        label,
+        enabledAt: null,
+        disabledAt: null,
+      },
+      update: {
+        schoolId: user.schoolId ?? null,
+        encryptedSecret: encryptSecret(secret),
+        issuer,
+        label,
+        enabledAt: null,
+        disabledAt: null,
+        setupStartedAt: new Date(),
+      },
+      select: { id: true },
+    });
+
+    await tx.totpBackupCode.deleteMany({
+      where: { userId: user.id },
+    });
+
+    await tx.user.update({
+      where: { id: user.id },
+      data: {
+        mfaEnabled: false,
+        mfaMethod: null,
+      },
+    });
+
+    return saved;
   });
 
   await auditTotp({

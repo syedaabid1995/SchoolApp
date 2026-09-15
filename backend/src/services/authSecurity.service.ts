@@ -12,7 +12,7 @@ export type AuthSecuritySettings = {
   requiredRoles: string[];
 };
 
-export const DEFAULT_MFA_REQUIRED_ROLES = ['SUPER_ADMIN', 'SCHOOL_ADMIN', 'PRINCIPAL', 'ACCOUNTANT'];
+export const DEFAULT_MFA_REQUIRED_ROLES = ['SUPER_ADMIN', 'SCHOOL_ADMIN', 'TEACHER', 'ACCOUNTANT', 'LIBRARIAN', 'STAFF', 'PARENT'];
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   Boolean(value) && typeof value === 'object' && !Array.isArray(value);
@@ -25,7 +25,7 @@ const pickRoles = (value: unknown) => {
     .filter((entry): entry is string => typeof entry === 'string')
     .map((entry) => entry.trim().toUpperCase())
     .filter(Boolean);
-  return roles.length ? Array.from(new Set(roles)).slice(0, 20) : DEFAULT_MFA_REQUIRED_ROLES;
+  return Array.from(new Set([...DEFAULT_MFA_REQUIRED_ROLES, ...roles])).slice(0, 20);
 };
 
 export const defaultAuthSecuritySettings = (): AuthSecuritySettings => ({

@@ -110,6 +110,7 @@ let resetTokens = new Map<string, TestResetToken>();
 let mfaChallenges = new Map<string, TestMfaChallenge>();
 let auditLogs: unknown[] = [];
 let redisValues = new Map<string, { value: string; expiresAt: number | null }>();
+let authSecurityConfig: Record<string, unknown>;
 let restoreFns: Array<() => void> = [];
 let nextRefreshSession = 1;
 let nextResetToken = 1;
@@ -287,12 +288,7 @@ const patchPrisma = () => {
       ? {
           id: 'auth-security-config',
           key: 'auth.security',
-          value: {
-            twoStepEnabled: true,
-            emailOtpEnabled: true,
-            authenticatorAppEnabled: true,
-            requiredRoles: ['SUPER_ADMIN', 'SCHOOL_ADMIN', 'PRINCIPAL', 'ACCOUNTANT'],
-          },
+          value: authSecurityConfig,
           version: 1,
         }
       : null,
@@ -574,6 +570,13 @@ const seedMfaChallenge = (params: {
   return challenge;
 };
 
+const disableLoginMfa = () => {
+  authSecurityConfig = {
+    ...authSecurityConfig,
+    twoStepEnabled: false,
+  };
+};
+
 test.beforeEach(async () => {
   restorePatchedMethods();
   env.REDIS_CACHE_ENABLED = false;
@@ -588,6 +591,12 @@ test.beforeEach(async () => {
   mfaChallenges = new Map();
   auditLogs = [];
   redisValues = new Map();
+  authSecurityConfig = {
+    twoStepEnabled: true,
+    emailOtpEnabled: true,
+    authenticatorAppEnabled: true,
+    requiredRoles: ['SUPER_ADMIN', 'SCHOOL_ADMIN', 'TEACHER', 'ACCOUNTANT', 'LIBRARIAN', 'STAFF', 'PARENT'],
+  };
   nextRefreshSession = 1;
   nextResetToken = 1;
   nextMfaChallenge = 1;
@@ -608,6 +617,8 @@ test.after(async () => {
 });
 
 test('normal user without 2FA can login normally and creates a refresh session', async () => {
+  disableLoginMfa();
+
   const res = await invoke(login, loginRequest());
 
   assert.equal(res.statusCode, 200);
@@ -1039,6 +1050,8 @@ test('remember me does not store password in localStorage', () => {
 });
 
 test('logout revokes the current refresh session', async () => {
+  disableLoginMfa();
+
   const loginRes = await invoke(login, loginRequest());
   const refresh = loginRes.cookies.refresh_token.value;
 
@@ -1056,6 +1069,8 @@ test('logout revokes the current refresh session', async () => {
 });
 
 test('refresh rotates session and returns tokens only as httpOnly cookies', async () => {
+  disableLoginMfa();
+
   const loginRes = await invoke(login, loginRequest());
   const refresh = loginRes.cookies.refresh_token.value;
 
@@ -1079,6 +1094,8 @@ test('refresh rotates session and returns tokens only as httpOnly cookies', asyn
 });
 
 test('revoked refresh token cannot be used', async () => {
+  disableLoginMfa();
+
   const loginRes = await invoke(login, loginRequest());
   const refresh = loginRes.cookies.refresh_token.value;
   await invoke(logout, createRequest({ cookie: `refresh_token=${encodeURIComponent(refresh)}` }));
@@ -1200,6 +1217,8 @@ test('reset password OTP uses account matching requested login type when email i
 });
 
 test('reset password works, revokes sessions, rejects old password, and accepts new password', async () => {
+  disableLoginMfa();
+
   const rawToken = 'valid-reset-token';
   seedResetToken({ rawToken });
   const loginRes = await invoke(login, loginRequest());

@@ -21,12 +21,14 @@ import {
 export const featureFlagRouter = Router();
 
 featureFlagRouter.use(authMiddleware);
+
+featureFlagRouter.get('/auth-security', getAuthSecuritySettingsApi);
+featureFlagRouter.put('/auth-security', updateAuthSecuritySettingsApi);
+
 featureFlagRouter.use(requireSuperAdmin);
 
 featureFlagRouter.get('/login-experience', getLoginExperienceSettings);
 featureFlagRouter.put('/login-experience', updateLoginExperienceSettings);
-featureFlagRouter.get('/auth-security', getAuthSecuritySettingsApi);
-featureFlagRouter.put('/auth-security', updateAuthSecuritySettingsApi);
 
 featureFlagRouter.post('/flags', createFeatureFlag);
 featureFlagRouter.get('/flags', listFeatureFlags);
