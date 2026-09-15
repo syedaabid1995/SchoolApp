@@ -263,14 +263,26 @@ export default function SupportPage() {
   return (
     <DashboardPageContainer maxWidthClassName="max-w-none" className="space-y-4">
       <header className="rounded-lg border border-[var(--shell-border)] bg-[var(--shell-card)] px-4 py-3 shadow-sm">
-        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <h1 className="text-2xl font-bold text-[var(--shell-text)]">Support Tickets</h1>
             <p className="mt-1 text-sm text-[var(--shell-muted)]">
               {listSummary}
             </p>
           </div>
-          <span className="text-sm font-semibold text-[var(--shell-muted)]">Dashboard / Support Tickets</span>
+          <div className="flex flex-col gap-2 sm:items-end">
+            <span className="text-sm font-semibold text-[var(--shell-muted)]">Dashboard / Support Tickets</span>
+            <button
+              type="button"
+              onClick={() => {
+                setFormError('');
+                setIsCreateModalOpen(true);
+              }}
+              className="h-10 rounded-md bg-[var(--shell-primary)] px-4 text-sm font-bold text-white shadow-sm hover:opacity-90"
+            >
+              Create New Ticket
+            </button>
+          </div>
         </div>
       </header>
 

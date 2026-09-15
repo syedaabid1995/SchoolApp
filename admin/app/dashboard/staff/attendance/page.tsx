@@ -18,10 +18,13 @@ import {
 } from '../../../../services/staff.service';
 
 const roles = ['SCHOOL_ADMIN', 'TEACHER', 'ACCOUNTANT', 'LIBRARIAN', 'STAFF'];
-const statuses: StaffAttendanceStatus[] = ['PRESENT', 'LATE', 'ABSENT', 'HOLIDAY', 'HALF_DAY', 'LEAVE', 'LOP', 'CASUAL_LEAVE'];
-const futureStatuses: StaffAttendanceStatus[] = ['ABSENT', 'LOP', 'CASUAL_LEAVE', 'PRESENT'];
+type StaffAttendanceMarkStatus = StaffAttendanceStatus | 'PENDING';
+type StaffAttendanceMarkRow = Omit<AttendanceStaffRow, 'status'> & { status: StaffAttendanceMarkStatus };
+const statuses: StaffAttendanceMarkStatus[] = ['PENDING', 'PRESENT', 'LATE', 'ABSENT', 'HOLIDAY', 'HALF_DAY', 'LEAVE', 'LOP', 'CASUAL_LEAVE'];
+const futureStatuses: StaffAttendanceMarkStatus[] = ['PENDING', 'ABSENT', 'LOP', 'CASUAL_LEAVE', 'PRESENT'];
 
 const statusLabels: Record<string, string> = {
+  PENDING: 'Pending',
   PRESENT: 'Present',
   LATE: 'Late',
   ABSENT: 'Absent',
@@ -34,6 +37,7 @@ const statusLabels: Record<string, string> = {
 };
 
 const statusClass: Record<string, string> = {
+  PENDING: 'bg-slate-50 text-slate-500 border-slate-200',
   PRESENT: 'bg-emerald-50 text-emerald-700 border-emerald-200',
   LATE: 'bg-amber-50 text-amber-700 border-amber-200',
   ABSENT: 'bg-rose-50 text-rose-700 border-rose-200',
@@ -49,6 +53,8 @@ const today = () => new Date().toISOString().slice(0, 10);
 const isFuture = (date: string) => date > today();
 
 const staffName = (row: AttendanceStaffRow | StaffAttendanceReportRow['staff']) => row.fullName ?? `${row.firstName ?? ''} ${row.lastName ?? ''}`.trim();
+const toMarkRows = (rows: AttendanceStaffRow[]): StaffAttendanceMarkRow[] =>
+  rows.map((row) => ({ ...row, status: row.attendanceId ? row.status : 'PENDING' }));
 
 const exportCsv = (rows: StaffAttendanceReportRow[]) => {
   const headers = ['Staff name', 'Staff no', 'Present', 'Late', 'Absent', 'Holiday', 'Half day', 'Leave', 'Percentage'];
@@ -104,7 +110,7 @@ export default function StaffAttendancePage() {
     month: new Date().getMonth() + 1,
     year: new Date().getFullYear(),
   });
-  const [rows, setRows] = useState<AttendanceStaffRow[]>([]);
+  const [rows, setRows] = useState<StaffAttendanceMarkRow[]>([]);
   const [holiday, setHoliday] = useState(false);
   const [holidayReason, setHolidayReason] = useState('');
   const [expanded, setExpanded] = useState<string | null>(null);
@@ -151,7 +157,7 @@ export default function StaffAttendancePage() {
   const loadRows = async () => {
     const data = await attendanceQuery.refetch();
     if (data.data) {
-      setRows(data.data.staff);
+      setRows(toMarkRows(data.data.staff));
       setResolvedMode(data.data.configuration.mode);
       setResolvedSource(data.data.configuration.source);
       setUnits(data.data.units);
@@ -164,8 +170,10 @@ export default function StaffAttendancePage() {
   const selectedUnit = units.find((unit) => unit.unitKey === selectedUnitKey) ?? units[0];
 
   const saveMutation = useMutation({
-    mutationFn: () =>
-      saveStaffAttendance({
+    mutationFn: () => {
+      const markedRows = rows.filter((row): row is StaffAttendanceMarkRow & { status: StaffAttendanceStatus } => row.status !== 'PENDING');
+      if (!holiday && !markedRows.length) throw new Error('Please mark at least one staff member before saving.');
+      return saveStaffAttendance({
         role: criteria.role || null,
         date: criteria.date,
         unitType: selectedUnit?.unitType,
@@ -173,13 +181,14 @@ export default function StaffAttendancePage() {
         periodId: selectedUnit?.periodId,
         markHoliday: holiday,
         holidayReason,
-        records: rows.map((row) => ({ staffId: row.id, status: row.status, note: row.note ?? '' })),
-      }),
+        records: markedRows.map((row) => ({ staffId: row.id, status: row.status, note: row.note ?? '' })),
+      });
+    },
     onSuccess: () => {
       notify.success('Attendance saved', holiday ? 'Holiday was marked for the selected staff group.' : 'Staff attendance was saved.');
       reportQuery.refetch();
     },
-    onError: (error: any) => notify.error('Unable to save attendance', error?.response?.data?.error?.message ?? 'Please try again.'),
+    onError: (error: any) => notify.error('Unable to save attendance', error?.response?.data?.error?.message ?? error?.message ?? 'Please try again.'),
   });
 
   if (sessionLoading || !session?.role) return <FullPageLoader label="Checking attendance access..." />;
@@ -274,7 +283,7 @@ export default function StaffAttendancePage() {
                         slotType: unit.slotType,
                         periodId: unit.periodId,
                       });
-                      setRows(data.staff);
+                      setRows(toMarkRows(data.staff));
                       setHoliday(Boolean(data.holiday));
                       setHolidayReason((data.holiday as any)?.reason ?? '');
                     }
@@ -309,7 +318,7 @@ export default function StaffAttendancePage() {
                         <td className="px-4 py-3">{row.employeeNo ?? row.staffNo ?? '-'}</td>
                         <td className="px-4 py-3">{String(row.role ?? row.roleName ?? '').replace('_', ' ')}</td>
                         <td className="px-4 py-3">
-                          <select disabled={holiday || !canMarkAttendance} value={row.status} onChange={(event) => setRows((current) => current.map((item) => item.id === row.id ? { ...item, status: event.target.value as StaffAttendanceStatus } : item))} className="rounded-xl border border-slate-200 px-3 py-2 text-sm disabled:bg-slate-50">
+                          <select disabled={holiday || !canMarkAttendance} value={row.status} onChange={(event) => setRows((current) => current.map((item) => item.id === row.id ? { ...item, status: event.target.value as StaffAttendanceMarkStatus } : item))} className="rounded-xl border border-slate-200 px-3 py-2 text-sm disabled:bg-slate-50">
                             {(isFuture(criteria.date) ? futureStatuses : statuses).map((status) => <option key={status} value={status} disabled={isFuture(criteria.date) && status === 'PRESENT'}>{statusLabels[status]}</option>)}
                           </select>
                         </td>

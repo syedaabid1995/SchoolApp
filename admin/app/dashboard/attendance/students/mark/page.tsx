@@ -24,20 +24,25 @@ import {
   type StudentAttendanceReport,
 } from '../../../../../services/attendanceV2.service';
 
-type LegacyRow = { studentId: string; name: string; admissionNo: string; status: StudentAttendanceStatus; remarks: string };
-type SheetRow = { studentId: string; name: string; admissionNo: string; rollNo?: string | null; status: AttendanceStatus; note: string };
+type LegacyAttendanceStatus = StudentAttendanceStatus | 'PENDING';
+type SheetAttendanceStatus = AttendanceStatus | 'PENDING';
+type LegacyRow = { studentId: string; name: string; admissionNo: string; status: LegacyAttendanceStatus; remarks: string };
+type SheetRow = { studentId: string; name: string; admissionNo: string; rollNo?: string | null; status: SheetAttendanceStatus; note: string };
 type SectionOption = { id: string; name: string; classId?: string | null; classSections?: Array<{ classId: string }> };
 type ReportCalendarStatus = AttendanceReportStatus | 'MIXED';
 
-const legacyStatusStyles: Record<StudentAttendanceStatus, string> = {
+const legacyStatuses: LegacyAttendanceStatus[] = ['PENDING', 'PRESENT', 'ABSENT', 'LATE', 'HALF_DAY'];
+const legacyStatusStyles: Record<LegacyAttendanceStatus, string> = {
+  PENDING: 'bg-slate-50 border-slate-300 text-slate-600',
   PRESENT: 'bg-emerald-50 border-emerald-300 text-emerald-700',
   ABSENT: 'bg-rose-50 border-rose-300 text-rose-700',
   LATE: 'bg-amber-50 border-amber-300 text-amber-700',
   HALF_DAY: 'bg-sky-50 border-sky-300 text-sky-700',
 };
 
-const sheetStatuses: AttendanceStatus[] = ['PRESENT', 'LATE', 'ABSENT', 'EXCUSED'];
-const sheetStatusStyles: Record<AttendanceStatus, string> = {
+const sheetStatuses: SheetAttendanceStatus[] = ['PENDING', 'PRESENT', 'LATE', 'ABSENT', 'EXCUSED'];
+const sheetStatusStyles: Record<SheetAttendanceStatus, string> = {
+  PENDING: 'bg-slate-50 border-slate-300 text-slate-600',
   PRESENT: 'bg-emerald-50 border-emerald-300 text-emerald-700',
   LATE: 'bg-amber-50 border-amber-300 text-amber-700',
   ABSENT: 'bg-rose-50 border-rose-300 text-rose-700',
@@ -74,7 +79,7 @@ const formatDate = (value?: string | null) => {
   return date.toLocaleDateString();
 };
 const errorMessage = (error: any, fallback: string) =>
-  error?.response?.data?.error?.message ?? error?.response?.data?.message ?? fallback;
+  error?.response?.data?.error?.message ?? error?.response?.data?.message ?? error?.message ?? fallback;
 
 const unitKey = (unit: ResolvedAttendanceUnit) =>
   [unit.unitType, unit.slotId ?? unit.slotType ?? '', unit.periodId ?? '', unit.timetableEntryId ?? ''].join(':');
@@ -355,7 +360,7 @@ function LegacyStudentAttendanceMarkPage({ onUseV2 }: { onUseV2: () => void }) {
           studentId: student.id,
           name: student.fullName ?? `${student.firstName} ${student.lastName}`.trim(),
           admissionNo: student.admissionNo,
-          status: 'PRESENT',
+          status: 'PENDING',
           remarks: '',
         })),
       );
@@ -373,7 +378,9 @@ function LegacyStudentAttendanceMarkPage({ onUseV2 }: { onUseV2: () => void }) {
     setMessage('');
     try {
       const updated = await updateStudentAttendanceSession(sessionId, {
-        records: rows.map((row) => ({ studentId: row.studentId, status: row.status, remarks: row.remarks || undefined })),
+        records: rows
+          .filter((row): row is LegacyRow & { status: StudentAttendanceStatus } => row.status !== 'PENDING')
+          .map((row) => ({ studentId: row.studentId, status: row.status, remarks: row.remarks || undefined })),
         submit,
         schoolId,
       });
@@ -441,9 +448,9 @@ function LegacyStudentAttendanceMarkPage({ onUseV2 }: { onUseV2: () => void }) {
                 <div className="col-span-2 text-sm font-medium text-slate-700">{row.admissionNo}</div>
                 <div className="col-span-3 text-sm">{row.name}</div>
                 <div className="col-span-5 flex flex-wrap gap-2">
-                  {(['PRESENT', 'ABSENT', 'LATE', 'HALF_DAY'] as StudentAttendanceStatus[]).map((option) => (
+                  {legacyStatuses.map((option) => (
                     <button key={option} type="button" className={`rounded-full border px-3 py-1 text-xs font-medium ${row.status === option ? legacyStatusStyles[option] : 'border-slate-200 text-slate-600 hover:bg-slate-50'}`} onClick={() => setRows((prev) => prev.map((item, idx) => (idx === index ? { ...item, status: option } : item)))}>
-                      {option}
+                      {option === 'PENDING' ? 'Pending' : option}
                     </button>
                   ))}
                 </div>
@@ -584,7 +591,7 @@ function StudentAttendanceMarkV2Page({ onUseLegacy }: { onUseLegacy?: () => void
           name: studentName(row.student),
           admissionNo: row.student.admissionNo,
           rollNo: row.student.rollNo,
-          status: row.status ?? 'PRESENT',
+          status: row.status ?? 'PENDING',
           note: row.manualOverrideReason ?? '',
         })),
       );
@@ -594,11 +601,13 @@ function StudentAttendanceMarkV2Page({ onUseLegacy }: { onUseLegacy?: () => void
   const saveMutation = useMutation({
     mutationFn: async () => {
       if (!selectedUnit) throw new Error('Select an attendance unit first.');
+      const markedRows = rows.filter((row): row is SheetRow & { status: AttendanceStatus } => row.status !== 'PENDING');
+      if (!markedRows.length) throw new Error('Please mark at least one student before saving.');
       return saveAttendanceSheet({
         ...effectiveCriteria,
         schoolId,
         ...buildUnitPayload(selectedUnit),
-        records: rows.map((row) => ({ studentId: row.studentId, status: row.status, manualOverrideReason: row.note || undefined })),
+        records: markedRows.map((row) => ({ studentId: row.studentId, status: row.status, manualOverrideReason: row.note || undefined })),
       });
     },
     onSuccess: (data) => {
@@ -861,7 +870,7 @@ function StudentAttendanceMarkV2Page({ onUseLegacy }: { onUseLegacy?: () => void
                         <div className="flex flex-wrap gap-2">
                           {sheetStatuses.map((status) => (
                             <button key={status} type="button" disabled={!canMark || isLocked} onClick={() => setRows((current) => current.map((item) => item.studentId === row.studentId ? { ...item, status } : item))} className={`rounded-full border px-3 py-1 text-xs font-bold disabled:cursor-not-allowed disabled:opacity-60 ${row.status === status ? sheetStatusStyles[status] : 'border-slate-200 bg-white text-slate-500'}`}>
-                              {status}
+                              {status === 'PENDING' ? 'Pending' : status}
                             </button>
                           ))}
                         </div>
