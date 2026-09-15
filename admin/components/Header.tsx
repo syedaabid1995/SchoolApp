@@ -208,13 +208,6 @@ const superAdminSearchItems: GlobalSearchItem[] = [
     keywords: ['compliance', 'data export', 'deletion', 'consent', 'privacy'],
   },
   {
-    title: 'Feature Flags',
-    description: 'Manage platform flags and advanced configuration entries',
-    href: '/dashboard/settings?tab=features',
-    group: 'Settings',
-    keywords: ['feature', 'flags', 'configuration', 'settings'],
-  },
-  {
     title: 'Security Settings',
     description: 'Open security and MFA settings',
     href: '/dashboard/settings?tab=security',

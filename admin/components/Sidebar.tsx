@@ -144,7 +144,6 @@ const platformSections: NavSection[] = [
     items: [
       { href: '/dashboard/settings?tab=brand', label: 'Branding & Theme', icon: 'palette' },
       { href: '/dashboard/settings?tab=security', label: 'Security', icon: 'shield' },
-      { href: '/dashboard/settings?tab=features', label: 'Feature Flags', icon: 'activity' },
       { href: '/dashboard/settings?tab=modules', label: 'Modules', icon: 'package' },
       { href: '/dashboard/settings?tab=access', label: 'Access', icon: 'lock' },
       { href: '/dashboard/settings?tab=compliance', label: 'Compliance', icon: 'scale' },
