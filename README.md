@@ -120,12 +120,20 @@ The admin dev server is configured to run on port `3001`.
 
 ### Mobile App
 
+Brand flavors (`saapt` / `akademifyy`) set package id, API URL, app name, and logos.
+
 ```bash
+# Teacher
+./scripts/build-flavor-apk.sh teacher saapt
+./scripts/build-flavor-apk.sh teacher akademifyy
+
+# Parent
+./scripts/build-flavor-apk.sh parent saapt
+./scripts/build-flavor-apk.sh parent akademifyy
+
+# Run (example: teacher SAAPT)
 cd school-flutter
-flutter pub get
-flutter run --dart-define=API_BASE_URL=http://127.0.0.1:4000/api/v1
-flutter run --dart-define=API_BASE_URL=https://api.saapttech.com/api/v1
-flutter run --dart-define=API_BASE_URL=https://api.akademifyy.in/api/v1
+flutter run --flavor saapt --dart-define-from-file=flavors/saapt.json
 ```
 
 ## Environment Variables

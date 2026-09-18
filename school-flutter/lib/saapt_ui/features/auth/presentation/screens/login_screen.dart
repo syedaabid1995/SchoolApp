@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../../../global_ui/core/constants/app_config.dart';
 import '../../../../../global_ui/features/auth/domain/entities/auth_session.dart';
 import '../../../../../global_ui/features/auth/presentation/providers/auth_controller.dart';
 import '../../../../app/theme/saapt_theme.dart';
@@ -94,7 +95,7 @@ class _SaaptLoginScreenState extends ConsumerState<SaaptLoginScreen> {
                     ),
                     clipBehavior: Clip.antiAlias,
                     child: Image.asset(
-                      'assets/branding/saapt_teacher_logo.png',
+                      AppConfig.logoAsset,
                       fit: BoxFit.cover,
                     ),
                   ),

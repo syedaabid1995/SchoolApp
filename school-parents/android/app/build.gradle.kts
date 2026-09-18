@@ -31,14 +31,24 @@ android {
     }
 
     defaultConfig {
-        // TODO: Specify your own unique Application ID (https://developer.android.com/studio/build/application-id.html).
-        applicationId = "com.saapt.parent"
-        // You can update the following values to match your application needs.
-        // For more information, see: https://flutter.dev/to/review-gradle-config.
+        // applicationId is set per product flavor (saapt / akademifyy).
         minSdk = flutter.minSdkVersion
         targetSdk = flutter.targetSdkVersion
         versionCode = flutter.versionCode
         versionName = flutter.versionName
+    }
+
+    flavorDimensions += "brand"
+    productFlavors {
+        create("saapt") {
+            dimension = "brand"
+            applicationId = "com.saapt.parent"
+        }
+        create("akademifyy") {
+            dimension = "brand"
+            // Android package IDs are lowercase (Play / Firebase convention).
+            applicationId = "com.akademifyy.parent"
+        }
     }
 
     signingConfigs {

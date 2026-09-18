@@ -159,3 +159,7 @@ backend/test-deployment.json
 # Load test outputs
 load-tests/k6/results/*
 !load-tests/k6/results/.gitkeep
+
+# Generated Android release packages
+*.apk
+*.aab

@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../../app/theme/saapt_theme.dart';
+import '../../../../core/config/parent_app_config.dart';
 import '../../../../core/network/parent_api_client.dart';
 import '../../../parent/presentation/providers/parent_providers.dart';
 
@@ -254,7 +255,7 @@ class _Logo extends StatelessWidget {
         ),
         clipBehavior: Clip.antiAlias,
         child: Image.asset(
-          'assets/branding/saapt_parent_logo.png',
+          ParentAppConfig.logoAsset,
           fit: BoxFit.cover,
         ),
       ),

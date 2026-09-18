@@ -117,14 +117,7 @@ The app includes Firebase Messaging, local notifications, notification repositor
 
 ## API Integration
 
-The API base URL is defined in `lib/core/constants/app_config.dart`:
-
-```dart
-static const apiBaseUrl = String.fromEnvironment(
-  'API_BASE_URL',
-  defaultValue: 'https://schoolapp-6a6f.onrender.com/api/v1',
-);
-```
+The API base URL and brand are defined in `lib/global_ui/core/constants/app_config.dart` via Dart defines (`APP_BRAND`, `API_BASE_URL`). Prefer the flavor JSON files under `flavors/`.
 
 Configured endpoints are in `lib/core/constants/api_endpoints.dart`, including auth, users, timetable, attendance, notifications, leave, homework, classes, exams, and marks.
 
@@ -132,13 +125,41 @@ Configured endpoints are in `lib/core/constants/api_endpoints.dart`, including a
 
 Local persistence uses Hive and Flutter secure storage. Cache/sync infrastructure exists under `lib/core/cache`, `lib/core/storage`, and `lib/core/sync`.
 
-## Build Android
+## Brand flavors (Android)
+
+Two product flavors share the same codebase:
+
+| Flavor | Package ID | API | App name |
+| --- | --- | --- | --- |
+| `saapt` | `com.saapt.teacher` | `https://api.saapttech.com/api/v1` | SAAPT Teacher |
+| `akademifyy` | `com.akademifyy.teacher` | `https://api.akademifyy.in/api/v1` | Akademifyy Teacher |
+
+```bash
+# From repo root (recommended)
+./scripts/build-flavor-apk.sh teacher saapt
+./scripts/build-flavor-apk.sh teacher akademifyy
+
+# Or manually
+cd school-flutter
+flutter pub get
+flutter build apk --flavor saapt --dart-define-from-file=flavors/saapt.json
+flutter build apk --flavor akademifyy --dart-define-from-file=flavors/akademifyy.json
+
+# Run on device
+flutter run --flavor saapt --dart-define-from-file=flavors/saapt.json
+flutter run --flavor akademifyy --dart-define-from-file=flavors/akademifyy.json
+```
+
+Replace login logos under `assets/branding/` and launcher icons under `android/app/src/<flavor>/res/mipmap-*`.
+
+**Firebase:** `google-services.json` currently registers `com.saapt.teacher` and `com.akademifyy` (not `com.akademifyy.teacher`). Register `com.akademifyy.teacher` in Firebase Console and refresh `google-services.json` before shipping the Akademifyy teacher APK with FCM.
+
+## Build Android (legacy single-define)
 
 ```bash
 cd school-flutter
 flutter pub get
-flutter build apk --debug --dart-define=API_BASE_URL=http://127.0.0.1:4000/api/v1
-flutter build apk --release --dart-define=API_BASE_URL=https://example.com/api/v1
+flutter build apk --flavor saapt --debug --dart-define-from-file=flavors/saapt.json
 ```
 
 ## Build iOS
@@ -146,14 +167,14 @@ flutter build apk --release --dart-define=API_BASE_URL=https://example.com/api/v
 ```bash
 cd school-flutter
 flutter pub get
-flutter build ios --no-codesign --dart-define=API_BASE_URL=https://example.com/api/v1
+flutter build ios --no-codesign --dart-define-from-file=flavors/saapt.json
 ```
 
 ## Build Web
 
 ```bash
 cd school-flutter
-flutter build web --debug --dart-define=API_BASE_URL=http://127.0.0.1:4000/api/v1
+flutter build web --debug --dart-define-from-file=flavors/saapt.json
 ```
 
 ## Environment Variables
@@ -162,6 +183,7 @@ Flutter uses Dart defines rather than a checked-in `.env` file.
 
 | Dart define | Purpose |
 | --- | --- |
+| `APP_BRAND` | `saapt` or `akademifyy` (drives name + logo) |
 | `API_BASE_URL` | Backend API base URL |
 
 ## Troubleshooting
