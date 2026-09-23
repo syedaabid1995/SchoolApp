@@ -164,7 +164,6 @@ const createSubjectBatchRow = (): BatchSubjectForm => ({ ...emptySubjectForm, ro
 
 const teacherName = (teacher?: { firstName?: string; lastName?: string; employeeNo?: string | null } | null) =>
   teacher ? `${teacher.firstName ?? ''} ${teacher.lastName ?? ''}`.trim() || teacher.employeeNo || 'Teacher' : 'Unassigned';
-const digitsOnly = (value: string) => value.replace(/\D/g, '');
 
 const formatPeriodType = (type: TimePeriodType | string) =>
   type === 'CLASS_TIME' ? 'Class Time' : type === 'EXAM_TIME' ? 'Exam Time' : 'Break';
@@ -869,13 +868,11 @@ export default function AcademicSetupPage() {
   const validateClass = () => {
     if (classForm.id) {
       if (!classForm.name.trim()) return notify.error('Validation error', 'Class name is required.');
-      if (!/^\d+$/.test(classForm.name.trim())) return notify.error('Validation error', 'Class name must contain numbers only.');
       classMutation.mutate();
       return;
     }
     if (!classBatchRows.length) return notify.error('Validation error', 'Add at least one class.');
     if (classBatchRows.some((row) => !row.name.trim())) return notify.error('Validation error', 'Class name is required for every row.');
-    if (classBatchRows.some((row) => !/^\d+$/.test(row.name.trim()))) return notify.error('Validation error', 'Class names must contain numbers only.');
     if (hasDuplicateValues(classBatchRows.map((row) => row.name))) return notify.error('Validation error', 'Remove duplicate class names before saving.');
     classBatchMutation.mutate();
   };
@@ -1223,7 +1220,7 @@ export default function AcademicSetupPage() {
             {classForm.id ? (
               <>
                 <Field label="Class name">
-                  <input className={inputClass} inputMode="numeric" pattern="[0-9]*" value={classForm.name} onChange={(e) => setClassForm((p) => ({ ...p, name: digitsOnly(e.target.value) }))} placeholder="Example: 10" />
+                  <input className={inputClass} value={classForm.name} onChange={(e) => setClassForm((p) => ({ ...p, name: e.target.value }))} placeholder="Example: Nursery" />
                 </Field>
                 <Field label="Academic year">
                   <select className={inputClass} value={classForm.academicYearId} onChange={(e) => setClassForm((p) => ({ ...p, academicYearId: e.target.value }))}>
@@ -1270,7 +1267,7 @@ export default function AcademicSetupPage() {
                         </div>
                         <div className="grid gap-3 lg:grid-cols-2">
                           <Field label="Class name">
-                            <input className={inputClass} inputMode="numeric" pattern="[0-9]*" value={row.name} onChange={(e) => setClassBatchRows((rows) => rows.map((item) => item.rowId === row.rowId ? { ...item, name: digitsOnly(e.target.value) } : item))} placeholder="Example: 1" />
+                            <input className={inputClass} value={row.name} onChange={(e) => setClassBatchRows((rows) => rows.map((item) => item.rowId === row.rowId ? { ...item, name: e.target.value } : item))} placeholder="Example: Nursery" />
                           </Field>
                           <Field label="Academic year">
                             <select className={inputClass} value={row.academicYearId} onChange={(e) => setClassBatchRows((rows) => rows.map((item) => item.rowId === row.rowId ? { ...item, academicYearId: e.target.value } : item))}>
