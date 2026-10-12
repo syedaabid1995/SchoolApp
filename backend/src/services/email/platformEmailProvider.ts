@@ -3,9 +3,9 @@ import {
   defaultPlatformSenderForIntent,
   PLATFORM_SENDER_EMAILS,
   type EmailMessage,
+  type EmailIntent,
   type EmailProviderDeliveryResult,
   type EmailSenderIdentity,
-  type PlatformEmailIntent,
 } from './email.types';
 import { GoogleWorkspaceTransport, SMTPTransport } from './transports';
 
@@ -100,7 +100,7 @@ export const PlatformEmailProvider = {
     };
   },
 
-  resolveSender(intent: PlatformEmailIntent, identity?: EmailSenderIdentity, senderName?: string | null) {
+  resolveSender(intent: EmailIntent, identity?: EmailSenderIdentity, senderName?: string | null) {
     const provider = getActiveProvider();
     const senderIdentity = identity ?? defaultPlatformSenderForIntent(intent);
     const defaultSender = provider?.fromEmail ?? PLATFORM_SENDER_EMAILS.NO_REPLY;
@@ -118,7 +118,7 @@ export const PlatformEmailProvider = {
   },
 
   async send(params: {
-    intent: PlatformEmailIntent;
+    intent: EmailIntent;
     message: EmailMessage;
     senderIdentity?: EmailSenderIdentity;
     senderName?: string | null;

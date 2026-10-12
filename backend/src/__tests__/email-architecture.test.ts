@@ -88,6 +88,13 @@ test('generic notification dispatcher no longer falls back from tenant email to 
   assert.doesNotMatch(dispatcher, /\?\?\s*\(\s*params\.channel === 'EMAIL'/);
 });
 
+test('tenant email defaults to platform SMTP when school SMTP is not configured', () => {
+  const service = source('src/services/email.service.ts');
+  assert.match(service, /createPlatformSchoolEmail/);
+  assert.match(service, /tenantEmailRoutedVia: 'PLATFORM_DEFAULT'/);
+  assert.match(service, /resolveSchoolSenderName/);
+});
+
 test('tenant SMTP passwords are encrypted before storage', () => {
   const messagingSettings = source('src/services/messagingSettings.service.ts');
   assert.match(messagingSettings, /prepareCredentialsForStorage/);

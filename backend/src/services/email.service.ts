@@ -116,6 +116,72 @@ const emailJobId = (scope: 'PLATFORM' | 'TENANT', logId: string) => `email-${sco
 
 const platformProviderCode = () => PlatformEmailProvider.getStatus().serviceCode ?? 'PLATFORM_EMAIL';
 
+const resolveSchoolSenderName = async (schoolId: string) => {
+  const school = await prisma.school.findUnique({
+    where: { id: schoolId },
+    select: { name: true },
+  });
+  return school?.name?.trim() || null;
+};
+
+const platformNotConfiguredError = 'Platform email is not configured';
+const tenantNotConfiguredError = 'School SMTP provider is not configured';
+
+const createPlatformSchoolEmail = async (params: {
+  schoolId: string;
+  userId?: string | null;
+  intent: TenantEmailIntent;
+  to: string;
+  subject: string;
+  body: string;
+  html?: string;
+  templateKey?: string | null;
+  safePayload?: Record<string, unknown>;
+  senderIdentity?: EmailSenderIdentity;
+  senderName?: string | null;
+}) => {
+  if (!PlatformEmailProvider.isConfigured()) {
+    return {
+      status: 'email_not_configured' as const,
+      delivery: { status: 'FAILED' as const, error: `${platformNotConfiguredError} and ${tenantNotConfiguredError}` },
+    };
+  }
+
+  const senderName = params.senderName?.trim() || (await resolveSchoolSenderName(params.schoolId));
+  const sender = PlatformEmailProvider.resolveSender(params.intent, params.senderIdentity, senderName);
+  const log = await createEmailLog({
+    schoolId: params.schoolId,
+    userId: params.userId ?? null,
+    intent: params.intent,
+    scope: 'PLATFORM',
+    to: params.to,
+    subject: params.subject,
+    templateKey: params.templateKey,
+    provider: platformProviderCode(),
+    sender: sender.email,
+    safePayload: {
+      ...(params.safePayload ?? {}),
+      ...(senderName ? { senderName } : {}),
+      tenantEmailRoutedVia: 'PLATFORM_DEFAULT',
+    },
+  });
+  const delivery = await enqueue('PLATFORM', {
+    logId: log.id,
+    schoolId: params.schoolId,
+    userId: params.userId ?? null,
+    intent: params.intent,
+    senderIdentity: params.senderIdentity,
+    senderName,
+    templateKey: params.templateKey ?? null,
+    to: params.to,
+    subject: params.subject,
+    body: params.body,
+    html: params.html,
+    queuedAt: new Date().toISOString(),
+  });
+  return { status: statusFromDelivery(delivery), logId: log.id, delivery };
+};
+
 const sentFacadeDeliveryFromLog = async (logId: string): Promise<EmailFacadeDeliveryResult | null> => {
   const log = await prisma.notificationLog.findUnique({
     where: { id: logId },
@@ -266,7 +332,7 @@ export const EmailService = {
 
   async sendPlatformEmail(params: SendEmailParams & { intent: PlatformEmailIntent }): Promise<EmailServiceResult> {
     if (!PlatformEmailProvider.isConfigured()) {
-      return { status: 'email_not_configured', delivery: { status: 'FAILED', error: 'Platform email is not configured' } };
+      return { status: 'email_not_configured', delivery: { status: 'FAILED', error: platformNotConfiguredError } };
     }
 
     const rendered = renderEmailTemplate({
@@ -313,11 +379,6 @@ export const EmailService = {
     if (!params.schoolId) {
       return { status: 'email_not_configured', delivery: { status: 'FAILED', error: 'Tenant email requires a schoolId' } };
     }
-    const config = await TenantEmailProvider.resolveConfigWithoutSecrets(params.schoolId);
-    if (!config) {
-      return { status: 'email_not_configured', delivery: { status: 'FAILED', error: 'School SMTP provider is not configured' } };
-    }
-
     const rendered = renderEmailTemplate({
       intent: params.intent,
       subject: params.subject,
@@ -325,6 +386,23 @@ export const EmailService = {
       html: params.html,
       data: params.data,
     });
+    const config = await TenantEmailProvider.resolveConfigWithoutSecrets(params.schoolId);
+    if (!config) {
+      return createPlatformSchoolEmail({
+        schoolId: params.schoolId,
+        userId: params.userId ?? null,
+        intent: params.intent,
+        to: params.to,
+        subject: rendered.subject,
+        body: rendered.body,
+        html: rendered.html,
+        templateKey: rendered.templateKey,
+        safePayload: params.safePayload,
+        senderIdentity: params.senderIdentity,
+        senderName: params.senderName,
+      });
+    }
+
     const log = await createEmailLog({
       schoolId: params.schoolId,
       userId: params.userId ?? null,
@@ -377,7 +455,7 @@ export const EmailService = {
 
     if (scope === 'PLATFORM') {
       if (!PlatformEmailProvider.isConfigured()) {
-        const error = 'Platform email is not configured';
+        const error = platformNotConfiguredError;
         await failLog(params.logId, error);
         return { status: 'FAILED', error };
       }
@@ -402,9 +480,33 @@ export const EmailService = {
     }
     const config = await TenantEmailProvider.resolveConfigWithoutSecrets(params.schoolId);
     if (!config) {
-      const error = 'School SMTP provider is not configured';
-      await failLog(params.logId, error);
-      return { status: 'FAILED', error };
+      if (!PlatformEmailProvider.isConfigured()) {
+        const error = `${platformNotConfiguredError} and ${tenantNotConfiguredError}`;
+        await failLog(params.logId, error);
+        return { status: 'FAILED', error };
+      }
+      const senderName = await resolveSchoolSenderName(params.schoolId);
+      const sender = PlatformEmailProvider.resolveSender(intent, undefined, senderName);
+      await updateLogPayload(params.logId, {
+        provider: platformProviderCode(),
+        sender: sender.email,
+        scope: 'PLATFORM',
+        ...(senderName ? { senderName } : {}),
+        tenantEmailRoutedVia: 'PLATFORM_DEFAULT',
+      });
+      return enqueue('PLATFORM', {
+        logId: params.logId,
+        schoolId: params.schoolId,
+        userId: params.userId ?? null,
+        intent,
+        senderName,
+        templateKey: params.templateKey ?? null,
+        to: params.to,
+        subject,
+        body,
+        html: params.html,
+        queuedAt: new Date().toISOString(),
+      });
     }
     await updateLogPayload(params.logId, {
       provider: config.provider,
@@ -426,7 +528,7 @@ export const EmailService = {
 
   async processPlatformEmailJob(data: EmailQueueJobData, attemptCount: number) {
     const sender = PlatformEmailProvider.resolveSender(
-      data.intent as PlatformEmailIntent,
+      data.intent,
       data.senderIdentity,
       data.senderName,
     );
@@ -437,7 +539,7 @@ export const EmailService = {
     if (alreadySent) return alreadySent;
 
     const result = await PlatformEmailProvider.send({
-      intent: data.intent as PlatformEmailIntent,
+      intent: data.intent,
       senderIdentity: data.senderIdentity,
       senderName: data.senderName,
       message: {

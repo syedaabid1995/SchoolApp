@@ -65,7 +65,7 @@ export const normalizeEmailIntent = (
   return fallback;
 };
 
-export const defaultPlatformSenderForIntent = (intent: PlatformEmailIntent): EmailSenderIdentity => {
+export const defaultPlatformSenderForIntent = (intent: EmailIntent): EmailSenderIdentity => {
   if (intent === 'BILLING' || intent === 'PAYMENT_RECEIPT' || intent === 'SUBSCRIPTION_ACTIVATED') {
     return 'BILLING';
   }
