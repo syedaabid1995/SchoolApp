@@ -155,9 +155,17 @@ class _FakeAuthRepository implements AuthRepository {
   Future<AuthSession> login({
     required String identifier,
     required String password,
+    String? schoolId,
     String? schoolCode,
     bool rememberMe = false,
   }) async => AuthSession.authenticated(user);
+
+  @override
+  Future<List<SchoolLoginOption>> listAccessibleSchools() async => const [];
+
+  @override
+  Future<AuthSession> switchSchool({required String schoolId}) async =>
+      AuthSession.authenticated(user);
 
   @override
   Future<AuthSession> verifyMfa({
@@ -176,7 +184,10 @@ class _FakeAuthRepository implements AuthRepository {
   }) async {}
 
   @override
-  Future<void> requestPasswordResetOtp({required String email}) async {}
+  Future<void> requestPasswordResetOtp({
+    required String email,
+    String? schoolCode,
+  }) async {}
 
   @override
   Future<void> resetPasswordWithOtp({
@@ -184,6 +195,7 @@ class _FakeAuthRepository implements AuthRepository {
     required String otp,
     required String newPassword,
     required String confirmPassword,
+    String? schoolCode,
   }) async {}
 
   @override

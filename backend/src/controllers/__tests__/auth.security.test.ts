@@ -222,6 +222,13 @@ const matchesUserWhere = (user: TestUser, where: Record<string, any>) => {
   if (emailWhere?.equals && user.email.toLowerCase() !== emailWhere.equals.toLowerCase()) return false;
   if ('schoolId' in where && (user.schoolId ?? null) !== (where.schoolId as string | null)) return false;
   if ('status' in where && user.status !== where.status) return false;
+  const roleNameWhere = where.roles?.some?.role?.name;
+  if (roleNameWhere) {
+    const allowedRoles = Array.isArray(roleNameWhere.in)
+      ? roleNameWhere.in
+      : [typeof roleNameWhere === 'string' ? roleNameWhere : roleNameWhere.equals].filter(Boolean);
+    if (!user.roles.some((entry) => allowedRoles.includes(entry.role.name))) return false;
+  }
   return true;
 };
 

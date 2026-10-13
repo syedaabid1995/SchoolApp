@@ -121,10 +121,18 @@ class AuthRemoteDataSource {
     );
   }
 
-  Future<void> requestPasswordResetOtp({required String email}) async {
+  Future<void> requestPasswordResetOtp({
+    required String email,
+    String? schoolCode,
+  }) async {
     await _dio.post<void>(
       ApiEndpoints.forgotPasswordOtp,
-      data: {'email': email, 'loginType': 'teacher'},
+      data: {
+        'email': email,
+        if (schoolCode != null && schoolCode.trim().isNotEmpty)
+          'schoolCode': schoolCode.trim(),
+        'loginType': 'teacher',
+      },
     );
   }
 
@@ -133,6 +141,7 @@ class AuthRemoteDataSource {
     required String otp,
     required String newPassword,
     required String confirmPassword,
+    String? schoolCode,
   }) async {
     await _dio.post<void>(
       ApiEndpoints.resetPasswordOtp,
@@ -141,6 +150,8 @@ class AuthRemoteDataSource {
         'otp': otp,
         'newPassword': newPassword,
         'confirmPassword': confirmPassword,
+        if (schoolCode != null && schoolCode.trim().isNotEmpty)
+          'schoolCode': schoolCode.trim(),
         'loginType': 'teacher',
       },
     );

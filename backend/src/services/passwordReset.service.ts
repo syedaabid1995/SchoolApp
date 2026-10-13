@@ -102,11 +102,15 @@ const findPasswordResetUser = async (
   input: Pick<ForgotPasswordInput, 'email' | 'loginType'>,
   selectedSchoolId: string | null,
 ) => {
+  const expectedRoles = input.loginType ? expectedRolesByLoginType[input.loginType] ?? [] : [];
   const users = await prisma.user.findMany({
     where: {
       email: { equals: input.email, mode: 'insensitive' },
       ...(selectedSchoolId ? { schoolId: selectedSchoolId } : {}),
       status: 'ACTIVE',
+      ...(expectedRoles.length
+        ? { roles: { some: { role: { name: { in: expectedRoles as any[] } } } } }
+        : {}),
     },
     orderBy: { createdAt: 'asc' },
     select: {
@@ -118,6 +122,30 @@ const findPasswordResetUser = async (
   });
 
   if (!users.length) {
+    if (input.loginType === 'parent') {
+      const profile = await prisma.parentProfile.findFirst({
+        where: {
+          email: { equals: input.email, mode: 'insensitive' },
+          user: {
+            ...(selectedSchoolId ? { schoolId: selectedSchoolId } : {}),
+            status: 'ACTIVE',
+            roles: { some: { role: { name: 'PARENT' } } },
+          },
+        },
+        orderBy: { createdAt: 'asc' },
+        select: {
+          user: {
+            select: {
+              id: true,
+              email: true,
+              schoolId: true,
+              roles: { select: { role: { select: { name: true } } } },
+            },
+          },
+        },
+      });
+      return { user: profile?.user ?? null, matchedLoginType: Boolean(profile?.user) };
+    }
     return { user: null, matchedLoginType: false };
   }
 

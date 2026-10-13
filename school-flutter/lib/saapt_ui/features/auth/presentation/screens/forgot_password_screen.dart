@@ -20,6 +20,7 @@ class _SaaptForgotPasswordScreenState
     extends ConsumerState<SaaptForgotPasswordScreen> {
   final _formKey = GlobalKey<FormState>();
   final _emailController = TextEditingController();
+  final _schoolCodeController = TextEditingController();
   final _otpController = TextEditingController();
   final _newPasswordController = TextEditingController();
   final _confirmPasswordController = TextEditingController();
@@ -32,6 +33,7 @@ class _SaaptForgotPasswordScreenState
   @override
   void dispose() {
     _emailController.dispose();
+    _schoolCodeController.dispose();
     _otpController.dispose();
     _newPasswordController.dispose();
     _confirmPasswordController.dispose();
@@ -51,6 +53,7 @@ class _SaaptForgotPasswordScreenState
       if (_step == _ForgotPasswordStep.email) {
         await repository.requestPasswordResetOtp(
           email: _emailController.text.trim(),
+          schoolCode: _schoolCodeController.text.trim(),
         );
         if (!mounted) return;
         setState(() {
@@ -69,6 +72,7 @@ class _SaaptForgotPasswordScreenState
         otp: _otpController.text.trim(),
         newPassword: _newPasswordController.text,
         confirmPassword: _confirmPasswordController.text,
+        schoolCode: _schoolCodeController.text.trim(),
       );
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -113,7 +117,8 @@ class _SaaptForgotPasswordScreenState
       _ForgotPasswordStep.password => 'Set New Password',
     };
     final subtitle = switch (_step) {
-      _ForgotPasswordStep.email => 'Enter your registered teacher email.',
+      _ForgotPasswordStep.email =>
+        'Enter your registered teacher email and school code.',
       _ForgotPasswordStep.otp => 'Check your email for the 6-digit OTP.',
       _ForgotPasswordStep.password => 'Create a new teacher login password.',
     };
@@ -184,6 +189,18 @@ class _SaaptForgotPasswordScreenState
                               hintText: 'teacher@school.com',
                             ),
                             validator: _emailValidator,
+                          ),
+                          const SizedBox(height: 16),
+                          const _FieldLabel('SCHOOL CODE'),
+                          TextFormField(
+                            controller: _schoolCodeController,
+                            textCapitalization: TextCapitalization.characters,
+                            textInputAction: TextInputAction.done,
+                            decoration: const InputDecoration(
+                              prefixIcon: Icon(Icons.apartment_outlined),
+                              hintText: 'Example: 001',
+                            ),
+                            validator: _required,
                           ),
                         ],
                         if (_step == _ForgotPasswordStep.otp) ...[
