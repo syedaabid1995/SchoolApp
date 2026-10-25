@@ -1,0 +1,30 @@
+[Unit]
+Description=Privileged SSH operations helper for SAAPT operations panel
+After=network-online.target ssh.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=root
+Group=sshops
+WorkingDirectory=/opt/saapt-ssh-alert
+RuntimeDirectory=saapt-ssh-alert
+RuntimeDirectoryMode=0770
+Environment=OPS_HELPER_SOCKET=/run/saapt-ssh-alert/ops-helper.sock
+ExecStart=/home/deploy/.nvm/versions/node/v24.18.0/bin/node /opt/saapt-ssh-alert/ssh-ops-helper.js
+Restart=always
+RestartSec=5
+NoNewPrivileges=true
+CapabilityBoundingSet=CAP_NET_ADMIN CAP_KILL CAP_DAC_READ_SEARCH
+AmbientCapabilities=CAP_NET_ADMIN CAP_KILL CAP_DAC_READ_SEARCH
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=read-only
+ReadWritePaths=/var/lib/saapt-ssh-alert /run/saapt-ssh-alert
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6 AF_NETLINK
+
+[Install]
+WantedBy=multi-user.target

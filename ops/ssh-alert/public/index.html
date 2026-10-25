@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light">
+  <title>Server Operations | SAAPT</title>
+  <link rel="stylesheet" href="/app.css">
+  <script src="/app.js" defer></script>
+</head>
+<body>
+  <header class="topbar">
+    <a class="brand" href="/" aria-label="SAAPT server operations home"><span class="brand-mark">S</span><span><strong>SAAPT</strong><small>Server Operations</small></span></a>
+    <div id="account" class="account" hidden><span id="operator-name"></span><button id="logout" class="button button-quiet" type="button">Sign out</button></div>
+  </header>
+  <main>
+    <section id="login-view" class="login-view" aria-labelledby="login-title">
+      <div class="login-heading"><p class="eyebrow">RESTRICTED ACCESS</p><h1 id="login-title">Server operations</h1><p>Sign in with your individual operator account and authenticator code.</p></div>
+      <form id="login-form" class="login-form">
+        <label for="username">Username</label><input id="username" name="username" autocomplete="username" required maxlength="120">
+        <label for="password">Password</label><input id="password" name="password" type="password" autocomplete="current-password" required>
+        <label for="code">Authenticator or recovery code</label><input id="code" name="code" autocomplete="one-time-code" maxlength="24" required>
+        <button class="button button-primary" type="submit">Sign in</button>
+        <p id="login-error" class="form-message" aria-live="polite"></p>
+      </form>
+    </section>
+
+    <section id="panel-view" hidden>
+      <div class="page-heading"><div><p class="eyebrow">INFRASTRUCTURE SECURITY</p><h1>SSH security</h1><p>Review active connections and manage server IP blocks.</p></div><button id="refresh" class="button button-secondary" type="button">Refresh</button></div>
+      <nav class="tabs" aria-label="SSH security sections">
+        <button class="tab active" data-tab="sessions" type="button" aria-current="page">Active sessions <span id="session-count" class="count">0</span></button>
+        <button class="tab" data-tab="access" type="button">Access approvals <span id="access-count" class="count">0</span></button>
+        <button class="tab" data-tab="blocks" type="button">Blocked IPs <span id="block-count" class="count">0</span></button>
+        <button class="tab" data-tab="audit" type="button">Audit log</button>
+      </nav>
+      <section id="sessions-panel" class="panel-section">
+        <div class="section-heading"><div><h2>Active SSH sessions</h2><p>Only exact, verified SSH connections can be revoked.</p></div><span id="sessions-updated" class="muted"></span></div>
+        <div class="table-wrap"><table><thead><tr><th>Linux account</th><th>Source IP</th><th>Client port</th><th>Authentication</th><th>Connected since</th><th>Action</th></tr></thead><tbody id="sessions-body"></tbody></table><p id="sessions-empty" class="empty-state" hidden>No active SSH sessions.</p></div>
+      </section>
+      <section id="access-panel" class="panel-section" hidden>
+        <div class="section-heading"><div><h2>Pending SSH access approvals</h2><p>Approvals allow a 15-minute retry window; valid SSH credentials are still required.</p></div></div>
+        <div class="table-wrap"><table><thead><tr><th>Linux account</th><th>Source IP</th><th>Requested</th><th>Expires</th><th>Action</th></tr></thead><tbody id="access-body"></tbody></table><p id="access-empty" class="empty-state" hidden>No pending access requests.</p></div>
+      </section>
+      <section id="blocks-panel" class="panel-section" hidden>
+        <div class="section-heading"><div><h2>Blocked IP addresses</h2><p>Blocks prevent new SSH connections. Existing sessions stay open.</p></div></div>
+        <form id="block-form" class="block-form"><label for="block-ip">IP address</label><input id="block-ip" name="ip" placeholder="IPv4 or IPv6 address" autocomplete="off" required><label for="block-reason">Reason</label><input id="block-reason" name="reason" placeholder="Optional note for the audit log" maxlength="200"><button class="button button-danger" type="submit">Block IP</button></form>
+        <div class="table-wrap"><table><thead><tr><th>IP address</th><th>Status</th><th>Updated</th><th>Action</th></tr></thead><tbody id="blocks-body"></tbody></table><p id="blocks-empty" class="empty-state" hidden>No IP addresses are blocked.</p></div>
+      </section>
+      <section id="audit-panel" class="panel-section" hidden>
+        <div class="section-heading"><div><h2>Administrative audit log</h2><p>Recent SSH security actions, including refused and failed operations.</p></div><span id="audit-integrity" class="status"></span></div>
+        <div class="table-wrap"><table><thead><tr><th>Time</th><th>Operator</th><th>Action</th><th>Target</th><th>Source</th><th>Result</th><th>Note</th></tr></thead><tbody id="audit-body"></tbody></table><p id="audit-empty" class="empty-state" hidden>No actions recorded.</p></div>
+      </section>
+      <p id="notice" class="notice" role="status" aria-live="polite"></p>
+    </section>
+  </main>
+</body>
+</html>

@@ -1,0 +1,38 @@
+[Unit]
+Description=SAAPT SSH server operations panel
+After=network-online.target saapt-ssh-action.service
+Wants=network-online.target
+Requires=saapt-ssh-action.service
+
+[Service]
+Type=simple
+User=sshops
+Group=sshops
+SupplementaryGroups=sshops
+WorkingDirectory=/opt/saapt-ssh-alert
+Environment=OPS_HOST=ops.saapttech.com
+Environment=OPS_PUBLIC_URL=https://ops.saapttech.com
+Environment=OPS_PANEL_PORT=4173
+Environment=OPS_PANEL_DATA=/var/lib/saapt-ssh-panel
+Environment=OPS_HELPER_SOCKET=/run/saapt-ssh-alert/ops-helper.sock
+ExecStart=/home/deploy/.nvm/versions/node/v24.18.0/bin/node /opt/saapt-ssh-alert/ssh-panel-server.js
+Restart=always
+RestartSec=5
+NoNewPrivileges=true
+CapabilityBoundingSet=
+PrivateTmp=true
+PrivateDevices=true
+ProtectSystem=strict
+ProtectHome=read-only
+ReadWritePaths=/var/lib/saapt-ssh-panel
+ReadOnlyPaths=/opt/saapt-ssh-alert
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+ProtectHostname=true
+LockPersonality=true
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+UMask=0077
+
+[Install]
+WantedBy=multi-user.target
