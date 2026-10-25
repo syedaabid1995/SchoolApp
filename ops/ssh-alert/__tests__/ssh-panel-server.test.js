@@ -66,7 +66,7 @@ function request(port, route, options = {}) {
     const body = options.body || '';
     const req = http.request({
       hostname: '127.0.0.1', port, path: route, method: options.method || 'GET',
-      headers: { Host: 'ops.saapttech.com', Origin: 'https://ops.saapttech.com', ...(body ? { 'Content-Type': 'application/json' } : {}), ...(options.headers || {}) },
+      headers: { Host: 'localhost:4174', Origin: 'http://localhost:4174', ...(body ? { 'Content-Type': 'application/json' } : {}), ...(options.headers || {}) },
     }, (res) => {
       let raw = '';
       res.setEncoding('utf8');
@@ -88,7 +88,7 @@ test('requires password and TOTP, issues secure session, enforces CSRF, and logs
   for (let attempt = 0; attempt < 50 && !fs.existsSync(socketPath); attempt += 1) await new Promise((resolve) => setTimeout(resolve, 50));
   assert.equal(fs.existsSync(socketPath), true);
   const child = spawn(process.execPath, [appPath], {
-    env: { ...process.env, OPS_PANEL_DATA: testDir, OPS_PANEL_PORT: String(port), OPS_HOST: 'ops.saapttech.com', OPS_HELPER_SOCKET: socketPath, SSH_ALERT_DATA_DIR: testDir },
+    env: { ...process.env, OPS_PANEL_DATA: testDir, OPS_PANEL_PORT: String(port), OPS_HOST: 'localhost', OPS_ORIGIN: 'http://localhost:4174', OPS_HELPER_SOCKET: socketPath, SSH_ALERT_DATA_DIR: testDir },
     stdio: ['ignore', 'inherit', 'inherit'],
   });
   t.after(async () => {
@@ -110,6 +110,12 @@ test('requires password and TOTP, issues secure session, enforces CSRF, and logs
     method: 'POST', body: JSON.stringify({ username: 'test.operator', password, code: '000000' }),
   });
   assert.equal(badLogin.status, 401);
+
+  const rejectedOrigin = await request(port, '/api/login', {
+    method: 'POST', body: JSON.stringify({ username: 'test.operator', password, code: currentTotp(mfaSecret) }),
+    headers: { Origin: 'http://localhost:4173' },
+  });
+  assert.equal(rejectedOrigin.status, 403);
 
   const login = await request(port, '/api/login', {
     method: 'POST', body: JSON.stringify({ username: 'test.operator', password, code: currentTotp(mfaSecret) }),

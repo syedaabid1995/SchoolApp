@@ -11,6 +11,7 @@ const root = __dirname;
 const dataDir = process.env.OPS_PANEL_DATA || '/var/lib/saapt-ssh-panel';
 const helperSocket = process.env.OPS_HELPER_SOCKET || '/run/saapt-ssh-alert/ops-helper.sock';
 const expectedHost = String(process.env.OPS_HOST || 'ops.saapttech.com').toLowerCase();
+const expectedOrigin = String(process.env.OPS_ORIGIN || `https://${expectedHost}`);
 const port = Number(process.env.OPS_PANEL_PORT || 4173);
 const cookieName = '__Host-ops_session';
 fs.mkdirSync(dataDir, { recursive: true, mode: 0o700 });
@@ -104,7 +105,7 @@ function hostOk(req) {
 }
 
 function originOk(req) {
-  return req.headers.origin === `https://${expectedHost}`;
+  return req.headers.origin === expectedOrigin;
 }
 
 function cookie(req) {
