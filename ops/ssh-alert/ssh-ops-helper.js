@@ -79,8 +79,8 @@ function discoverActiveSessions() {
   for (const line of output.split('\n')) {
     if (!line) continue;
     const fields = line.trim().split(/\s+/);
-    const local = parseEndpoint(fields[3]);
-    const peer = parseEndpoint(fields[4]);
+    const local = parseEndpoint(fields[2]);
+    const peer = parseEndpoint(fields[3]);
     if (!local || local.port !== 22 || !peer) continue;
     const pids = [...line.matchAll(/pid=(\d+)/g)].map((match) => Number(match[1]));
     for (const pid of pids) {
