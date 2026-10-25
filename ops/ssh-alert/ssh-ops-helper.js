@@ -38,7 +38,7 @@ function exactConnection(session) {
     const startTicks = stat.slice(stat.lastIndexOf(')') + 2).trim().split(/\s+/)[19];
     if (startTicks !== session.sshd_start_ticks) return false;
     const output = execFileSync('/usr/bin/ss', [
-      '-Htnp', 'state', 'established', 'dst', session.source_ip,
+      '-Htnpe', 'state', 'established', 'dst', session.source_ip,
       'dport', '=', `:${session.source_port}`, 'sport', '=', `:${session.local_port}`,
     ], { encoding: 'utf8', timeout: 3000 });
     for (const line of output.split('\n')) {
@@ -46,13 +46,34 @@ function exactConnection(session) {
       const fields = line.trim().split(/\s+/);
       const peer = fields[3] || '';
       const peerPort = Number(peer.slice(peer.lastIndexOf(':') + 1));
-      const pids = [...line.matchAll(/pid=(\d+)/g)].map((match) => Number(match[1]));
-      if (peerPort !== session.source_port || !pids.includes(session.sshd_pid)) continue;
+      const inode = Number(line.match(/\bino:(\d+)/)?.[1]);
+      if (peerPort !== session.source_port || !inode || sshdProcessForSocket(inode, session.username)?.pid !== session.sshd_pid) continue;
       const command = fs.readFileSync(`/proc/${session.sshd_pid}/cmdline`, 'utf8').replaceAll('\0', ' ').trim();
       if (command.startsWith(`sshd: ${session.username}@`) || command.startsWith(`sshd: ${session.username} [`)) return true;
     }
   } catch { return false; }
   return false;
+}
+
+function sshdProcessForSocket(inode, expectedUsername) {
+  for (const entry of fs.readdirSync('/proc')) {
+    if (!/^\d+$/.test(entry)) continue;
+    const pid = Number(entry);
+    let command;
+    try { command = fs.readFileSync(`/proc/${pid}/cmdline`, 'utf8').replaceAll('\0', ' ').trim(); }
+    catch { continue; }
+    const username = command.match(/^sshd: ([^@\s]+)@/)?.[1];
+    if (!username || (expectedUsername && username !== expectedUsername)) continue;
+    let descriptors;
+    try { descriptors = fs.readdirSync(`/proc/${pid}/fd`); }
+    catch { continue; }
+    for (const descriptor of descriptors) {
+      try {
+        if (fs.readlinkSync(`/proc/${pid}/fd/${descriptor}`) === `socket:[${inode}]`) return { pid, username };
+      } catch {}
+    }
+  }
+  return null;
 }
 
 function processStartTicks(pid) {
@@ -73,8 +94,11 @@ function parseEndpoint(value) {
 function discoverActiveSessions() {
   let output;
   try {
-    output = execFileSync('/usr/bin/ss', ['-Htnp', 'state', 'established'], { encoding: 'utf8', timeout: 3000 });
-  } catch { return; }
+    output = execFileSync('/usr/bin/ss', ['-Htnpe', 'state', 'established'], { encoding: 'utf8', timeout: 3000 });
+  } catch (error) {
+    if (error.code !== 'ENOENT') console.error(`SSH session discovery failed: ${error.message}`);
+    return;
+  }
 
   for (const line of output.split('\n')) {
     if (!line) continue;
@@ -82,17 +106,14 @@ function discoverActiveSessions() {
     const local = parseEndpoint(fields[2]);
     const peer = parseEndpoint(fields[3]);
     if (!local || local.port !== 22 || !peer) continue;
-    const pids = [...line.matchAll(/pid=(\d+)/g)].map((match) => Number(match[1]));
-    for (const pid of pids) {
-      const command = (() => {
-        try { return fs.readFileSync(`/proc/${pid}/cmdline`, 'utf8').replaceAll('\0', ' ').trim(); }
-        catch { return ''; }
-      })();
-      const match = command.match(/^sshd: ([^@\s]+)@/);
+    const inode = Number(line.match(/\bino:(\d+)/)?.[1]);
+    if (!inode) continue;
+    const owner = sshdProcessForSocket(inode);
+    if (owner) {
+      const { pid, username } = owner;
       const startTicks = processStartTicks(pid);
-      if (!match || !startTicks) continue;
+      if (!startTicks) continue;
 
-      const username = match[1];
       const existing = db.prepare(`SELECT * FROM ssh_sessions
         WHERE username=? AND source_ip=? AND source_port=? AND local_port=? AND ended_at IS NULL
         ORDER BY started_at DESC LIMIT 1`).get(username, peer.host, peer.port, local.port);
