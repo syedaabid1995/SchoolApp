@@ -62,7 +62,63 @@ function processStartTicks(pid) {
   } catch { return null; }
 }
 
+function parseEndpoint(value) {
+  const endpoint = String(value || '');
+  const bracketEnd = endpoint.startsWith('[') ? endpoint.indexOf(']') : -1;
+  const host = bracketEnd >= 0 ? endpoint.slice(1, bracketEnd) : endpoint.slice(0, endpoint.lastIndexOf(':'));
+  const port = Number(endpoint.slice((bracketEnd >= 0 ? bracketEnd : endpoint.lastIndexOf(':')) + 1).replace(/^:/, ''));
+  return net.isIP(host) && Number.isInteger(port) ? { host, port } : null;
+}
+
+function discoverActiveSessions() {
+  let output;
+  try {
+    output = execFileSync('/usr/bin/ss', ['-Htnp', 'state', 'established'], { encoding: 'utf8', timeout: 3000 });
+  } catch { return; }
+
+  for (const line of output.split('\n')) {
+    if (!line) continue;
+    const fields = line.trim().split(/\s+/);
+    const local = parseEndpoint(fields[3]);
+    const peer = parseEndpoint(fields[4]);
+    if (!local || local.port !== 22 || !peer) continue;
+    const pids = [...line.matchAll(/pid=(\d+)/g)].map((match) => Number(match[1]));
+    for (const pid of pids) {
+      const command = (() => {
+        try { return fs.readFileSync(`/proc/${pid}/cmdline`, 'utf8').replaceAll('\0', ' ').trim(); }
+        catch { return ''; }
+      })();
+      const match = command.match(/^sshd: ([^@\s]+)@/);
+      const startTicks = processStartTicks(pid);
+      if (!match || !startTicks) continue;
+
+      const username = match[1];
+      const existing = db.prepare(`SELECT * FROM ssh_sessions
+        WHERE username=? AND source_ip=? AND source_port=? AND local_port=? AND ended_at IS NULL
+        ORDER BY started_at DESC LIMIT 1`).get(username, peer.host, peer.port, local.port);
+      if (existing?.sshd_pid === pid && existing.sshd_start_ticks === startTicks) break;
+      if (existing && existing.sshd_pid == null) {
+        db.prepare(`UPDATE ssh_sessions SET sshd_pid=?, sshd_start_ticks=?, local_port=?, control_available=1
+          WHERE id=? AND ended_at IS NULL`).run(pid, startTicks, local.port, existing.id);
+      } else {
+        if (existing) db.prepare('UPDATE ssh_sessions SET ended_at=? WHERE id=? AND ended_at IS NULL').run(Date.now(), existing.id);
+        let startedAt = Date.now();
+        try {
+          const processStart = execFileSync('/usr/bin/ps', ['-p', String(pid), '-o', 'lstart='], { encoding: 'utf8', timeout: 1000 }).trim();
+          startedAt = Date.parse(processStart) || startedAt;
+        } catch {}
+        db.prepare(`INSERT INTO ssh_sessions
+          (id, sshd_pid, sshd_start_ticks, username, source_ip, source_port, local_port, auth_method, started_at, control_available)
+          VALUES (?, ?, ?, ?, ?, ?, ?, 'discovered', ?, 1)`)
+          .run(crypto.randomUUID(), pid, startTicks, username, peer.host, peer.port, local.port, startedAt);
+      }
+      break;
+    }
+  }
+}
+
 function activeSessions() {
+  discoverActiveSessions();
   const sessions = db.prepare('SELECT * FROM ssh_sessions WHERE ended_at IS NULL ORDER BY started_at DESC').all();
   const result = [];
   for (const session of sessions) {
