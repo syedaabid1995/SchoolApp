@@ -4,7 +4,7 @@ The operations panel is served at `https://ops.saapttech.com`. It is separate fr
 
 ## Components
 
-- `ssh-login-alert.js` follows the SSH journal, records every opened session, and sends at most one successful-login email per source IP in a rolling five-minute window. Suppressed logins remain in the session inventory.
+- `ssh-login-alert.js` follows the SSH journal, records every opened session, and sends at most one successful-login email per source IP in a rolling five-minute window. Suppressed logins remain in the session inventory. SSH alert emails expire after 60 seconds in the outbox so stale alerts are discarded instead of replayed after a provider delay.
 - `ssh-panel-server.js` serves the panel on `127.0.0.1:4173`, authenticates operators, applies idle/absolute session expiry, rate-limits login attempts, checks CSRF/origin, and proxies only typed operations.
 - `ssh-ops-helper.js` is the root-owned privileged helper. It listens on a restricted Unix socket and supports only session listing/revocation, IP block management, alert-link resolution, and audit listing. It accepts no shell command. Its `CAP_SYS_PTRACE` capability is limited to identifying and verifying the exact `sshd` process that owns a session socket; the helper's typed API remains the only exposed interface.
 - `ssh-firewall.js` keeps active IPv4/IPv6 SSH blocks in nftables and restores them from the SQLite state at boot.

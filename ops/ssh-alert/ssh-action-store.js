@@ -156,6 +156,10 @@ function recordSession(db, session) {
   return id;
 }
 
+function expireStaleMail(db, now = Date.now(), maxAgeMs = 60 * 1000) {
+  return db.prepare('DELETE FROM ssh_mail_outbox WHERE created_at < ?').run(now - maxAgeMs).changes;
+}
+
 function issuePanelLink(db, sessionId) {
   const token = crypto.randomBytes(32).toString('base64url');
   const now = Date.now();
@@ -213,4 +217,4 @@ function issueAccessRequest(db, username, ip) {
   }
 }
 
-module.exports = { hashToken, issueAction, issueAccessRequest, issuePanelLink, openStore, recordSession, shouldSendLoginAlert };
+module.exports = { expireStaleMail, hashToken, issueAction, issueAccessRequest, issuePanelLink, openStore, recordSession, shouldSendLoginAlert };

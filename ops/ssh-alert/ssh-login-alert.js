@@ -6,7 +6,7 @@ const os = require('node:os');
 const backendRoot = '/var/www/academify/backend';
 require(`${backendRoot}/node_modules/dotenv`).config({ path: `${backendRoot}/.env`, quiet: true });
 const nodemailer = require(`${backendRoot}/node_modules/nodemailer`);
-const { issuePanelLink, openStore, recordSession, shouldSendLoginAlert } = require('./ssh-action-store');
+const { expireStaleMail, issuePanelLink, openStore, recordSession, shouldSendLoginAlert } = require('./ssh-action-store');
 
 const recipient = 'syedaabid1995@gmail.com';
 const host = process.env.PLATFORM_SMTP_HOST;
@@ -45,6 +45,8 @@ const sendAlert = (subject, text, html) => {
   if (isTest) return sendImmediately(subject, text, html);
   try {
     const now = Date.now();
+    const expired = expireStaleMail(db, now, mailFreshnessMs);
+    if (expired) console.log(`Discarded stale SSH alerts count=${expired} maxAgeMs=${mailFreshnessMs}`);
     const result = db.prepare(`
       INSERT INTO ssh_mail_outbox (subject, text_body, html_body, created_at, next_attempt_at)
       VALUES (?, ?, ?, ?, ?)
@@ -66,26 +68,51 @@ function processStartTicks(pid) {
 }
 
 const minimumSendIntervalMs = 30 * 1000;
+const mailFreshnessMs = 60 * 1000;
 let drainTimer;
+let drainScheduledAt = Infinity;
 let drainingMail = false;
 
 function scheduleMailDrain(delayMs) {
-  if (isTest || drainTimer) return;
+  if (isTest) return;
+  const scheduledAt = Date.now() + Math.max(0, delayMs);
+  if (drainTimer && drainScheduledAt <= scheduledAt) return;
+  if (drainTimer) clearTimeout(drainTimer);
+  drainScheduledAt = scheduledAt;
   drainTimer = setTimeout(() => {
     drainTimer = null;
+    drainScheduledAt = Infinity;
     drainMailQueue().catch((error) => console.error('SSH mail queue worker failed:', error.message));
-  }, Math.max(0, delayMs));
+  }, Math.max(0, scheduledAt - Date.now()));
 }
 
 async function drainMailQueue() {
   if (drainingMail) return;
-  const message = db.prepare('SELECT * FROM ssh_mail_outbox ORDER BY id LIMIT 1').get();
-  if (!message) return;
   const now = Date.now();
+  const expired = expireStaleMail(db, now, mailFreshnessMs);
+  if (expired) console.log(`Discarded stale SSH alerts count=${expired} maxAgeMs=${mailFreshnessMs}`);
+  const message = db.prepare(`
+    SELECT * FROM ssh_mail_outbox
+    WHERE created_at >= ? AND next_attempt_at <= ?
+    ORDER BY id LIMIT 1
+  `).get(now - mailFreshnessMs, now);
   const schedule = db.prepare('SELECT next_send_at FROM ssh_mail_schedule WHERE id = 1').get();
-  const eligibleAt = Math.max(message.next_attempt_at, schedule?.next_send_at || 0);
-  if (eligibleAt > now) {
-    scheduleMailDrain(eligibleAt - now);
+  const nextSendAt = schedule?.next_send_at || 0;
+  if (nextSendAt > now) {
+    const oldest = db.prepare('SELECT MIN(created_at) AS created_at FROM ssh_mail_outbox').get()?.created_at;
+    const nextExpiryAt = oldest == null ? Infinity : oldest + mailFreshnessMs;
+    scheduleMailDrain(Math.max(0, Math.min(nextSendAt, nextExpiryAt) - now));
+    return;
+  }
+  if (!message) {
+    const pending = db.prepare(`
+      SELECT MIN(next_attempt_at) AS retry_at, MIN(created_at) AS created_at
+      FROM ssh_mail_outbox WHERE created_at >= ?
+    `).get(now - mailFreshnessMs);
+    if (pending?.created_at != null) {
+      const nextExpiryAt = pending.created_at + mailFreshnessMs;
+      scheduleMailDrain(Math.max(0, Math.min(pending.retry_at, nextExpiryAt) - now));
+    }
     return;
   }
 
@@ -109,7 +136,7 @@ async function drainMailQueue() {
     db.prepare('UPDATE ssh_mail_outbox SET attempts = ?, next_attempt_at = ?, last_error = ? WHERE id = ?')
       .run(attempts, Date.now() + delayMs, detail, message.id);
     console.error(`Security email send deferred id=${message.id} retryInMs=${delayMs} reason=${detail}`);
-    scheduleMailDrain(delayMs);
+    scheduleMailDrain(0);
   } finally {
     drainingMail = false;
   }

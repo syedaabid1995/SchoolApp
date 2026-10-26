@@ -8,7 +8,7 @@ const test = require('node:test');
 
 const testDir = fs.mkdtempSync(path.join(os.tmpdir(), 'saapt-ssh-store-'));
 process.env.SSH_ALERT_DATA_DIR = testDir;
-const { openStore, issuePanelLink, recordSession, shouldSendLoginAlert } = require('../ssh-action-store');
+const { expireStaleMail, openStore, issuePanelLink, recordSession, shouldSendLoginAlert } = require('../ssh-action-store');
 
 test('records login sessions independently from whether an alert is sent', () => {
   const db = openStore();
@@ -28,6 +28,21 @@ test('throttles email per source IP for five minutes while allowing another IP',
   assert.equal(shouldSendLoginAlert(db, '203.0.113.11'), true);
   db.prepare('UPDATE ssh_login_alert_windows SET last_alert_at=? WHERE source_ip=?').run(Date.now() - 5 * 60 * 1000 - 1, '203.0.113.10');
   assert.equal(shouldSendLoginAlert(db, '203.0.113.10'), true);
+  db.close();
+});
+
+test('expires only SSH alert emails older than the freshness window', () => {
+  const db = openStore();
+  const now = Date.now();
+  const insert = db.prepare(`
+    INSERT INTO ssh_mail_outbox (subject, text_body, created_at, next_attempt_at)
+    VALUES (?, ?, ?, ?)
+  `);
+  insert.run('stale', 'stale body', now - 60_001, now - 60_001);
+  insert.run('fresh', 'fresh body', now - 59_999, now - 59_999);
+
+  assert.equal(expireStaleMail(db, now), 1);
+  assert.deepEqual(db.prepare('SELECT subject FROM ssh_mail_outbox').all().map((row) => row.subject), ['fresh']);
   db.close();
 });
 
