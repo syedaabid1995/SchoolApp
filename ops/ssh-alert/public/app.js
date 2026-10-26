@@ -4,6 +4,12 @@
   const account = document.getElementById('account');
   const loginForm = document.getElementById('login-form');
   const loginError = document.getElementById('login-error');
+  const resetRequestForm = document.getElementById('reset-request-form');
+  const resetCompleteForm = document.getElementById('reset-complete-form');
+  const resetEmail = document.getElementById('reset-email');
+  const resetRequestMessage = document.getElementById('reset-request-message');
+  const resetCompleteMessage = document.getElementById('reset-complete-message');
+  const passwordDialog = document.getElementById('password-dialog');
   const notice = document.getElementById('notice');
   let csrf = '';
   let focusSessionId = '';
@@ -35,6 +41,12 @@
     loginView.hidden = false;
     account.hidden = true;
     csrf = '';
+    showAuthForm('login');
+  };
+  const showAuthForm = (name) => {
+    loginForm.hidden = name !== 'login';
+    resetRequestForm.hidden = name !== 'request';
+    resetCompleteForm.hidden = name !== 'complete';
   };
   const showPanel = (username, token) => {
     csrf = token;
@@ -204,6 +216,7 @@
   loginForm.addEventListener('submit', async (event) => {
     event.preventDefault();
     loginError.textContent = '';
+    loginError.classList.remove('success-message');
     const submit = loginForm.querySelector('button[type="submit"]');
     submit.disabled = true;
     try {
@@ -212,6 +225,87 @@
       loginForm.reset();
       showPanel(result.username, result.csrf);
     } catch (error) { loginError.textContent = error.message; }
+    finally { submit.disabled = false; }
+  });
+
+  document.getElementById('forgot-password').addEventListener('click', () => {
+    resetEmail.value = document.getElementById('username').value;
+    resetRequestMessage.textContent = '';
+    showAuthForm('request');
+  });
+  document.getElementById('back-to-login').addEventListener('click', () => showAuthForm('login'));
+  resetRequestForm.addEventListener('submit', async (event) => {
+    event.preventDefault();
+    const submit = resetRequestForm.querySelector('button[type="submit"]');
+    submit.disabled = true;
+    resetRequestMessage.textContent = '';
+    try {
+      const result = await api('/api/password-reset/request', {
+        method: 'POST', body: JSON.stringify({ email: resetEmail.value.trim() }),
+      });
+      resetCompleteMessage.textContent = result.message;
+      document.getElementById('reset-code').value = '';
+      showAuthForm('complete');
+    } catch (error) { resetRequestMessage.textContent = error.message; }
+    finally { submit.disabled = false; }
+  });
+  document.getElementById('request-another-code').addEventListener('click', () => {
+    resetRequestMessage.textContent = '';
+    showAuthForm('request');
+  });
+  resetCompleteForm.addEventListener('submit', async (event) => {
+    event.preventDefault();
+    resetCompleteMessage.textContent = '';
+    const password = resetCompleteForm.elements.password.value;
+    if (password !== resetCompleteForm.elements.confirmPassword.value) {
+      resetCompleteMessage.textContent = 'The new passwords do not match.';
+      return;
+    }
+    const submit = resetCompleteForm.querySelector('button[type="submit"]');
+    submit.disabled = true;
+    try {
+      const result = await api('/api/password-reset/complete', {
+        method: 'POST',
+        body: JSON.stringify({ email: resetEmail.value.trim(), code: resetCompleteForm.elements.code.value.trim(), password }),
+      });
+      document.getElementById('username').value = resetEmail.value.trim();
+      loginError.textContent = result.message;
+      loginError.classList.add('success-message');
+      resetCompleteForm.reset();
+      showAuthForm('login');
+    } catch (error) { resetCompleteMessage.textContent = error.message; }
+    finally { submit.disabled = false; }
+  });
+
+  document.getElementById('change-password').addEventListener('click', () => {
+    document.getElementById('password-change-form').reset();
+    document.getElementById('password-change-message').textContent = '';
+    passwordDialog.showModal();
+  });
+  document.getElementById('cancel-password-change').addEventListener('click', () => passwordDialog.close());
+  passwordDialog.addEventListener('click', (event) => {
+    if (event.target === passwordDialog) passwordDialog.close();
+  });
+  document.getElementById('password-change-form').addEventListener('submit', async (event) => {
+    event.preventDefault();
+    const form = event.currentTarget;
+    const message = document.getElementById('password-change-message');
+    const newPassword = form.elements.newPassword.value;
+    if (newPassword !== form.elements.confirmPassword.value) {
+      message.textContent = 'The new passwords do not match.';
+      return;
+    }
+    const submit = form.querySelector('button[type="submit"]');
+    submit.disabled = true;
+    message.textContent = '';
+    try {
+      const result = await api('/api/account/password', {
+        method: 'POST', body: JSON.stringify({ currentPassword: form.elements.currentPassword.value, newPassword }),
+      });
+      message.textContent = result.message;
+      await loadAudit();
+      window.setTimeout(() => passwordDialog.close(), 1200);
+    } catch (error) { message.textContent = error.message; }
     finally { submit.disabled = false; }
   });
 

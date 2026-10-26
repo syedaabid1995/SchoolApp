@@ -15,6 +15,7 @@ Environment=OPS_PUBLIC_URL=https://ops.saapttech.com
 Environment=OPS_PANEL_PORT=4173
 Environment=OPS_PANEL_DATA=/var/lib/saapt-ssh-panel
 Environment=OPS_HELPER_SOCKET=/run/saapt-ssh-alert/ops-helper.sock
+EnvironmentFile=/etc/saapt-ssh-panel/smtp.env
 ExecStart=/home/deploy/.nvm/versions/node/v24.18.0/bin/node /opt/saapt-ssh-alert/ssh-panel-server.js
 Restart=always
 RestartSec=5

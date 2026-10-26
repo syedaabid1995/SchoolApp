@@ -209,7 +209,7 @@ async function handle(req, res) {
     return json(res, 200, { events: rows.slice(-200).reverse(), chainValid });
   }
   if (req.method === 'POST' && req.url === '/auth-event') {
-    if (!['panel-login', 'panel-login-failed', 'panel-logout'].includes(input.action)) return json(res, 400, { message: 'Unsupported authentication event.' });
+    if (!['panel-login', 'panel-login-failed', 'panel-logout', 'password-reset-request', 'password-reset-failed', 'password-reset-success', 'panel-password-change'].includes(input.action)) return json(res, 400, { message: 'Unsupported authentication event.' });
     audit(input.actor || 'unknown', input.action, String(input.target || '-'), input.sourceIp || '', String(input.result || 'unknown'), String(input.details || ''));
     return json(res, 200, { ok: true });
   }

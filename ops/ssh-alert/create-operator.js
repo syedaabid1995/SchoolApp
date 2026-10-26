@@ -8,18 +8,6 @@ const { DatabaseSync } = require('node:sqlite');
 const dataDir = process.env.OPS_PANEL_DATA || '/var/lib/saapt-ssh-panel';
 fs.mkdirSync(dataDir, { recursive: true, mode: 0o700 });
 const dbPath = path.join(dataDir, 'panel.sqlite');
-const keyPath = path.join(dataDir, 'mfa.key');
-
-function base32(buffer) {
-  const alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567';
-  let bits = '';
-  for (const byte of buffer) bits += byte.toString(2).padStart(8, '0');
-  let result = '';
-  for (let i = 0; i < bits.length; i += 5) result += alphabet[parseInt(bits.slice(i, i + 5).padEnd(5, '0'), 2)];
-  return result;
-}
-
-function hash(value) { return crypto.createHash('sha256').update(value).digest('hex'); }
 
 function secret(prompt) {
   return new Promise((resolve, reject) => {
@@ -44,17 +32,6 @@ function secret(prompt) {
     };
     process.stdin.on('data', onData);
   });
-}
-
-function encryptTotp(key, secretValue) {
-  const nonce = crypto.randomBytes(12);
-  const cipher = crypto.createCipheriv('aes-256-gcm', key, nonce);
-  const ciphertext = Buffer.concat([cipher.update(secretValue, 'utf8'), cipher.final()]);
-  return {
-    nonce: nonce.toString('base64'),
-    tag: cipher.getAuthTag().toString('base64'),
-    ciphertext: ciphertext.toString('base64'),
-  };
 }
 
 async function main() {
@@ -99,41 +76,29 @@ async function main() {
   if (password.length < 14 || password !== confirmation) throw new Error('Passwords must match and be at least 14 characters.');
   const salt = crypto.randomBytes(16);
   const passwordHash = crypto.scryptSync(password, salt, 64);
-  const key = fs.existsSync(keyPath) ? fs.readFileSync(keyPath) : crypto.randomBytes(32);
-  if (!fs.existsSync(keyPath)) fs.writeFileSync(keyPath, key, { mode: 0o600, flag: 'wx' });
-  fs.chmodSync(keyPath, 0o600);
-  const totpSecret = base32(crypto.randomBytes(20));
-  const encrypted = encryptTotp(key, totpSecret);
   const id = existing?.id || crypto.randomUUID();
   const now = Date.now();
-  const recovery = Array.from({ length: 10 }, () => crypto.randomBytes(8).toString('hex').toUpperCase());
   db.exec('BEGIN IMMEDIATE');
   try {
     if (command === 'reset') {
-      db.prepare(`UPDATE operators SET password_hash=?, password_salt=?, totp_nonce=?, totp_tag=?, totp_ciphertext=?, enabled=1
+      db.prepare(`UPDATE operators SET password_hash=?, password_salt=?, totp_nonce='', totp_tag='', totp_ciphertext='', enabled=1
         WHERE id=?`)
-        .run(passwordHash.toString('base64'), salt.toString('base64'), encrypted.nonce, encrypted.tag, encrypted.ciphertext, id);
+        .run(passwordHash.toString('base64'), salt.toString('base64'), id);
       db.prepare('DELETE FROM web_sessions WHERE operator_id=?').run(id);
       db.prepare('DELETE FROM recovery_codes WHERE operator_id=?').run(id);
     } else {
       db.prepare(`INSERT INTO operators
         (id, username, password_hash, password_salt, totp_nonce, totp_tag, totp_ciphertext, created_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?)`)
-        .run(id, usernameArg, passwordHash.toString('base64'), salt.toString('base64'), encrypted.nonce, encrypted.tag, encrypted.ciphertext, now);
+        VALUES (?, ?, ?, ?, '', '', '', ?)`)
+        .run(id, usernameArg, passwordHash.toString('base64'), salt.toString('base64'), now);
     }
-    const insertCode = db.prepare('INSERT INTO recovery_codes (operator_id, code_hash) VALUES (?, ?)');
-    for (const code of recovery) insertCode.run(id, hash(code));
     db.exec('COMMIT');
   } catch (error) {
     try { db.exec('ROLLBACK'); } catch {}
     throw error;
   } finally { db.close(); }
 
-  const issuer = 'SAAPT Server Operations';
-  const uri = `otpauth://totp/${encodeURIComponent(`${issuer}:${usernameArg}`)}?secret=${totpSecret}&issuer=${encodeURIComponent(issuer)}&algorithm=SHA1&digits=6&period=30`;
-  console.log(`${command === 'reset' ? 'Reset' : 'Created'} operator ${usernameArg}. Configure an authenticator using this URI:\n${uri}`);
-  console.log('\nStore these single-use recovery codes securely. They are shown only once:');
-  console.log(recovery.join('\n'));
+  console.log(`${command === 'reset' ? 'Reset' : 'Created'} operator ${usernameArg}. Sign in with the email and password.`);
 }
 
 main().catch((error) => { console.error(error.message); process.exitCode = 1; });

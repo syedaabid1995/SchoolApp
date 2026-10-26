@@ -15,14 +15,17 @@ const appPath = path.resolve(__dirname, '../ssh-panel-server.js');
 const helperPath = path.resolve(__dirname, '../ssh-ops-helper.js');
 const testDir = fs.mkdtempSync(path.join(os.tmpdir(), 'saapt-ssh-panel-'));
 const dbPath = path.join(testDir, 'panel.sqlite');
-const mfaKey = crypto.randomBytes(32);
-fs.writeFileSync(path.join(testDir, 'mfa.key'), mfaKey, { mode: 0o600 });
+const mailFile = path.join(testDir, 'sent-mail.jsonl');
+const fakeMailerPath = path.join(testDir, 'fake-nodemailer.js');
+fs.writeFileSync(fakeMailerPath, `
+const fs = require('node:fs');
+module.exports = { createTransport: () => ({
+  sendMail: async (message) => fs.appendFileSync(process.env.OPS_TEST_MAIL_FILE, JSON.stringify(message) + '\\n'),
+  close() {},
+})};
+`);
 const password = 'correct horse battery staple 2026';
 const passwordSalt = crypto.randomBytes(16);
-const mfaSecret = 'JBSWY3DPEHPK3PXP';
-const nonce = crypto.randomBytes(12);
-const cipher = crypto.createCipheriv('aes-256-gcm', mfaKey, nonce);
-const ciphertext = Buffer.concat([cipher.update(mfaSecret, 'utf8'), cipher.final()]);
 const db = new DatabaseSync(dbPath);
 db.exec(`CREATE TABLE operators (
   id TEXT PRIMARY KEY, username TEXT NOT NULL UNIQUE COLLATE NOCASE, password_hash TEXT NOT NULL,
@@ -31,27 +34,10 @@ db.exec(`CREATE TABLE operators (
 );`);
 db.prepare(`INSERT INTO operators (id, username, password_hash, password_salt, totp_nonce, totp_tag, totp_ciphertext, created_at)
   VALUES (?, ?, ?, ?, ?, ?, ?, ?)`)
-  .run('test-operator', 'test.operator', crypto.scryptSync(password, passwordSalt, 64).toString('base64'),
-    passwordSalt.toString('base64'), nonce.toString('base64'), cipher.getAuthTag().toString('base64'), ciphertext.toString('base64'), Date.now());
+  .run('test-operator', 'test.operator@example.com', crypto.scryptSync(password, passwordSalt, 64).toString('base64'),
+    passwordSalt.toString('base64'), '', '', '', Date.now());
 db.close();
 fs.chmodSync(dbPath, 0o600);
-
-function base32Decode(input) {
-  const alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567';
-  let bits = '';
-  for (const char of input) bits += alphabet.indexOf(char).toString(2).padStart(5, '0');
-  const bytes = [];
-  for (let i = 0; i + 8 <= bits.length; i += 8) bytes.push(parseInt(bits.slice(i, i + 8), 2));
-  return Buffer.from(bytes);
-}
-
-function currentTotp(secret) {
-  const counter = Buffer.alloc(8);
-  counter.writeBigUInt64BE(BigInt(Math.floor(Date.now() / 30000)));
-  const digest = crypto.createHmac('sha1', base32Decode(secret)).update(counter).digest();
-  const offset = digest[digest.length - 1] & 15;
-  return String((digest.readUInt32BE(offset) & 0x7fffffff) % 1000000).padStart(6, '0');
-}
 
 async function freePort() {
   const listener = net.createServer();
@@ -78,7 +64,7 @@ function request(port, route, options = {}) {
   });
 }
 
-test('requires password and TOTP, issues secure session, enforces CSRF, and logs out', async (t) => {
+test('supports password login, password changes, and single-use email OTP recovery', async (t) => {
   const port = await freePort();
   const socketPath = path.join(testDir, 'ops-helper.sock');
   const helperChild = spawn(process.execPath, [helperPath], {
@@ -88,7 +74,12 @@ test('requires password and TOTP, issues secure session, enforces CSRF, and logs
   for (let attempt = 0; attempt < 50 && !fs.existsSync(socketPath); attempt += 1) await new Promise((resolve) => setTimeout(resolve, 50));
   assert.equal(fs.existsSync(socketPath), true);
   const child = spawn(process.execPath, [appPath], {
-    env: { ...process.env, OPS_PANEL_DATA: testDir, OPS_PANEL_PORT: String(port), OPS_HOST: 'localhost', OPS_ORIGIN: 'http://localhost:4174', OPS_HELPER_SOCKET: socketPath, SSH_ALERT_DATA_DIR: testDir },
+    env: {
+      ...process.env, OPS_PANEL_DATA: testDir, OPS_PANEL_PORT: String(port), OPS_HOST: 'localhost',
+      OPS_ORIGIN: 'http://localhost:4174', OPS_HELPER_SOCKET: socketPath, SSH_ALERT_DATA_DIR: testDir,
+      OPS_NODEMAILER_PATH: fakeMailerPath, OPS_TEST_MAIL_FILE: mailFile, OPS_SMTP_HOST: 'smtp.test',
+      OPS_SMTP_FROM_EMAIL: 'ops@example.com', OPS_SMTP_USERNAME: 'ops@example.com', OPS_SMTP_PASSWORD: 'test-secret',
+    },
     stdio: ['ignore', 'inherit', 'inherit'],
   });
   t.after(async () => {
@@ -107,18 +98,18 @@ test('requires password and TOTP, issues secure session, enforces CSRF, and logs
   assert.equal(ready, true, `health endpoint status ${healthStatus}`);
 
   const badLogin = await request(port, '/api/login', {
-    method: 'POST', body: JSON.stringify({ username: 'test.operator', password, code: '000000' }),
+    method: 'POST', body: JSON.stringify({ username: 'test.operator@example.com', password: 'incorrect password' }),
   });
   assert.equal(badLogin.status, 401);
 
   const rejectedOrigin = await request(port, '/api/login', {
-    method: 'POST', body: JSON.stringify({ username: 'test.operator', password, code: currentTotp(mfaSecret) }),
+    method: 'POST', body: JSON.stringify({ username: 'test.operator@example.com', password }),
     headers: { Origin: 'http://localhost:4173' },
   });
   assert.equal(rejectedOrigin.status, 403);
 
   const login = await request(port, '/api/login', {
-    method: 'POST', body: JSON.stringify({ username: 'test.operator', password, code: currentTotp(mfaSecret) }),
+    method: 'POST', body: JSON.stringify({ username: 'test.operator@example.com', password }),
   });
   assert.equal(login.status, 200, JSON.stringify(login.json()));
   const loginData = login.json();
@@ -128,16 +119,51 @@ test('requires password and TOTP, issues secure session, enforces CSRF, and logs
 
   const me = await request(port, '/api/me', { headers: { Cookie: cookie } });
   assert.equal(me.status, 200);
-  assert.equal(me.json().username, 'test.operator');
+  assert.equal(me.json().username, 'test.operator@example.com');
   const audit = await request(port, '/api/audit', { headers: { Cookie: cookie } });
   assert.equal(audit.status, 200);
   assert.equal(audit.json().chainValid, true);
   assert.deepEqual(audit.json().events.map((event) => event.action), ['panel-login', 'panel-login-failed']);
 
-  const noCsrf = await request(port, '/api/logout', { method: 'POST', headers: { Cookie: cookie } });
+  const passwordChange = await request(port, '/api/account/password', {
+    method: 'POST', headers: { Cookie: cookie, 'X-CSRF-Token': loginData.csrf },
+    body: JSON.stringify({ currentPassword: password, newPassword: 'new password phrase 2026 with length' }),
+  });
+  assert.equal(passwordChange.status, 200, JSON.stringify(passwordChange.json()));
+  const meAfterChange = await request(port, '/api/me', { headers: { Cookie: cookie } });
+  assert.equal(meAfterChange.status, 200);
+
+  const resetRequest = await request(port, '/api/password-reset/request', {
+    method: 'POST', body: JSON.stringify({ email: 'test.operator@example.com' }),
+  });
+  assert.equal(resetRequest.status, 200);
+  assert.match(resetRequest.json().message, /If that email is registered/);
+  const email = JSON.parse(fs.readFileSync(mailFile, 'utf8').trim().split('\n').at(-1));
+  const code = email.text.match(/code is (\d{6})/)[1];
+  const finalPassword = 'final replacement password phrase 2026';
+  const resetComplete = await request(port, '/api/password-reset/complete', {
+    method: 'POST', body: JSON.stringify({ email: 'test.operator@example.com', code, password: finalPassword }),
+  });
+  assert.equal(resetComplete.status, 200, JSON.stringify(resetComplete.json()));
+  const revokedSession = await request(port, '/api/me', { headers: { Cookie: cookie } });
+  assert.equal(revokedSession.status, 401);
+
+  const reusedCode = await request(port, '/api/password-reset/complete', {
+    method: 'POST', body: JSON.stringify({ email: 'test.operator@example.com', code, password: 'another new password phrase 2026' }),
+  });
+  assert.equal(reusedCode.status, 400);
+
+  const newLogin = await request(port, '/api/login', {
+    method: 'POST', body: JSON.stringify({ username: 'test.operator@example.com', password: finalPassword }),
+  });
+  assert.equal(newLogin.status, 200, JSON.stringify(newLogin.json()));
+
+  const newCookie = newLogin.headers['set-cookie'][0].split(';')[0];
+  const newLoginData = newLogin.json();
+  const noCsrf = await request(port, '/api/logout', { method: 'POST', headers: { Cookie: newCookie } });
   assert.equal(noCsrf.status, 401);
-  const logout = await request(port, '/api/logout', { method: 'POST', headers: { Cookie: cookie, 'X-CSRF-Token': loginData.csrf } });
+  const logout = await request(port, '/api/logout', { method: 'POST', headers: { Cookie: newCookie, 'X-CSRF-Token': newLoginData.csrf } });
   assert.equal(logout.status, 200);
-  const afterLogout = await request(port, '/api/me', { headers: { Cookie: cookie } });
+  const afterLogout = await request(port, '/api/me', { headers: { Cookie: newCookie } });
   assert.equal(afterLogout.status, 401);
 });

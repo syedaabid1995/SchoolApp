@@ -52,17 +52,31 @@ db.exec(`
     used_at INTEGER,
     PRIMARY KEY(operator_id, code_hash)
   );
+  CREATE TABLE IF NOT EXISTS password_reset_challenges (
+    operator_id TEXT PRIMARY KEY REFERENCES operators(id),
+    code_hash TEXT NOT NULL,
+    created_at INTEGER NOT NULL,
+    expires_at INTEGER NOT NULL,
+    attempts INTEGER NOT NULL DEFAULT 0,
+    used_at INTEGER,
+    source_ip TEXT NOT NULL
+  );
+  CREATE TABLE IF NOT EXISTS password_reset_limits (
+    bucket TEXT PRIMARY KEY,
+    window_started_at INTEGER NOT NULL,
+    attempts INTEGER NOT NULL
+  );
 `);
 fs.chmodSync(path.join(dataDir, 'panel.sqlite'), 0o600);
 
-const keyPath = path.join(dataDir, 'mfa.key');
-let mfaKey;
-if (fs.existsSync(keyPath)) {
-  mfaKey = fs.readFileSync(keyPath);
-  if (mfaKey.length !== 32) throw new Error('Invalid MFA encryption key length');
+const resetKeyPath = path.join(dataDir, 'password-reset.key');
+let resetKey;
+if (fs.existsSync(resetKeyPath)) {
+  resetKey = fs.readFileSync(resetKeyPath);
+  if (resetKey.length !== 32) throw new Error('Invalid password reset key length');
 } else {
-  mfaKey = crypto.randomBytes(32);
-  fs.writeFileSync(keyPath, mfaKey, { mode: 0o600, flag: 'wx' });
+  resetKey = crypto.randomBytes(32);
+  fs.writeFileSync(resetKeyPath, resetKey, { mode: 0o600, flag: 'wx' });
 }
 
 const headers = {
@@ -142,38 +156,61 @@ function readJson(req, max = 8192) {
   });
 }
 
-function base32Decode(input) {
-  const alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567';
-  let bits = '';
-  for (const char of input.replace(/=+$/g, '').toUpperCase()) {
-    const value = alphabet.indexOf(char);
-    if (value < 0) throw new Error('invalid base32');
-    bits += value.toString(2).padStart(5, '0');
+function passwordHash(password, salt = crypto.randomBytes(16)) {
+  return { salt: salt.toString('base64'), hash: crypto.scryptSync(password, salt, 64).toString('base64') };
+}
+
+function passwordMatches(password, row) {
+  const candidate = crypto.scryptSync(password, Buffer.from(row.password_salt, 'base64'), 64);
+  const expected = Buffer.from(row.password_hash, 'base64');
+  return candidate.length === expected.length && crypto.timingSafeEqual(candidate, expected);
+}
+
+function passwordResetHash(operatorId, code) {
+  return crypto.createHmac('sha256', resetKey).update(`${operatorId}:${code}`).digest('hex');
+}
+
+function consumeResetLimit(bucket, now) {
+  const row = db.prepare('SELECT * FROM password_reset_limits WHERE bucket=?').get(bucket);
+  if (row && now - row.window_started_at < 15 * 60 * 1000 && row.attempts >= 3) return false;
+  if (!row || now - row.window_started_at >= 15 * 60 * 1000) {
+    db.prepare(`INSERT INTO password_reset_limits (bucket, window_started_at, attempts) VALUES (?, ?, 1)
+      ON CONFLICT(bucket) DO UPDATE SET window_started_at=excluded.window_started_at, attempts=1`).run(bucket, now);
+  } else {
+    db.prepare('UPDATE password_reset_limits SET attempts=attempts+1 WHERE bucket=?').run(bucket);
   }
-  const bytes = [];
-  for (let i = 0; i + 8 <= bits.length; i += 8) bytes.push(parseInt(bits.slice(i, i + 8), 2));
-  return Buffer.from(bytes);
+  return true;
 }
 
-function totp(secret, at = Date.now()) {
-  const counter = Buffer.alloc(8);
-  counter.writeBigUInt64BE(BigInt(Math.floor(at / 30000)));
-  const digest = crypto.createHmac('sha1', base32Decode(secret)).update(counter).digest();
-  const offset = digest[digest.length - 1] & 15;
-  const number = (digest.readUInt32BE(offset) & 0x7fffffff) % 1000000;
-  return String(number).padStart(6, '0');
+function passwordResetLimited(ip, username, action, now = Date.now()) {
+  const normalized = username.trim().toLowerCase();
+  db.prepare('DELETE FROM password_reset_limits WHERE window_started_at < ?').run(now - 24 * 60 * 60 * 1000);
+  const ipAllowed = consumeResetLimit(`${action}:ip:${ip}`, now);
+  const userAllowed = consumeResetLimit(`${action}:user:${hash(normalized)}`, now);
+  return !ipAllowed || !userAllowed;
 }
 
-function decryptTotp(row) {
-  const decipher = crypto.createDecipheriv('aes-256-gcm', mfaKey, Buffer.from(row.totp_nonce, 'base64'));
-  decipher.setAuthTag(Buffer.from(row.totp_tag, 'base64'));
-  return Buffer.concat([decipher.update(Buffer.from(row.totp_ciphertext, 'base64')), decipher.final()]).toString('utf8');
-}
-
-function verifyTotp(secret, code) {
-  if (!/^\d{6}$/.test(String(code))) return false;
-  for (const drift of [-30000, 0, 30000]) if (safeEqual(totp(secret, Date.now() + drift), code)) return true;
-  return false;
+async function sendPasswordResetEmail(email, code) {
+  const host = process.env.OPS_SMTP_HOST;
+  const port = Number(process.env.OPS_SMTP_PORT || 587);
+  const fromAddress = process.env.OPS_SMTP_FROM_EMAIL;
+  const username = process.env.OPS_SMTP_USERNAME;
+  const password = process.env.OPS_SMTP_PASSWORD;
+  if (!host || !fromAddress || !username || !password) throw new Error('Operations panel SMTP is not configured');
+  const nodemailer = require(process.env.OPS_NODEMAILER_PATH || '/var/www/academify/backend/node_modules/nodemailer');
+  const transporter = nodemailer.createTransport({
+    host, port, secure: port === 465, requireTLS: port === 587,
+    connectionTimeout: 10000, greetingTimeout: 10000, socketTimeout: 15000,
+    auth: { user: username, pass: password },
+  });
+  try {
+    await transporter.sendMail({
+      from: { name: process.env.OPS_SMTP_FROM_NAME || 'SAAPT Server Operations', address: fromAddress },
+      to: email,
+      subject: 'SAAPT Server Operations password reset code',
+      text: `Your password reset code is ${code}. It expires in 10 minutes. If you did not request this, ignore this email.`,
+    });
+  } finally { transporter.close(); }
 }
 
 function limited(ip) {
@@ -246,30 +283,11 @@ const server = http.createServer(async (req, res) => {
     const username = String(data.username || '').trim().slice(0, 120);
     const row = db.prepare('SELECT * FROM operators WHERE username=? COLLATE NOCASE AND enabled=1').get(username);
     const passwordInput = typeof data.password === 'string' && data.password.length <= 1024 ? data.password : '';
-    const candidate = crypto.scryptSync(passwordInput, row ? Buffer.from(row.password_salt, 'base64') : Buffer.alloc(16), 64);
-    let valid = false;
-    if (row) {
-      const expected = Buffer.from(row.password_hash, 'base64');
-      let totpSecret = '';
-      try { totpSecret = decryptTotp(row); } catch {}
-      const passwordOk = candidate.length === expected.length && crypto.timingSafeEqual(candidate, expected);
-      let factorOk = verifyTotp(totpSecret, data.code);
-      const recoveryHash = hash(String(data.code || '').replaceAll('-', '').toUpperCase());
-      if (!factorOk && row && String(data.code || '').length >= 12) {
-        const recovery = db.prepare('SELECT code_hash FROM recovery_codes WHERE operator_id=? AND code_hash=? AND used_at IS NULL')
-          .get(row.id, recoveryHash);
-        if (recovery) {
-          const used = db.prepare('UPDATE recovery_codes SET used_at=? WHERE operator_id=? AND code_hash=? AND used_at IS NULL')
-            .run(Date.now(), row.id, recoveryHash);
-          factorOk = used.changes === 1;
-        }
-      }
-      valid = passwordOk && factorOk;
-    }
+    const valid = Boolean(row && passwordMatches(passwordInput, row));
     if (!valid) {
       failedLogin(ip);
       await recordAuthEvent('panel-login-failed', username || 'unknown', ip, 'denied');
-      return json(res, 401, { message: 'Username, password, or authenticator code is incorrect.' });
+      return json(res, 401, { message: 'Email or password is incorrect.' });
     }
     db.prepare('DELETE FROM login_limits WHERE source_ip=?').run(ip);
     const token = crypto.randomBytes(32).toString('base64url');
@@ -281,6 +299,77 @@ const server = http.createServer(async (req, res) => {
     db.prepare('UPDATE operators SET last_login_at=? WHERE id=?').run(now, row.id);
     await recordAuthEvent('panel-login', row.username, ip, 'success');
     return json(res, 200, { username: row.username, csrf }, { 'Set-Cookie': setCookie(token, 8 * 60 * 60) });
+  }
+
+  if (req.method === 'POST' && url.pathname === '/api/password-reset/request') {
+    if (!originOk(req)) return json(res, 403, { message: 'Request origin was rejected.' });
+    let data;
+    try { data = await readJson(req); } catch { return json(res, 400, { message: 'Enter a valid email address.' }); }
+    const username = String(data.email || '').trim().slice(0, 120);
+    const normalizedEmail = username.toLowerCase();
+    const ip = requestIp(req);
+    const limited = passwordResetLimited(ip, normalizedEmail, 'request');
+    const operator = !limited && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalizedEmail)
+      ? db.prepare('SELECT id, username FROM operators WHERE username=? COLLATE NOCASE AND enabled=1').get(normalizedEmail)
+      : null;
+    if (operator) {
+      const now = Date.now();
+      const code = String(crypto.randomInt(0, 1000000)).padStart(6, '0');
+      db.prepare(`INSERT INTO password_reset_challenges (operator_id, code_hash, created_at, expires_at, attempts, source_ip)
+        VALUES (?, ?, ?, ?, 0, ?)
+        ON CONFLICT(operator_id) DO UPDATE SET code_hash=excluded.code_hash, created_at=excluded.created_at,
+          expires_at=excluded.expires_at, attempts=0, source_ip=excluded.source_ip`)
+        .run(operator.id, passwordResetHash(operator.id, code), now, now + 10 * 60 * 1000, ip);
+      try { await sendPasswordResetEmail(operator.username, code); }
+      catch (error) { console.error('Could not deliver operations-panel password reset email:', error.message); }
+    }
+    await recordAuthEvent('password-reset-request', normalizedEmail || 'unknown', ip, 'requested');
+    return json(res, 200, { message: 'If that email is registered, a reset code has been sent.' });
+  }
+
+  if (req.method === 'POST' && url.pathname === '/api/password-reset/complete') {
+    if (!originOk(req)) return json(res, 403, { message: 'Request origin was rejected.' });
+    let data;
+    try { data = await readJson(req); } catch { return json(res, 400, { message: 'Enter the email, code, and new password.' }); }
+    const email = String(data.email || '').trim().slice(0, 120).toLowerCase();
+    const code = String(data.code || '').trim();
+    const newPassword = typeof data.password === 'string' ? data.password : '';
+    const ip = requestIp(req);
+    if (passwordResetLimited(ip, email, 'verify')) return json(res, 429, { message: 'Too many reset attempts. Try again in 15 minutes.' });
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || !/^\d{6}$/.test(code) || newPassword.length < 14 || newPassword.length > 1024) {
+      return json(res, 400, { message: 'The reset code is invalid or expired, or the password is too short.' });
+    }
+
+    const now = Date.now();
+    let operator;
+    db.exec('BEGIN IMMEDIATE');
+    try {
+      operator = db.prepare('SELECT id, username FROM operators WHERE username=? COLLATE NOCASE AND enabled=1').get(email);
+      const challenge = operator && db.prepare('SELECT * FROM password_reset_challenges WHERE operator_id=?').get(operator.id);
+      const valid = Boolean(challenge && !challenge.used_at && challenge.expires_at > now && challenge.attempts < 5 &&
+        safeEqual(challenge.code_hash, passwordResetHash(operator.id, code)));
+      if (!valid) {
+        if (challenge && !challenge.used_at && challenge.expires_at > now && challenge.attempts < 5) {
+          db.prepare('UPDATE password_reset_challenges SET attempts=attempts+1 WHERE operator_id=?').run(operator.id);
+        }
+        db.exec('COMMIT');
+        await recordAuthEvent('password-reset-failed', email || 'unknown', ip, 'denied');
+        return json(res, 400, { message: 'The reset code is invalid or expired.' });
+      }
+
+      const credentials = passwordHash(newPassword);
+      db.prepare('UPDATE operators SET password_hash=?, password_salt=? WHERE id=?')
+        .run(credentials.hash, credentials.salt, operator.id);
+      db.prepare('UPDATE password_reset_challenges SET used_at=? WHERE operator_id=?').run(now, operator.id);
+      db.prepare('DELETE FROM web_sessions WHERE operator_id=?').run(operator.id);
+      db.prepare('DELETE FROM login_limits WHERE source_ip=?').run(ip);
+      db.exec('COMMIT');
+    } catch (error) {
+      try { db.exec('ROLLBACK'); } catch {}
+      throw error;
+    }
+    await recordAuthEvent('password-reset-success', operator.username, ip, 'success');
+    return json(res, 200, { message: 'Password updated. Sign in with your new password.' });
   }
 
   if (req.method === 'POST' && url.pathname === '/api/logout') {
@@ -296,6 +385,24 @@ const server = http.createServer(async (req, res) => {
   if (req.method === 'GET' && url.pathname === '/api/me') return json(res, 200, { username: session.username, csrf: session.csrf_token });
   if (req.method !== 'GET' && (!originOk(req) || !safeEqual(req.headers['x-csrf-token'] || '', session.csrf_token))) {
     return json(res, 403, { message: 'The request could not be verified. Refresh and try again.' });
+  }
+
+  if (req.method === 'POST' && url.pathname === '/api/account/password') {
+    let data;
+    try { data = await readJson(req); } catch { return json(res, 400, { message: 'Enter your current and new passwords.' }); }
+    const currentPassword = typeof data.currentPassword === 'string' && data.currentPassword.length <= 1024 ? data.currentPassword : '';
+    const newPassword = typeof data.newPassword === 'string' ? data.newPassword : '';
+    const operator = db.prepare('SELECT * FROM operators WHERE id=? AND enabled=1').get(session.operator_id);
+    if (!operator || !passwordMatches(currentPassword, operator)) return json(res, 401, { message: 'Current password is incorrect.' });
+    if (newPassword.length < 14 || newPassword.length > 1024) return json(res, 400, { message: 'Use a password with at least 14 characters.' });
+    if (passwordMatches(newPassword, operator)) return json(res, 400, { message: 'Choose a password different from your current password.' });
+    const credentials = passwordHash(newPassword);
+    db.prepare('UPDATE operators SET password_hash=?, password_salt=? WHERE id=?')
+      .run(credentials.hash, credentials.salt, operator.id);
+    db.prepare('DELETE FROM password_reset_challenges WHERE operator_id=?').run(operator.id);
+    db.prepare('DELETE FROM web_sessions WHERE operator_id=? AND token_hash<>?').run(operator.id, session.token_hash);
+    await recordAuthEvent('panel-password-change', operator.username, requestIp(req), 'success');
+    return json(res, 200, { message: 'Password updated. Other active sessions were signed out.' });
   }
 
   try {
