@@ -6,13 +6,13 @@ The operations panel is served at `https://200.97.165.51:4174`. It is separate f
 
 - `ssh-login-alert.js` follows the SSH journal, records every opened session, and sends at most one successful-login email per source IP in a rolling five-minute window. Suppressed logins remain in the session inventory. SSH alert emails expire after 60 seconds in the outbox so stale alerts are discarded instead of replayed after a provider delay.
 - `ssh-panel-server.js` serves the panel on `127.0.0.1:4173`, authenticates operators, applies idle/absolute session expiry, rate-limits login attempts, checks CSRF/origin, and proxies only typed operations.
-- `ssh-ops-helper.js` is the root-owned privileged helper. It listens on a restricted Unix socket and supports only session listing/revocation, IP block management, alert-link resolution, and audit listing. It accepts no shell command. Its `CAP_SYS_PTRACE` capability is limited to identifying and verifying the exact `sshd` process that owns a session socket; the helper's typed API remains the only exposed interface.
+- `ssh-ops-helper.js` is the root-owned privileged helper. It listens on a restricted Unix socket and supports only session listing/revocation, IP block and allowlist management, alert-link resolution, and audit listing. It accepts no shell command. Its `CAP_SYS_PTRACE` capability is limited to identifying and verifying the exact `sshd` process that owns a session socket; the helper's typed API remains the only exposed interface.
 - `ssh-firewall.js` keeps active IPv4/IPv6 SSH blocks in nftables and restores them from the SQLite state at boot.
 - `create-operator.js` provisions, resets, or disables individual panel accounts. Passwords are scrypt-hashed; routine password changes happen in the panel, and forgotten passwords are reset with a short-lived emailed OTP.
 
 The helper verifies an exact `sshd` PID and process start time, account, peer IP, client port, and local port before offering/revoking a session. Sessions that cannot be matched are visible as not safely controllable. Blocking an address prevents future SSH connections; it does not terminate already-open sessions. Blocking the IP currently using the panel is refused.
 
-The existing email-based SSH access approval remains available through the panel: an approval link is a locator only, operators must sign in with their email and password, and approval grants a 15-minute retry window while normal SSH key/password authentication remains required.
+The SSH allowlist is global by source IP and bypasses the email approval gate for any Linux account. Explicit enabled IP blocks are evaluated first and always override an allowlist entry. Removing an allowlist entry restores email approval for that address unless it remains blocked. The existing email-based SSH access approval remains available through the panel: an approval link is a locator only, operators must sign in with their email and password, and approval grants a 15-minute retry window while normal SSH key/password authentication remains required.
 
 ## Deployment checklist
 

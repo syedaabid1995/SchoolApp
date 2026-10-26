@@ -8,7 +8,7 @@ const test = require('node:test');
 
 const testDir = fs.mkdtempSync(path.join(os.tmpdir(), 'saapt-ssh-store-'));
 process.env.SSH_ALERT_DATA_DIR = testDir;
-const { expireStaleMail, openStore, issuePanelLink, recordSession, shouldSendLoginAlert } = require('../ssh-action-store');
+const { expireStaleMail, isTrustedSource, openStore, issuePanelLink, recordSession, shouldSendLoginAlert } = require('../ssh-action-store');
 
 test('records login sessions independently from whether an alert is sent', () => {
   const db = openStore();
@@ -55,6 +55,18 @@ test('creates expiring opaque panel links and stores only token hashes', () => {
   assert.notEqual(row.token_hash, token);
   assert.equal(row.session_id, sessionId);
   assert.ok(row.expires_at - row.issued_at <= 60 * 60 * 1000);
+  db.close();
+});
+
+test('global allowlist entries trust any SSH account while account-scoped entries remain supported', () => {
+  const db = openStore();
+  db.prepare('INSERT INTO ssh_trusted_sources (username, source_ip, created_at) VALUES (?, ?, ?)')
+    .run('*', '203.0.113.20', Date.now());
+  db.prepare('INSERT INTO ssh_trusted_sources (username, source_ip, created_at) VALUES (?, ?, ?)')
+    .run('deploy', '203.0.113.21', Date.now());
+  assert.equal(isTrustedSource(db, 'root', '203.0.113.20'), true);
+  assert.equal(isTrustedSource(db, 'deploy', '203.0.113.21'), true);
+  assert.equal(isTrustedSource(db, 'root', '203.0.113.21'), false);
   db.close();
 });
 

@@ -269,7 +269,7 @@ function staticFile(res, file, type) {
 const server = http.createServer(async (req, res) => {
   if (!hostOk(req)) return reply(res, 404, 'text/plain; charset=utf-8', 'Not found');
   const url = new URL(req.url, `https://${expectedHost}`);
-  if (req.method === 'GET' && ['/', '/sessions', '/access', '/blocks', '/audit'].includes(url.pathname)) return staticFile(res, 'index.html', 'text/html; charset=utf-8');
+  if (req.method === 'GET' && ['/', '/sessions', '/access', '/blocks', '/allowlist', '/audit'].includes(url.pathname)) return staticFile(res, 'index.html', 'text/html; charset=utf-8');
   if (req.method === 'GET' && url.pathname === '/app.js') return staticFile(res, 'app.js', 'application/javascript; charset=utf-8');
   if (req.method === 'GET' && url.pathname === '/app.css') return staticFile(res, 'app.css', 'text/css; charset=utf-8');
   if (req.method === 'GET' && url.pathname === '/healthz') return json(res, 200, { status: 'ok' });
@@ -409,6 +409,7 @@ const server = http.createServer(async (req, res) => {
     if (req.method === 'GET' && url.pathname === '/api/sessions') return json(res, 200, await helper('GET', '/sessions'));
     if (req.method === 'GET' && url.pathname === '/api/access-requests') return json(res, 200, await helper('GET', '/access-requests'));
     if (req.method === 'GET' && url.pathname === '/api/blocks') return json(res, 200, await helper('GET', '/blocks'));
+    if (req.method === 'GET' && url.pathname === '/api/allowed-ips') return json(res, 200, await helper('GET', '/allowed-ips'));
     if (req.method === 'GET' && url.pathname === '/api/audit') return json(res, 200, await helper('GET', '/audit'));
     if (req.method === 'POST' && url.pathname === '/api/alerts/resolve') {
       const data = await readJson(req);
@@ -431,6 +432,14 @@ const server = http.createServer(async (req, res) => {
     if (req.method === 'POST' && url.pathname === '/api/blocks') {
       const data = await readJson(req);
       return json(res, 200, await helper('POST', '/block', { ip: data.ip, actor: session.username, sourceIp: requestIp(req) }));
+    }
+    if (req.method === 'POST' && url.pathname === '/api/allowed-ips') {
+      const data = await readJson(req);
+      return json(res, 200, await helper('POST', '/allow-ip', { ip: data.ip, reason: data.reason, actor: session.username, sourceIp: requestIp(req) }));
+    }
+    if (req.method === 'POST' && url.pathname.startsWith('/api/allowed-ips/') && url.pathname.endsWith('/remove')) {
+      const ip = decodeURIComponent(url.pathname.slice('/api/allowed-ips/'.length, -'/remove'.length));
+      return json(res, 200, await helper('POST', '/remove-allowed-ip', { ip, actor: session.username, sourceIp: requestIp(req) }));
     }
     if (req.method === 'POST' && url.pathname.startsWith('/api/blocks/') && /\/(unblock|enable)$/.test(url.pathname)) {
       const action = url.pathname.endsWith('/enable') ? 'enable' : 'unblock';

@@ -136,6 +136,34 @@
     }
   }
 
+  async function loadAllowedIps() {
+    const data = await api('/api/allowed-ips');
+    const body = document.getElementById('allow-body');
+    body.replaceChildren();
+    document.getElementById('allow-count').textContent = String(data.allowedIps.length);
+    document.getElementById('allow-empty').hidden = data.allowedIps.length !== 0;
+    for (const item of data.allowedIps) {
+      const row = document.createElement('tr');
+      row.innerHTML = `<td class="ip-cell">${escape(item.ip)}</td><td><span class="status ${item.blocked ? 'status-disabled' : 'status-active'}">${item.blocked ? 'Blocked override' : 'Allowed'}</span></td><td class="time-cell">${escape(fmt(item.created_at))}</td><td></td>`;
+      const remove = document.createElement('button');
+      remove.className = 'button button-secondary button-small';
+      remove.type = 'button';
+      remove.textContent = 'Remove allow';
+      remove.addEventListener('click', async () => {
+        if (!window.confirm(`Remove ${item.ip} from the SSH allowlist? Future connections will require approval unless the IP is explicitly blocked.`)) return;
+        remove.disabled = true;
+        try {
+          const result = await api(`/api/allowed-ips/${encodeURIComponent(item.ip)}/remove`, { method: 'POST' });
+          setNotice(result.message);
+          await loadAllowedIps();
+          await loadAudit();
+        } catch (error) { setNotice(error.message, true); remove.disabled = false; }
+      });
+      row.lastElementChild.append(remove);
+      body.append(row);
+    }
+  }
+
   async function loadAccessRequests() {
     const data = await api('/api/access-requests');
     const body = document.getElementById('access-body');
@@ -187,6 +215,7 @@
       if (active === 'sessions') await loadSessions();
       if (active === 'access') await loadAccessRequests();
       if (active === 'blocks') await loadBlocks();
+      if (active === 'allowlist') await loadAllowedIps();
       if (active === 'audit') await loadAudit();
     } catch (error) { setNotice(error.message, true); }
   }
@@ -333,6 +362,25 @@
       form.reset();
       setNotice(result.message);
       await loadBlocks();
+      await loadAudit();
+    } catch (error) { setNotice(error.message, true); }
+    finally { button.disabled = false; }
+  });
+  document.getElementById('allow-form').addEventListener('submit', async (event) => {
+    event.preventDefault();
+    const form = event.currentTarget;
+    const values = new FormData(form);
+    const ip = values.get('ip').trim();
+    if (!window.confirm(`Always allow SSH connections from ${ip} without email approval? Any active block for this IP will still take precedence.`)) return;
+    const button = form.querySelector('button');
+    button.disabled = true;
+    try {
+      const result = await api('/api/allowed-ips', {
+        method: 'POST', body: JSON.stringify({ ip, reason: values.get('reason').trim() }),
+      });
+      form.reset();
+      setNotice(result.message);
+      await loadAllowedIps();
       await loadAudit();
     } catch (error) { setNotice(error.message, true); }
     finally { button.disabled = false; }

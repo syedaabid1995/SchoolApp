@@ -190,6 +190,11 @@ function shouldSendLoginAlert(db, ip, cooldownMs = 5 * 60 * 1000) {
   }
 }
 
+function isTrustedSource(db, username, ip) {
+  return Boolean(db.prepare(`SELECT 1 FROM ssh_trusted_sources
+    WHERE source_ip = ? AND username IN (?, '*') LIMIT 1`).get(ip, username));
+}
+
 function issueAccessRequest(db, username, ip) {
   const now = Date.now();
   db.exec('BEGIN IMMEDIATE');
@@ -217,4 +222,4 @@ function issueAccessRequest(db, username, ip) {
   }
 }
 
-module.exports = { expireStaleMail, hashToken, issueAction, issueAccessRequest, issuePanelLink, openStore, recordSession, shouldSendLoginAlert };
+module.exports = { expireStaleMail, hashToken, isTrustedSource, issueAction, issueAccessRequest, issuePanelLink, openStore, recordSession, shouldSendLoginAlert };

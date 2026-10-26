@@ -69,4 +69,22 @@ test('privileged helper exposes typed Unix-socket operations and a verifiable au
   assert.deepEqual(audit.body.events.map((event) => event.action), ['revoke-session', 'approve-ssh-access']);
   assert.equal(audit.body.events[1].result, 'success');
   assert.equal(audit.body.events[0].result, 'not-active-or-not-controllable');
+
+  const addedAllow = await call(socketPath, '/allow-ip', 'POST', {
+    ip: '203.0.113.45', actor: 'test.operator', sourceIp: '127.0.0.1', reason: 'Test allowlist entry',
+  });
+  assert.equal(addedAllow.status, 200);
+  assert.match(addedAllow.body.message, /allowed to connect.*without an approval email/);
+  const allowlist = await call(socketPath, '/allowed-ips');
+  assert.deepEqual(allowlist.body.allowedIps.map((item) => ({ ip: item.ip, blocked: item.blocked })), [
+    { ip: '203.0.113.45', blocked: false },
+  ]);
+  const removeAllow = await call(socketPath, '/remove-allowed-ip', 'POST', {
+    ip: '203.0.113.45', actor: 'test.operator', sourceIp: '127.0.0.1',
+  });
+  assert.equal(removeAllow.status, 200);
+  assert.deepEqual((await call(socketPath, '/allowed-ips')).body.allowedIps, []);
+  const finalAudit = await call(socketPath, '/audit');
+  assert.equal(finalAudit.body.chainValid, true);
+  assert.deepEqual(finalAudit.body.events.slice(0, 2).map((event) => event.action), ['remove-allowed-ip', 'allow-ip']);
 });

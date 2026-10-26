@@ -191,6 +191,15 @@ async function handle(req, res) {
       .map((row) => ({ ...row, enabled: Boolean(row.enabled) }));
     return json(res, 200, { blocks });
   }
+  if (req.method === 'GET' && req.url === '/allowed-ips') {
+    const allowedIps = db.prepare(`SELECT trusted.source_ip AS ip, trusted.created_at,
+      COALESCE(block.enabled, 0) AS blocked
+      FROM ssh_trusted_sources AS trusted
+      LEFT JOIN ssh_ip_blocks AS block ON block.ip = trusted.source_ip
+      WHERE trusted.username = '*' ORDER BY trusted.source_ip`).all()
+      .map((row) => ({ ...row, blocked: Boolean(row.blocked) }));
+    return json(res, 200, { allowedIps });
+  }
   if (req.method === 'GET' && req.url === '/access-requests') {
     const requests = db.prepare(`SELECT token_hash AS id, username, source_ip, issued_at, expires_at
       FROM ssh_access_requests WHERE approved_at IS NULL AND used_at IS NULL AND expires_at > ? ORDER BY issued_at DESC`).all(Date.now());
@@ -318,6 +327,26 @@ async function handle(req, res) {
       audit(input.actor || 'unknown', req.url.slice(1), ip, input.sourceIp || '', `failed:${error.code || 'error'}`);
       return json(res, 500, { message: 'The firewall update failed. Check the audit log and server firewall state.' });
     }
+  }
+  if (req.method === 'POST' && req.url === '/allow-ip') {
+    const ip = String(input.ip || '');
+    if (!net.isIP(ip)) return json(res, 400, { message: 'Enter a valid IPv4 or IPv6 address.' });
+    const now = Date.now();
+    db.prepare(`INSERT INTO ssh_trusted_sources (username, source_ip, created_at) VALUES ('*', ?, ?)
+      ON CONFLICT(username, source_ip) DO NOTHING`).run(ip, now);
+    const blocked = db.prepare('SELECT 1 FROM ssh_ip_blocks WHERE ip = ? AND enabled = 1').get(ip);
+    audit(input.actor || 'unknown', 'allow-ip', ip, input.sourceIp || '', 'success', String(input.reason || ''));
+    return json(res, 200, { message: blocked
+      ? `${ip} is on the allowlist, but its active block still prevents SSH access.`
+      : `${ip} is allowed to connect to SSH without an approval email.` });
+  }
+  if (req.method === 'POST' && req.url === '/remove-allowed-ip') {
+    const ip = String(input.ip || '');
+    if (!net.isIP(ip)) return json(res, 400, { message: 'Enter a valid IPv4 or IPv6 address.' });
+    const removed = db.prepare("DELETE FROM ssh_trusted_sources WHERE username = '*' AND source_ip = ?").run(ip);
+    if (!removed.changes) return json(res, 404, { message: 'That address is not on the allowlist.' });
+    audit(input.actor || 'unknown', 'remove-allowed-ip', ip, input.sourceIp || '', 'success', String(input.reason || ''));
+    return json(res, 200, { message: `${ip} was removed from the allowlist. Future SSH logins from it will require approval unless it is explicitly blocked.` });
   }
   return json(res, 404, { message: 'Not found.' });
 }

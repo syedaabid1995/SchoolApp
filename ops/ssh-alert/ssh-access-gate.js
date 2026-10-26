@@ -5,7 +5,7 @@ const { execFileSync } = require('node:child_process');
 const backendRoot = '/var/www/academify/backend';
 require(`${backendRoot}/node_modules/dotenv`).config({ path: `${backendRoot}/.env`, quiet: true });
 const nodemailer = require(`${backendRoot}/node_modules/nodemailer`);
-const { hashToken, issueAccessRequest, openStore } = require('./ssh-action-store');
+const { hashToken, isTrustedSource, issueAccessRequest, openStore } = require('./ssh-action-store');
 
 const recipient = 'syedaabid1995@gmail.com';
 const username = process.env.PAM_USER || '';
@@ -32,7 +32,7 @@ async function main() {
     audit(`Rejected SSH login from blocked IP account=${username} ip=${ip}`);
     return 1;
   }
-  if (db.prepare('SELECT 1 FROM ssh_trusted_sources WHERE username = ? AND source_ip = ?').get(username, ip)) return 0;
+  if (isTrustedSource(db, username, ip)) return 0;
   if (db.prepare(`
     SELECT 1 FROM ssh_access_requests
     WHERE username = ? AND source_ip = ? AND approved_at IS NOT NULL AND expires_at > ?
