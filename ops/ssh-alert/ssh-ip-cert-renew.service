@@ -1,0 +1,13 @@
+[Unit]
+Description=Renew the SAAPT SSH operations IP-address TLS certificate
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/opt/certbot-ip-venv/bin/certbot renew --config-dir=/etc/letsencrypt-ops-ip --work-dir=/var/lib/letsencrypt-ops-ip --logs-dir=/var/log/letsencrypt-ops-ip --deploy-hook "nginx -t && systemctl reload nginx"
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/etc/letsencrypt-ops-ip /var/lib/letsencrypt-ops-ip /var/log/letsencrypt-ops-ip /var/www/certbot
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6

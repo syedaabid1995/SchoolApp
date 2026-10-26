@@ -57,7 +57,7 @@ async function main() {
 
   const safeUser = escapeHtml(username);
   const safeIp = escapeHtml(ip);
-  const panelUrl = String(process.env.OPS_PUBLIC_URL || 'https://ops.saapttech.com').replace(/\/$/, '');
+  const panelUrl = String(process.env.OPS_PUBLIC_URL || 'https://200.97.165.51:4174').replace(/\/$/, '');
   const url = `${panelUrl}/access#${token}`;
   const transporter = nodemailer.createTransport({
     host,

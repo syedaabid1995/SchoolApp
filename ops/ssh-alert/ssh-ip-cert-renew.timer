@@ -1,0 +1,11 @@
+[Unit]
+Description=Check SAAPT SSH operations IP certificate renewal regularly
+
+[Timer]
+OnCalendar=*-*-* 00,06,12,18:00:00
+RandomizedDelaySec=20m
+Persistent=true
+Unit=saapt-ssh-ip-cert-renew.service
+
+[Install]
+WantedBy=timers.target

@@ -10,8 +10,9 @@ User=sshops
 Group=sshops
 SupplementaryGroups=sshops
 WorkingDirectory=/opt/saapt-ssh-alert
-Environment=OPS_HOST=ops.saapttech.com
-Environment=OPS_PUBLIC_URL=https://ops.saapttech.com
+Environment=OPS_HOST=200.97.165.51
+Environment=OPS_ORIGIN=https://200.97.165.51:4174
+Environment=OPS_PUBLIC_URL=https://200.97.165.51:4174
 Environment=OPS_PANEL_PORT=4173
 Environment=OPS_PANEL_DATA=/var/lib/saapt-ssh-panel
 Environment=OPS_HELPER_SOCKET=/run/saapt-ssh-alert/ops-helper.sock

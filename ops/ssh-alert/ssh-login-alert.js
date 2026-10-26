@@ -26,7 +26,7 @@ const transporter = nodemailer.createTransport({
   auth: { user: process.env.PLATFORM_SMTP_USERNAME, pass: process.env.PLATFORM_SMTP_PASSWORD },
 });
 const hostname = os.hostname();
-const panelUrl = String(process.env.OPS_PUBLIC_URL || 'https://ops.saapttech.com').replace(/\/$/, '');
+const panelUrl = String(process.env.OPS_PUBLIC_URL || 'https://200.97.165.51:4174').replace(/\/$/, '');
 const isTest = process.argv.includes('--test');
 const db = isTest ? null : openStore();
 
