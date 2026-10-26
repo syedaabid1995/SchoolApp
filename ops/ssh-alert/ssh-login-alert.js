@@ -135,8 +135,12 @@ async function drainMailQueue() {
     const detail = `${error.code || 'SMTP_ERROR'}${error.responseCode ? ` ${error.responseCode}` : ''}: ${String(error.response || error.message).slice(0, 400)}`;
     db.prepare('UPDATE ssh_mail_outbox SET attempts = ?, next_attempt_at = ?, last_error = ? WHERE id = ?')
       .run(attempts, Date.now() + delayMs, detail, message.id);
+    db.prepare(`
+      INSERT INTO ssh_mail_schedule (id, next_send_at) VALUES (1, ?)
+      ON CONFLICT(id) DO UPDATE SET next_send_at = excluded.next_send_at
+    `).run(Date.now() + minimumSendIntervalMs);
     console.error(`Security email send deferred id=${message.id} retryInMs=${delayMs} reason=${detail}`);
-    scheduleMailDrain(0);
+    scheduleMailDrain(minimumSendIntervalMs);
   } finally {
     drainingMail = false;
   }
