@@ -43,7 +43,7 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 .account { display: flex; align-items: center; gap: 10px; color: var(--muted); font-size: 13px; }
 #operator-name { max-width: 260px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
-main { width: min(1440px, 100%); margin: 0 auto; padding: 32px clamp(16px, 4vw, 56px) 64px; }
+main { width: min(1520px, 100%); margin: 0 auto; padding: 32px clamp(16px, 4vw, 56px) 64px; }
 .login-view {
   width: min(460px, 100%);
   margin: clamp(32px, 9vh, 96px) auto 0;
@@ -95,6 +95,41 @@ main { width: min(1440px, 100%); margin: 0 auto; padding: 32px clamp(16px, 4vw, 
 
 .page-heading { display: flex; align-items: center; justify-content: space-between; gap: 20px; padding: 0 0 24px; }
 .page-heading h1 { font-size: 28px; }
+#panel-view { display: grid; grid-template-columns: 220px minmax(0, 1fr); align-content: start; column-gap: 28px; }
+.page-heading, .overview-grid { grid-column: 1 / -1; }
+.tabs { grid-column: 1; grid-row: 3 / span 2; display: flex; flex-direction: column; align-items: stretch; gap: 4px; overflow: visible; align-self: stretch; padding: 8px 14px 0 0; border: 0; border-right: 1px solid var(--line); }
+.nav-caption { padding: 5px 12px 9px; color: #8a97a8; font-size: 10px; font-weight: 750; letter-spacing: .8px; }
+.tab { width: 100%; justify-content: flex-start; border-radius: 5px; padding-inline: 12px; }
+.tab.active::after { top: 5px; right: auto; bottom: 5px; left: 0; width: 2px; height: auto; }
+.panel-section { grid-column: 2; grid-row: 3; min-width: 0; }
+#notice { grid-column: 2; grid-row: 4; }
+.overview-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; margin: 0 0 24px; }
+.summary-card {
+  display: grid;
+  min-width: 0;
+  min-height: 126px;
+  grid-template-columns: 1fr auto;
+  grid-template-rows: auto 1fr auto;
+  align-items: center;
+  gap: 0 10px;
+  padding: 16px 18px;
+  border: 1px solid var(--line);
+  border-left: 3px solid var(--metric-color, var(--blue));
+  border-radius: 7px;
+  background: var(--surface);
+  color: var(--ink);
+  cursor: pointer;
+  text-align: left;
+  transition: border-color .15s ease, box-shadow .15s ease, transform .15s ease;
+}
+.summary-card:hover { border-color: #b8c5d5; box-shadow: 0 5px 16px #1b2d420c; transform: translateY(-1px); }
+.summary-sessions { --metric-color: #16845d; }
+.summary-approvals { --metric-color: #b36b13; }
+.summary-blocks { --metric-color: #c43c36; }
+.summary-allowed { --metric-color: #1d5fe5; }
+.summary-label { grid-column: 1 / -1; color: #536378; font-size: 12px; font-weight: 650; }
+.summary-card strong { align-self: center; color: var(--ink); font-size: 30px; font-variant-numeric: tabular-nums; line-height: 1; }
+.summary-note { align-self: center; color: #78879a; font-size: 11px; line-height: 1.35; text-align: right; }
 .tabs { display: flex; gap: 8px; overflow-x: auto; border-bottom: 1px solid var(--line); scrollbar-width: thin; }
 .tab {
   position: relative;
@@ -156,7 +191,15 @@ tbody tr:hover { background: #f8faff; }
 .dialog-actions { display: flex; justify-content: flex-end; gap: 8px; }
 
 @media (max-width: 760px) {
+  #panel-view { display: block; }
   main { padding-top: 24px; }
+  .tabs { display: flex; flex-direction: row; align-items: center; gap: 3px; overflow-x: auto; margin-inline: -14px; padding: 0 14px; border: 0; border-bottom: 1px solid var(--line); }
+  .nav-caption { display: none; }
+  .tab { width: auto; justify-content: center; }
+  .tab.active::after { top: auto; right: 0; bottom: -1px; left: 0; width: auto; height: 2px; }
+  .overview-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 9px; margin-bottom: 18px; }
+  .summary-card { min-height: 112px; padding: 13px 14px; }
+  .summary-card strong { font-size: 27px; }
   .block-form { grid-template-columns: 1fr 1fr; }
   .block-form label { align-self: end; }
   .block-form .button { grid-column: 1 / -1; }
@@ -177,6 +220,9 @@ tbody tr:hover { background: #f8faff; }
   .tabs { gap: 3px; margin-inline: -14px; padding-inline: 14px; }
   .tab { min-height: 42px; padding-inline: 10px; font-size: 12px; }
   .section-heading { align-items: flex-start; flex-direction: column; gap: 7px; }
+  .overview-grid { gap: 8px; }
+  .summary-card { min-height: 105px; padding: 12px; }
+  .summary-note { max-width: 82px; }
   .block-form { grid-template-columns: 1fr; }
   .block-form .button { grid-column: auto; }
   .activity-filters { grid-template-columns: 1fr; }

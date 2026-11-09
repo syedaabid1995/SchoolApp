@@ -43,7 +43,14 @@
 
     <section id="panel-view" hidden>
       <div class="page-heading"><div><p class="eyebrow">INFRASTRUCTURE SECURITY</p><h1>Server operations</h1><p>Manage SSH access and review server and operator activity.</p></div><button id="refresh" class="button button-secondary" type="button">Refresh</button></div>
+      <div class="overview-grid" aria-label="Current server security summary">
+        <button class="summary-card summary-sessions" data-open-tab="sessions" type="button"><span class="summary-label">Active sessions</span><strong id="overview-session-count">0</strong><span class="summary-note">SSH connections now</span></button>
+        <button class="summary-card summary-approvals" data-open-tab="access" type="button"><span class="summary-label">Pending approvals</span><strong id="overview-access-count">0</strong><span class="summary-note">Waiting for review</span></button>
+        <button class="summary-card summary-blocks" data-open-tab="blocks" type="button"><span class="summary-label">Blocked IPs</span><strong id="overview-block-count">0</strong><span class="summary-note">Entries in the block list</span></button>
+        <button class="summary-card summary-allowed" data-open-tab="allowlist" type="button"><span class="summary-label">Allowed IPs</span><strong id="overview-allow-count">0</strong><span class="summary-note">Trusted addresses</span></button>
+      </div>
       <nav class="tabs" aria-label="SSH security sections">
+        <span class="nav-caption">OPERATIONS</span>
         <button class="tab active" data-tab="sessions" type="button" aria-current="page">Active sessions <span id="session-count" class="count">0</span></button>
         <button class="tab" data-tab="access" type="button">Access approvals <span id="access-count" class="count">0</span></button>
         <button class="tab" data-tab="blocks" type="button">Blocked IPs <span id="block-count" class="count">0</span></button>

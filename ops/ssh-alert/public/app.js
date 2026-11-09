@@ -70,12 +70,23 @@
     if (accessToken) resolveAccessToken();
   };
   const fmt = (time) => new Date(Number(time)).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' });
+  const countTargets = {
+    'session-count': 'overview-session-count',
+    'access-count': 'overview-access-count',
+    'block-count': 'overview-block-count',
+    'allow-count': 'overview-allow-count',
+  };
+  const setCount = (id, value) => {
+    document.getElementById(id).textContent = String(value);
+    const summaryTarget = countTargets[id];
+    if (summaryTarget) document.getElementById(summaryTarget).textContent = String(value);
+  };
 
   async function loadSessions() {
     const data = await api('/api/sessions');
     const body = document.getElementById('sessions-body');
     body.replaceChildren();
-    document.getElementById('session-count').textContent = String(data.sessions.length);
+    setCount('session-count', data.sessions.length);
     document.getElementById('sessions-empty').hidden = data.sessions.length !== 0;
     for (const item of data.sessions) {
       const row = document.createElement('tr');
@@ -119,7 +130,7 @@
     const data = await api('/api/blocks');
     const body = document.getElementById('blocks-body');
     body.replaceChildren();
-    document.getElementById('block-count').textContent = String(data.blocks.length);
+    setCount('block-count', data.blocks.length);
     document.getElementById('blocks-empty').hidden = data.blocks.length !== 0;
     for (const block of data.blocks) {
       const row = document.createElement('tr');
@@ -151,7 +162,7 @@
     const data = await api('/api/allowed-ips');
     const body = document.getElementById('allow-body');
     body.replaceChildren();
-    document.getElementById('allow-count').textContent = String(data.allowedIps.length);
+    setCount('allow-count', data.allowedIps.length);
     document.getElementById('allow-empty').hidden = data.allowedIps.length !== 0;
     for (const item of data.allowedIps) {
       const row = document.createElement('tr');
@@ -179,7 +190,7 @@
     const data = await api('/api/access-requests');
     const body = document.getElementById('access-body');
     body.replaceChildren();
-    document.getElementById('access-count').textContent = String(data.requests.length);
+    setCount('access-count', data.requests.length);
     document.getElementById('access-empty').hidden = data.requests.length !== 0;
     for (const item of data.requests) {
       const row = document.createElement('tr');
@@ -250,10 +261,10 @@
   async function loadTabCounts() {
     try {
       const counts = await api('/api/counts');
-      document.getElementById('session-count').textContent = String(counts.sessions);
-      document.getElementById('access-count').textContent = String(counts.requests);
-      document.getElementById('block-count').textContent = String(counts.blocks);
-      document.getElementById('allow-count').textContent = String(counts.allowedIps);
+      setCount('session-count', counts.sessions);
+      setCount('access-count', counts.requests);
+      setCount('block-count', counts.blocks);
+      setCount('allow-count', counts.allowedIps);
     } catch (error) { setNotice(error.message, true); }
   }
 
@@ -409,6 +420,9 @@
     tab.setAttribute('aria-current', 'page');
     document.querySelectorAll('.panel-section').forEach((panel) => { panel.hidden = panel.id !== `${tab.dataset.tab}-panel`; });
     loadActiveTab();
+  }));
+  document.querySelectorAll('[data-open-tab]').forEach((card) => card.addEventListener('click', () => {
+    document.querySelector(`.tab[data-tab="${CSS.escape(card.dataset.openTab)}"]`)?.click();
   }));
   document.getElementById('block-form').addEventListener('submit', async (event) => {
     event.preventDefault();
