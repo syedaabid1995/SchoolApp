@@ -11,6 +11,84 @@ const { syncFirewall } = require('./ssh-firewall');
 const socketPath = process.env.OPS_HELPER_SOCKET || '/run/saapt-ssh-alert/ops-helper.sock';
 const db = openStore();
 
+const serverActivityCategories = {
+  all: 'All server activity',
+  ssh_auth: 'SSH authentication',
+  privileged_command: 'Privileged commands',
+  log_read: 'Server log access',
+  log_change: 'Server log changes',
+  security_config: 'Security and access configuration',
+  persistence_config: 'Services, scheduled tasks, and SSH keys',
+};
+const auditKeysByCategory = {
+  privileged_command: ['saapt_privileged_command'],
+  log_read: ['saapt_log_read'],
+  log_change: ['saapt_log_change'],
+  security_config: ['saapt_ssh_config', 'saapt_sudo_config', 'saapt_identity_config', 'saapt_pam_config', 'saapt_audit_config'],
+  persistence_config: ['saapt_service_config', 'saapt_cron_config', 'saapt_shell_config', 'saapt_authorized_keys'],
+};
+
+function queryServerActivity(category, range, page) {
+  if (!Object.hasOwn(serverActivityCategories, category) || !['today', 'last-7-days'].includes(range)
+    || !Number.isInteger(page) || page < 1 || page > 10000) {
+    return { status: 400, body: { message: 'Choose a supported activity category and time range.' } };
+  }
+  const events = [];
+  const run = (binary, args, label, parser) => {
+    try {
+      const output = execFileSync(binary, args, { encoding: 'utf8', timeout: 10000, maxBuffer: 2 * 1024 * 1024 });
+      for (const line of output.split(/\r?\n/).filter(Boolean)) {
+        const event = parser(line);
+        if (event && events.length < 10000) events.push({ ...event, category: label });
+      }
+    } catch (error) {
+      if (error.stdout) {
+        for (const line of String(error.stdout).split(/\r?\n/).filter(Boolean)) {
+          const event = parser(line);
+          if (event && events.length < 10000) events.push({ ...event, category: label });
+        }
+      } else if (error.code !== 'ENOENT' && error.status !== 1) {
+        throw error;
+      }
+    }
+  };
+  const categories = category === 'all' ? Object.keys(auditKeysByCategory) : (auditKeysByCategory[category] ? [category] : []);
+  const auditStart = range === 'today'
+    ? ['today']
+    : (() => {
+      const date = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+      const localDate = `${String(date.getMonth() + 1).padStart(2, '0')}/${String(date.getDate()).padStart(2, '0')}/${date.getFullYear()}`;
+      return [localDate, '00:00:00'];
+    })();
+  for (const key of categories.flatMap((name) => auditKeysByCategory[name])) {
+    const label = category === 'all'
+      ? serverActivityCategories[Object.keys(auditKeysByCategory).find((name) => auditKeysByCategory[name].includes(key))]
+      : serverActivityCategories[category];
+    run('/usr/sbin/ausearch', ['--input', '/var/log/audit/audit.log', '--key', key, '--format', 'text', '--start', ...auditStart], label, (line) => {
+      const match = line.match(/^At (.+?) (\d{2}:\d{2}:\d{2}) (\d{2}\/\d{2}\/\d{4}) (.+)$/);
+      if (!match) return null;
+      const [month, day, year] = match[3].split('/');
+      return { timestamp: `${year}-${month}-${day} ${match[2]}`, details: `${match[1]} ${match[4]}`.slice(0, 1200) };
+    });
+  }
+  if (category === 'all' || category === 'ssh_auth') {
+    const since = range === 'today' ? 'today' : '7 days ago';
+    run('/usr/bin/journalctl', ['--unit=ssh.service', `--since=${since}`, '--no-pager', '--output=short-iso', '--lines=500'], serverActivityCategories.ssh_auth, (line) => {
+      const match = line.match(/^(\S+)\s+\S+\s+\S+\s+(.+)$/);
+      if (!match || !/(sshd|ssh\[|Accepted |Failed |Invalid user|authentication failure)/i.test(match[2])) return null;
+      return { timestamp: match[1], details: match[2].slice(0, 1200) };
+    });
+  }
+  events.sort((a, b) => String(b.timestamp).localeCompare(String(a.timestamp)));
+  const pageSize = 25;
+  const total = events.length;
+  const offset = (page - 1) * pageSize;
+  return { status: 200, body: {
+    events: events.slice(offset, offset + pageSize), category, range, page, pageSize, total,
+    truncated: total === 10000, categories: serverActivityCategories,
+  } };
+}
+
 function json(res, status, value) {
   res.writeHead(status, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' });
   res.end(JSON.stringify(value));
@@ -200,12 +278,23 @@ async function handle(req, res) {
       .map((row) => ({ ...row, blocked: Boolean(row.blocked) }));
     return json(res, 200, { allowedIps });
   }
+  if (req.method === 'GET' && req.url === '/counts') {
+    const sessions = activeSessions().length;
+    const requests = db.prepare(`SELECT COUNT(*) AS count FROM ssh_access_requests
+      WHERE approved_at IS NULL AND used_at IS NULL AND expires_at > ?`).get(Date.now()).count;
+    const blocks = db.prepare('SELECT COUNT(*) AS count FROM ssh_ip_blocks').get().count;
+    const allowedIps = db.prepare("SELECT COUNT(*) AS count FROM ssh_trusted_sources WHERE username = '*'").get().count;
+    return json(res, 200, { sessions, requests, blocks, allowedIps });
+  }
   if (req.method === 'GET' && req.url === '/access-requests') {
     const requests = db.prepare(`SELECT token_hash AS id, username, source_ip, issued_at, expires_at
       FROM ssh_access_requests WHERE approved_at IS NULL AND used_at IS NULL AND expires_at > ? ORDER BY issued_at DESC`).all(Date.now());
     return json(res, 200, { requests });
   }
-  if (req.method === 'GET' && req.url === '/audit') {
+  if (req.method === 'GET' && req.url.startsWith('/audit')) {
+    const url = new URL(req.url, 'http://localhost');
+    const page = Number(url.searchParams.get('page') || 1);
+    if (!Number.isInteger(page) || page < 1 || page > 10000) return json(res, 400, { message: 'Choose a valid audit log page.' });
     const rows = db.prepare('SELECT id, actor, action, target, source_ip, result, details, previous_hash, event_hash, created_at FROM ssh_security_audit ORDER BY id').all();
     let previous = '';
     let chainValid = true;
@@ -215,7 +304,15 @@ async function handle(req, res) {
       if (event.previous_hash !== previous || event.event_hash !== expected) chainValid = false;
       previous = event.event_hash;
     }
-    return json(res, 200, { events: rows.slice(-200).reverse(), chainValid });
+    const newestFirst = rows.slice().reverse();
+    const pageSize = 25;
+    const offset = (page - 1) * pageSize;
+    return json(res, 200, { events: newestFirst.slice(offset, offset + pageSize), total: rows.length, page, pageSize, chainValid });
+  }
+  if (req.method === 'GET' && req.url.startsWith('/server-activity')) {
+    const url = new URL(req.url, 'http://localhost');
+    const result = queryServerActivity(url.searchParams.get('category') || 'all', url.searchParams.get('range') || 'today', Number(url.searchParams.get('page') || 1));
+    return json(res, result.status, result.body);
   }
   if (req.method === 'POST' && req.url === '/auth-event') {
     if (!['panel-login', 'panel-login-failed', 'panel-logout', 'password-reset-request', 'password-reset-failed', 'password-reset-success', 'panel-password-change'].includes(input.action)) return json(res, 400, { message: 'Unsupported authentication event.' });

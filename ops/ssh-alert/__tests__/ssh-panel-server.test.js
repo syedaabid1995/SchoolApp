@@ -75,8 +75,8 @@ test('supports password login, password changes, and single-use email OTP recove
   assert.equal(fs.existsSync(socketPath), true);
   const child = spawn(process.execPath, [appPath], {
     env: {
-      ...process.env, OPS_PANEL_DATA: testDir, OPS_PANEL_PORT: String(port), OPS_HOST: 'localhost',
-      OPS_ORIGIN: 'http://localhost:4174', OPS_HELPER_SOCKET: socketPath, SSH_ALERT_DATA_DIR: testDir,
+      ...process.env, OPS_PANEL_DATA: testDir, OPS_PANEL_PORT: String(port), OPS_HOSTS: 'localhost,localhost-alt',
+      OPS_ORIGINS: 'http://localhost:4174,http://localhost-alt:4174', OPS_HELPER_SOCKET: socketPath, SSH_ALERT_DATA_DIR: testDir,
       OPS_NODEMAILER_PATH: fakeMailerPath, OPS_TEST_MAIL_FILE: mailFile, OPS_SMTP_HOST: 'smtp.test',
       OPS_SMTP_FROM_EMAIL: 'ops@example.com', OPS_SMTP_USERNAME: 'ops@example.com', OPS_SMTP_PASSWORD: 'test-secret',
     },
@@ -96,6 +96,11 @@ test('supports password login, password changes, and single-use email OTP recove
     if (!ready) await new Promise((resolve) => setTimeout(resolve, 50));
   }
   assert.equal(ready, true, `health endpoint status ${healthStatus}`);
+
+  const aliasHealth = await request(port, '/healthz', {
+    headers: { Host: 'localhost-alt:4174', Origin: 'http://localhost-alt:4174' },
+  });
+  assert.equal(aliasHealth.status, 200);
 
   const badLogin = await request(port, '/api/login', {
     method: 'POST', body: JSON.stringify({ username: 'test.operator@example.com', password: 'incorrect password' }),
@@ -124,6 +129,26 @@ test('supports password login, password changes, and single-use email OTP recove
   assert.equal(audit.status, 200);
   assert.equal(audit.json().chainValid, true);
   assert.deepEqual(audit.json().events.map((event) => event.action), ['panel-login', 'panel-login-failed']);
+  assert.equal(audit.json().pageSize, 25);
+  const emptyAuditPage = await request(port, '/api/audit?page=2', { headers: { Cookie: cookie } });
+  assert.equal(emptyAuditPage.status, 200);
+  assert.deepEqual(emptyAuditPage.json().events, []);
+  const countsWithoutSession = await request(port, '/api/counts');
+  assert.equal(countsWithoutSession.status, 401);
+  const counts = await request(port, '/api/counts', { headers: { Cookie: cookie } });
+  assert.equal(counts.status, 200);
+  assert.deepEqual(counts.json(), { sessions: 0, requests: 0, blocks: 0, allowedIps: 0 });
+  const activityWithoutSession = await request(port, '/api/server-activity');
+  assert.equal(activityWithoutSession.status, 401);
+  const serverActivity = await request(port, '/api/server-activity?category=all&range=today', { headers: { Cookie: cookie } });
+  assert.equal(serverActivity.status, 200, JSON.stringify(serverActivity.json()));
+  assert.ok(Array.isArray(serverActivity.json().events));
+  assert.equal(serverActivity.json().pageSize, 25);
+  assert.equal(serverActivity.json().page, 1);
+  const invalidActivityFilter = await request(port, '/api/server-activity?category=arbitrary&range=today', { headers: { Cookie: cookie } });
+  assert.equal(invalidActivityFilter.status, 400);
+  const invalidAuditPage = await request(port, '/api/audit?page=0', { headers: { Cookie: cookie } });
+  assert.equal(invalidAuditPage.status, 400);
 
   const passwordChange = await request(port, '/api/account/password', {
     method: 'POST', headers: { Cookie: cookie, 'X-CSRF-Token': loginData.csrf },
@@ -166,4 +191,13 @@ test('supports password login, password changes, and single-use email OTP recove
   assert.equal(logout.status, 200);
   const afterLogout = await request(port, '/api/me', { headers: { Cookie: newCookie } });
   assert.equal(afterLogout.status, 401);
+});
+
+test('auth forms and account controls respect hidden state despite layout styles', () => {
+  const html = fs.readFileSync(path.resolve(__dirname, '../public/index.html'), 'utf8');
+  const css = fs.readFileSync(path.resolve(__dirname, '../public/app.css'), 'utf8');
+  assert.match(html, /id="account" class="account" hidden/);
+  assert.match(html, /id="reset-request-form" class="login-form" hidden/);
+  assert.match(html, /id="reset-complete-form" class="login-form" hidden/);
+  assert.match(css, /\[hidden\]\s*\{\s*display:\s*none\s*!important;/);
 });

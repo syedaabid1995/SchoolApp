@@ -14,6 +14,8 @@
   let csrf = '';
   let focusSessionId = '';
   let focusAccessId = '';
+  let auditPage = 1;
+  let activityPage = 1;
   const linkToken = window.location.hash.slice(1);
   const alertToken = window.location.pathname === '/sessions' ? linkToken : '';
   const accessToken = window.location.pathname === '/access' ? linkToken : '';
@@ -41,12 +43,20 @@
     loginView.hidden = false;
     account.hidden = true;
     csrf = '';
+    setNotice('');
     showAuthForm('login');
   };
   const showAuthForm = (name) => {
     loginForm.hidden = name !== 'login';
     resetRequestForm.hidden = name !== 'request';
     resetCompleteForm.hidden = name !== 'complete';
+    const copy = {
+      login: ['Sign in', 'Sign in with your operator email and password.'],
+      request: ['Reset password', 'Request a one-time code sent to your operator email.'],
+      complete: ['Choose a new password', 'Verify the email code and set a new password.'],
+    }[name];
+    document.getElementById('login-title').textContent = copy[0];
+    document.getElementById('login-subtitle').textContent = copy[1];
   };
   const showPanel = (username, token) => {
     csrf = token;
@@ -54,6 +64,7 @@
     panelView.hidden = false;
     account.hidden = false;
     document.getElementById('operator-name').textContent = username;
+    loadTabCounts();
     loadActiveTab();
     if (alertToken) resolveAlertToken();
     if (accessToken) resolveAccessToken();
@@ -108,7 +119,7 @@
     const data = await api('/api/blocks');
     const body = document.getElementById('blocks-body');
     body.replaceChildren();
-    document.getElementById('block-count').textContent = String(data.blocks.filter((block) => block.enabled).length);
+    document.getElementById('block-count').textContent = String(data.blocks.length);
     document.getElementById('blocks-empty').hidden = data.blocks.length !== 0;
     for (const block of data.blocks) {
       const row = document.createElement('tr');
@@ -195,7 +206,7 @@
   }
 
   async function loadAudit() {
-    const data = await api('/api/audit');
+    const data = await api(`/api/audit?page=${auditPage}`);
     const integrity = document.getElementById('audit-integrity');
     integrity.textContent = data.chainValid ? 'Audit chain verified' : 'Audit integrity check failed';
     integrity.className = `status ${data.chainValid ? 'status-active' : 'status-disabled'}`;
@@ -207,6 +218,43 @@
       row.innerHTML = `<td class="time-cell">${escape(fmt(item.created_at))}</td><td>${escape(item.actor)}</td><td>${escape(item.action)}</td><td class="ip-cell">${escape(item.target)}</td><td class="ip-cell">${escape(item.source_ip)}</td><td>${escape(item.result)}</td><td>${escape(item.details)}</td>`;
       body.append(row);
     }
+    updatePager('audit', data.total, data.page, data.pageSize);
+  }
+
+  async function loadServerActivity() {
+    const filters = new FormData(document.getElementById('server-activity-filters'));
+    const query = new URLSearchParams({ category: filters.get('category'), range: filters.get('range'), page: String(activityPage) });
+    const data = await api(`/api/server-activity?${query}`);
+    const body = document.getElementById('server-activity-body');
+    body.replaceChildren();
+    document.getElementById('server-activity-empty').hidden = data.events.length !== 0;
+    for (const item of data.events) {
+      const row = document.createElement('tr');
+      row.innerHTML = `<td class="time-cell">${escape(item.timestamp)}</td><td>${escape(item.category)}</td><td>${escape(item.details)}</td>`;
+      body.append(row);
+    }
+    document.getElementById('server-activity-updated').textContent = `Updated ${new Date().toLocaleTimeString()}`;
+    updatePager('server-activity', data.total, data.page, data.pageSize, data.truncated);
+  }
+
+  function updatePager(prefix, total, page, pageSize, truncated = false) {
+    const pages = Math.max(1, Math.ceil(total / pageSize));
+    const first = total ? (page - 1) * pageSize + 1 : 0;
+    const last = Math.min(page * pageSize, total);
+    document.getElementById(`${prefix}-range`).textContent = `Showing ${first}-${last} of ${total}${truncated ? '+' : ''}`;
+    document.getElementById(`${prefix}-page`).textContent = `Page ${page} of ${pages}`;
+    document.getElementById(`${prefix}-prev`).disabled = page <= 1;
+    document.getElementById(`${prefix}-next`).disabled = page >= pages;
+  }
+
+  async function loadTabCounts() {
+    try {
+      const counts = await api('/api/counts');
+      document.getElementById('session-count').textContent = String(counts.sessions);
+      document.getElementById('access-count').textContent = String(counts.requests);
+      document.getElementById('block-count').textContent = String(counts.blocks);
+      document.getElementById('allow-count').textContent = String(counts.allowedIps);
+    } catch (error) { setNotice(error.message, true); }
   }
 
   async function loadActiveTab() {
@@ -217,6 +265,7 @@
       if (active === 'blocks') await loadBlocks();
       if (active === 'allowlist') await loadAllowedIps();
       if (active === 'audit') await loadAudit();
+      if (active === 'server-activity') await loadServerActivity();
     } catch (error) { setNotice(error.message, true); }
   }
 
@@ -342,7 +391,19 @@
     try { await api('/api/logout', { method: 'POST' }); } catch {}
     showLogin();
   });
-  document.getElementById('refresh').addEventListener('click', loadActiveTab);
+  document.getElementById('refresh').addEventListener('click', async () => {
+    await loadTabCounts();
+    await loadActiveTab();
+  });
+  document.getElementById('server-activity-filters').addEventListener('submit', (event) => {
+    event.preventDefault();
+    activityPage = 1;
+    loadServerActivity().catch((error) => setNotice(error.message, true));
+  });
+  document.getElementById('audit-prev').addEventListener('click', () => { auditPage -= 1; loadAudit().catch((error) => setNotice(error.message, true)); });
+  document.getElementById('audit-next').addEventListener('click', () => { auditPage += 1; loadAudit().catch((error) => setNotice(error.message, true)); });
+  document.getElementById('server-activity-prev').addEventListener('click', () => { activityPage -= 1; loadServerActivity().catch((error) => setNotice(error.message, true)); });
+  document.getElementById('server-activity-next').addEventListener('click', () => { activityPage += 1; loadServerActivity().catch((error) => setNotice(error.message, true)); });
   document.querySelectorAll('.tab').forEach((tab) => tab.addEventListener('click', () => {
     document.querySelectorAll('.tab').forEach((item) => { item.classList.toggle('active', item === tab); item.removeAttribute('aria-current'); });
     tab.setAttribute('aria-current', 'page');

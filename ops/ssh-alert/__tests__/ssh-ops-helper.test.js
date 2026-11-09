@@ -87,4 +87,17 @@ test('privileged helper exposes typed Unix-socket operations and a verifiable au
   const finalAudit = await call(socketPath, '/audit');
   assert.equal(finalAudit.body.chainValid, true);
   assert.deepEqual(finalAudit.body.events.slice(0, 2).map((event) => event.action), ['remove-allowed-ip', 'allow-ip']);
+
+  for (let index = 0; index < 30; index += 1) {
+    const event = await call(socketPath, '/auth-event', 'POST', {
+      action: 'panel-login', actor: 'test.operator', target: 'test.operator', sourceIp: '127.0.0.1', result: 'success',
+    });
+    assert.equal(event.status, 200);
+  }
+  const secondAuditPage = await call(socketPath, '/audit?page=2');
+  assert.equal(secondAuditPage.status, 200);
+  assert.equal(secondAuditPage.body.total, 34);
+  assert.equal(secondAuditPage.body.page, 2);
+  assert.equal(secondAuditPage.body.events.length, 9);
+  assert.equal(secondAuditPage.body.chainValid, true);
 });

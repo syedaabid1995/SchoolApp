@@ -10,8 +10,11 @@ const { DatabaseSync } = require('node:sqlite');
 const root = __dirname;
 const dataDir = process.env.OPS_PANEL_DATA || '/var/lib/saapt-ssh-panel';
 const helperSocket = process.env.OPS_HELPER_SOCKET || '/run/saapt-ssh-alert/ops-helper.sock';
-const expectedHost = String(process.env.OPS_HOST || '200.97.165.51').toLowerCase();
-const expectedOrigin = String(process.env.OPS_ORIGIN || `https://${expectedHost}:4174`);
+const expectedHosts = new Set(String(process.env.OPS_HOSTS || process.env.OPS_HOST || '200.97.165.51')
+  .split(',').map((host) => host.trim().toLowerCase()).filter(Boolean));
+const expectedHost = [...expectedHosts][0] || '200.97.165.51';
+const expectedOrigins = new Set(String(process.env.OPS_ORIGINS || process.env.OPS_ORIGIN || `https://${expectedHost}:4174`)
+  .split(',').map((origin) => origin.trim()).filter(Boolean));
 const port = Number(process.env.OPS_PANEL_PORT || 4173);
 const cookieName = '__Host-ops_session';
 fs.mkdirSync(dataDir, { recursive: true, mode: 0o700 });
@@ -115,11 +118,11 @@ function requestIp(req) {
 }
 
 function hostOk(req) {
-  return String(req.headers.host || '').split(':')[0].toLowerCase() === expectedHost;
+  return expectedHosts.has(String(req.headers.host || '').split(':')[0].toLowerCase());
 }
 
 function originOk(req) {
-  return req.headers.origin === expectedOrigin;
+  return expectedOrigins.has(req.headers.origin);
 }
 
 function cookie(req) {
@@ -231,7 +234,7 @@ function failedLogin(ip) {
     .run(now + 15 * 60 * 1000, ip);
 }
 
-function helper(method, route, data) {
+function helper(method, route, data, timeoutMs = 5000) {
   return new Promise((resolve, reject) => {
     const req = http.request({ socketPath: helperSocket, path: route, method, headers: { 'content-type': 'application/json' } }, (res) => {
       let raw = '';
@@ -244,7 +247,7 @@ function helper(method, route, data) {
         resolve(payload);
       });
     });
-    req.setTimeout(5000, () => req.destroy(new Error('SSH helper timed out.')));
+    req.setTimeout(timeoutMs, () => req.destroy(new Error('SSH helper timed out.')));
     req.on('error', reject);
     if (data) req.end(JSON.stringify(data)); else req.end();
   });
@@ -407,10 +410,23 @@ const server = http.createServer(async (req, res) => {
 
   try {
     if (req.method === 'GET' && url.pathname === '/api/sessions') return json(res, 200, await helper('GET', '/sessions'));
+    if (req.method === 'GET' && url.pathname === '/api/counts') return json(res, 200, await helper('GET', '/counts'));
     if (req.method === 'GET' && url.pathname === '/api/access-requests') return json(res, 200, await helper('GET', '/access-requests'));
     if (req.method === 'GET' && url.pathname === '/api/blocks') return json(res, 200, await helper('GET', '/blocks'));
     if (req.method === 'GET' && url.pathname === '/api/allowed-ips') return json(res, 200, await helper('GET', '/allowed-ips'));
-    if (req.method === 'GET' && url.pathname === '/api/audit') return json(res, 200, await helper('GET', '/audit'));
+    if (req.method === 'GET' && url.pathname === '/api/audit') {
+      const page = url.searchParams.get('page') || '1';
+      if (!/^\d{1,5}$/.test(page) || Number(page) < 1 || Number(page) > 10000) return json(res, 400, { message: 'Choose a valid audit log page.' });
+      return json(res, 200, await helper('GET', `/audit?page=${page}`));
+    }
+    if (req.method === 'GET' && url.pathname === '/api/server-activity') {
+      const category = url.searchParams.get('category') || 'all';
+      const range = url.searchParams.get('range') || 'today';
+      const page = url.searchParams.get('page') || '1';
+      if (!/^\d{1,5}$/.test(page) || Number(page) < 1 || Number(page) > 10000) return json(res, 400, { message: 'Choose a valid activity page.' });
+      const query = new URLSearchParams({ category, range, page });
+      return json(res, 200, await helper('GET', `/server-activity?${query}`, undefined, 30000));
+    }
     if (req.method === 'POST' && url.pathname === '/api/alerts/resolve') {
       const data = await readJson(req);
       if (typeof data.token !== 'string') return json(res, 400, { message: 'Invalid review link.' });
@@ -452,4 +468,4 @@ const server = http.createServer(async (req, res) => {
   }
 });
 
-server.listen(port, '127.0.0.1', () => console.log(`SSH operations panel listening on 127.0.0.1:${port} for ${expectedHost}`));
+server.listen(port, '127.0.0.1', () => console.log(`SSH operations panel listening on 127.0.0.1:${port} for ${[...expectedHosts].join(', ')}`));
